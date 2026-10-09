@@ -8,6 +8,10 @@
 // elements in it, the arrows one SVG beneath them. Zoom and pan change the transform only; dragging a
 // box moves that box and redraws the arrows that touch it.
 //
+// A box can be expanded: another element in its place, above the others (an entity with its linked
+// entities embedded), until it is closed. Each box takes the focus (Tab); the context-menu key or
+// Shift+F10 on a focused box, or a right-click, asks for its menu (onMenu).
+//
 import { BOX_W, BOX_H } from './layout.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -24,6 +28,8 @@ export class Graph {
     this.boxesEl = els.boxes;
     this.pctEl = els.pct;
     this.onSelect = () => {};
+    this.onMenu = () => {};
+    this.onCollapse = () => {};                 // (id) - an expanded box closed with Esc                     // (id, {x, y}, element) - a box's context menu
 
     this.k = 1; this.tx = 0; this.ty = 0;
     this.nodes = new Map();     // id -> {id, x, y, types, el}
@@ -39,6 +45,11 @@ export class Graph {
     this.vp.addEventListener('pointerup', (e) => this.onUp(e));
     this.vp.addEventListener('pointercancel', (e) => this.onUp(e));
     this.vp.addEventListener('keydown', (e) => this.onKey(e));
+    this.vp.addEventListener('contextmenu', (e) => this.onContext(e));
+    this.vp.addEventListener('focusin', (e) => {
+      const box = e.target.closest && e.target.closest('.box[data-entity]');
+      if (box && box.dataset.entity !== this.sel && !this.drag) this.select(box.dataset.entity);
+    });
     //
     // Until the view is moved by hand, it stays fitted - also when the window changes size
     //
@@ -58,6 +69,7 @@ export class Graph {
     this.edgesAt.clear();
     this.edges = [];
     this.sel = null;
+    this.expanded = null;
 
     const frag = document.createDocumentFragment();
     for (const n of nodes) {
@@ -66,7 +78,9 @@ export class Graph {
       el.className = 'box';
       el.dataset.entity = n.id;
       el.setAttribute('role', 'button');
-      el.setAttribute('aria-label', n.id);
+      el.setAttribute('aria-label', n.label + ' ' + n.id);
+      el.setAttribute('aria-haspopup', 'menu');
+      el.tabIndex = 0;
       el.title = n.id;
 
       const stripe = document.createElement('div');
@@ -138,6 +152,36 @@ export class Graph {
   place(node) {
     node.el.style.left = node.x + 'px';
     node.el.style.top = node.y + 'px';
+    if (node.xel) {
+      node.xel.style.left = node.x + 'px';
+      node.xel.style.top = node.y + 'px';
+    }
+  }
+
+  //
+  // expand - 'content' shown in place of the box of 'id', above the others, until collapse()
+  //
+  expand(id, content) {
+    this.collapse();
+    const n = this.nodes.get(id);
+    if (!n) return;
+    content.classList.add('xbox');
+    content.dataset.entity = id;
+    n.xel = content;
+    n.el.classList.add('under');
+    this.place(n);
+    this.boxesEl.append(content);
+    this.expanded = id;
+  }
+
+  collapse() {
+    if (!this.expanded) return;
+    const n = this.nodes.get(this.expanded);
+    this.expanded = null;
+    if (!n || !n.xel) return;
+    n.xel.remove();
+    n.xel = null;
+    n.el.classList.remove('under');
   }
 
   //
@@ -177,7 +221,10 @@ export class Graph {
   }
 
   applyFilter() {
-    for (const n of this.nodes.values()) n.el.classList.toggle('off', !this.visible(n));
+    for (const n of this.nodes.values()) {
+      n.el.classList.toggle('off', !this.visible(n));
+      if (n.xel) n.xel.classList.toggle('off', !this.visible(n));
+    }
     for (const e of this.edges) {
       const off = !this.visible(this.nodes.get(e.from)) || !this.visible(this.nodes.get(e.to));
       e.g.classList.toggle('off', off);
@@ -262,6 +309,21 @@ export class Graph {
     this.applyTransform();
   }
 
+  //
+  // reveal - the expanded box of 'id' readable (at least 100 %, less if it would not fit) and centred
+  //
+  reveal(id) {
+    const n = this.nodes.get(id);
+    if (!n || !n.xel) return;
+    const w = n.xel.offsetWidth, h = n.xel.offsetHeight;
+    const vw = this.vp.clientWidth, vh = this.vp.clientHeight;
+    this.autoFit = false;
+    this.k = Math.max(K_MIN, Math.min(Math.max(this.k, 1), (vw - 48) / w, (vh - 48) / h));
+    this.tx = vw / 2 - (n.x + w / 2) * this.k;
+    this.ty = vh / 2 - (n.y + h / 2) * this.k;
+    this.applyTransform();
+  }
+
   centerOn(id) {
     const n = this.nodes.get(id);
     if (!n) return;
@@ -284,13 +346,45 @@ export class Graph {
 
   onDown(e) {
     if (e.button !== 0) return;
+    if (e.target.closest('button, a, .xbox .body')) return;   // the controls in an expanded box
     const box = e.target.closest('[data-entity]');
     const id = box ? box.dataset.entity : null;
     const n = id ? this.nodes.get(id) : null;
     this.drag = { id, sx: e.clientX, sy: e.clientY, ox: n ? n.x : this.tx, oy: n ? n.y : this.ty, moved: false };
     this.vp.setPointerCapture(e.pointerId);
-    this.vp.focus({ preventScroll: true });
+    (box || this.vp).focus({ preventScroll: true });
     this.vp.classList.add('grabbing');
+  }
+
+  //
+  // onContext - a right-click on a box: selected, and its menu at the pointer
+  //
+  onContext(e) {
+    const box = e.target.closest('[data-entity]');
+    if (!box) return;
+    e.preventDefault();
+    const id = box.dataset.entity;
+    if (this.sel !== id) this.select(id);
+    const n = this.nodes.get(id);
+    const target = n.xel || n.el;
+    target.focus({ preventScroll: true });
+    this.onMenu(id, { x: e.clientX, y: e.clientY }, target);
+  }
+
+  //
+  // menuKey - the context-menu key or Shift+F10: the menu of the focused (or selected) box, at the box
+  //
+  menuKey(e) {
+    const box = e.target.closest && e.target.closest('[data-entity]');
+    const id = box ? box.dataset.entity : this.sel;
+    const n = id ? this.nodes.get(id) : null;
+    if (!n) return false;
+    if (this.sel !== id) this.select(id);
+    const target = n.xel || n.el;
+    const r = target.getBoundingClientRect();
+    target.focus({ preventScroll: true });
+    this.onMenu(id, { x: r.left + Math.min(24, r.width / 2), y: r.top + Math.min(32, r.height / 2) }, target);
+    return true;
   }
 
   onMove(e) {
@@ -321,7 +415,16 @@ export class Graph {
   }
 
   onKey(e) {
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      if (this.menuKey(e)) e.preventDefault();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.box[data-entity]')) {
+      e.preventDefault();
+      this.select(e.target.closest('.box[data-entity]').dataset.entity);
+      return;
+    }
     const step = 60;
     const m = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
     if (m) {
@@ -333,6 +436,9 @@ export class Graph {
     } else if (e.key === '+' || e.key === '=') { e.preventDefault(); this.zoomCenter(1.25); }
     else if (e.key === '-' || e.key === '_') { e.preventDefault(); this.zoomCenter(0.8); }
     else if (e.key === '0') { e.preventDefault(); this.fit(); }
-    else if (e.key === 'Escape') this.select(null);
+    else if (e.key === 'Escape') {
+      if (this.expanded) { const id = this.expanded; this.collapse(); this.onCollapse(id); }
+      else this.select(null);
+    }
   }
 }
