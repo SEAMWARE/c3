@@ -39,6 +39,25 @@ or a cookie), and an `Origin` check for a page not served by the broker itself (
 does for HTTP).
 
 
+### Connect - discovery, choosing what to see, linked entities
+
+**Discovery** - what a broker holds, before loading any entity: its entity types (`GET /types`,
+with `details=true` for each type's attributes) and its attributes (`GET /attributes`, with their
+kinds - Property, Relationship, GeoProperty, ... - and the types that use them). Shown as a panel:
+types with their counts, each one's attributes, the Relationships between types - a map of the data
+model before the data.
+
+**Choosing what to see** - the entity view loads the types the user picks from that list (`type=`),
+not the whole broker: a broker with a million sensors and twenty buildings shows the buildings.
+The choice is part of a saved view.
+
+**Linked entities, embedded** - a right-click on an entity opens a menu; "with its linked entities"
+shows the entity with the entities its Relationships point to embedded in it, as NGSI-LD's linked
+entity retrieval returns them (`join=inline`, `joinLevel` 1, 2, ... - coraine implements it): one
+box that holds the related entities inside, level by level, instead of arrows to boxes elsewhere.
+The same menu: follow one Relationship, show only this entity's neighbourhood, hide this type,
+copy the id, the entity as JSON.
+
 ### Operating brokers - logs, log levels, metrics
 
 Connect shows a broker's data; c³ also shows the brokers themselves, several at once:

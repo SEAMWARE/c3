@@ -8,6 +8,10 @@ Something running first, then grow it.
    holds the brokers connected to. Connect: a broker URL, its entities by ordinary queries
    (`GET /entities`, paged), boxes and Relationship arrows in an automatic layout, zoom, pan, drag,
    an entity's attributes on a click. No WebSocket, no map, no saved views, no live values yet.
+1b. **Connect - discovery and choosing** - the broker's types and attributes (`/types`,
+   `/attributes`), the entity view loading only the types picked, and a right-click menu on an
+   entity: with its linked entities embedded (`join=inline`, `joinLevel`), its neighbourhood, follow a
+   Relationship, hide a type, copy the id, the JSON.
 2. **Compile** - the hardest part: the feature switches from `coraine-build --list-features`, the
    optimisation choice, the build run and its output, the result.
 3. Then, in no fixed order: live values over the WebSocket transport, the map, saved views,
