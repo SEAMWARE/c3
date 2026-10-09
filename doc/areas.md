@@ -29,6 +29,14 @@ look (dark only - the coraine mark is made for a dark background). Everything el
   as `location`, a column naming another row as a Relationship), choose the mode (once, poll, push).
 - **CSV** - the same for a file.
 
+## Docs
+
+- Bring every Markdown source together - coraine's `doc/` and Read the Docs, each cor-lib's README
+  and `doc/` - rendered in c³'s look, with search and navigation, offline from `coraine-dev`.
+- An API reference per lib, generated from its headers.
+- The plugin skeletons: one repository per kind (current-state store, temporal store, API,
+  transport, bridge) - makefile, template `.c`/`.h`, a functest, CI - and `c3 new plugin`.
+
 ## Connect
 
 - The connection: the broker's WebSocket transport - the initial state by queries, then one

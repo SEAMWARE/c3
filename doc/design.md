@@ -38,3 +38,26 @@ authorisation, not after it: how a browser presents a token on the socket (in a 
 or a cookie), and an `Origin` check for a page not served by the broker itself (as `--corsOrigin`
 does for HTTP).
 
+
+### Docs
+
+All of coraine's documentation in one place, and much easier to read than Markdown on GitHub:
+
+- **The broker** - everything on Read the Docs (`doc/*.md`, built with `mkdocs.yml`): installation,
+  building, the features, performance, the roadmap.
+- **Every cor-lib** - corBase, corAlloc, corLog, corArgs, corJson, corTree, corJsonld, corNgsild,
+  corRest, corHttp, corDB, corProm, corPlugin, corTest, corBridge, and the bridges: each one's README
+  and docs, plus an API reference generated from its headers - the functions, their arguments,
+  their ownership rules.
+- **Searchable, and offline** - the docs come with the `coraine-dev` package, matching the version
+  installed, so the build machine needs no network to read them. The same pages can be published as
+  a website.
+- **Linked from where they are needed** - a feature switch in Compile links to what it removes, a
+  bridge in Configure to its mapping format.
+
+**Writing a plugin.** A skeleton repository per kind of plugin - a current-state store, a temporal
+store, an API, a transport, a bridge: a makefile that builds against the installed `coraine-dev`,
+template `.c`/`.h` files with the entry points the loader resolves (corPlugin) and the registration
+filled in, a functest that loads the plugin into a broker, and a CI workflow. In c³: pick the kind,
+name it, and get the repository (`c3 new plugin <kind> <name>` on the command line), with the docs
+for that kind beside it. The plugin builds and loads before a line of its own is written.
