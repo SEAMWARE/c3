@@ -171,6 +171,15 @@ data from different deployments understandable to each other, and c³ uses them 
 The catalogue is read from the initiative's published repositories and kept locally (in c³'s data
 directory), so it works offline and can be refreshed on demand.
 
+### If the connection to brokers is too slow: cor:// in the backend
+
+A browser cannot speak cor:// (it is not HTTP or WebSocket), but c³'s backend is a C program on the
+same machine as the browser, built on the libraries that speak it. So, if WebSocket between c³ and
+the brokers turns out too slow, the backend becomes the proxy: cor:// to the brokers - compact,
+multiplexed, the long way over the network - and WebSocket only for the short local hop to the
+page. One backend keeps the connections to many brokers. Not before measuring: with thousands of
+entities the time is more likely spent drawing them in the browser than moving them.
+
 ### Run - starting and stopping brokers and what they need
 
 c³ starts and stops brokers on the machine it runs on, and the services they use:
