@@ -108,6 +108,26 @@ same attribute of the same entity.
 monitored items, methods. **Modbus**: registers and coils have no names or types to discover; its
 mapping is entered by hand (address, data type, scale), the same output.
 
+### Smart Data Models
+
+The Smart Data Models initiative publishes the common NGSI-LD data models - each one a JSON Schema,
+its attributes with their meaning, and an @context with the official IRIs. Using them is what makes
+data from different deployments understandable to each other, and c³ uses them throughout:
+
+- **Configure** - for each entity type being mapped, the models that fit are suggested (by the
+  type's name and its fields); choosing one turns the attribute names into the model's, and the
+  output's user @context takes the model's IRIs instead of minting new ones. A mapping can always
+  go its own way; the suggestion is never forced.
+- **Connect** - an entity of a known model shows which one, links to its documentation, and checks
+  the entity against the model's schema: missing required attributes, wrong value types, as warnings
+  beside the entity, never as errors.
+- **Discovery** - for a broker's types, which Smart Data Models they follow, and how closely.
+- **Docs** - the catalogue browsable next to coraine's own documentation: subjects, models, their
+  attributes and examples.
+
+The catalogue is read from the initiative's published repositories and kept locally (in c³'s data
+directory), so it works offline and can be refreshed on demand.
+
 ### Run - starting and stopping brokers and what they need
 
 c³ starts and stops brokers on the machine it runs on, and the services they use:

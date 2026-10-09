@@ -86,3 +86,10 @@ Everything else plugs into it.
   (`/admin/log`), metrics as charts (`/admin/metrics`), health (`--healthPort`).
 - In coraine and corLog: a log callback in corLog, a ring buffer and a log subscription in coraine,
   carried on the WebSocket transport.
+
+## Smart Data Models
+
+- The catalogue kept locally (subjects, models, schemas, @contexts), refreshed on demand.
+- Suggestions in Configure (models that fit an entity type), the model's IRIs in the output @context.
+- Checking entities against a model's schema in Connect (warnings), the models a broker's types follow.
+- The catalogue browsable in Docs.
