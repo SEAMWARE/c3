@@ -6,15 +6,24 @@
 //
 // The configuration file - ~/.config/c3/c3.json ($XDG_CONFIG_HOME, or --config <file>)
 //
-// Milestone 1 holds the brokers connected to and the last page:
+// It holds the brokers connected to - with, per broker, the entity types Connect loads - and the last
+// page:
 //
 //   {
 //     "version": 1,
-//     "brokers": [ { "url": "http://localhost:1026", "name": "localhost:1026", "lastUsed": "2026-10-09T17:30:00Z" } ],
+//     "brokers": [
+//       {
+//         "url":      "http://localhost:1026",
+//         "name":     "localhost:1026",
+//         "lastUsed": "2026-10-09T17:30:00Z",
+//         "connect":  { "types": ["Building", "Floor"] }
+//       }
+//     ],
 //     "ui":      { "lastPage": "connect" }
 //   }
 //
-// The most recently used broker is first. Members this version does not know are kept as they are.
+// The most recently used broker is first. Members this version does not know are kept as they are,
+// also inside a broker.
 //
 // The file is written whole to '<file>.tmp' and renamed over the old one, so a crash never leaves half a
 // file. A file that cannot be parsed is moved aside to '<file>.broken' at start, not overwritten; a file
@@ -36,6 +45,7 @@
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corTree/CorNode.h"                     // CorNode
 #include "corTree/corTreeBuilder.h"              // corTreeObject, corTreeArray, corTreeString, ...
+#include "corTree/corTreeChildAddOrReplace.h"    // corTreeChildAddOrReplace
 #include "corTree/corTreeChildPrepend.h"         // corTreeChildPrepend
 #include "corTree/corTreeLookup.h"               // corTreeLookup
 #include "corJson/CorJson.h"                     // CorJson
@@ -59,6 +69,7 @@ static int    cfgBrokerCount = 0;
 
 #define CONFIG_VERSION      1
 #define CONFIG_BROKERS_MAX  50
+#define CONFIG_TYPES_MAX    1000
 
 static const char* configDefault = "{\"version\": 1, \"brokers\": [], \"ui\": {\"lastPage\": \"connect\"}}";
 
@@ -629,13 +640,25 @@ bool configBrokerTouch(char* body, char* errBuf, int errLen)
   gmtime_r(&t, &tm);
   strftime(now, sizeof(now), "%Y-%m-%dT%H:%M:%SZ", &tm);
 
-  CorNode* brokerP = corTreeObject(&doc.alloc, NULL);
-  corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "url",      urlN));
-  corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "name",     name));
-  corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "lastUsed", now));
+  //
+  // A broker already in the list keeps its other members (its "connect" choices, members a later c3
+  // wrote); only the name and lastUsed change
+  //
+  CorNode* brokerP = oldP;
 
-  if (oldP != NULL)
-    corTreeChildRemove(brokersP, oldP);
+  if (brokerP != NULL)
+  {
+    corTreeChildRemove(brokersP, brokerP);
+    corTreeChildAddOrReplace(brokerP, "name",     corTreeString(&doc.alloc, "name",     name));
+    corTreeChildAddOrReplace(brokerP, "lastUsed", corTreeString(&doc.alloc, "lastUsed", now));
+  }
+  else
+  {
+    brokerP = corTreeObject(&doc.alloc, NULL);
+    corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "url",      urlN));
+    corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "name",     name));
+    corTreeChildAdd(brokerP, corTreeString(&doc.alloc, "lastUsed", now));
+  }
 
   corTreeChildPrepend(brokersP, brokerP);
 
@@ -734,6 +757,83 @@ bool configUiSet(char* body, char* errBuf, int errLen)
     corTreeChildRemove(uiP, oldP);
 
   corTreeChildAdd(uiP, corTreeString(&doc.alloc, "lastPage", lastPage));
+  ok = commit(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configBrokerTypes - PUT /api/brokers/types {"url": "...", "types": ["Building", "Floor"]}
+//
+// The entity types Connect loads from this broker, kept as the broker's "connect": {"types": [...]}.
+// An empty list is a choice too (nothing loaded); a broker that never had a choice has no "types".
+// The broker must be in the list already (Connect adds it when the broker has answered).
+//
+bool configBrokerTypes(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* url;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if (bodyP == NULL)
+    goto done;
+
+  if (stringMember(bodyP, "url", true, 2048, &url, errBuf, errLen) == false)
+    goto done;
+
+  CorNode* typesP = corTreeLookup(bodyP, "types");
+  if ((typesP == NULL) || (typesP->type != CorArray))
+  {
+    snprintf(errBuf, errLen, "\"types\" must be an array of type names");
+    goto done;
+  }
+
+  int n = 0;
+  for (CorNode* tP = typesP->value.head; tP != NULL; tP = tP->next)
+  {
+    if ((tP->type != CorString) || (tP->value.s[0] == 0) || (strlen(tP->value.s) > 2048))
+    {
+      snprintf(errBuf, errLen, "\"types\" must hold type names: non-empty strings of at most 2048 characters");
+      goto done;
+    }
+    if (++n > CONFIG_TYPES_MAX)
+    {
+      snprintf(errBuf, errLen, "\"types\" holds more than %d names", CONFIG_TYPES_MAX);
+      goto done;
+    }
+  }
+
+  CorNode* brokersP = corTreeLookup(doc.treeP, "brokers");
+  CorNode* brokerP  = brokerFind(brokersP, url);
+
+  if (brokerP == NULL)
+  {
+    snprintf(errBuf, errLen, "no broker %s in the configuration", url);
+    goto done;
+  }
+
+  CorNode* connectP = corTreeLookup(brokerP, "connect");
+  if ((connectP == NULL) || (connectP->type != CorObject))
+  {
+    CorNode* newP = corTreeObject(&doc.alloc, "connect");
+    corTreeChildAddOrReplace(brokerP, "connect", newP);
+    connectP = corTreeLookup(brokerP, "connect");
+  }
+
+  CorNode* listP = corTreeArray(&doc.alloc, "types");
+  for (CorNode* tP = typesP->value.head; tP != NULL; tP = tP->next)
+    corTreeChildAdd(listP, corTreeString(&doc.alloc, NULL, tP->value.s));
+
+  corTreeChildAddOrReplace(connectP, "types", listP);
   ok = commit(&doc, errBuf, errLen);
 
  done:

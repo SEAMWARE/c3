@@ -10,6 +10,7 @@
 //   GET    /api/config          the configuration
 //   POST   /api/brokers         {"url", "name"}: a broker connected to - first in the list, lastUsed now
 //   DELETE /api/brokers         {"url"}: forget a broker
+//   PUT    /api/brokers/types   {"url", "types"}: the entity types Connect loads from a broker
 //   PUT    /api/ui              {"lastPage"}
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
 //   GET    /<file>              a file of the www directory; / is index.html
@@ -317,6 +318,8 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configBrokerTouch);
   else if ((strcmp(path, "/api/brokers") == 0) && (strcmp(method, "DELETE") == 0))
     serveConfigChange(connP, configBrokerForget);
+  else if ((strcmp(path, "/api/brokers/types") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configBrokerTypes);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configUiSet);
   else

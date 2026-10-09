@@ -49,6 +49,7 @@ extern int          configBrokers(void);        // how many brokers it holds
 extern bool         configBrokerTouch(char* body, char* errBuf, int errLen);   // POST /api/brokers
 extern bool         configBrokerForget(char* body, char* errBuf, int errLen);  // DELETE /api/brokers
 extern bool         configUiSet(char* body, char* errBuf, int errLen);         // PUT /api/ui
+extern bool         configBrokerTypes(char* body, char* errBuf, int errLen);   // PUT /api/brokers/types
 
 
 
