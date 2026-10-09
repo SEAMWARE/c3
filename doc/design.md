@@ -228,6 +228,27 @@ The change:
 - Under conditional compilation, like every new concept: a broker built without it has no ring
   buffer and no hook.
 
+### Packaging - what c³ can do depends on what is installed
+
+c³ is its own Debian package, **`coraine-c3`**, and comes with coraine: the `coraine` package
+recommends it (`Recommends: coraine-c3`), and `coraine-dev` depends on `coraine`, so both bring it.
+A Recommends, not a Depends: a server or a container image installed with `--no-install-recommends`
+gets the broker without the GUI.
+
+Only `coraine-dev` can build a broker (`coraine-build` and the source are in it). So c³ looks at
+what is installed when it starts, and shows each part only as far as it can work:
+
+| Needs | Part | Without it |
+|---|---|---|
+| `coraine-dev` (`coraine-build`) | Compile; Run of a broker just built | shown greyed, with "install coraine-dev to build brokers" |
+| `coraine` | Run of the installed broker | - (always there) |
+| `docker` or `podman` | Run in a container; MongoDB, PostgreSQL, Mosquitto | greyed, with what to install |
+| the dds bridge plugin | Configure - DDS discovery from a broker started here | from a running broker or a snapshot file only |
+| network | online map tiles, the Smart Data Models refresh | downloaded areas and the local catalogue only |
+
+Greyed rather than hidden: the user sees what c³ can do and what to install for it. The backend
+reports what it found (`GET /api/capabilities`), and checks again when asked, after an install.
+
 ### The configuration file
 
 c³ remembers everything between starts in one JSON file, written by the backend as the user works -
