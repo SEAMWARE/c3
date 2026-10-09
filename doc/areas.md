@@ -6,7 +6,9 @@ the backend's API (served to the pages) and the files c³ writes for the broker 
 ## Shell
 
 The `c3` command, the backend's HTTP server and the static pages, the splash screen, navigation, the
-look (dark only - the coraine mark is made for a dark background). Everything else plugs into it.
+look (dark only - the coraine mark is made for a dark background), and the configuration file
+(`~/.config/c3/c3.json`: brokers, compile choices, mappings, graph layouts - saved on every change).
+Everything else plugs into it.
 
 ## Compile
 

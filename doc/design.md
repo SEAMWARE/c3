@@ -39,6 +39,33 @@ or a cookie), and an `Origin` check for a page not served by the broker itself (
 does for HTTP).
 
 
+### The configuration file
+
+c³ remembers everything between starts in one JSON file, written by the backend as the user works -
+every button that changes a choice saves it, no "save settings" step:
+
+- `~/.config/c3/c3.json` (`$XDG_CONFIG_HOME`); `c3 --config <file>` for another one.
+- Written whole to a temporary file and renamed over the old one, so a crash never leaves half a
+  file; a `"version"` member, so a later c³ can read an older file and convert it.
+- Kept by the backend, not in the browser (`localStorage`): the same settings whichever browser or
+  laptop opens c³, and a file that can be read, copied and versioned.
+
+What it holds:
+
+- **brokers** - every broker connected to: URL (`ws://host:port`), name, tenant, subprotocol, last
+  used; the list Connect offers at start.
+- **compile** - the last choices (features, optimisation, target, output) and named presets ("edge
+  node", "full"), the workload files used for tuning, the build directories.
+- **configure** - the mapping files opened recently, DDS domains, OPC UA servers, CKAN portals.
+- **connect** - per broker: where each entity was dragged to, the zoom and position of the view, the
+  type filters, graph or map - so a broker's graph opens the way it was left.
+- **ui** - the last page, the window size.
+
+Secrets - a broker's token, a CKAN API key - are not in it: they go in a separate file readable only
+by the user (mode 600), or the desktop's keyring where there is one, so `c3.json` can be shared or
+committed. The entity positions of a large broker can grow big; they are the first candidate to move
+to a file of their own per broker if the main file gets slow to write.
+
 ### Docs
 
 All of coraine's documentation in one place, and much easier to read than Markdown on GitHub:
