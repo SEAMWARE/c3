@@ -14,6 +14,9 @@ Something running first, then grow it.
    Relationship, hide a type, copy the id, the JSON.
 2. **Compile** - the hardest part: the feature switches from `coraine-build --list-features`, the
    optimisation choice, the build run and its output, the result.
+2b. **Run** - start and stop brokers (the one just built, the installed one, or an image) natively or
+   in a container, and the services they need (MongoDB, PostgreSQL/TimescaleDB, Mosquitto) as
+   containers; status from the health port; a started broker joins Connect's list.
 3. Then, in no fixed order: live values over the WebSocket transport, the map, saved views,
    Configure (DDS first), Docs (the bridge skeleton first), Operate.
 
@@ -65,6 +68,14 @@ Everything else plugs into it.
   for the same graph; **Save view** to keep a named selection with its positions.
 - The map: GeoProperty entities on a map, the same arrows between them.
 - Authorisation on the socket - settled together with the broker's authorisation.
+
+## Run
+
+- Brokers started and stopped natively (a process of the backend, its log in a file) or in a
+  container (`docker`/`podman`), with their options from a form.
+- MongoDB, PostgreSQL/TimescaleDB and Mosquitto as containers; ready-made sets per kind of
+  deployment; started before the broker, stopped when nothing uses them.
+- Kept in the configuration file, so they can be started again.
 
 ## Operate
 

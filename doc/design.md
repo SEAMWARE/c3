@@ -58,6 +58,27 @@ box that holds the related entities inside, level by level, instead of arrows to
 The same menu: follow one Relationship, show only this entity's neighbourhood, hide this type,
 copy the id, the entity as JSON.
 
+### Run - starting and stopping brokers and what they need
+
+c³ starts and stops brokers on the machine it runs on, and the services they use:
+
+- **A broker, natively** - the binary Compile just built, or the installed `coraine` - with its
+  options chosen in a form (store, history, ports, tenants, the health port), started as a process
+  of c³'s backend, its output kept in a log file.
+- **A broker in a container** - an image Compile built, or a published one (`docker run`), with the
+  same options.
+- **What it needs** - MongoDB, PostgreSQL with TimescaleDB, Mosquitto, as containers, started before
+  the broker that uses them and found by it; a ready-made set per kind of deployment ("corDB alone",
+  "mongoc + timescale", "with MQTT").
+- **Status** - running or stopped, the health port's report, the ports; a broker started here is
+  added to Connect's list, and Operate's logs and metrics follow it.
+- **Stopping** - a broker stops cleanly (SIGTERM: corDB writes its snapshot), then its services if
+  nothing else uses them; data stays unless the user deletes it, with a confirmation.
+
+What was started, with which options, is kept in the configuration file, so the next start of c³
+shows it and can start it again. Containers are driven through the `docker` command (or Podman's,
+which takes the same commands); no orchestrator.
+
 ### Operating brokers - logs, log levels, metrics
 
 Connect shows a broker's data; c³ also shows the brokers themselves, several at once:
