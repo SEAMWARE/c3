@@ -57,14 +57,19 @@ What it holds:
 - **compile** - the last choices (features, optimisation, target, output) and named presets ("edge
   node", "full"), the workload files used for tuning, the build directories.
 - **configure** - the mapping files opened recently, DDS domains, OPC UA servers, CKAN portals.
-- **connect** - per broker: where each entity was dragged to, the zoom and position of the view, the
-  type filters, graph or map - so a broker's graph opens the way it was left.
+- **connect** - per broker: the type filters, graph or map, and the **saved views** (below).
 - **ui** - the last page, the window size.
 
 Secrets - a broker's token, a CKAN API key - are not in it: they go in a separate file readable only
 by the user (mode 600), or the desktop's keyring where there is one, so `c3.json` can be shared or
-committed. The entity positions of a large broker can grow big; they are the first candidate to move
-to a file of their own per broker if the main file gets slow to write.
+committed.
+
+**Entity positions are not saved as they are dragged.** The graph lays itself out - the same
+entities and Relationships give the same layout every time, so it needs no saving. Dragging is for
+looking closer. What is worth keeping is saved on purpose: **Save view** on the graph stores a named
+view - the entities shown (by type filter, query or a hand-picked selection), their positions, the
+zoom - and the view list of a broker opens any of them again. Only what the user chose to keep is in
+the file.
 
 ### Docs
 

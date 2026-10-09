@@ -7,7 +7,7 @@ the backend's API (served to the pages) and the files c³ writes for the broker 
 
 The `c3` command, the backend's HTTP server and the static pages, the splash screen, navigation, the
 look (dark only - the coraine mark is made for a dark background), and the configuration file
-(`~/.config/c3/c3.json`: brokers, compile choices, mappings, graph layouts - saved on every change).
+(`~/.config/c3/c3.json`: brokers, compile choices, mappings, saved views - saved on every change).
 Everything else plugs into it.
 
 ## Compile
@@ -44,6 +44,7 @@ Everything else plugs into it.
 - The connection: the broker's WebSocket transport - the initial state by queries, then one
   subscription; headers in each message's metadata.
 - The graph: entities as boxes, Relationships as arrows; zoom, pan, drag; type filters; an entity's
-  attributes, Relationships followed by a click.
+  attributes, Relationships followed by a click. An automatic layout that gives the same picture
+  for the same graph; **Save view** to keep a named selection with its positions.
 - The map: GeoProperty entities on a map, the same arrows between them.
 - Authorisation on the socket - settled together with the broker's authorisation.
