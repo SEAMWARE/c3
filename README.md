@@ -27,6 +27,7 @@ make                                                   # ./c3
 coraine -fg -db corDB -p 1090 &                        # a broker, in RAM, on a port of its own
 examples/factory.sh http://localhost:1090              # 25 entities with Relationships and locations
 examples/factory.sh http://localhost:1090 300          # ... and 300 sensors more, to page through
+examples/ckan-bikes.sh http://localhost:1090           # real open data: 572 Boston bike stations from a CKAN portal
 
 ./c3                                                   # opens the application; Ctrl-C stops it
 ```
@@ -170,7 +171,7 @@ licences beside them); the coraine mark and the Seamware logo in `www/img/`.
 ```
 src/               the backend (C)
 www/               the pages, served by the backend
-examples/          factory.sh - sample entities for Connect
+examples/          factory.sh - sample entities for Connect; ckan-bikes.sh - real open data from a CKAN portal
 doc/design.md      what c³ is and how it is built
 doc/areas.md       the parts of the work and the milestones
 design/            screen designs (Splash, Compile, Configure, Connect)

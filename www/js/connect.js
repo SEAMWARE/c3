@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 // Type colours - by the type's place in the sorted list of the graph's types: the same graph, the same
 // colours. Types beyond the palette repeat it.
 //
-const PALETTE = ['#A6ADBA', '#7FA3BC', '#6FA8FF', '#B48CFF', '#6FDCA0', '#5FB4E8', '#F2B84B', '#FF8A9A', '#E58AB1', '#C9D46A', '#4FD1C5', '#F59E6B'];
+const PALETTE = ['#5FB4E8', '#F2B84B', '#6FDCA0', '#B48CFF', '#FF8A9A', '#6FA8FF', '#C9D46A', '#4FD1C5', '#F59E6B', '#E58AB1', '#7FA3BC', '#A6ADBA'];
 
 let colors = new Map();
 
