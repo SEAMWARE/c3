@@ -48,3 +48,10 @@ Everything else plugs into it.
   for the same graph; **Save view** to keep a named selection with its positions.
 - The map: GeoProperty entities on a map, the same arrows between them.
 - Authorisation on the socket - settled together with the broker's authorisation.
+
+## Operate
+
+- Several brokers at once: their live logs (level and text filters), the log and trace levels
+  (`/admin/log`), metrics as charts (`/admin/metrics`), health (`--healthPort`).
+- In coraine and corLog: a log callback in corLog, a ring buffer and a log subscription in coraine,
+  carried on the WebSocket transport.

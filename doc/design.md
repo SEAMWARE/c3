@@ -39,6 +39,33 @@ or a cookie), and an `Origin` check for a page not served by the broker itself (
 does for HTTP).
 
 
+### Operating brokers - logs, log levels, metrics
+
+Connect shows a broker's data; c³ also shows the brokers themselves, several at once:
+
+- **Logs, live** - each broker's log lines as they are written, filtered by level and by text,
+  side by side for several brokers.
+- **Log and trace levels** - verbose, debug, info and the trace levels, changed on a running broker.
+  coraine already has this as `/admin/log` (GET, PUT, PATCH, POST, DELETE); c³ is a front-end to it.
+  Trace levels exist only in a debug build - release builds compile traces out - and c³ shows which
+  kind of build it is talking to.
+- **Metrics** - `/admin/metrics` (Prometheus format) as charts: request rates, latencies, entities,
+  subscriptions and notifications, memory against the budget. The health port's report
+  (`--healthPort`) gives liveness and readiness.
+
+**What coraine needs for the logs.** corLog writes each line to a file descriptor and has no hook.
+The change:
+
+- corLog: an optional callback, called with each line (level, file, line, function, text) - one
+  pointer test when none is set, so a broker nobody watches pays nothing.
+- coraine: the callback keeps the last lines in a ring buffer, and passes new lines to whoever is
+  subscribed, with the subscriber's level filter applied before anything is sent.
+- The lines travel on the socket c³ already has to the broker (the WebSocket transport) as a log
+  subscription - no second port. A broker built without the transports could offer the same
+  through the admin API.
+- Under conditional compilation, like every new concept: a broker built without it has no ring
+  buffer and no hook.
+
 ### The configuration file
 
 c³ remembers everything between starts in one JSON file, written by the backend as the user works -
