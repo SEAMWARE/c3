@@ -1,5 +1,18 @@
 # The parts of the work
 
+## Milestones
+
+Something running first, then grow it.
+
+1. **Shell + Connect, read-only** - `c3` starts the backend and opens the window; the config file
+   holds the brokers connected to. Connect: a broker URL, its entities by ordinary queries
+   (`GET /entities`, paged), boxes and Relationship arrows in an automatic layout, zoom, pan, drag,
+   an entity's attributes on a click. No WebSocket, no map, no saved views, no live values yet.
+2. **Compile** - the hardest part: the feature switches from `coraine-build --list-features`, the
+   optimisation choice, the build run and its output, the result.
+3. Then, in no fixed order: live values over the WebSocket transport, the map, saved views,
+   Configure (DDS first), Docs (the bridge skeleton first), Operate.
+
 c³ is built by several people; each part below can be taken on its own. The seams between them are
 the backend's API (served to the pages) and the files c³ writes for the broker and its bridges.
 
