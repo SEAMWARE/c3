@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>c³ Control Center</title>
+<link rel="icon" href="img/coraine-mark.png">
+<link rel="stylesheet" href="css/c3.css">
+</head>
+<body>
+
+<div id="splash" role="status" aria-live="polite">
+  <div class="splash-brand">
+    <img src="img/coraine-mark.png" alt="coraine">
+    <div class="splash-word">c<span class="cube">³</span></div>
+    <div class="splash-sub">coraine control center</div>
+  </div>
+  <div class="splash-steps">
+    <div id="steps"></div>
+    <div class="splash-bar"><div id="splash-bar"></div></div>
+    <div id="splash-error" class="splash-error" hidden></div>
+  </div>
+  <div class="splash-foot"><span>by</span><img src="img/seamware.svg" alt="Seamware"><span class="mono" id="splash-version"></span></div>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <img class="mark" src="img/coraine-mark.png" alt="coraine">
+    <div class="brand"><span class="word">c<span class="cube">³</span></span><span class="tag">coraine control center</span></div>
+    <nav class="pages" aria-label="Parts">
+      <span class="later" title="Milestone 2">Compile</span>
+      <span class="later" title="Later">Configure</span>
+      <a href="#connect" class="active" aria-current="page">Connect</a>
+    </nav>
+    <div class="top-right"><span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware"></div>
+  </header>
+
+  <main class="page" id="page-connect">
+    <div class="panel connbar">
+      <span class="state" id="state"><span class="dot"></span><span class="label" id="state-label">Not connected</span></span>
+      <form class="connform" id="connform">
+        <input id="broker-url" list="broker-list" placeholder="http://localhost:1026" aria-label="Broker URL" autocomplete="off" spellcheck="false">
+        <datalist id="broker-list"></datalist>
+        <button class="btn primary" type="submit" id="connect-btn">Connect</button>
+        <button class="btn" type="button" id="reload-btn" title="Load the entities again" disabled>Reload</button>
+      </form>
+      <span class="counts" id="counts"></span>
+      <span class="notice" id="notice" hidden></span>
+    </div>
+
+    <div class="cols">
+      <aside class="panel types">
+        <h2 class="section">Types</h2>
+        <div class="typeall" id="typeall" hidden><button type="button" id="types-all">all</button><button type="button" id="types-none">none</button></div>
+        <div class="typelist" id="typelist"></div>
+        <div class="help">Drag the background to move the view, drag a box to move an entity, wheel or the buttons to zoom. Keys: + − 0 and the arrows.</div>
+      </aside>
+
+      <section class="graphwrap" id="graphwrap">
+        <div class="viewport" id="viewport" tabindex="0" aria-label="Entity graph">
+          <div class="world" id="world">
+            <svg class="edges" id="edges" width="1" height="1" aria-hidden="true">
+              <defs>
+                <marker id="arrow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#5A616E"/></marker>
+                <marker id="arrow-hot" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#D0558A"/></marker>
+              </defs>
+              <g id="edge-lines"></g>
+              <g id="edge-labels"></g>
+            </svg>
+            <div id="boxes"></div>
+          </div>
+        </div>
+        <div class="zoombar">
+          <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <span class="pct" id="zoom-pct">100%</span>
+          <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" class="fit" id="zoom-fit">Fit</button>
+        </div>
+        <div class="overlay" id="overlay" hidden><div class="card" id="overlay-card"></div></div>
+      </section>
+
+      <aside class="panel entity" id="entity">
+        <h2 class="section">Entity</h2>
+        <div class="empty" id="entity-empty">Click an entity to see its attributes.</div>
+        <div id="entity-body" hidden></div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
