@@ -45,7 +45,11 @@ Everything else plugs into it.
   name, or skip), and the output: the bridge configuration plus the user @context for
   `--defaultUserContext`. Needs in coraine: type name and fields in the discovery report, the
   inventory kept per bridge and served (`/admin/bridges/{bridge}/discovered`, and live).
-- **OPC UA** - browse a server's address space; map variables, monitored items and methods.
+- **One mapping tool, an adapter per protocol** - inventory, lines (entity id / type / attribute),
+  Smart Data Models, @context and round-trip merge written once.
+- **OPC UA** - the address space (objects as entities, variables as attributes with their
+  sampling, methods as commands, events), from a running server through the bridge or from a
+  NodeSet2 file; companion specifications as entity types.
 - **Modbus**, **MQTT** - the same for the other bridges.
 
 ## Configure - data

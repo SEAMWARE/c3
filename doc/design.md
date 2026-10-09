@@ -104,9 +104,32 @@ Opening an existing mapping and a fresh discovery together keeps every decision 
 shows only what is new. Names are checked before writing: valid URIs, no two endpoints writing the
 same attribute of the same entity.
 
-**OPC UA**, once the bridge exists: the same screen over a server's address space - variables,
-monitored items, methods. **Modbus**: registers and coils have no names or types to discover; its
-mapping is entered by hand (address, data type, scale), the same output.
+### Configure - one tool for every protocol
+
+DDS, OPC UA, and the bridges after them share one mapping tool: the inventory, the lines, the
+output are the same shape; what differs per protocol is a small adapter - how the inventory is
+read, what a line's defaults are, which output file the bridge reads. The three columns (entity id,
+entity type, attribute name), Smart Data Models, the user @context and the round-trip merge are
+written once.
+
+**OPC UA.** The inventory is a server's address space, browsed from the Objects folder down:
+
+- **objects** - the natural entities (a machine, a robot, a line); their browse name is the default
+  entity id and their type definition the default entity type;
+- **variables** - an object's attributes: data type, unit (EngineeringUnits), whether writable
+  (AccessLevel) - a writable one becomes an attribute a PATCH writes back to the server; per
+  variable the sampling of its monitored item (interval, deadband);
+- **methods** - an object's commands, with their input and output arguments, called by writing the
+  attribute (as a DDS service is);
+- **events** - the server's event types, carried as attributes when chosen.
+
+Read by the OPC UA bridge from a running server (the way the broker reports DDS discovery), or
+offline from a NodeSet2 XML file - the standard export of an information model, which also covers
+the OPC UA companion specifications (Robotics, Machinery, ...): a companion specification's types
+map naturally to entity types, and where a Smart Data Model exists for one, it is suggested.
+
+**Modbus**: registers and coils have no names or types to discover; its lines are entered by hand
+(address, data type, scale, poll interval), into the same table, with the same output.
 
 ### Smart Data Models
 
