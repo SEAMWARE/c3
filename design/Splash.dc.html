@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>c³ Starting</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500&amp;family=Source+Sans+3:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E1014}
+@keyframes c3glow{0%,100%{filter:drop-shadow(0 0 18px #A72E6055)}50%{filter:drop-shadow(0 0 42px #D0558A88)}}
+@keyframes c3spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.c3-anim{animation:none !important}}
+</style>
+</helmet>
+<div style="min-height: 900px; background: radial-gradient(ellipse at 50% 38%, #2A1420 0%, #14111A 38%, #0E1014 70%); color: #ECEEF2; font-family: 'Source Sans 3', system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; padding: 48px 16px; box-sizing: border-box; position: relative">
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 20px">
+<img class="c3-anim" src="/_blob/cdc7bc932c7d049917541d77900c8ae5" alt="coraine" style="width: 168px; height: auto; animation: c3glow 3.2s ease-in-out infinite">
+<div style="font-family: Outfit, sans-serif; font-size: 72px; line-height: 72px; font-weight: 200; letter-spacing: 0.02em">c<span style="color: #E58AB1; font-weight: 300">³</span></div>
+<div style="font-family: Outfit, sans-serif; font-size: 14px; letter-spacing: 0.42em; text-transform: uppercase; color: #A6ADBA">coraine control center</div>
+</div>
+
+<div role="status" aria-live="polite" style="width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 14px; min-height: 34px; font-size: 15px">
+<span style="{{s.icon}}">{{s.mark}}</span>
+<span style="{{s.text}}">{{s.label}}</span>
+<span style="margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7A8190">{{s.detail}}</span>
+</div>
+</sc-for>
+<div style="margin-top: 14px; height: 3px; border-radius: 2px; background: #232833; overflow: hidden"><div style="{{bar}}"></div></div>
+<sc-if value="{{ready}}" hint-placeholder-val="{{false}}">
+<a href="Main.dc.html" style="align-self: center; margin-top: 24px; display: inline-flex; align-items: center; min-height: 48px; padding: 0 28px; border-radius: 10px; background: linear-gradient(135deg, #C2407A, #A72E60); color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Open Compile</a>
+</sc-if>
+</div>
+
+<div style="position: absolute; bottom: 28px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 10px; color: #7A8190; font-size: 13px">
+<span>by</span><img src="/_blob/1503548c26ed7019d2750683b022cb5a" alt="Seamware" style="height: 16px; width: auto; opacity: 0.8"><span style="margin-left: 14px; font-family: 'JetBrains Mono', monospace">0.5.0</span>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+const STEPS = [
+  ['Backend on port 7900', 'localhost'],
+  ['coraine-dev', '0.5.0'],
+  ['Feature switches', '24 from coraine-build'],
+  ['Brokers', '2 found'],
+  ['Bridges', 'DDS, MQTT, Modbus']
+];
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { done: 0 }; }
+  componentDidMount() { this.run(); }
+  componentWillUnmount() { clearTimeout(this.t); }
+  run() {
+    this.setState({ done: 0 });
+    const next = () => {
+      if (this.state.done >= STEPS.length) { this.t = setTimeout(() => this.run(), 4000); return; }
+      this.t = setTimeout(() => { this.setState({ done: this.state.done + 1 }); next(); }, 550 + Math.random() * 500);
+    };
+    next();
+  }
+  renderVals() {
+    const d = this.state.done;
+    const steps = STEPS.map(([label, detail], i) => {
+      const ok = i < d, now = i === d;
+      return {
+        label, detail: ok ? detail : '',
+        mark: ok ? '✓' : '',
+        icon: 'flex: 0 0 auto; width: 18px; height: 18px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; border-radius: 50%; ' +
+          (ok ? 'background: #A72E60; color: #FFFFFF' : now ? 'border: 2px solid #3A3F4B; border-top-color: #E58AB1; animation: c3spin 0.8s linear infinite' : 'border: 2px solid #2B303B'),
+        text: ok ? 'color: #ECEEF2' : now ? 'color: #CDD2DB' : 'color: #5A616E'
+      };
+    });
+    return {
+      steps, ready: d >= STEPS.length,
+      bar: 'height: 100%; width: ' + Math.round(100 * d / STEPS.length) + '%; background: linear-gradient(90deg, #A72E60, #E58AB1); transition: width 0.4s ease'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>c³ Compile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&amp;family=Source+Sans+3:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E1014}
+a{color:#E58AB1}a:hover{color:#F3B3CE}
+</style>
+</helmet>
+<div style="min-height: 1060px; background: #0E1014; color: #ECEEF2; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 16px; line-height: 24px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 0 32px; min-height: 64px; background: #0A0C0F; border-bottom: 1px solid #2B303B">
+<img src="/_blob/cdc7bc932c7d049917541d77900c8ae5" alt="coraine" style="height: 34px; width: auto">
+<div style="display: flex; align-items: baseline; gap: 10px"><span style="font-family: Outfit, sans-serif; font-size: 26px; font-weight: 400; color: #ECEEF2">c<span style="color: #D0558A">³</span></span><span style="font-family: Outfit, sans-serif; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: #A6ADBA">coraine control center</span></div>
+<nav style="display: flex; gap: 4px; margin-left: 16px">
+<a href="Main.dc.html" style="padding: 18px 16px 17px; color: #ECEEF2; text-decoration: none; font-weight: 600; border-bottom: 3px solid #D0558A">Compile</a>
+<a href="Configure.dc.html" style="padding: 18px 16px 20px; color: #A6ADBA; text-decoration: none">Configure</a>
+<a href="Connect.dc.html" style="padding: 18px 16px 20px; color: #A6ADBA; text-decoration: none">Connect</a>
+</nav>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 16px"><span style="padding: 6px 12px; border: 1px solid #2B303B; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #A6ADBA">build host · [hostname]</span><img src="/_blob/1503548c26ed7019d2750683b022cb5a" alt="Seamware" style="height: 18px; width: auto; opacity: 0.85"></div>
+</header>
+
+<div style="max-width: 1440px; margin: 0 auto; padding: 32px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 32px">
+
+<main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+<div>
+<h1 style="margin: 0; font-family: Outfit, sans-serif; font-size: 36px; line-height: 44px; font-weight: 300; letter-spacing: 0.01em">Build a broker</h1>
+<p style="margin: 8px 0 0; color: #A6ADBA">Choose what goes into the binary, train it on your workload, and take it away as a binary, an image or a package.</p>
+</div>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Target</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">Architecture</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{arch}}" as="o" hint-placeholder-count="2"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">Distribution</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{dist}}" as="o" hint-placeholder-count="3"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">Output</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{output}}" as="o" hint-placeholder-count="3"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+</div>
+</div>
+</div>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Server and stores</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">HTTP server</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{http}}" as="o" hint-placeholder-count="2"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">Current-state stores</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{store}}" as="o" hint-placeholder-count="3"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #A6ADBA; text-transform: uppercase; letter-spacing: 0.06em">Temporal history</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span style="font-size: 15px; line-height: 22px">none, corDB and timescale are always built; <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">--troe</span> picks one at start</span>
+</div>
+</div>
+</div>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+<h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Features</h2>
+<span style="color: #A6ADBA; font-size: 14px">{{featuresOn}} of {{featuresTotal}} compiled in · a feature switched off is not in the binary at all</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{features}}" as="f" hint-placeholder-count="23">
+<button type="button" onClick="{{f.pick}}" style="{{f.style}}">
+<span style="{{f.dot}}"></span>
+<span style="display: flex; flex-direction: column; text-align: left; min-width: 0"><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500">{{f.name}}</span><span style="font-size: 13px; line-height: 18px; color: #A6ADBA">{{f.desc}}</span></span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Optimisation</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{opt}}" as="o" hint-placeholder-count="3">
+<button type="button" onClick="{{o.pick}}" style="{{o.card}}"><span style="font-weight: 600">{{o.label}}</span><span style="font-size: 14px; line-height: 20px; color: #A6ADBA">{{o.desc}}</span></button>
+</sc-for>
+</div>
+</section>
+</main>
+
+<aside style="flex: 1 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 16px">
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">This build</h2>
+<dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 16px; row-gap: 8px; font-size: 15px">
+<dt style="color: #A6ADBA">Target</dt><dd style="margin: 0">{{sumTarget}}</dd>
+<dt style="color: #A6ADBA">Server</dt><dd style="margin: 0">{{sumServer}}</dd>
+<dt style="color: #A6ADBA">Stores</dt><dd style="margin: 0">{{sumStores}}</dd>
+<dt style="color: #A6ADBA">Built as</dt><dd style="margin: 0">{{sumOpt}}</dd>
+</dl>
+<div style="background: #0A0C0F; border: 1px solid #2B303B; border-radius: 8px; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 19px; color: #CDD2DB; white-space: pre-wrap; word-break: break-all">{{command}}</div>
+<div style="font-size: 13px; color: #A6ADBA">Architecture, distribution, output and HTTP server: c³ adds these; coraine-build builds for the host it runs on.</div>
+<div style="font-size: 14px; color: #A6ADBA">Size and start-up time are measured after the build. For reference, corHttp + corDB is 4.3 MiB on disk and 17 MiB resident when idle (README).</div>
+<button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #C2407A, #A72E60); color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">Build</button>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Last build</h2><span style="margin-left: auto; padding: 2px 10px; border-radius: 999px; background: #1E3A2E; color: #6FDCA0; font-size: 13px; font-weight: 600">succeeded</span></div>
+<div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 19px; color: #A6ADBA; background: #0A0C0F; border: 1px solid #2B303B; border-radius: 8px; padding: 12px 14px">[date] · [duration]<br>coraine_0.5.0+ubuntu24.04_arm64.deb<br>no debug code in the binary ✓<br>functional smoke test passed ✓</div>
+<a href="#" style="font-size: 15px">Download</a>
+</section>
+</aside>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { arch: 'arm64', dist: 'Ubuntu 24.04', output: 'Debian package', http: 'corHttp (built in)', store: 'corDB + mongoc', opt: 'pgo', off: {} };
+  }
+  seg(key, labels) {
+    const cur = this.state[key];
+    return labels.map((label) => {
+      const on = label === cur;
+      return {
+        label,
+        pick: () => this.setState({ [key]: label }),
+        style: 'min-height: 44px; padding: 0 14px; border-radius: 8px; font-family: inherit; font-size: 15px; cursor: pointer; ' +
+          (on ? 'background: #A72E60; color: #FFFFFF; border: 1px solid #D0558A; font-weight: 600'
+              : 'background: #1D212A; color: #ECEEF2; border: 1px solid #2B303B')
+      };
+    });
+  }
+  renderVals() {
+    const s = this.state;
+    // CMakeLists.txt COR_FEATURES, in its order, defaults as there (MONGOC is the store choice above)
+    const list = [
+      ['SUBSCRIPTIONS', 'Subscriptions and notifications'],
+      ['REGISTRATIONS', 'Context Source Registrations, distributed operations'],
+      ['GEOQ', 'Geo-query matching (GEOS)'],
+      ['SCOPES', 'Entity scope and scopeQ'],
+      ['DATASETID', 'Multi-instance attributes'],
+      ['MULTI_TYPE', 'Entities with more than one type'],
+      ['CONTEXT_DL', 'Download @contexts from URLs'],
+      ['CONTEXT_HOSTING', '/jsonldContexts endpoints'],
+      ['TENANTS', 'Multi-tenancy (NGSILD-Tenant)'],
+      ['ADMIN_API', 'The admin API plugin'],
+      ['METRICS', 'Prometheus metrics'],
+      ['TRANSPORTS', 'The API over WebSocket (ws.so)'],
+      ['SERVICE_EXECUTION', 'Services, executions, executors'],
+      ['SNAPSHOT_WRITE', 'Writes on a Snapshot'],
+      ['SNAPSHOT_SUBSCRIPTIONS', 'Subscriptions on a Snapshot'],
+      ['MIGRATE', 'coraine-import'],
+      ['HEALTH', 'Health port for probes'],
+      ['RESPONSE_BUDGET', 'Byte budget per response'],
+      ['AUTO_ENTITY_MAP', 'Automatic EntityMaps'],
+      ['ICU_COLLATION', 'orderBy via ICU (+39 MiB)'],
+      ['LOCATION', 'Geo dispatch on location'],
+      ['OBSERVATION_SPACE', 'Geo dispatch on observationSpace'],
+      ['OPERATION_SPACE', 'Geo dispatch on operationSpace']
+    ];
+    const DEFAULT_OFF = { ICU_COLLATION: true, OBSERVATION_SPACE: true, OPERATION_SPACE: true };
+    const isOn = (n) => (n in s.off) ? !s.off[n] : !DEFAULT_OFF[n];
+    const forcedOff = (n) => n === 'SNAPSHOT_SUBSCRIPTIONS' && (!isOn('SUBSCRIPTIONS') || !isOn('SNAPSHOT_WRITE'));
+    const features = list.map(([name, desc]) => {
+      const on = isOn(name) && !forcedOff(name);
+      if (forcedOff(name)) desc = 'Needs SUBSCRIPTIONS and SNAPSHOT_WRITE';
+      return {
+        name, desc,
+        pick: () => this.setState({ off: { ...this.state.off, [name]: on } }),
+        style: 'display: flex; align-items: flex-start; gap: 10px; min-height: 64px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; color: #ECEEF2; text-align: left; ' +
+          (on ? 'background: #1D212A; border: 1px solid #6B2C47' : 'background: #12151B; border: 1px solid #2B303B; opacity: 0.7'),
+        dot: 'flex: 0 0 auto; margin-top: 5px; width: 12px; height: 12px; border-radius: 3px; ' + (on ? 'background: #D0558A' : 'border: 2px solid #5A616E; box-sizing: border-box')
+      };
+    });
+    const opts = [
+      ['release', 'Release', 'Optimised build, no training.'],
+      ['pgo', 'Profile-guided', 'Trained on the standard scenarios, then rebuilt.'],
+      ['tune', 'Tuned for a workload', 'Trained on your workload; allocator and lock policy measured on it.']
+    ];
+    const opt = opts.map(([id, label, desc]) => {
+      const on = s.opt === id;
+      return {
+        label, desc,
+        pick: () => this.setState({ opt: id }),
+        card: 'display: flex; flex-direction: column; gap: 4px; min-height: 96px; padding: 14px 16px; border-radius: 10px; text-align: left; font-family: inherit; color: #ECEEF2; cursor: pointer; ' +
+          (on ? 'background: #2A1420; border: 2px solid #D0558A' : 'background: #1D212A; border: 2px solid #2B303B')
+      };
+    });
+    const changed = list.map((l) => l[0]).filter((n) => isOn(n) === !!DEFAULT_OFF[n]).map((n) => n + '=' + (isOn(n) ? 'ON' : 'OFF'));
+    if (s.store === 'corDB only') changed.push('MONGOC=OFF');
+    const onCount = list.filter((l) => isOn(l[0]) && !forcedOff(l[0])).length;
+    const optFlag = s.opt === 'tune' ? '--tune workload.json' : (s.opt === 'pgo' ? '--pgo' : '--release');
+    const command = 'coraine-build ' + optFlag +
+      (changed.length ? ' \\\n  --features ' + changed.join(',') : '') + ' \\\n  ./build';
+    return {
+      arch: this.seg('arch', ['amd64', 'arm64']),
+      dist: this.seg('dist', ['Ubuntu 26.04', 'Ubuntu 24.04', 'Debian 13']),
+      output: this.seg('output', ['Binary', 'Docker image', 'Debian package']),
+      http: this.seg('http', ['corHttp (built in)', 'libmicrohttpd']),
+      store: this.seg('store', ['corDB only', 'corDB + mongoc']),
+      features, featuresOn: onCount, featuresTotal: features.length,
+      opt,
+      sumTarget: s.arch + ' · ' + s.dist + ' · ' + s.output,
+      sumServer: s.http,
+      sumStores: s.store + '; history none, corDB, timescale',
+      sumOpt: opts.find((o) => o[0] === s.opt)[1],
+      command
+    };
+  }
+}
+</script>
+</body>
+</html>

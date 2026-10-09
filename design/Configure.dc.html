@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>c³ Configure</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&amp;family=Source+Sans+3:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E1014}
+a{color:#E58AB1}a:hover{color:#F3B3CE}
+</style>
+</helmet>
+<div style="min-height: 920px; background: #0E1014; color: #ECEEF2; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 16px; line-height: 24px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 0 32px; min-height: 64px; background: #0A0C0F; border-bottom: 1px solid #2B303B">
+<img src="/_blob/cdc7bc932c7d049917541d77900c8ae5" alt="coraine" style="height: 34px; width: auto">
+<div style="display: flex; align-items: baseline; gap: 10px"><span style="font-family: Outfit, sans-serif; font-size: 26px; font-weight: 400; color: #ECEEF2">c<span style="color: #D0558A">³</span></span><span style="font-family: Outfit, sans-serif; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: #A6ADBA">coraine control center</span></div>
+<nav style="display: flex; gap: 4px; margin-left: 16px">
+<a href="Main.dc.html" style="padding: 18px 16px 20px; color: #A6ADBA; text-decoration: none">Compile</a>
+<a href="Configure.dc.html" style="padding: 18px 16px 17px; color: #ECEEF2; text-decoration: none; font-weight: 600; border-bottom: 3px solid #D0558A">Configure</a>
+<a href="Connect.dc.html" style="padding: 18px 16px 20px; color: #A6ADBA; text-decoration: none">Connect</a>
+</nav>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 16px"><span style="padding: 6px 12px; border: 1px solid #2B303B; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #A6ADBA">build host · [hostname]</span><img src="/_blob/1503548c26ed7019d2750683b022cb5a" alt="Seamware" style="height: 18px; width: auto; opacity: 0.85"></div>
+</header>
+
+<div style="max-width: 1440px; margin: 0 auto; padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+<div style="flex: 1 1 480px">
+<h1 style="margin: 0; font-family: Outfit, sans-serif; font-size: 36px; line-height: 44px; font-weight: 300">Map a bridge</h1>
+<p style="margin: 8px 0 0; color: #A6ADBA">Pick the topics the bridge listens to and say which NGSI-LD attribute each field becomes. The bridge reads the file; the broker never sees a topic.</p>
+</div>
+<div style="display: flex; gap: 6px" role="tablist" aria-label="Bridge">
+<button type="button" role="tab" aria-selected="true" style="min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid #D0558A; background: #A72E60; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">DDS / ROS 2</button>
+<button type="button" role="tab" aria-selected="false" disabled style="min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px dashed #2B303B; background: transparent; color: #7A8190; font-family: inherit; font-size: 15px">OPC UA · coming</button>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch">
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; flex: 1 1 300px; min-width: 280px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px"><h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Topics</h2><span style="margin-left: auto; font-size: 13px; color: #A6ADBA">domain 0 · discovered</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{topics}}" as="t" hint-placeholder-count="6">
+<button type="button" onClick="{{t.pick}}" style="{{t.style}}">
+<span style="display: flex; align-items: center; gap: 8px"><span style="{{t.dot}}"></span><span style="font-family: 'JetBrains Mono', monospace; font-size: 14px">{{t.name}}</span></span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A6ADBA; padding-left: 18px">{{t.type}}</span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; flex: 3 1 560px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px"><h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">Mapping</h2><span style="font-family: 'JetBrains Mono', monospace; font-size: 14px">{{selName}}</span><span style="margin-left: auto; font-size: 13px; color: #A6ADBA">{{mappedCount}} of {{fieldCount}} fields mapped</span></div>
+<div style="display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; align-items: center; padding: 12px 14px; background: #12151B; border: 1px solid #2B303B; border-radius: 8px; font-size: 14px">
+<span style="color: #A6ADBA">Entity</span><span style="font-family: 'JetBrains Mono', monospace">{{entityId}}</span>
+<span style="color: #A6ADBA">Type</span><span style="font-family: 'JetBrains Mono', monospace">{{entityType}}</span>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1.3fr) 24px minmax(0, 1fr) minmax(0, 0.8fr) 56px; gap: 0; font-size: 14px">
+<span style="padding: 8px 10px; color: #A6ADBA; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid #2B303B">Field</span><span style="border-bottom: 1px solid #2B303B"></span>
+<span style="padding: 8px 10px; color: #A6ADBA; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid #2B303B">Attribute</span>
+<span style="padding: 8px 10px; color: #A6ADBA; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid #2B303B">As</span>
+<span style="padding: 8px 10px; color: #A6ADBA; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid #2B303B">Map</span>
+<sc-for list="{{fields}}" as="f" hint-placeholder-count="6">
+<span style="{{f.cell}}; font-family: 'JetBrains Mono', monospace; font-size: 13px">{{f.path}}</span>
+<span style="{{f.cell}}; color: #E58AB1; text-align: center">{{f.arrow}}</span>
+<span style="{{f.cell}}; font-family: 'JetBrains Mono', monospace; font-size: 13px">{{f.attr}}</span>
+<span style="{{f.cell}}; color: #A6ADBA">{{f.kind}}</span>
+<span style="{{f.cell}}; padding: 4px 10px"><button type="button" onClick="{{f.toggle}}" aria-label="{{f.label}}" aria-pressed="{{f.on}}" style="{{f.sw}}"><span style="{{f.knob}}"></span></button></span>
+</sc-for>
+</div>
+<div style="font-size: 13px; color: #A6ADBA">Rate limit {{rate}} · a message that changes nothing mapped is not forwarded</div>
+</section>
+
+<section style="background: #161920; border: 1px solid #2B303B; border-radius: 12px; flex: 2 1 380px; min-width: 300px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px"><h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #E58AB1">The entity</h2><span style="margin-left: auto; font-size: 13px; color: #A6ADBA">from the last message</span></div>
+<pre style="margin: 0; flex: 1; overflow: auto; background: #0A0C0F; border: 1px solid #2B303B; border-radius: 8px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 20px; color: #CDD2DB">{{preview}}</pre>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A6ADBA">/opt/seamware/etc/dds.json</span>
+<button type="button" style="margin-left: auto; min-height: 44px; padding: 0 20px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #C2407A, #A72E60); color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 700">Save mapping</button>
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":920}}'>
+const TOPICS = [
+  { name: '/amr1/odom', type: 'nav_msgs/msg/Odometry', id: 'urn:ngsi-ld:Robot:amr1', etype: 'Robot', rate: '1 per second', fields: [
+    ['pose.pose.position.x,y', 'location', 'GeoProperty', true, '{ "type": "Point", "coordinates": [ 12.41, 7.03 ] }'],
+    ['pose.pose.orientation', 'heading', 'Property', true, '1.57'],
+    ['twist.twist.linear.x', 'speed', 'Property', true, '0.82'],
+    ['twist.twist.angular.z', 'turnRate', 'Property', false, ''],
+    ['pose.covariance', 'positionCovariance', 'Property', false, ''],
+    ['header.stamp', 'observedAt', 'every attribute', true, '']
+  ]},
+  { name: '/amr1/battery_state', type: 'sensor_msgs/msg/BatteryState', id: 'urn:ngsi-ld:Robot:amr1', etype: 'Robot', rate: '1 per 10 seconds', fields: [
+    ['percentage', 'batteryLevel', 'Property', true, '0.74'],
+    ['voltage', 'batteryVoltage', 'Property', true, '24.6'],
+    ['power_supply_status', 'charging', 'Property', true, 'false'],
+    ['temperature', 'batteryTemperature', 'Property', false, ''],
+    ['header.stamp', 'observedAt', 'every attribute', true, '']
+  ]},
+  { name: '/amr1/scan', type: 'sensor_msgs/msg/LaserScan', id: 'urn:ngsi-ld:Robot:amr1', etype: 'Robot', rate: 'not forwarded', fields: [
+    ['ranges', 'scan', 'Property', false, ''],
+    ['range_min', 'scanRangeMin', 'Property', false, ''],
+    ['range_max', 'scanRangeMax', 'Property', false, '']
+  ]},
+  { name: '/amr1/cmd_vel', type: 'geometry_msgs/msg/Twist', id: 'urn:ngsi-ld:Robot:amr1', etype: 'Robot', rate: 'on change', fields: [
+    ['linear.x', 'commandedSpeed', 'Property', true, '0.80'],
+    ['angular.z', 'commandedTurnRate', 'Property', false, '']
+  ]},
+  { name: '/dock3/state', type: 'std_msgs/msg/String', id: 'urn:ngsi-ld:Dock:dock3', etype: 'Dock', rate: 'on change', fields: [
+    ['data', 'status', 'Property', true, '"occupied"']
+  ]},
+  { name: '/rosout', type: 'rcl_interfaces/msg/Log', id: '-', etype: '-', rate: 'not forwarded', fields: [
+    ['msg', 'logMessage', 'Property', false, '']
+  ]}
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const on = {};
+    TOPICS.forEach((t, ti) => t.fields.forEach((f, fi) => { on[ti + ':' + fi] = f[3]; }));
+    this.state = { sel: 0, on };
+  }
+  renderVals() {
+    const s = this.state;
+    const t = TOPICS[s.sel];
+    const topics = TOPICS.map((x, i) => {
+      const cur = i === s.sel;
+      const mapped = x.fields.some((f, fi) => s.on[i + ':' + fi]);
+      return {
+        name: x.name, type: x.type,
+        pick: () => this.setState({ sel: i }),
+        style: 'display: flex; flex-direction: column; gap: 2px; min-height: 52px; padding: 8px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-family: inherit; color: #ECEEF2; ' +
+          (cur ? 'background: #2A1420; border: 1px solid #D0558A' : 'background: #1D212A; border: 1px solid #2B303B'),
+        dot: 'width: 10px; height: 10px; border-radius: 50%; ' + (mapped ? 'background: #D0558A' : 'border: 2px solid #5A616E; box-sizing: border-box')
+      };
+    });
+    const fields = t.fields.map((f, fi) => {
+      const key = s.sel + ':' + fi;
+      const on = !!s.on[key];
+      return {
+        path: f[0], attr: on ? f[1] : '-', kind: on ? f[2] : '', arrow: on ? '→' : '',
+        on: on ? 'true' : 'false', label: 'Map ' + f[0],
+        toggle: () => this.setState({ on: { ...this.state.on, [key]: !on } }),
+        cell: 'padding: 10px; border-bottom: 1px solid #232833; display: flex; align-items: center; min-height: 28px' + (on ? '' : '; color: #7A8190'),
+        sw: 'position: relative; width: 40px; height: 24px; border-radius: 12px; cursor: pointer; padding: 0; border: 0; ' + (on ? 'background: #A72E60' : 'background: #2B303B'),
+        knob: 'position: absolute; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #ECEEF2; ' + (on ? 'left: 19px' : 'left: 3px')
+      };
+    });
+    const mapped = t.fields.filter((f, fi) => s.on[s.sel + ':' + fi]);
+    const stamp = mapped.some((f) => f[1] === 'observedAt');
+    const attrs = mapped.filter((f) => f[1] !== 'observedAt').map((f) => {
+      const typ = f[2] === 'GeoProperty' ? 'GeoProperty' : 'Property';
+      return '  "' + f[1] + '": {\n    "type": "' + typ + '",\n    "value": ' + f[4] + (stamp ? ',\n    "observedAt": "2026-10-09T16:42:07.315Z"' : '') + '\n  }';
+    });
+    const preview = t.etype === '-' ? 'Nothing mapped - this topic is not forwarded.' :
+      '{\n  "id": "' + t.id + '",\n  "type": "' + t.etype + '"' + (attrs.length ? ',\n' + attrs.join(',\n') : '') + '\n}';
+    return {
+      topics, fields, preview,
+      selName: t.name, entityId: t.id, entityType: t.etype, rate: t.rate,
+      fieldCount: t.fields.length, mappedCount: mapped.length
+    };
+  }
+}
+</script>
+</body>
+</html>
