@@ -32,6 +32,7 @@ export const config       = () => call('GET', '/api/config');
 export const brokerTouch  = (url, name) => call('POST', '/api/brokers', name ? { url, name } : { url });
 export const brokerForget = (url) => call('DELETE', '/api/brokers', { url });
 export const uiSet        = (ui) => call('PUT', '/api/ui', ui);
+export const brokerTypes  = (url, types) => call('PUT', '/api/brokers/types', { url, types });
 
 //
 // brokerGet - a GET to the broker, through the backend's proxy

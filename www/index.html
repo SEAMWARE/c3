@@ -49,11 +49,16 @@
     </div>
 
     <div class="cols">
-      <aside class="panel types">
+      <aside class="panel types" aria-label="What the broker holds">
         <h2 class="section">Types</h2>
-        <div class="typeall" id="typeall" hidden><button type="button" id="types-all">all</button><button type="button" id="types-none">none</button></div>
-        <div class="typelist" id="typelist"></div>
-        <div class="help">Drag the background to move the view, drag a box to move an entity, wheel or the buttons to zoom. Keys: + − 0 and the arrows.</div>
+        <div class="disc-sum" id="disc-sum"></div>
+        <div class="typeall" id="typeall" hidden><span>load</span><button type="button" id="pick-all">all</button><button type="button" id="pick-none">none</button></div>
+        <div class="typelist" id="typelist" role="list"></div>
+        <button class="btn primary" type="button" id="load-btn" hidden>Load</button>
+        <h2 class="section">Relationships</h2>
+        <div class="rels" id="rels"></div>
+        <div class="disc-notes" id="disc-notes"></div>
+        <div class="help">Tick the types to load, click a type to hide or show it, ▸ for its attributes. Drag the background to move the view, drag a box to move an entity, wheel or the buttons to zoom. Keys: + − 0 and the arrows; Tab to a box, then the menu key or Shift+F10 for its menu - or right-click it.</div>
       </aside>
 
       <section class="graphwrap" id="graphwrap">
@@ -76,6 +81,12 @@
           <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
           <button type="button" class="fit" id="zoom-fit">Fit</button>
         </div>
+        <div class="modebar" id="modebar" hidden><span id="mode-text"></span><button class="btn" type="button" id="mode-back">Back to the picked types</button></div>
+        <div class="jsonpanel" id="jsonpanel" role="dialog" aria-label="Entity JSON" hidden>
+          <div class="jhead"><span class="jtitle" id="json-title"></span><button class="btn" type="button" id="json-copy">Copy</button><button class="btn" type="button" id="json-close" aria-label="Close the JSON">×</button></div>
+          <pre id="json-pre" tabindex="0"></pre>
+        </div>
+        <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
         <div class="overlay" id="overlay" hidden><div class="card" id="overlay-card"></div></div>
       </section>
 
