@@ -23,7 +23,7 @@ Something running first, then grow it.
 2c. **Changing data** - create/edit/delete entities, attributes, registrations, subscriptions from
    Connect - after authorisation in the broker (or the APISIX plugin): sign-in, the user's token on
    every request, actions the policy forbids greyed with the reason.
-3. Then, in no fixed order: live values over the WebSocket transport, the map, saved views,
+3. Then, in no fixed order: live values over the WebSocket transport, saved views,
    Configure (DDS first), Docs (the bridge skeleton first), Operate.
 
 c³ is built by several people; each part below can be taken on its own. The seams between them are

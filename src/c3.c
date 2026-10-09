@@ -8,7 +8,7 @@
 //
 // Starts the backend on a local port, serves the pages and the API, and opens the application.
 //
-//   c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>]
+//   c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
 //
 // If the port is taken by a c3 already, that one is opened and this one exits.
 //
@@ -57,6 +57,7 @@ static CorArg options[] =
   { "--config",     "-c",  CorArgString, &configArg, CorArgOpt, NULL,     NULL,  NULL,      "configuration file (default: $XDG_CONFIG_HOME/c3/c3.json, ~/.config/c3/c3.json)" },
   { "--no-browser", "-nb", CorArgBool,   &noBrowser, CorArgOpt, _vp false, NULL, NULL,      "serve only - print the URL, open no browser" },
   { "--www",        "-w",  CorArgString, &wwwArg,    CorArgOpt, NULL,     NULL,  NULL,      "directory of the pages (default: next to the binary, or ../share/c3/www)" },
+  { "--planet",     "-pl", CorArgString, &c3Planet,  CorArgOpt, NULL,     NULL,  NULL,      "the Protomaps planet (.pmtiles URL) map areas are extracted from (default: the newest daily build)" },
   CORARGS_END
 };
 
@@ -254,6 +255,9 @@ int main(int argC, char* argV[])
 
   server.maxRequestSize = 1024 * 1024;
   configLoad();
+
+  if (mapsInit() == false)
+    fprintf(stderr, "c3: no $HOME and no $XDG_DATA_HOME - the map cannot download areas\n");
 
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);

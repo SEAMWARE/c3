@@ -10,7 +10,9 @@
 #
 # 25 entities: a Building, two Floors, Docks, Shelves, ChargingStations, Robots, Missions and
 # Operators, joined by Relationships (partOf, locatedIn, isDockedAt, isChargingAt, assignedTo,
-# target, supervises). The Building, the Docks and the Robots have a location (GeoProperty).
+# target, supervises). The Building, the Docks and the Robots have a location (a Point), the Floors
+# an outline (location, a Polygon) and the running Missions a route (route, a LineString - a
+# GeoProperty other than location).
 # No @context: every term expands with the core context's default vocabulary.
 #
 # Entities are created with POST /ngsi-ld/v1/entityOperations/upsert, so running the script
@@ -27,6 +29,8 @@ U() { echo "urn:ngsi-ld:$1:$2"; }
 prop()  { printf '"%s": {"type": "Property", "value": %s}' "$1" "$2"; }
 rel()   { printf '"%s": {"type": "Relationship", "object": "%s"}' "$1" "$2"; }
 point() { printf '"location": {"type": "GeoProperty", "value": {"type": "Point", "coordinates": [%s, %s]}}' "$1" "$2"; }
+area()  { printf '"location": {"type": "GeoProperty", "value": {"type": "Polygon", "coordinates": [[%s]]}}' "$1"; }
+route() { printf '"route": {"type": "GeoProperty", "value": {"type": "LineString", "coordinates": [%s]}}' "$1"; }
 
 ENTITIES=()
 add() { ENTITIES+=("$1"); }
@@ -45,8 +49,8 @@ F1=$(U Floor n-1)
 F2=$(U Floor n-2)
 
 entity Building north "$(prop name '"Plant North"')" "$(prop address '"Dock Road 4"')" "$(point 13.4050 52.5200)"
-entity Floor n-1 "$(prop level 1)" "$(prop area 4200)" "$(rel partOf "$B")"
-entity Floor n-2 "$(prop level 2)" "$(prop area 3100)" "$(rel partOf "$B")"
+entity Floor n-1 "$(prop level 1)" "$(prop area 4200)" "$(rel partOf "$B")" "$(area '[13.4044, 52.51965], [13.4056, 52.51965], [13.4056, 52.52005], [13.4044, 52.52005], [13.4044, 52.51965]')"
+entity Floor n-2 "$(prop level 2)" "$(prop area 3100)" "$(rel partOf "$B")" "$(area '[13.4044, 52.52005], [13.4054, 52.52005], [13.4054, 52.52035], [13.4044, 52.52035], [13.4044, 52.52005]')"
 
 entity Dock dock1 "$(prop status '"free"')"     "$(rel locatedIn "$F1")" "$(point 13.4046 52.5198)"
 entity Dock dock2 "$(prop status '"occupied"')" "$(rel locatedIn "$F1")" "$(point 13.4049 52.5198)"
@@ -68,10 +72,10 @@ entity Robot amr4 "$(prop batteryLevel 0.55)" "$(prop speed 0.40)" "$(rel locate
 entity Robot amr5 "$(prop batteryLevel 0.12)" "$(prop speed 0)"    "$(rel isChargingAt "$(U ChargingStation charger1)")" "$(point 13.4047 52.5201)"
 
 entity Mission m-0711 "$(prop status '"done"')"    "$(prop progress 1.0)"  "$(rel assignedTo "$(U Robot amr3)")" "$(rel target "$(U Shelf shelf10)")"
-entity Mission m-0712 "$(prop status '"running"')" "$(prop progress 0.80)" "$(rel assignedTo "$(U Robot amr3)")" "$(rel target "$(U Shelf shelf11)")"
+entity Mission m-0712 "$(prop status '"running"')" "$(prop progress 0.80)" "$(rel assignedTo "$(U Robot amr3)")" "$(rel target "$(U Shelf shelf11)")" "$(route '[13.4049, 52.5199], [13.4049, 52.5201], [13.4045, 52.5201]')"
 entity Mission m-0713 "$(prop status '"queued"')"  "$(prop progress 0)"    "$(rel assignedTo "$(U Robot amr4)")" "$(rel target "$(U Shelf shelf20)")"
-entity Mission m-0714 "$(prop status '"running"')" "$(prop progress 0.35)" "$(rel assignedTo "$(U Robot amr1)")" "$(rel target "$(U Shelf shelf12)")"
-entity Mission m-0715 "$(prop status '"running"')" "$(prop progress 0.10)" "$(rel assignedTo "$(U Robot amr4)")" "$(rel target "$(U Shelf shelf21)")"
+entity Mission m-0714 "$(prop status '"running"')" "$(prop progress 0.35)" "$(rel assignedTo "$(U Robot amr1)")" "$(rel target "$(U Shelf shelf12)")" "$(route '[13.4052, 52.5199], [13.4054, 52.5199], [13.4054, 52.52015]')"
+entity Mission m-0715 "$(prop status '"running"')" "$(prop progress 0.10)" "$(rel assignedTo "$(U Robot amr4)")" "$(rel target "$(U Shelf shelf21)")" "$(route '[13.4048, 52.5203], [13.4051, 52.5203], [13.4051, 52.52025]')"
 
 entity Operator op-17 "$(prop shift '"B"')" "$(rel supervises "$(U Mission m-0714)")"
 entity Operator op-22 "$(prop shift '"A"')" "$(rel supervises "$(U Mission m-0713)")"

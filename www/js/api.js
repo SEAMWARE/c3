@@ -33,6 +33,17 @@ export const brokerTouch  = (url, name) => call('POST', '/api/brokers', name ? {
 export const brokerForget = (url) => call('DELETE', '/api/brokers', { url });
 export const uiSet        = (ui) => call('PUT', '/api/ui', ui);
 export const brokerTypes  = (url, types) => call('PUT', '/api/brokers/types', { url, types });
+export const brokerConnect = (url, patch) => call('PUT', '/api/brokers/connect', { url, ...patch });
+
+//
+// The map's downloaded areas
+//
+export const maps         = () => call('GET', '/api/maps');
+export const mapsEstimate = (bbox, maxzoom) => call('POST', '/api/maps/estimate', { bbox, maxzoom });
+export const mapsDownload = (name, bbox, maxzoom) => call('POST', '/api/maps/download', { name, bbox, maxzoom });
+export const mapsProgress = () => call('GET', '/api/maps/download');
+export const mapsCancel   = () => call('DELETE', '/api/maps/download');
+export const mapsDelete   = (id) => call('DELETE', '/api/maps/areas', { id });
 
 //
 // brokerGet - a GET to the broker, through the backend's proxy

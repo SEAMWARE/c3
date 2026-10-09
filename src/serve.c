@@ -11,9 +11,11 @@
 //   POST   /api/brokers         {"url", "name"}: a broker connected to - first in the list, lastUsed now
 //   DELETE /api/brokers         {"url"}: forget a broker
 //   PUT    /api/brokers/types   {"url", "types"}: the entity types Connect loads from a broker
+//   PUT    /api/brokers/connect {"url", "view", "map", "colourBy"}: Connect's view of a broker
 //   PUT    /api/ui              {"lastPage"}
+//   ...    /api/maps/...        the map's downloaded areas (maps.c)
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
-//   GET    /<file>              a file of the www directory; / is index.html
+//   GET    /<file>              a file of the www directory; / is index.html (Range taken)
 //
 // Only for this machine: a connection from another address is refused, and so is a request whose Host
 // is not localhost / 127.0.0.1 / [::1] (a page of another site, through DNS rebinding, must not reach
@@ -24,12 +26,14 @@
 #include <fcntl.h>                               // open
 #include <netinet/in.h>                          // sockaddr_in, sockaddr_in6
 #include <stdio.h>                               // snprintf
+#include <stdlib.h>                              // strtoll
 #include <string.h>                              // strcmp, strncmp, strstr, strrchr
 #include <sys/socket.h>                          // getpeername
 #include <sys/stat.h>                            // fstat
 #include <unistd.h>                              // read, close
 
 #include "corAlloc/corAlloc.h"                   // corAlloc
+#include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 
 #include "c3.h"
 
@@ -164,6 +168,7 @@ static const char* contentType(const char* path)
   if (dot == NULL)                    return "application/octet-stream";
   if (strcmp(dot, ".html")  == 0)     return "text/html; charset=utf-8";
   if (strcmp(dot, ".js")    == 0)     return "text/javascript; charset=utf-8";
+  if (strcmp(dot, ".mjs")   == 0)     return "text/javascript; charset=utf-8";
   if (strcmp(dot, ".css")   == 0)     return "text/css; charset=utf-8";
   if (strcmp(dot, ".json")  == 0)     return "application/json";
   if (strcmp(dot, ".svg")   == 0)     return "image/svg+xml";
@@ -173,6 +178,160 @@ static const char* contentType(const char* path)
   if (strcmp(dot, ".ico")   == 0)     return "image/x-icon";
 
   return "application/octet-stream";
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// rangeParse - a Range header: one range of bytes in a file of 'size' bytes
+//
+// "bytes=a-b", "bytes=a-", "bytes=-n". Answers 1 with [*fromP, *toP] (to clamped to the file), 0 when
+// there is no Range to apply (none, or one c3 does not take: several ranges, another unit), -1 when the
+// range starts past the end (416).
+//
+static int rangeParse(const char* h, int64_t size, int64_t* fromP, int64_t* toP)
+{
+  if ((h == NULL) || (strncmp(h, "bytes=", 6) != 0) || (strchr(h, ',') != NULL))
+    return 0;
+
+  const char* p = h + 6;
+  char*       end;
+
+  if (*p == '-')
+  {
+    long long n = strtoll(p + 1, &end, 10);
+    if ((end == p + 1) || (*end != 0) || (n <= 0))
+      return 0;
+    if (size == 0)
+      return -1;
+    *fromP = (n >= size) ? 0 : size - n;
+    *toP   = size - 1;
+    return 1;
+  }
+
+  long long a = strtoll(p, &end, 10);
+  if ((end == p) || (*end != '-') || (a < 0))
+    return 0;
+
+  p = end + 1;
+  long long b = size - 1;
+  if (*p != 0)
+  {
+    b = strtoll(p, &end, 10);
+    if ((end == p) || (*end != 0) || (b < a))
+      return 0;
+  }
+
+  if (a >= size)
+    return -1;
+
+  *fromP = a;
+  *toP   = (b >= size) ? size - 1 : b;
+  return 1;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// serveFileRange - a file, whole or the part a Range header asks for (206, Content-Range)
+//
+// A request without Range gets the whole file if it has 'maxWhole' bytes or fewer (0: 32 MiB); a larger
+// one is read by ranges only - the page's PMTiles reader does that. A range is at most 16 MiB. The ETag
+// (size and modification time) lets the reader see the file change under it.
+//
+#define RANGE_MAX  (16 * 1024 * 1024)
+
+void serveFileRange(CorHttpConn* connP, const char* file, const char* type, int maxWhole)
+{
+  int fd = open(file, O_RDONLY);
+  if (fd == -1)
+  {
+    serveError(connP, 404, "Not found", strrchr(file, '/') ? strrchr(file, '/') + 1 : file);
+    return;
+  }
+
+  struct stat st;
+  if ((fstat(fd, &st) == -1) || (!S_ISREG(st.st_mode)))
+  {
+    close(fd);
+    serveError(connP, 404, "Not found", strrchr(file, '/') ? strrchr(file, '/') + 1 : file);
+    return;
+  }
+
+  if (maxWhole <= 0)
+    maxWhole = 32 * 1024 * 1024;
+
+  int64_t size = st.st_size;
+  int64_t from = 0;
+  int64_t to   = size - 1;
+  int     r    = rangeParse(corHttpHeader(connP, "Range"), size, &from, &to);
+  char*   etag = corAlloc(&connP->alloc, 64);
+
+  snprintf(etag, 64, "\"%llx-%llx\"", (unsigned long long) size, (unsigned long long) st.st_mtime);
+
+  if (r == -1)
+  {
+    char* cr = corAlloc(&connP->alloc, 64);
+    close(fd);
+    snprintf(cr, 64, "bytes */%lld", (long long) size);
+    corHttpResponseStatus(connP, 416);
+    corHttpResponseHeader(connP, "Content-Range", cr);
+    corHttpResponseHeader(connP, "Accept-Ranges", "bytes");
+    corHttpResponseHeader(connP, "ETag", etag);
+    corHttpResponseBody(connP, (char*) "", 0);
+    return;
+  }
+
+  if ((r == 0) && (size > maxWhole))
+  {
+    close(fd);
+    serveError(connP, 413, "Too large", "the file is read by ranges (Range: bytes=a-b)");
+    return;
+  }
+
+  if ((r == 1) && (to - from + 1 > RANGE_MAX))
+    to = from + RANGE_MAX - 1;
+
+  int64_t len  = (size == 0) ? 0 : to - from + 1;
+  char*   body = corAlloc(&connP->alloc, len + 1);
+  int64_t got  = 0;
+
+  while (got < len)
+  {
+    ssize_t n = pread(fd, body + got, len - got, from + got);
+    if (n <= 0)
+    {
+      if ((n == -1) && (errno == EINTR))
+        continue;
+      break;
+    }
+    got += n;
+  }
+  close(fd);
+
+  if (got != len)
+  {
+    serveError(connP, 500, "Read error", strrchr(file, '/') ? strrchr(file, '/') + 1 : file);
+    return;
+  }
+
+  if (r == 1)
+  {
+    char* cr = corAlloc(&connP->alloc, 96);
+    snprintf(cr, 96, "bytes %lld-%lld/%lld", (long long) from, (long long) to, (long long) size);
+    corHttpResponseStatus(connP, 206);
+    corHttpResponseHeader(connP, "Content-Range", cr);
+  }
+  else
+    corHttpResponseStatus(connP, 200);
+
+  corHttpResponseHeader(connP, "Content-Type", type);
+  corHttpResponseHeader(connP, "Accept-Ranges", "bytes");
+  corHttpResponseHeader(connP, "ETag", etag);
+  corHttpResponseHeader(connP, "Cache-Control", "no-cache");
+  corHttpResponseBody(connP, body, (int) len);
 }
 
 
@@ -197,42 +356,19 @@ static void serveFile(CorHttpConn* connP, const char* path)
 
   char file[8192];
   snprintf(file, sizeof(file), "%s%s", c3WwwDir, path);
+  serveFileRange(connP, file, contentType(file), 0);
+}
 
-  int fd = open(file, O_RDONLY);
-  if (fd == -1)
-  {
-    serveError(connP, 404, "Not found", path);
-    return;
-  }
 
-  struct stat st;
-  if ((fstat(fd, &st) == -1) || (!S_ISREG(st.st_mode)) || (st.st_size > 32 * 1024 * 1024))
-  {
-    close(fd);
-    serveError(connP, 404, "Not found", path);
-    return;
-  }
 
-  char* body = corAlloc(&connP->alloc, st.st_size + 1);
-  int   got  = 0;
-
-  while (got < st.st_size)
-  {
-    int n = read(fd, body + got, st.st_size - got);
-    if (n <= 0)
-    {
-      if ((n == -1) && (errno == EINTR))
-        continue;
-      break;
-    }
-    got += n;
-  }
-  close(fd);
-
-  corHttpResponseStatus(connP, 200);
-  corHttpResponseHeader(connP, "Content-Type", contentType(file));
-  corHttpResponseHeader(connP, "Cache-Control", "no-cache");
-  corHttpResponseBody(connP, body, got);
+// -----------------------------------------------------------------------------
+//
+// configCopy - the configuration's text, copied into the connection: the response is sent after the
+// callback returns, and a later change frees the text it was taken from
+//
+static char* configCopy(CorHttpConn* connP)
+{
+  return corAllocStrdup(&connP->alloc, configText());
 }
 
 
@@ -279,7 +415,7 @@ static void serveConfigChange(CorHttpConn* connP, bool (*change)(char* body, cha
     return;
   }
 
-  serveJson(connP, 200, configText());
+  serveJson(connP, 200, configCopy(connP));
 }
 
 
@@ -310,16 +446,20 @@ void serveRequest(CorHttpConn* connP)
 
   if (strncmp(path, "/api/proxy/", 11) == 0)
     proxyRequest(connP, &path[10]);
+  else if ((strcmp(path, "/api/maps") == 0) || (strncmp(path, "/api/maps/", 10) == 0))
+    mapsRequest(connP, path);
   else if ((strcmp(path, "/api/status") == 0) && (strcmp(method, "GET") == 0))
     serveStatus(connP);
   else if ((strcmp(path, "/api/config") == 0) && (strcmp(method, "GET") == 0))
-    serveJson(connP, 200, configText());
+    serveJson(connP, 200, configCopy(connP));
   else if ((strcmp(path, "/api/brokers") == 0) && (strcmp(method, "POST") == 0))
     serveConfigChange(connP, configBrokerTouch);
   else if ((strcmp(path, "/api/brokers") == 0) && (strcmp(method, "DELETE") == 0))
     serveConfigChange(connP, configBrokerForget);
   else if ((strcmp(path, "/api/brokers/types") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configBrokerTypes);
+  else if ((strcmp(path, "/api/brokers/connect") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configBrokerConnect);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configUiSet);
   else

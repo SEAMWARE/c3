@@ -6,8 +6,8 @@
 //
 // The configuration file - ~/.config/c3/c3.json ($XDG_CONFIG_HOME, or --config <file>)
 //
-// It holds the brokers connected to - with, per broker, the entity types Connect loads - and the last
-// page:
+// It holds the brokers connected to - with, per broker, the entity types Connect loads and its view (graph
+// or map, the map's view, what the markers are coloured by) - the downloaded map areas, and the last page:
 //
 //   {
 //     "version": 1,
@@ -16,9 +16,12 @@
 //         "url":      "http://localhost:1026",
 //         "name":     "localhost:1026",
 //         "lastUsed": "2026-10-09T17:30:00Z",
-//         "connect":  { "types": ["Building", "Floor"] }
+//         "connect":  { "types": ["Building", "Floor"], "view": "map",
+//                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type" }
 //       }
 //     ],
+//     "maps":    { "areas": [ { "id": "area-20261009-190012", "name": "Boston", "bbox": [w, s, e, n],
+//                               "maxzoom": 15, "bytes": 31457280, "created": "...", "build": "20261009" } ] },
 //     "ui":      { "lastPage": "connect" }
 //   }
 //
@@ -470,6 +473,26 @@ static bool commit(Doc* docP, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// commitIfChanged - commit, unless the tree renders as the configuration already is
+//
+static bool commitIfChanged(Doc* docP, char* errBuf, int errLen)
+{
+  char* text = docRender(docP);
+
+  if ((text != NULL) && (cfgText != NULL) && (strcmp(text, cfgText) == 0))
+  {
+    free(text);
+    return true;
+  }
+
+  free(text);
+  return commit(docP, errBuf, errLen);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // bodyParse - a request body, as a JSON object, in the doc's allocator
 //
 static CorNode* bodyParse(Doc* docP, char* body, char* errBuf, int errLen)
@@ -839,4 +862,297 @@ bool configBrokerTypes(char* body, char* errBuf, int errLen)
  done:
   docRelease(&doc);
   return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// numberOf - a number member as a double
+//
+static bool numberOf(CorNode* nodeP, double* vP)
+{
+  if (nodeP == NULL)
+    return false;
+  if (nodeP->type == CorFloat)
+    *vP = nodeP->value.f;
+  else if (nodeP->type == CorInt)
+    *vP = (double) nodeP->value.i;
+  else
+    return false;
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy"}
+//
+// Connect's view of a broker, kept in its "connect" object beside "types":
+//
+//   "view":     "graph" or "map" - the one shown
+//   "map":      {"center": [lon, lat], "zoom": z, "bearing": b, "pitch": p} - the map's view
+//   "colourBy": "type", or the name of a Relationship: the map's markers coloured by its target
+//
+// Each member is optional; the ones given replace the stored ones, the others stay.
+//
+bool configBrokerConnect(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* url;
+  const char* view;
+  const char* colourBy;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if (bodyP == NULL)
+    goto done;
+
+  if (stringMember(bodyP, "url", true, 2048, &url, errBuf, errLen) == false)
+    goto done;
+  if (stringMember(bodyP, "view", false, 16, &view, errBuf, errLen) == false)
+    goto done;
+  if (stringMember(bodyP, "colourBy", false, 2048, &colourBy, errBuf, errLen) == false)
+    goto done;
+
+  if ((view != NULL) && (strcmp(view, "graph") != 0) && (strcmp(view, "map") != 0))
+  {
+    snprintf(errBuf, errLen, "\"view\" is \"graph\" or \"map\"");
+    goto done;
+  }
+
+  CorNode* mapP = corTreeLookup(bodyP, "map");
+  CorNode* newMapP = NULL;
+  if (mapP != NULL)
+  {
+    CorNode* centerP = (mapP->type == CorObject) ? corTreeLookup(mapP, "center") : NULL;
+    double   lon, lat, zoom, bearing = 0, pitch = 0;
+
+    if ((centerP == NULL) || (centerP->type != CorArray) || (centerP->value.head == NULL) || (centerP->value.head->next == NULL) ||
+        !numberOf(centerP->value.head, &lon) || !numberOf(centerP->value.head->next, &lat) ||
+        !numberOf(corTreeLookup(mapP, "zoom"), &zoom) ||
+        (lon < -180) || (lon > 180) || (lat < -90) || (lat > 90) || (zoom < 0) || (zoom > 24))
+    {
+      snprintf(errBuf, errLen, "\"map\" must be {\"center\": [lon, lat], \"zoom\": z} (bearing and pitch optional)");
+      goto done;
+    }
+    numberOf(corTreeLookup(mapP, "bearing"), &bearing);
+    numberOf(corTreeLookup(mapP, "pitch"), &pitch);
+
+    newMapP = corTreeObject(&doc.alloc, "map");
+    CorNode* cP = corTreeArray(&doc.alloc, "center");
+    corTreeChildAdd(cP, corTreeFloat(&doc.alloc, NULL, lon));
+    corTreeChildAdd(cP, corTreeFloat(&doc.alloc, NULL, lat));
+    corTreeChildAdd(newMapP, cP);
+    corTreeChildAdd(newMapP, corTreeFloat(&doc.alloc, "zoom", zoom));
+    if (bearing != 0)
+      corTreeChildAdd(newMapP, corTreeFloat(&doc.alloc, "bearing", bearing));
+    if (pitch != 0)
+      corTreeChildAdd(newMapP, corTreeFloat(&doc.alloc, "pitch", pitch));
+  }
+
+  CorNode* brokersP = corTreeLookup(doc.treeP, "brokers");
+  CorNode* brokerP  = brokerFind(brokersP, url);
+
+  if (brokerP == NULL)
+  {
+    snprintf(errBuf, errLen, "no broker %s in the configuration", url);
+    goto done;
+  }
+
+  CorNode* connectP = corTreeLookup(brokerP, "connect");
+  if ((connectP == NULL) || (connectP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(brokerP, "connect", corTreeObject(&doc.alloc, "connect"));
+    connectP = corTreeLookup(brokerP, "connect");
+  }
+
+  if (view != NULL)
+    corTreeChildAddOrReplace(connectP, "view", corTreeString(&doc.alloc, "view", view));
+  if (colourBy != NULL)
+    corTreeChildAddOrReplace(connectP, "colourBy", corTreeString(&doc.alloc, "colourBy", colourBy));
+  if (newMapP != NULL)
+    corTreeChildAddOrReplace(connectP, "map", newMapP);
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// areaNode - a downloaded map area as an object of the configuration
+//
+static CorNode* areaNode(CorAlloc* allocP, const MapsArea* aP)
+{
+  CorNode* objP  = corTreeObject(allocP, NULL);
+  CorNode* bboxP = corTreeArray(allocP, "bbox");
+
+  for (int i = 0; i < 4; i++)
+    corTreeChildAdd(bboxP, corTreeFloat(allocP, NULL, aP->bbox[i]));
+
+  corTreeChildAdd(objP, corTreeString(allocP, "id", aP->id));
+  corTreeChildAdd(objP, corTreeString(allocP, "name", aP->name));
+  corTreeChildAdd(objP, bboxP);
+  corTreeChildAdd(objP, corTreeInteger(allocP, "maxzoom", aP->maxzoom));
+  corTreeChildAdd(objP, corTreeInteger(allocP, "bytes", aP->bytes));
+  corTreeChildAdd(objP, corTreeString(allocP, "created", aP->created));
+  if (aP->build[0] != 0)
+    corTreeChildAdd(objP, corTreeString(allocP, "build", aP->build));
+
+  return objP;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// mapsAreas - the configuration's "maps": {"areas": [...]}, created if missing
+//
+static CorNode* mapsAreas(Doc* docP)
+{
+  CorNode* mapsP = corTreeLookup(docP->treeP, "maps");
+  if ((mapsP == NULL) || (mapsP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(docP->treeP, "maps", corTreeObject(&docP->alloc, "maps"));
+    mapsP = corTreeLookup(docP->treeP, "maps");
+  }
+
+  CorNode* areasP = corTreeLookup(mapsP, "areas");
+  if ((areasP == NULL) || (areasP->type != CorArray))
+  {
+    corTreeChildAddOrReplace(mapsP, "areas", corTreeArray(&docP->alloc, "areas"));
+    areasP = corTreeLookup(mapsP, "areas");
+  }
+
+  return areasP;
+}
+
+static const char* areaId(CorNode* aP)
+{
+  CorNode* idP = (aP->type == CorObject) ? corTreeLookup(aP, "id") : NULL;
+  return ((idP != NULL) && (idP->type == CorString)) ? idP->value.s : NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configMapsSync - the downloaded areas in the configuration made to match the map directory
+//
+// 'added' (a download just finished) goes in with its name; an area whose file is gone is dropped; a file
+// with no entry gets one (named after its id); the sizes follow the files. Written only on a change.
+//
+bool configMapsSync(const MapsArea* disk, int n, const MapsArea* added, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* areasP = mapsAreas(&doc);
+
+  if (added != NULL)
+  {
+    for (CorNode* aP = areasP->value.head; aP != NULL; aP = aP->next)
+    {
+      const char* id = areaId(aP);
+      if ((id != NULL) && (strcmp(id, added->id) == 0))
+      {
+        corTreeChildRemove(areasP, aP);
+        break;
+      }
+    }
+    corTreeChildAdd(areasP, areaNode(&doc.alloc, added));
+  }
+
+  //
+  // Gone from the directory: dropped
+  //
+  CorNode* aP = areasP->value.head;
+  while (aP != NULL)
+  {
+    CorNode*    next = aP->next;
+    const char* id   = areaId(aP);
+    bool        here = false;
+
+    for (int i = 0; (id != NULL) && (i < n); i++)
+      if (strcmp(disk[i].id, id) == 0)
+        here = true;
+
+    if (!here)
+      corTreeChildRemove(areasP, aP);
+    else
+    {
+      for (int i = 0; i < n; i++)
+      {
+        if (strcmp(disk[i].id, id) != 0)
+          continue;
+        CorNode* bytesP = corTreeLookup(aP, "bytes");
+        if ((bytesP == NULL) || (bytesP->type != CorInt) || (bytesP->value.i != disk[i].bytes))
+          corTreeChildAddOrReplace(aP, "bytes", corTreeInteger(&doc.alloc, "bytes", disk[i].bytes));
+      }
+    }
+    aP = next;
+  }
+
+  //
+  // In the directory and not in the configuration: added
+  //
+  for (int i = 0; i < n; i++)
+  {
+    bool known = false;
+    for (CorNode* bP = areasP->value.head; bP != NULL; bP = bP->next)
+    {
+      const char* id = areaId(bP);
+      if ((id != NULL) && (strcmp(id, disk[i].id) == 0))
+        known = true;
+    }
+    if (!known)
+      corTreeChildAdd(areasP, areaNode(&doc.alloc, &disk[i]));
+  }
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configMapsAreasText - the downloaded areas as a JSON array, allocated from 'allocP'
+//
+char* configMapsAreasText(CorAlloc* allocP)
+{
+  Doc   doc;
+  char* out;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* mapsP  = corTreeLookup(doc.treeP, "maps");
+  CorNode* areasP = ((mapsP != NULL) && (mapsP->type == CorObject)) ? corTreeLookup(mapsP, "areas") : NULL;
+
+  if ((areasP == NULL) || (areasP->type != CorArray))
+    out = corAllocStrdup(allocP, "[]");
+  else
+  {
+    areasP->name = NULL;
+    int size = corJsonRenderSize(&doc.json, areasP) + 2;
+    out = corAlloc(allocP, size);
+    corJsonRender(&doc.json, areasP, out);
+  }
+
+  docRelease(&doc);
+  return out;
 }

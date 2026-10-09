@@ -62,6 +62,7 @@ typedef struct ProxyJob
 void proxyInit(void)
 {
   corRestClientInit(8, 30, "c3/" C3_VERSION);
+  corRestClientTlsInit();                        // the multi engine does not initialise TLS by itself: https brokers
 }
 
 

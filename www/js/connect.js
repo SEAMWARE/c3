@@ -1,6 +1,6 @@
 //
-// connect.js - Connect, read-only: what a broker holds (discovery), the types picked as a graph, and a
-// menu on each entity
+// connect.js - Connect, read-only: what a broker holds (discovery), the types picked as a graph or on a
+// map, and a menu on each entity
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -13,6 +13,8 @@ import {
 import { layout } from './layout.js';
 import { Graph } from './graph.js';
 import { openMenu, closeMenu } from './menu.js';
+import { EntityMap, geometries, nameOf } from './map.js';
+import { OfflinePanel } from './offline.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,16 +93,46 @@ export class Connect {
     this.unresolved = 0;                         // Relationships to entities not loaded
     this.loadedKinds = new Map();                // type -> attribute -> Set(kind), from the loaded entities
     this.loading = 0;                            // the load in progress; a newer one makes it stale
+    this.view = 'graph';                         // 'graph' or 'map' - kept per broker
+    this.mapView = null;                         // the map's view kept for the broker: {center, zoom, ...}
+    this.colourBy = 'type';                      // the map's markers: by type, or by a Relationship's target
+    this.edges = [];
 
     this.graph = new Graph({
       viewport: $('viewport'), world: $('world'), svg: $('edges'),
       lines: $('edge-lines'), labels: $('edge-labels'), boxes: $('boxes'), pct: $('zoom-pct'),
     });
-    this.graph.onSelect = (id) => this.showEntity(id);
+    this.graph.onSelect = (id) => { this.showEntity(id); this.emap.select(id); };
     this.graph.onMenu = (id, at, target) => this.menu(id, at, target);
     this.graph.onCollapse = (id) => {
       const n = this.graph.nodes.get(id);
       if (n) n.el.focus({ preventScroll: true });
+    };
+
+    //
+    // The map
+    //
+    this.emap = new EntityMap({ container: $('mapview') });
+    this.emap.onSelect = (id) => this.graph.select(id);
+    this.emap.onMenu = (id, at, target) => this.menu(id, at, target);
+    this.emap.onView = (v) => {
+      this.mapView = v;
+      clearTimeout(this.viewTimer);
+      const url = this.broker;
+      this.viewTimer = setTimeout(() => url && api.brokerConnect(url, { map: v }).catch(() => {}), 800);
+    };
+    this.emap.onOnline = (ok) => { $('map-offline').hidden = ok; };
+    this.offline = new OfflinePanel({ map: this.emap, toast: (t) => this.toast(t), onAreas: (areas, fonts) => this.emap.setAreas(areas, fonts) });
+    $('view-graph').onclick = () => this.setView('graph', true);
+    $('view-map').onclick = () => this.setView('map', true);
+    $('map-in').onclick = () => this.emap.zoomBy(1);
+    $('map-out').onclick = () => this.emap.zoomBy(-1);
+    $('map-fit').onclick = () => this.emap.fit();
+    $('map-download').onclick = () => (this.offline.isOpen() ? this.offline.close() : this.offline.open());
+    $('colour-by').onchange = () => {
+      this.colourBy = $('colour-by').value;
+      this.renderMapChrome();
+      if (this.broker) api.brokerConnect(this.broker, { colourBy: this.colourBy }).catch(() => {});
     };
 
     $('zoom-in').onclick = () => this.graph.zoomCenter(1.25);
@@ -122,7 +154,7 @@ export class Connect {
     // The graph's keys also work when nothing in particular has the focus
     //
     document.addEventListener('keydown', (e) => {
-      if (e.target === document.body && !$('app').hidden) this.graph.onKey(e);
+      if (e.target === document.body && !$('app').hidden && this.view === 'graph') this.graph.onKey(e);
     });
 
     this.empty('Connect to a broker', 'Enter its URL above - for example http://localhost:1026. c³ reads its entities with ordinary NGSI-LD queries, through the backend.');
@@ -226,7 +258,12 @@ export class Connect {
       const config = await api.brokerTouch(url);
       this.setBrokers(config.brokers);
       const b = (config.brokers || []).find((x) => x.url === url);
-      if (b && b.connect && Array.isArray(b.connect.types)) saved = b.connect.types.map(String);
+      const c = (b && b.connect) || {};
+      if (Array.isArray(c.types)) saved = c.types.map(String);
+      this.mapView = c.map && Array.isArray(c.map.center) ? c.map : null;
+      this.pendingView = this.mapView;
+      this.colourBy = typeof c.colourBy === 'string' ? c.colourBy : 'type';
+      if (c.view === 'map' || c.view === 'graph') this.setView(c.view, false);
     } catch (e) {
       console.warn('c3: the configuration was not saved:', e.message);
     }
@@ -399,6 +436,7 @@ export class Connect {
     this.entities = sorted;
     this.byId = new Map(sorted.map((e) => [e.id, e]));
     const edges = edgesOf(sorted, this.byId);
+    this.edges = edges;
 
     const nodes = sorted.map((e) => {
       const types = typesOf(e);
@@ -415,7 +453,137 @@ export class Connect {
     this.graph.set(nodes, edges, positions);
     this.graph.setHidden(this.hidden);
     this.graph.fit();
+    this.emap.select(null);
+    this.emap.set(sorted, edges, (e) => this.mapColor(e));
+    this.renderMapChrome();
     this.showEntity(null);
+    this.mapPlaced = false;
+    this.mapPlace();
+  }
+
+  //
+  // setView - the graph or the map; 'save' keeps the choice for the broker
+  //
+  async setView(view, save) {
+    this.view = view;
+    $('view-graph').setAttribute('aria-pressed', view === 'graph' ? 'true' : 'false');
+    $('view-map').setAttribute('aria-pressed', view === 'map' ? 'true' : 'false');
+    $('viewport').hidden = view !== 'graph';
+    $('graphbar').hidden = view !== 'graph';
+    $('mapview').hidden = view !== 'map';
+    $('mapbar').hidden = view !== 'map';
+    $('mapfoot').hidden = view !== 'map';
+    if (view !== 'map') this.offline.close();
+    if (save && this.broker) api.brokerConnect(this.broker, { view }).catch(() => {});
+    if (view !== 'map') return;
+
+    if (!this.emap.ready) {
+      const st = await this.offline.refresh();
+      this.emap.areas = st.areas || [];
+      this.emap.fonts = !!st.fonts;
+      await this.emap.open(this.mapView);
+      if (st.job && ['planning', 'tiles', 'fonts'].includes(st.job.state)) this.offline.open();
+    } else {
+      await this.emap.ready;
+      this.emap.resize();
+    }
+    this.mapPlace();
+    if (this.graph.sel) this.emap.select(this.graph.sel);
+  }
+
+  //
+  // mapPlace - the map's view for entities just drawn: the view kept for the broker the first time after
+  // a connect, else fitted to them; once per set of entities (switching views keeps where the map is)
+  //
+  mapPlace() {
+    if (this.view !== 'map' || !this.emap.map || !this.emap.boxes.size || this.mapPlaced) return;
+    this.mapPlaced = true;
+    const v = this.pendingView;
+    this.pendingView = null;
+    if (v) this.emap.map.jumpTo({ center: v.center, zoom: v.zoom, bearing: v.bearing || 0, pitch: v.pitch || 0 });
+    else this.emap.fit(false);
+  }
+
+  //
+  // Colour by - the type (as the graph), or the target of a Relationship: each target its colour, the
+  // entities pointing at it in the same one, the target itself too
+  //
+  colourOptions() {
+    const counts = new Map();
+    for (const e of this.entities) {
+      for (const [name, v] of attributes(e)) {
+        const k = kindOf(v);
+        if ((k === 'Relationship' || k === 'ListRelationship') && relationshipTargets(v).length) counts.set(name, (counts.get(name) || 0) + 1);
+      }
+    }
+    return [...counts].sort((a, b) => cmp(a[0], b[0]));
+  }
+
+  targetsOf(rel) {
+    const t = new Map();
+    for (const e of this.entities) {
+      for (const [name, v] of attributes(e)) {
+        if (name !== rel) continue;
+        const first = relationshipTargets(v)[0];
+        if (first) { t.set(first, (t.get(first) || 0) + 1); break; }
+      }
+    }
+    return new Map([...t.keys()].sort(cmp).map((id, i) => [id, { color: PALETTE[i % PALETTE.length], n: t.get(id) }]));
+  }
+
+  mapColor(e) {
+    if (this.colourBy === 'type' || !this.colourTargets) return typeColor(typesOf(e)[0]);
+    for (const [name, v] of attributes(e)) {
+      if (name !== this.colourBy) continue;
+      const first = relationshipTargets(v)[0];
+      if (first && this.colourTargets.has(first)) return this.colourTargets.get(first).color;
+    }
+    if (this.colourTargets.has(e.id)) return this.colourTargets.get(e.id).color;
+    return '#5A616E';
+  }
+
+  //
+  // renderMapChrome - the colour-by choices, the legend, how many entities are not on the map
+  //
+  renderMapChrome() {
+    const opts = this.colourOptions();
+    const known = this.colourBy !== 'type' && opts.some(([n]) => n === this.colourBy);
+    this.colourTargets = known ? this.targetsOf(this.colourBy) : null;
+    const sel = $('colour-by');
+    sel.textContent = '';
+    const o = el('option', null, 'type');
+    o.value = 'type';
+    sel.append(o);
+    for (const [name] of opts) {
+      const x = el('option', null, name + ' →');
+      x.value = name;
+      sel.append(x);
+    }
+    sel.value = this.colourTargets ? this.colourBy : 'type';
+    this.emap.setColors((e) => this.mapColor(e));
+
+    const legend = $('legend');
+    legend.textContent = '';
+    legend.hidden = !this.colourTargets;
+    if (this.colourTargets) {
+      legend.append(el('span', 'lt', `${this.colourBy} →`));
+      for (const [id, { color, n }] of this.colourTargets) {
+        const sw = el('span', 'sw');
+        sw.style.background = color;
+        const t = this.byId.get(id);
+        const ln = el('span', 'ln', t ? nameOf(t) || shortId(t) : targetLabel(id));
+        ln.title = id;
+        legend.append(sw, ln, el('span', 'lc', String(n)));
+      }
+    }
+
+    const off = this.emap.notOnMap.length;
+    const shownCount = this.entities.filter((e) => this.emap.visible(e)).length;
+    const nm = $('not-on-map');
+    nm.textContent = shownCount ? `on the map: ${shownCount - off} · not on the map: ${off}` : '';
+    const byType = new Map();
+    for (const e of this.emap.notOnMap) for (const t of typesOf(e)) byType.set(typeLabel(t), (byType.get(typeLabel(t)) || 0) + 1);
+    nm.title = off ? 'No GeoProperty: ' + [...byType].map(([t, n]) => `${t} ${n}`).join(', ') : '';
   }
 
   //
@@ -430,6 +598,8 @@ export class Connect {
   setHidden(types) {
     this.hidden = new Set(types);
     this.graph.setHidden(this.hidden);
+    this.emap.setHidden(this.hidden);
+    this.renderMapChrome();
     this.renderDiscovery();
   }
 
@@ -600,6 +770,12 @@ export class Connect {
       types.forEach((t) => h.delete(t));
       this.setHidden(h);
     }
+    if (this.view === 'map') {
+      this.graph.select(id);
+      if (this.emap.has(id)) this.emap.centerOn(id);
+      else this.toast(`${shortId(e)} has no location - not on the map`);
+      return;
+    }
     this.graph.select(id, { center: true });
     const n = this.graph.nodes.get(id);
     if (n) (n.xel || n.el).focus({ preventScroll: true });
@@ -636,6 +812,8 @@ export class Connect {
     items.push({ label: 'Follow', items: follows });
     items.push({ separator: true });
     for (const t of types) items.push({ label: `Hide type ${typeLabel(t)}`, action: () => this.setHidden([...this.hidden, t]) });
+    if (this.view === 'map') items.push({ label: 'Show in the graph', action: () => { this.setView('graph', true); this.graph.select(id, { center: true }); } });
+    else if (geometries(e).length) items.push({ label: 'Show on the map', action: async () => { await this.setView('map', true); this.graph.select(id); this.emap.centerOn(id); } });
     items.push({ label: 'Copy id', action: () => this.copy(id, 'the id') });
     items.push({ label: 'Show JSON', action: () => this.showJson(id) });
 
@@ -686,6 +864,7 @@ export class Connect {
   // expandLinked - the entity with its linked entities embedded (join=inline, joinLevel), as one box
   //
   async expandLinked(id, level) {
+    if (this.view !== 'graph') this.setView('graph', true);         // the linked entities open in the graph
     const ticket = this.linkTicket = (this.linkTicket || 0) + 1;
     const e = this.byId.get(id);
     this.toast(`Asking for ${e ? shortId(e) : id} with its linked entities, level ${level}…`);

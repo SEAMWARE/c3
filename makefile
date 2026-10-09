@@ -29,7 +29,7 @@ endif
 
 CFLAGS      = $(OPT) -Wall -Werror -Wundef -Wno-format-truncation -fstack-protector-all -I$(COR_LIBS) -MMD -MP $(EXTRA_CFLAGS)
 
-SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/browser.c
+SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/browser.c src/maps.c
 OBJDIR      = obj/$(BUILD)
 OBJECTS     = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 DEPS        = $(OBJECTS:.o=.d)
@@ -46,7 +46,7 @@ COR_ARCHIVES = $(COR_LIBS)/corHttp/libcorHttp.a   \
                $(COR_LIBS)/corAlloc/libcorAlloc.a \
                $(COR_LIBS)/corBase/libcorBase.a
 
-LIBS        = $(COR_ARCHIVES) -lssl -lcrypto -lpthread -lm
+LIBS        = $(COR_ARCHIVES) -lssl -lcrypto -lz -lpthread -lm
 
 all: c3
 

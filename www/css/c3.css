@@ -334,9 +334,9 @@ nav.pages span.later { color: var(--faint); cursor: default; }
 .lcard .miss .why { color: var(--dim); }
 
 .modebar {
-  position: absolute; left: 12px; top: 12px; right: 260px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  position: absolute; left: 172px; top: 12px; right: 260px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   padding: 8px 8px 8px 14px; border-radius: 10px; background: #161920F0; border: 1px solid var(--accent);
-  font-size: 14px; color: var(--text-2); width: max-content; max-width: calc(100% - 280px);
+  font-size: 14px; color: var(--text-2); width: max-content; max-width: calc(100% - 440px);
 }
 
 .jsonpanel {
@@ -429,6 +429,77 @@ details.raw pre {
   margin: 8px 0 0; padding: 10px; border-radius: 8px; background: var(--bg-deep); border: 1px solid var(--line-soft);
   font-family: var(--mono); font-size: 12px; line-height: 17px; color: var(--text-2); overflow: auto; max-height: 360px;
 }
+
+/* the Graph / Map switch, the map and its controls */
+.viewswitch {
+  position: absolute; left: 12px; top: 12px; z-index: 6; display: flex; padding: 4px; gap: 2px;
+  border-radius: 10px; background: #161920E6; border: 1px solid var(--line);
+}
+.viewswitch button {
+  min-height: 40px; min-width: 64px; padding: 0 14px; border: 0; border-radius: 7px; background: none;
+  color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.viewswitch button:hover { color: var(--text); }
+.viewswitch button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+.mapview, .mapview.maplibregl-map { position: absolute; inset: 0; background: #0B1620; outline: none; }
+.zoombar .colourby { display: flex; align-items: center; gap: 6px; padding: 0 4px 0 6px; font-size: 13px; color: var(--muted); }
+.zoombar select, .dlbody select, .dlbody input {
+  min-height: 36px; max-width: 220px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px;
+}
+.zoombar select:focus, .dlbody select:focus, .dlbody input:focus { border-color: var(--accent-2); outline: none; }
+.zoombar { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 196px); }
+
+.mapfoot { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: min(360px, calc(100% - 24px)); pointer-events: none; }
+.mapfoot > * { pointer-events: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip2 { padding: 4px 10px; border-radius: 8px; background: #161920E6; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.chip2:empty { display: none; }
+.chip2.warn { color: var(--warn); border-color: #5A4416; }
+.legend {
+  max-height: 260px; overflow: auto; padding: 8px 12px; border-radius: 10px; background: #161920F0; border: 1px solid var(--line);
+  display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; font-size: 13px; line-height: 19px;
+}
+.legend .lt { grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-text); margin-bottom: 2px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 50%; }
+.legend .ln { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.legend .lc { color: var(--dim); font-size: 12px; text-align: right; }
+
+.dlpanel {
+  position: absolute; right: 12px; top: 72px; bottom: 12px; z-index: 7; width: min(440px, calc(100% - 24px));
+  display: flex; flex-direction: column; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 16px 48px #000C;
+}
+.dlpanel .jhead { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line-soft); }
+.dlpanel .jtitle { flex: 1; font-family: var(--title); font-size: 16px; }
+.dlbody { flex: 1; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.dlbody h3 { margin: 6px 0 0; font-family: var(--title); font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-text); }
+.dlrow { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 10px; font-size: 14px; }
+.dlrow .k { color: var(--muted); font-size: 13px; }
+.dlrow .v { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.dlrow select, .dlrow input { max-width: none; width: 100%; }
+.dlest { min-height: 42px; font-size: 14px; color: var(--text-2); }
+.dlest .big { font-family: var(--title); font-size: 22px; color: var(--text); }
+.dlest .dim { font-size: 13px; }
+.dlest.bad { color: var(--bad); }
+.dlnote { margin: 0; font-size: 12px; line-height: 18px; color: var(--dim); }
+.dlnote .mono { color: var(--muted); overflow-wrap: anywhere; }
+.dlbody .actions { display: flex; gap: 8px; }
+.dlareas { display: flex; flex-direction: column; gap: 6px; }
+.dlarea { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-soft); }
+.dlarea .an { grid-column: 1; grid-row: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlarea .ai { grid-column: 1; grid-row: 2; font-size: 12px; color: var(--dim); }
+.dlarea .btn { min-height: 32px; padding: 0 10px; font-size: 13px; grid-row: 1 / span 2; }
+.dlarea .btn.show { grid-column: 2; }
+.dlarea .btn.danger { grid-column: 3; }
+.dlarea .btn.danger { color: var(--bad); }
+
+/* MapLibre's controls, in c³'s colours */
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: #0E1014CC !important; color: var(--muted); font-family: var(--sans); font-size: 11px; }
+.maplibregl-ctrl-attrib a { color: var(--accent-text) !important; }
+.maplibregl-ctrl-scale { background: #0E1014AA !important; color: var(--muted) !important; border-color: var(--faint) !important; font-family: var(--mono); font-size: 10px !important; }
+.maplibregl-canvas:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -2px; }
 
 @media (max-width: 1100px) {
   .types, .entity { max-width: none; }

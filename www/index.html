@@ -58,7 +58,7 @@
         <h2 class="section">Relationships</h2>
         <div class="rels" id="rels"></div>
         <div class="disc-notes" id="disc-notes"></div>
-        <div class="help">Tick the types to load, click a type to hide or show it, ▸ for its attributes. Drag the background to move the view, drag a box to move an entity, wheel or the buttons to zoom. Keys: + − 0 and the arrows; Tab to a box, then the menu key or Shift+F10 for its menu - or right-click it.</div>
+        <div class="help">Tick the types to load, click a type to hide or show it, ▸ for its attributes. Drag the background to move the view, drag a box to move an entity, wheel or the buttons to zoom. Keys: + − 0 and the arrows; Tab to a box, then the menu key or Shift+F10 for its menu - or right-click it. On the map: click a marker, right-click it for its menu; drag to move, the wheel to zoom, right-drag to turn.</div>
       </aside>
 
       <section class="graphwrap" id="graphwrap">
@@ -75,7 +75,38 @@
             <div id="boxes"></div>
           </div>
         </div>
-        <div class="zoombar">
+        <div class="mapview" id="mapview" tabindex="-1" hidden></div>
+        <div class="viewswitch" role="group" aria-label="View">
+          <button type="button" id="view-graph" aria-pressed="true">Graph</button>
+          <button type="button" id="view-map" aria-pressed="false">Map</button>
+        </div>
+        <div class="zoombar" id="mapbar" hidden>
+          <label class="colourby">colour by <select id="colour-by" aria-label="Colour the markers by"></select></label>
+          <button type="button" class="fit" id="map-download" title="Download the area in view, for offline use">Download this area</button>
+          <button type="button" id="map-out" aria-label="Zoom out">−</button>
+          <button type="button" id="map-in" aria-label="Zoom in">+</button>
+          <button type="button" class="fit" id="map-fit">Fit</button>
+        </div>
+        <div class="mapfoot" id="mapfoot" hidden>
+          <div class="legend" id="legend" hidden></div>
+          <div class="chips"><span class="chip2" id="not-on-map"></span><span class="chip2 warn" id="map-offline" hidden>online map not reachable - downloaded areas only</span></div>
+        </div>
+        <div class="dlpanel" id="dlpanel" role="dialog" aria-label="Offline map" hidden>
+          <div class="jhead"><span class="jtitle">Offline map</span><button class="btn" type="button" id="dl-close" aria-label="Close">×</button></div>
+          <div class="dlbody">
+            <h3>Download this area</h3>
+            <div class="dlrow"><span class="k">area</span><span class="v mono" id="dl-bbox"></span></div>
+            <label class="dlrow"><span class="k">detail</span><select id="dl-zoom"></select></label>
+            <label class="dlrow"><span class="k">name</span><input id="dl-name" maxlength="200" spellcheck="false"></label>
+            <div class="dlest" id="dl-est" aria-live="polite"></div>
+            <div class="progress" id="dl-progress" hidden><div id="dl-bar"></div></div>
+            <div class="actions"><button class="btn primary" type="button" id="dl-go" disabled>Download</button><button class="btn" type="button" id="dl-cancel" hidden>Cancel</button></div>
+            <p class="dlnote">The map data is OpenStreetMap's, extracted from the Protomaps planet build and saved as one <span class="mono">.pmtiles</span> file in <span class="mono" id="dl-dir"></span>. A downloaded area is drawn from that file - offline, and without asking the network; outside it the map uses OpenFreeMap online.</p>
+            <h3>Downloaded areas</h3>
+            <div class="dlareas" id="dl-areas"></div>
+          </div>
+        </div>
+        <div class="zoombar" id="graphbar">
           <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
           <span class="pct" id="zoom-pct">100%</span>
           <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
