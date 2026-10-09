@@ -45,8 +45,8 @@ All of coraine's documentation in one place, and much easier to read than Markdo
 
 - **The broker** - everything on Read the Docs (`doc/*.md`, built with `mkdocs.yml`): installation,
   building, the features, performance, the roadmap.
-- **Every cor-lib** - corBase, corAlloc, corLog, corArgs, corJson, corTree, corJsonld, corNgsild,
-  corRest, corHttp, corDB, corProm, corPlugin, corTest, corBridge, and the bridges: each one's README
+- **Every cor-lib** - corBase, corAlloc, corLog, corArgs, corHash, corJson, corTree, corJsonld, corNgsild,
+  corRest, corHttp, corDB, corProm, corPlugin, corTest, corTools, corBridge, and the bridges: each one's README
   and docs, plus an API reference generated from its headers - the functions, their arguments,
   their ownership rules.
 - **Searchable, and offline** - the docs come with the `coraine-dev` package, matching the version
