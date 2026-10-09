@@ -131,6 +131,26 @@ map naturally to entity types, and where a Smart Data Model exists for one, it i
 **Modbus**: registers and coils have no names or types to discover; its lines are entered by hand
 (address, data type, scale, poll interval), into the same table, with the same output.
 
+### Connect - the map
+
+A **Graph / Map** switch in Connect. On the map: the entities with a GeoProperty, where it puts them -
+a point as a marker coloured by type, a LineString as a line, a Polygon as an area - and the
+Relationships between them as arrows, as on the graph. The same click (the attribute panel) and
+right-click menu; "Fit" zooms to what is shown; later a rectangle drawn on the map becomes a
+`georel=within` query.
+
+**The map itself** - MapLibre GL JS (open source, BSD), bundled with c³, styled dark; the map data
+is OpenStreetMap's ("© OpenStreetMap contributors" shown, as its licence requires). No account, no
+key, nothing paid:
+
+- **online** - vector tiles from OpenFreeMap (hosted OpenStreetMap tiles, free, no key);
+- **"Download this area"** - a button on the map: the area in view, down to a chosen level of
+  detail, with its size shown before the download, saved as one Protomaps file (`.pmtiles`) in c³'s
+  data directory. From then on that area is drawn from the file - offline, and faster than over the
+  network - and the online tiles are used only outside it. Downloaded areas are listed, with their
+  size, and can be deleted. A site without internet - a factory, a robot cell - gets its map this
+  way, downloaded once from a machine that has it.
+
 ### Smart Data Models
 
 The Smart Data Models initiative publishes the common NGSI-LD data models - each one a JSON Schema,

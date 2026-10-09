@@ -12,6 +12,9 @@ Something running first, then grow it.
    `/attributes`), the entity view loading only the types picked, and a right-click menu on an
    entity: with its linked entities embedded (`join=inline`, `joinLevel`), its neighbourhood, follow a
    Relationship, hide a type, copy the id, the JSON.
+1c. **Connect - the map** - Graph / Map switch; GeoProperty entities as points, lines, areas; the
+   Relationships as arrows; MapLibre + OpenStreetMap (OpenFreeMap online); "Download this area" to a
+   `.pmtiles` file, offline and faster.
 2. **Compile** - the hardest part: the feature switches from `coraine-build --list-features`, the
    optimisation choice, the build run and its output, the result.
 2b. **Run** - start and stop brokers (the one just built, the installed one, or an image) natively or
