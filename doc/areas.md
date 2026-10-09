@@ -20,6 +20,9 @@ Something running first, then grow it.
 2b. **Run** - start and stop brokers (the one just built, the installed one, or an image) natively or
    in a container, and the services they need (MongoDB, PostgreSQL/TimescaleDB, Mosquitto) as
    containers; status from the health port; a started broker joins Connect's list.
+2c. **Changing data** - create/edit/delete entities, attributes, registrations, subscriptions from
+   Connect - after authorisation in the broker (or the APISIX plugin): sign-in, the user's token on
+   every request, actions the policy forbids greyed with the reason.
 3. Then, in no fixed order: live values over the WebSocket transport, the map, saved views,
    Configure (DDS first), Docs (the bridge skeleton first), Operate.
 

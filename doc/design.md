@@ -171,6 +171,20 @@ data from different deployments understandable to each other, and c³ uses them 
 The catalogue is read from the initiative's published repositories and kept locally (in c³'s data
 directory), so it works offline and can be refreshed on demand.
 
+### Changing data - after authorisation
+
+A control center changes things: create entities, edit and delete attributes, create and modify
+registrations and subscriptions, delete entities - all from the graph, the map and the entity
+panel. c³ gets these only after the broker has authorisation (coraine's roadmap: authorisation
+inside the broker - per entity, per type, per tenant, per attribute; ODRL, verifiable credentials -
+and the NGSI-LD plugin for APISIX in front of any broker). Until then Connect reads.
+
+With it, c³ is one more client of the broker: the user signs in, c³ presents the user's token or
+credential on every request (and on the WebSocket, in each message's metadata), and the broker
+decides. c³ shows what the user may do - an action the policy forbids is greyed, with the reason -
+but never decides it; the broker or the gateway does. Every change c³ makes goes through the same
+NGSI-LD API any other client uses, so it is checked, logged and notified like any other.
+
 ### If the connection to brokers is too slow: cor:// in the backend
 
 A browser cannot speak cor:// (it is not HTTP or WebSocket), but c³'s backend is a C program on the
