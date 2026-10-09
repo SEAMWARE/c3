@@ -43,31 +43,13 @@ function problem(r) {
 }
 
 //
-// loadEntities - every entity of the broker, page by page, up to ENTITY_CAP
+// pages - follow a query's rel="next" links from its first answer 'r', into 'seen', up to ENTITY_CAP
 //
-// GET /ngsi-ld/v1/entities?local=true&limit=..&count=true, following rel="next". A broker that does not
-// take local=true as the whole query (400) is asked for its types (GET /ngsi-ld/v1/types) and then
-// queried with type=<all of them>.
+// Answers the total the broker announced (NGSILD-Results-Count of the first page), or null.
 //
-// onProgress(loaded, total) after each page. Answers { entities, total, truncated } or throws
-// { reached, status, title, detail }.
-//
-export async function loadEntities(broker, onProgress) {
-  let first = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true`;
-  let r = await brokerGet(broker, first);
-
-  if (r.status === 400) {
-    const t = await brokerGet(broker, '/ngsi-ld/v1/types');
-    if (!t.ok) throw problem(r);
-    const list = (t.body && (t.body.typeList || (Array.isArray(t.body) ? t.body.map((x) => x.typeName || x.id) : null))) || [];
-    if (list.length === 0) return { entities: [], total: 0, truncated: false };
-    first = `/ngsi-ld/v1/entities?type=${encodeURIComponent(list.join(','))}&limit=${PAGE_SIZE}&count=true`;
-    r = await brokerGet(broker, first);
-  }
-
-  const seen = new Map();
+async function pages(broker, r, seen, onProgress, base = 0) {
   let total = null;
-  let pages = 0;
+  let n = 0;
 
   for (;;) {
     if (!r.ok) throw problem(r);
@@ -77,19 +59,220 @@ export async function loadEntities(broker, onProgress) {
     if (count !== null && total === null) total = parseInt(count, 10);
 
     for (const e of r.body) {
-      if (e && typeof e.id === 'string' && !seen.has(e.id)) seen.set(e.id, e);
       if (seen.size >= ENTITY_CAP) break;
+      if (e && typeof e.id === 'string' && !seen.has(e.id)) seen.set(e.id, e);
     }
-    ++pages;
-    if (onProgress) onProgress(seen.size, total);
+    ++n;
+    if (onProgress) onProgress(seen.size, total === null ? null : base + total);
 
     const next = nextLink(r.headers.get('Link'));
-    if (!next || seen.size >= ENTITY_CAP || r.body.length === 0 || pages > 1000) {
-      const truncated = seen.size >= ENTITY_CAP && (next !== null || (total !== null && total > seen.size));
-      return { entities: [...seen.values()], total: total === null ? seen.size : total, truncated };
-    }
+    if (!next || seen.size >= ENTITY_CAP || r.body.length === 0 || n > 1000) return { total, more: next !== null };
     r = await brokerGet(broker, next);
   }
+}
+
+//
+// typeParam - a list of types as the value of type=: each one encoded, the commas between them not
+//
+export function typeParam(types) {
+  return types.map(encodeURIComponent).join(',');
+}
+
+//
+// loadEntities - the broker's entities, page by page, up to ENTITY_CAP
+//
+// types null: every entity - GET /ngsi-ld/v1/entities?local=true&limit=..&count=true, following
+// rel="next". A broker that does not take local=true as the whole query (400) is asked for its types
+// (GET /ngsi-ld/v1/types) and then queried with type=<all of them>.
+//
+// types an array: the entities of those types only - one query, type=A,B,..., or one query per type
+// when the list is too long for a URL; local=true unless the broker refuses it (400).
+//
+// onProgress(loaded, total) after each page. Answers { entities, total, truncated } or throws
+// { reached, status, title, detail }.
+//
+export async function loadEntities(broker, onProgress, types = null) {
+  if (types !== null) return loadTypes(broker, onProgress, types);
+
+  let first = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true`;
+  let r = await brokerGet(broker, first);
+
+  if (r.status === 400) {
+    const t = await brokerGet(broker, '/ngsi-ld/v1/types');
+    if (!t.ok) throw problem(r);
+    const list = (t.body && (t.body.typeList || (Array.isArray(t.body) ? t.body.map((x) => x.typeName || x.id) : null))) || [];
+    if (list.length === 0) return { entities: [], total: 0, truncated: false };
+    return loadTypes(broker, onProgress, list);
+  }
+
+  const seen = new Map();
+  const { total, more } = await pages(broker, r, seen, onProgress);
+  const truncated = seen.size >= ENTITY_CAP && (more || (total !== null && total > seen.size));
+  return { entities: [...seen.values()], total: total === null ? seen.size : total, truncated };
+}
+
+async function loadTypes(broker, onProgress, types) {
+  const seen = new Map();
+  if (types.length === 0) return { entities: [], total: 0, truncated: false };
+
+  const joined = typeParam(types);
+  const groups = joined.length <= 2000 ? [joined] : types.map((t) => typeParam([t]));
+  let total = 0;
+  let known = true;
+  let more = false;
+
+  for (const g of groups) {
+    if (seen.size >= ENTITY_CAP) { more = true; known = false; break; }
+    const q = `/ngsi-ld/v1/entities?type=${g}&limit=${PAGE_SIZE}&count=true`;
+    let r = await brokerGet(broker, q + '&local=true');
+    if (r.status === 400) r = await brokerGet(broker, q);
+    const before = seen.size;
+    const page = await pages(broker, r, seen, onProgress, known ? total : 0);
+    if (page.total === null) { known = false; total += seen.size - before; }
+    else total += page.total;
+    more = more || page.more;
+  }
+
+  const truncated = seen.size >= ENTITY_CAP && (more || total > seen.size);
+  return { entities: [...seen.values()], total: known ? total : Math.max(total, seen.size), truncated };
+}
+
+//
+// discover - what the broker holds, before any entity is loaded: its types, their entity counts and
+// attributes with their kinds, and which types use each attribute
+//
+//   GET /ngsi-ld/v1/types?details=true          the types and their attribute names
+//   GET /ngsi-ld/v1/types/{type}                per type: entityCount and attributeDetails (with the
+//                                               kinds, attributeTypes); if a broker does not answer it,
+//                                               GET /entities?type=T&limit=0&count=true for the count
+//   GET /ngsi-ld/v1/attributes?details=true     per attribute: the types that use it (typeNames)
+//
+// A broker that does not answer /types?details=true is asked for /types (the names only).
+//
+// Answers { types: [{ name, id, count, attrs: [{ name, kinds }] }] sorted by name, attributes: Map
+// name -> { typeNames }, total, notes } - or null when the broker has no /types at all (not an NGSI-LD
+// broker, or one too old). Throws { reached, status, ... } when the broker cannot be reached.
+//
+export async function discover(broker, onProgress) {
+  let r = await brokerGet(broker, '/ngsi-ld/v1/types?details=true');
+  if (!r.reached) throw problem(r);
+
+  const notes = [];
+  let list = [];
+
+  if (r.ok && Array.isArray(r.body)) {
+    list = r.body.filter((t) => t && (t.typeName || t.id)).map((t) => ({
+      name: String(t.typeName || t.id), id: String(t.id || t.typeName),
+      attrs: (t.attributeNames || []).map((a) => ({ name: String(a), kinds: [] })),
+    }));
+  } else {
+    r = await brokerGet(broker, '/ngsi-ld/v1/types');
+    if (!r.reached) throw problem(r);
+    if (!r.ok) return null;
+    const names = (r.body && (r.body.typeList || (Array.isArray(r.body) ? r.body.map((x) => x.typeName || x.id) : null))) || [];
+    list = names.map((n) => ({ name: String(n), id: String(n), attrs: [] }));
+    notes.push('the broker did not answer /types?details=true');
+  }
+
+  const byName = new Map();
+  for (const t of list) if (!byName.has(t.name)) byName.set(t.name, { ...t, count: null });
+  const types = [...byName.values()].sort((a, b) => cmp(a.name, b.name));
+
+  //
+  // Per type, a few requests at a time
+  //
+  let done = 0;
+  let fallback = 0;
+  const one = async (t) => {
+    const info = await brokerGet(broker, '/ngsi-ld/v1/types/' + encodeURIComponent(t.name));
+    if (info.ok && info.body && typeof info.body.entityCount === 'number') {
+      t.count = info.body.entityCount;
+      if (Array.isArray(info.body.attributeDetails)) {
+        t.attrs = info.body.attributeDetails.filter((a) => a && (a.attributeName || a.id)).map((a) => ({
+          name: String(a.attributeName || a.id),
+          kinds: Array.isArray(a.attributeTypes) ? a.attributeTypes.map(String) : [],
+        }));
+      }
+    } else {
+      ++fallback;
+      const q = `/ngsi-ld/v1/entities?type=${typeParam([t.name])}&limit=0&count=true`;
+      let c = await brokerGet(broker, q + '&local=true');
+      if (c.status === 400) c = await brokerGet(broker, q);
+      const n = c.ok ? c.headers.get('NGSILD-Results-Count') : null;
+      t.count = n === null ? null : parseInt(n, 10);
+    }
+    ++done;
+    if (onProgress) onProgress(done, types.length);
+  };
+  const queue = types.slice(0, TYPE_DETAILS_MAX);
+  const workers = Array.from({ length: Math.min(6, queue.length) }, async () => {
+    while (queue.length) await one(queue.shift());
+  });
+  await Promise.all(workers);
+  if (fallback) notes.push(`${fallback} type${fallback === 1 ? '' : 's'} counted with count=true (no /types/{type})`);
+  if (types.length > TYPE_DETAILS_MAX) notes.push(`details for the first ${TYPE_DETAILS_MAX} types only`);
+  for (const t of types) t.attrs.sort((a, b) => cmp(a.name, b.name));
+
+  const attributes = new Map();
+  const a = await brokerGet(broker, '/ngsi-ld/v1/attributes?details=true');
+  if (a.ok && Array.isArray(a.body)) {
+    for (const x of a.body) {
+      if (!x || !(x.attributeName || x.id)) continue;
+      attributes.set(String(x.attributeName || x.id), { typeNames: Array.isArray(x.typeNames) ? x.typeNames.map(String).sort(cmp) : [] });
+    }
+  } else {
+    notes.push('the broker did not answer /attributes?details=true');
+  }
+
+  const total = types.reduce((s, t) => s + (t.count || 0), 0);
+  return { types, attributes, total, notes };
+}
+
+export const TYPE_DETAILS_MAX = 200;
+
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+//
+// relationshipNames - every attribute that is a Relationship or a ListRelationship in some type
+//
+export function relationshipNames(disc) {
+  const names = new Set();
+  if (!disc) return [];
+  for (const t of disc.types) for (const a of t.attrs) if (a.kinds.some((k) => k === 'Relationship' || k === 'ListRelationship')) names.add(a.name);
+  return [...names].sort(cmp);
+}
+
+//
+// entityGet - one entity: GET /ngsi-ld/v1/entities/{id}[?query]; the entity, or throws a problem
+//
+export async function entityGet(broker, id, query = '') {
+  const r = await brokerGet(broker, '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + (query ? '?' + query : ''));
+  if (!r.ok || !r.body || typeof r.body !== 'object' || Array.isArray(r.body)) throw problem(r);
+  return r.body;
+}
+
+//
+// entitiesQuery - the entities of one query (a query string without limit/count), up to 'max'
+//
+export async function entitiesQuery(broker, query, max) {
+  const q = `/ngsi-ld/v1/entities?${query}&limit=${PAGE_SIZE}&count=true`;
+  let r = await brokerGet(broker, q + '&local=true');
+  if (r.status === 400) r = await brokerGet(broker, q);
+  const seen = new Map();
+  const { total } = await pages(broker, r, seen, null);
+  const entities = [...seen.values()].slice(0, max);
+  return { entities, total: total === null ? seen.size : total };
+}
+
+//
+// linked - the entities embedded in a Relationship by linked entity retrieval (join=inline): the
+// "entity" member of a Relationship, the "entityList" of a ListRelationship
+//
+export function linked(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return [];
+  if (v.entity && typeof v.entity === 'object' && !Array.isArray(v.entity)) return [v.entity];
+  if (Array.isArray(v.entityList)) return v.entityList.filter((x) => x && typeof x === 'object' && typeof x.id === 'string');
+  return [];
 }
 
 //
@@ -221,12 +404,12 @@ function langText(m) {
 }
 
 //
-// boxAttrs - the two attributes a box shows: the first Properties of the entity, not location
+// boxAttrs - the attributes a box shows (two): the first Properties of the entity, not location
 //
-export function boxAttrs(e) {
+export function boxAttrs(e, max = 2) {
   const out = [];
   for (const [k, v] of attributes(e)) {
-    if (out.length === 2) break;
+    if (out.length === max) break;
     const kind = kindOf(v);
     if (kind === 'Relationship' || kind === 'ListRelationship' || kind === 'GeoProperty') continue;
     if (CORE.has(k)) continue;

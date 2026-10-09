@@ -80,6 +80,12 @@ name and description with each discovery, the broker keeps the inventory per bri
 A JSON snapshot of that inventory, saved to a file, lets the mapping be made away from the DDS
 network.
 
+**One format, shared with the other tools.** The inventory uses the discovery format already used in
+ARISE - an object with `topics`, `services` and `actions`; a topic has `name` and `typeName` (and
+`qos`), a service `requestType` and `replyType`, an action `goalType`, `feedbackType` and
+`resultType`. So c³ reads a discovery made by a standalone script on the DDS network as well as a
+broker's, and other mapping tools can read the broker's endpoint directly.
+
 **The screen.** Three sections - **Topics**, **Services**, **Actions** - one line per endpoint: its
 name, its type, and the fields to fill in: **entity id**, **entity type**, **attribute name**; or
 "skip". Defaults are offered, never imposed: the `rt/` prefix stripped, the entity type from the
