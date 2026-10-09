@@ -58,6 +58,50 @@ box that holds the related entities inside, level by level, instead of arrows to
 The same menu: follow one Relationship, show only this entity's neighbourhood, hide this type,
 copy the id, the entity as JSON.
 
+### Configure - DDS mapping
+
+**The raw data.** At start the DDS Enabler discovers the DDS network - every topic, service and
+action, with its type - and reports each one to the broker through the bridge contract
+(`endpointDiscoveredIn`). That inventory is what the mapping tool works from.
+
+**Where c³ gets it: from a broker, not from DDS itself.** c³ does not link the DDS Enabler or a DDS
+stack (about five times the size of the broker, C++). It asks a broker that runs the DDS bridge:
+
+- a broker started for the purpose - Run starts one on the chosen DDS domain with the dds bridge and
+  no mapping, so everything it discovers is reported and nothing is carried yet;
+- or a running broker, to extend its mapping.
+
+What the broker needs for that (coraine): today the plugin reports only the endpoint name and its
+kind, and only services and actions are carried (on `urn:ngsi-ld:dds:default`). The mapping tool
+needs the whole inventory: every topic, service and action, its DDS/ROS 2 type name, and the type's
+fields (to preview a payload and offer attribute names). So: the bridge contract carries the type
+name and description with each discovery, the broker keeps the inventory per bridge, and serves it -
+`GET /admin/bridges/{bridge}/discovered`, and live on the WebSocket transport as endpoints appear.
+A JSON snapshot of that inventory, saved to a file, lets the mapping be made away from the DDS
+network.
+
+**The screen.** Three sections - **Topics**, **Services**, **Actions** - one line per endpoint: its
+name, its type, and the fields to fill in: **entity id**, **entity type**, **attribute name**; or
+"skip". Defaults are offered, never imposed: the `rt/` prefix stripped, the entity type from the
+type's last part (`Twist`, `SetBool`), attribute names made URL-safe; logging (`/rosout`,
+`rcl_interfaces/msg/Log`) skipped by default. A payload preview per line from the type's fields.
+
+**The output.**
+
+- the bridge configuration the broker and the Enabler read (`dds.json`: the domain, the endpoints
+  carried, each one's entity id / type / attribute);
+- the **user @context** the broker is started with as its default (`--defaultUserContext`): every
+  short name used in the mapping (entity types, attribute names) expanded to a full IRI under a base
+  the user sets.
+
+Opening an existing mapping and a fresh discovery together keeps every decision already made and
+shows only what is new. Names are checked before writing: valid URIs, no two endpoints writing the
+same attribute of the same entity.
+
+**OPC UA**, once the bridge exists: the same screen over a server's address space - variables,
+monitored items, methods. **Modbus**: registers and coils have no names or types to discover; its
+mapping is entered by hand (address, data type, scale), the same output.
+
 ### Run - starting and stopping brokers and what they need
 
 c³ starts and stops brokers on the machine it runs on, and the services they use:

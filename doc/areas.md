@@ -40,8 +40,11 @@ Everything else plugs into it.
 
 ## Configure - industry
 
-- **DDS / ROS 2** - discover topics, services and actions; map message fields to entities and
-  attributes; write the mapping file the DDS bridge reads.
+- **DDS / ROS 2** - the inventory from a broker running the dds bridge (every topic, service and
+  action with its type), three sections with one line each (entity id, entity type, attribute
+  name, or skip), and the output: the bridge configuration plus the user @context for
+  `--defaultUserContext`. Needs in coraine: type name and fields in the discovery report, the
+  inventory kept per bridge and served (`/admin/bridges/{bridge}/discovered`, and live).
 - **OPC UA** - browse a server's address space; map variables, monitored items and methods.
 - **Modbus**, **MQTT** - the same for the other bridges.
 
