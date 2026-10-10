@@ -538,3 +538,6 @@ details.raw pre {
 .doclist .dname { font-family: var(--mono); }
 .doclist .ddesc { color: var(--text-2); }
 @media (max-width: 600px) { .doclist li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Entity panel: the attribute shown on the map */
+.attr .maplabel { width: 14px; height: 14px; margin: 0 6px 0 0; vertical-align: middle; accent-color: var(--accent-2); cursor: pointer; }

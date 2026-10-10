@@ -1248,6 +1248,23 @@ export class Connect {
     for (const [name, v] of attributes(e)) {
       const row = el('div', 'attr');
       const kind = kindOf(v);
+      if (kind !== 'Relationship' && kind !== 'ListRelationship') {
+        //
+        // The one attribute shown on the map: its value as every entity's label; clicked again, the names
+        //
+        const pick = el('input', 'maplabel');
+        pick.type = 'radio';
+        pick.name = 'maplabel';
+        pick.checked = this.emap.labelAttr === name;
+        pick.title = 'Show this attribute on the map';
+        pick.setAttribute('aria-label', 'Show ' + name + ' on the map');
+        pick.addEventListener('click', () => {
+          const on = this.emap.labelAttr !== name;
+          this.emap.setLabelAttr(on ? name : null);
+          pick.checked = on;
+        });
+        row.append(pick);
+      }
       row.append(el('span', 'k', name), el('span', 'kind', kind));
 
       if (kind === 'Relationship' || kind === 'ListRelationship') {

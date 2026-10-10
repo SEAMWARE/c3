@@ -12,7 +12,7 @@
 //
 // MapLibre and pmtiles are loaded when the map is first shown: the graph does not pay for them.
 //
-import { attributes, kindOf, relationshipTargets, typesOf, shortId } from './ngsild.js';
+import { attributes, kindOf, relationshipTargets, typesOf, shortId, valueText } from './ngsild.js';
 import { buildStyle, registerProtocols, setAreas, ATTRIBUTION, C, onlineState } from './basemap.js';
 
 const ARROW = 'c3-arrow';
@@ -325,6 +325,14 @@ export class EntityMap {
   //
   // render - the GeoJSON of the entities, the Relationships and the arrows
   //
+  //
+  // setLabelAttr - the attribute whose value labels the entities on the map; null: their names
+  //
+  setLabelAttr(name) {
+    this.labelAttr = name;
+    this.render();
+  }
+
   render() {
     this.anchors = new Map();
     this.boxes = new Map();
@@ -335,8 +343,11 @@ export class EntityMap {
       const geoms = geometries(e);
       if (!geoms.length) { this.notOnMap.push(e); continue; }
       const color = this.colorOf(e);
-      const short = shortId(e);
-      const name = nameOf(e) || short;
+      let short = shortId(e);
+      let name = nameOf(e) || short;
+      if (this.labelAttr && e[this.labelAttr] !== undefined) {      // the attribute picked in the Entity panel
+        name = short = valueText(e[this.labelAttr], 40);
+      }
       const box = [Infinity, Infinity, -Infinity, -Infinity];
       for (const g of geoms) {
         extendGeometry(box, g.geometry);
