@@ -345,6 +345,7 @@ export class EntityMap {
   render() {
     this.anchors = new Map();
     this.boxes = new Map();
+    this.dots = [];                              // the Points drawn, for hit()
     this.notOnMap = [];
     const feats = [];
     for (const e of this.entities) {
@@ -360,6 +361,7 @@ export class EntityMap {
       const box = [Infinity, Infinity, -Infinity, -Infinity];
       for (const g of geoms) {
         extendGeometry(box, g.geometry);
+        if (g.geometry.type === 'Point') this.dots.push({ id: e.id, at: g.geometry.coordinates });
         feats.push({ type: 'Feature', geometry: g.geometry, properties: { id: e.id, attr: g.attr, color, short, name, label: g.geometry.type === 'Point' ? 1 : 0 } });
       }
       const anchor = anchorOf(geoms);
@@ -480,9 +482,22 @@ export class EntityMap {
   // Input - a click selects (a point before a line before an area), a right-click opens the menu
   //
   hit(point) {
-    // a label is not the entity: its dot is
-    const layers = ['sel-point', 'ent-point', 'area-label', 'ent-line', 'ent-fill'].filter((l) => this.map.getLayer(l));
-    const box = [[point.x - 8, point.y - 8], [point.x + 8, point.y + 8]];
+    //
+    // A dot first: the nearest one within its radius and 4 px more, found on the screen - not the label
+    //
+    const z = this.map.getZoom();
+    const r = (z <= 3 ? 2.5 : z <= 10 ? 2.5 + (z - 3) * 1.5 / 7 : z <= 14 ? 4 + (z - 10) * 2.5 / 4 : z <= 18 ? 6.5 + (z - 14) * 3.5 / 4 : 10) + 4;
+    let best = null;
+    let bestD = r * r;
+    for (const d of this.dots || []) {
+      const p = this.map.project(d.at);
+      const dd = (p.x - point.x) ** 2 + (p.y - point.y) ** 2;
+      if (dd <= bestD) { bestD = dd; best = d.id; }
+    }
+    if (best) return best;
+
+    const layers = ['area-label', 'ent-line', 'ent-fill'].filter((l) => this.map.getLayer(l));
+    const box = [[point.x - 5, point.y - 5], [point.x + 5, point.y + 5]];
     const f = this.map.queryRenderedFeatures(box, { layers });
     if (!f.length) return null;
     const rank = { 'sel-point': 0, 'ent-point': 0, 'ent-label': 1, 'area-label': 2, 'ent-line': 2, 'ent-fill': 3 };
