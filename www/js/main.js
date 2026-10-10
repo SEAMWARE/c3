@@ -10,6 +10,7 @@ import * as api from './api.js';
 import { brokerGet } from './api.js';
 import { Connect } from './connect.js';
 import { Compile } from './compile.js';
+import { Run } from './run.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -96,11 +97,11 @@ async function splash() {
 }
 
 //
-// The pages: #compile and #connect, the one shown kept as ui.lastPage
+// The pages: #compile, #run and #connect, the one shown kept as ui.lastPage
 //
-const PAGES = ['compile', 'connect'];
+const PAGES = ['compile', 'run', 'connect'];
 
-function pageShow(page, compile) {
+function pageShow(page, compile, run) {
   for (const p of PAGES) {
     $('page-' + p).hidden = (p !== page);
     const a = $('nav-' + p);
@@ -108,6 +109,7 @@ function pageShow(page, compile) {
     if (p === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
   if (page === 'compile') compile.refresh();
+  if (page === 'run') run.refresh(); else run.hide();
   window.dispatchEvent(new Event('resize'));          // a page shown again measures itself
   api.uiSet({ lastPage: page }).catch(() => {});
 }
@@ -122,6 +124,26 @@ async function main() {
   const compile = new Compile();
   compile.init(boot.config);                          // the choice and the presets; the rest when the page is shown
 
+  //
+  // Run: a broker opened in Connect - the list as the backend keeps it now (a started broker is in it)
+  //
+  const run = new Run({
+    onConnect: async (url) => {
+      try { connect.setBrokers((await api.config()).brokers || []); } catch (e) { /* the list as it was */ }
+      location.hash = '#connect';
+      $('broker-url').value = url;
+      connect.connect(url);
+    },
+  });
+
+  //
+  // Compile's "Run it": Run, with that build in the form
+  //
+  window.addEventListener('c3:run', (e) => {
+    location.hash = '#run';
+    run.preselectBuild(e.detail.build);
+  });
+
   await new Promise((r) => setTimeout(r, 250));
   $('app').hidden = false;
   $('splash').classList.add('leaving');
@@ -130,8 +152,8 @@ async function main() {
   const fromHash = () => PAGES.find((p) => location.hash === '#' + p);
   const first = fromHash() || (PAGES.includes((boot.config.ui || {}).lastPage) ? boot.config.ui.lastPage : 'connect');
   if (location.hash !== '#' + first) history.replaceState(null, '', '#' + first);
-  pageShow(first, compile);
-  window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile));
+  pageShow(first, compile, run);
+  window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run));
 
   if (boot.last) {
     $('broker-url').value = boot.last.url;

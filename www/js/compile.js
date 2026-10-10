@@ -567,12 +567,12 @@ export class Compile {
     log.target = '_blank';
     row('Log', log);
 
-    const runIt = el('button', 'btn', 'Run it');
+    const runIt = el('button', 'btn primary', 'Run it');
     runIt.type = 'button';
-    runIt.disabled = true;
-    runIt.title = 'Run - milestone 2b';
+    runIt.title = 'Run: this build in the form, natively';
+    runIt.addEventListener('click', () => window.dispatchEvent(new CustomEvent('c3:run', { detail: { build: b.name } })));
     const ri = el('span', 'cp-chips');
-    ri.append(runIt, el('span', 'cp-note', 'with Run (milestone 2b) - until then: . ' + b.install + '/env; coraine -fg --database corDB'));
+    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; coraine -fg --database corDB'));
     if (b.state === 'succeeded') row('', ri);
 
     dl.hidden = false;

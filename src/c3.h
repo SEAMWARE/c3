@@ -12,6 +12,8 @@
 #include <stdbool.h>                             // bool
 #include <stdint.h>                              // int64_t
 #include <pthread.h>                             // pthread_mutex_t
+#include <sys/types.h>                           // pid_t
+#include <time.h>                                // time_t
 
 #include "corHttp/CorHttp.h"                     // CorHttpConn
 
@@ -34,6 +36,79 @@ extern char            c3WwwDir[4096];
 extern char            c3ConfigPath[4096];
 extern char            c3MapsDir[4096];          // the downloaded map areas: $XDG_DATA_HOME/c3/maps
 extern char*           c3Planet;                 // --planet: the Protomaps planet to extract from (NULL: the newest build)
+
+
+
+// -----------------------------------------------------------------------------
+//
+// A corHttp without streamed responses (before corHttpResponseStream): no page follows a log live - it
+// reads the log file instead, by Range - and these keep the rest unchanged
+//
+#ifndef COR_HTTP_STREAM_PENDING_MAX
+typedef struct CorHttpStream CorHttpStream;
+static inline bool corHttpStreamWrite(CorHttpStream* sP, const char* data, int len) { (void) sP; (void) data; (void) len; return false; }
+static inline void corHttpStreamEnd(CorHttpStream* sP)                              { (void) sP; }
+#endif
+
+
+
+// -----------------------------------------------------------------------------
+//
+// util.c - what Compile and Run share
+//
+typedef struct Str                               // a growing string, malloc'ed; { NULL, 0, 0 } is empty
+{
+  char*  s;
+  int    len;
+  int    size;
+} Str;
+
+extern void  strAddN(Str* sP, const char* s, int len);
+extern void  strAdd(Str* sP, const char* s);
+extern void  strAddf(Str* sP, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+extern void  strAddJson(Str* sP, const char* s);   // a JSON string, quotes included; NULL: null
+extern void  strFree(Str* sP);
+extern void  shellQuote(Str* sP, const char* arg);
+
+extern void  isoTime(time_t t, char* out, int outLen);
+extern char* fileText(const char* path);          // a whole (small) file, malloc'ed; NULL if it cannot be read
+extern bool  dirsMake(const char* dir);           // mkdir -p, mode 700
+extern bool  removeAll(const char* path);         // rm -rf, not following links
+extern bool  dataHome(const char* sub, char* out, int outLen);   // $XDG_DATA_HOME/c3/<sub>, else ~/.local/share/c3/<sub>
+
+extern int   runCapture(char* const argv[], char* out, int outSize, int timeoutS);   // the exit status (waitpid's), -1: not run
+extern bool  inPath(const char* name, char* out, int outLen);
+extern void  groupStop(pid_t pgid);               // SIGTERM to what is left of a process group, SIGKILL 3 s later
+
+typedef struct ProcSpawn
+{
+  char* const*  argv;                            // argv[0] is a path
+  char* const*  envp;                            // NULL: c3's environment
+  int           outFd;                           // stdout and stderr (-1: /dev/null)
+  const char*   cwd;                             // NULL: c3's
+  bool          group;                           // a process group of its own
+  bool          session;                         // a session of its own (setsid): outlives c3
+  int           deathSig;                        // sent when c3 dies (0: none)
+} ProcSpawn;
+
+extern pid_t      procSpawn(const ProcSpawn* sP);
+extern long long  procStartTime(pid_t pid);      // /proc/<pid>/stat's start time; 0: no such process (or a zombie)
+
+#define SSE_SUBS_MAX     32
+#define SSE_BACKLOG_MAX  (4 * 1024 * 1024)       // the most of a log sent to a page that starts following it
+
+typedef struct SseSubs
+{
+  CorHttpStream*  v[SSE_SUBS_MAX];
+  int             n;
+} SseSubs;
+
+extern bool  sseSubsAdd(SseSubs* subsP, CorHttpStream* streamP);
+extern void  sseSubsSend(SseSubs* subsP, const char* text, int len);
+extern void  sseSubsEnd(SseSubs* subsP);
+extern void  sseLines(Str* sP, const char* data, int len, int64_t endOffset);
+extern void  sseFromFile(Str* sP, int fd, int64_t from, int64_t end);
+extern void  respondStr(CorHttpConn* connP, int status, Str* sP);   // a JSON answer from a Str (the Str freed)
 
 
 
@@ -77,6 +152,8 @@ extern char*        configMapsAreasText(CorAlloc* allocP);                   // 
 extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
 extern bool         configCompilePreset(char* body, char* errBuf, int errLen);       // PUT /api/compile/presets
 extern bool         configCompilePresetDelete(char* body, char* errBuf, int errLen); // DELETE /api/compile/presets
+extern bool         configRunBrokerPut(const char* defJson, char* errBuf, int errLen);  // a broker of Run, added or replaced (by name)
+extern bool         configRunBrokerDelete(const char* name, char* errBuf, int errLen);  // and forgotten
 
 
 
@@ -109,6 +186,17 @@ extern char* c3Source;                           // --source: the source tarball
 extern bool  compileInit(void);
 extern void  compileRequest(CorHttpConn* connP, const char* path);
 extern void  compileShutdown(void);
+
+
+
+// -----------------------------------------------------------------------------
+//
+// run.c - Run: brokers started and stopped, natively or in a container, and the services they use
+//
+extern bool  runInit(void);                       // after configLoad: the brokers kept, re-attached when they still run
+extern void  runRequest(CorHttpConn* connP, const char* path);
+extern void  runCapabilities(Str* sP);            // "run": {...} of GET /api/capabilities
+extern void  runShutdown(void);                   // c3 stops: the brokers keep running; c3's own helpers stop
 
 
 

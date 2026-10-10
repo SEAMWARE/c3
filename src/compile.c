@@ -39,7 +39,7 @@
 // When the script has exited, whatever is left of its process group is stopped too (SIGTERM, then
 // SIGKILL): no make or gcc outlives a build, also a cancelled one.
 //
-#define _GNU_SOURCE                              // close_range, posix_spawn_file_actions_addclosefrom_np
+#define _GNU_SOURCE                              // pipe2, nftw
 
 #include <dirent.h>                              // opendir, readdir
 #include <errno.h>                               // errno
@@ -48,12 +48,9 @@
 #include <poll.h>                                // poll
 #include <pthread.h>                             // pthread_*
 #include <signal.h>                              // kill, SIGTERM, SIGKILL, sigaction
-#include <spawn.h>                               // posix_spawn
-#include <stdarg.h>                              // va_list
 #include <stdio.h>                               // snprintf
 #include <stdlib.h>                              // malloc, realloc, free, getenv, qsort
 #include <string.h>                              // strcmp, strncmp, strlen, memcpy
-#include <sys/prctl.h>                           // prctl, PR_SET_PDEATHSIG
 #include <sys/stat.h>                            // stat, mkdir
 #include <sys/utsname.h>                         // uname
 #include <sys/wait.h>                            // waitpid
@@ -78,19 +75,6 @@ extern char** environ;
 
 // -----------------------------------------------------------------------------
 //
-// A corHttp without streamed responses (before corHttpResponseStream): no page follows a log live - it
-// reads the log file instead (GET /api/builds/<name>/log, by Range), and these keep the rest unchanged
-//
-#ifndef COR_HTTP_STREAM_PENDING_MAX
-typedef struct CorHttpStream CorHttpStream;
-static bool corHttpStreamWrite(CorHttpStream* sP, const char* data, int len) { (void) sP; (void) data; (void) len; return false; }
-static void corHttpStreamEnd(CorHttpStream* sP)                              { (void) sP; }
-#endif
-
-
-
-// -----------------------------------------------------------------------------
-//
 // The command line's (c3.c): --coraine-build, --source
 //
 char* c3CoraineBuild = NULL;
@@ -98,236 +82,8 @@ char* c3Source       = NULL;
 
 #define SOURCE_DEFAULT      "/usr/share/coraine/src/coraine-src.tar.xz"     // coraine-build's own default
 #define CANCEL_GRACE_S      5                    // SIGTERM to SIGKILL
-#define LOG_BACKLOG_MAX     (4 * 1024 * 1024)    // the most of a log sent to a page that starts following it
 #define LINE_MAX_BYTES      (64 * 1024)          // a "line" longer than this is cut into several
-#define SUBSCRIBERS_MAX     32
 #define PHASES_MAX          16
-
-
-
-// -----------------------------------------------------------------------------
-//
-// Str - a growing string, malloc'ed
-//
-typedef struct Str
-{
-  char*  s;
-  int    len;
-  int    size;
-} Str;
-
-static void strGrow(Str* sP, int more)
-{
-  if (sP->len + more + 1 <= sP->size)
-    return;
-
-  int size = (sP->size == 0) ? 1024 : sP->size;
-  while (size < sP->len + more + 1)
-    size *= 2;
-
-  char* s = realloc(sP->s, size);
-  if (s == NULL)
-    abort();                                     // a few KiB of JSON: there is no recovering from this
-
-  sP->s    = s;
-  sP->size = size;
-}
-
-static void strAddN(Str* sP, const char* s, int len)
-{
-  if (len < 0)
-    return;
-
-  strGrow(sP, len);
-  memcpy(&sP->s[sP->len], s, len);
-  sP->len += len;
-  sP->s[sP->len] = 0;
-}
-
-static void strAdd(Str* sP, const char* s)
-{
-  strAddN(sP, s, strlen(s));
-}
-
-static void strAddf(Str* sP, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
-static void strAddf(Str* sP, const char* fmt, ...)
-{
-  va_list ap;
-  va_start(ap, fmt);
-  int n = vsnprintf(NULL, 0, fmt, ap);
-  va_end(ap);
-
-  strGrow(sP, n);
-  va_start(ap, fmt);
-  vsnprintf(&sP->s[sP->len], n + 1, fmt, ap);
-  va_end(ap);
-  sP->len += n;
-}
-
-//
-// strAddJson - 's' as a JSON string, quotes included; NULL: null
-//
-static void strAddJson(Str* sP, const char* s)
-{
-  if (s == NULL)
-  {
-    strAdd(sP, "null");
-    return;
-  }
-
-  strAdd(sP, "\"");
-  for (; *s != 0; ++s)
-  {
-    unsigned char c = (unsigned char) *s;
-
-    if      (c == '"')   strAdd(sP, "\\\"");
-    else if (c == '\\')  strAdd(sP, "\\\\");
-    else if (c == '\n')  strAdd(sP, "\\n");
-    else if (c == '\t')  strAdd(sP, "\\t");
-    else if (c < 0x20)   strAddf(sP, "\\u%04x", c);
-    else                 strAddN(sP, (const char*) &c, 1);
-  }
-  strAdd(sP, "\"");
-}
-
-static void strFree(Str* sP)
-{
-  free(sP->s);
-  sP->s    = NULL;
-  sP->len  = 0;
-  sP->size = 0;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// isoTime - "2026-10-10T01:02:03Z"
-//
-static void isoTime(time_t t, char* out, int outLen)
-{
-  struct tm tm;
-  gmtime_r(&t, &tm);
-  strftime(out, outLen, "%Y-%m-%dT%H:%M:%SZ", &tm);
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// runCapture - run argv[0] (a path, or a name found in $PATH), its stdout and stderr into 'out'
-//
-// The exit status (as waitpid gives it), or -1 when it could not be run; killed after 'timeoutS'. No file
-// descriptor of c3's is passed on - the listening socket least of all.
-//
-static int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
-{
-  int fds[2];
-
-  out[0] = 0;
-  if (pipe2(fds, O_CLOEXEC) != 0)
-    return -1;
-
-  posix_spawn_file_actions_t fa;
-  posix_spawn_file_actions_init(&fa);
-  posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
-  posix_spawn_file_actions_adddup2(&fa, fds[1], 1);
-  posix_spawn_file_actions_adddup2(&fa, fds[1], 2);
-  posix_spawn_file_actions_addclosefrom_np(&fa, 3);
-
-  posix_spawnattr_t attr;
-  sigset_t          none, dfl;
-  sigemptyset(&none);
-  sigemptyset(&dfl);
-  sigaddset(&dfl, SIGPIPE);                      // c3 ignores SIGPIPE; the child must not inherit that
-  posix_spawnattr_init(&attr);
-  posix_spawnattr_setsigmask(&attr, &none);
-  posix_spawnattr_setsigdefault(&attr, &dfl);
-  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
-
-  pid_t pid;
-  int   r = posix_spawnp(&pid, argv[0], &fa, &attr, argv, environ);
-
-  posix_spawn_file_actions_destroy(&fa);
-  posix_spawnattr_destroy(&attr);
-  close(fds[1]);
-
-  if (r != 0)
-  {
-    close(fds[0]);
-    return -1;
-  }
-
-  int    got      = 0;
-  time_t deadline = time(NULL) + timeoutS;
-
-  while (true)
-  {
-    struct pollfd pfd = { fds[0], POLLIN, 0 };
-    int           ms  = (int) (deadline - time(NULL)) * 1000;
-
-    if ((ms <= 0) || (poll(&pfd, 1, ms) <= 0))
-    {
-      kill(pid, SIGKILL);
-      break;
-    }
-
-    char    buf[4096];
-    ssize_t n = read(fds[0], buf, sizeof(buf));
-
-    if (n <= 0)
-    {
-      if ((n < 0) && (errno == EINTR))
-        continue;
-      break;
-    }
-
-    int take = (got + n < outSize - 1) ? n : outSize - 1 - got;
-    memcpy(&out[got], buf, take);
-    got += take;
-  }
-
-  out[got] = 0;
-  close(fds[0]);
-
-  int status = -1;
-  while ((waitpid(pid, &status, 0) == -1) && (errno == EINTR))
-    ;
-
-  return status;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// inPath - 'name' found in $PATH as an executable file, its path into 'out'
-//
-static bool inPath(const char* name, char* out, int outLen)
-{
-  const char* path = getenv("PATH");
-
-  if (path == NULL)
-    path = "/usr/local/bin:/usr/bin:/bin";
-
-  while (*path != 0)
-  {
-    const char* colon = strchr(path, ':');
-    int         len   = (colon != NULL) ? (int) (colon - path) : (int) strlen(path);
-    struct stat st;
-
-    snprintf(out, outLen, "%.*s/%s", len, path, name);
-    if ((len > 0) && (stat(out, &st) == 0) && S_ISREG(st.st_mode) && (access(out, X_OK) == 0))
-      return true;
-
-    path += len;
-    if (*path == ':')
-      ++path;
-  }
-
-  out[0] = 0;
-  return false;
-}
 
 
 
@@ -469,23 +225,6 @@ static void capsFind(Caps* cP, bool withVersion)
 //
 static char buildsDir[2048];
 
-static bool dirsMake(const char* dir)
-{
-  char path[2048];
-  snprintf(path, sizeof(path), "%s", dir);
-
-  for (char* p = path + 1; *p != 0; ++p)
-  {
-    if (*p != '/')
-      continue;
-    *p = 0;
-    mkdir(path, 0700);
-    *p = '/';
-  }
-
-  return (mkdir(path, 0700) == 0) || (errno == EEXIST);
-}
-
 
 
 // -----------------------------------------------------------------------------
@@ -541,47 +280,12 @@ typedef struct Build
   char*           part;                          // the output after its last newline
   int             partLen;
 
-  CorHttpStream*  subs[SUBSCRIBERS_MAX];         // the pages following the log
-  int             nSubs;
+  SseSubs         subs;                          // the pages following the log
   pthread_t       thread;
 } Build;
 
 static pthread_mutex_t bMutex = PTHREAD_MUTEX_INITIALIZER;
 static Build*          cur    = NULL;            // the build that runs; NULL: none
-
-
-
-// -----------------------------------------------------------------------------
-//
-// shellQuote - an argument as a shell would need it
-//
-static void shellQuote(Str* sP, const char* arg)
-{
-  bool plain = (arg[0] != 0);
-
-  for (const char* p = arg; *p != 0; ++p)
-  {
-    char c = *p;
-    if (!(((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9')) || (strchr("_./=,:@+-%", c) != NULL)))
-      plain = false;
-  }
-
-  if (plain)
-  {
-    strAdd(sP, arg);
-    return;
-  }
-
-  strAdd(sP, "'");
-  for (const char* p = arg; *p != 0; ++p)
-  {
-    if (*p == '\'')
-      strAdd(sP, "'\\''");
-    else
-      strAddN(sP, p, 1);
-  }
-  strAdd(sP, "'");
-}
 
 
 
@@ -715,58 +419,8 @@ static void buildSave(Build* bP)
 
 // -----------------------------------------------------------------------------
 //
-// broadcast - text to every page following the log; one that is gone is let go of
+// sseEvent - the build's record as an event of its own ("build", "end")
 //
-static void broadcast(Build* bP, const char* text, int len)
-{
-  for (int ix = 0; ix < bP->nSubs; )
-  {
-    if (corHttpStreamWrite(bP->subs[ix], text, len) == true)
-    {
-      ++ix;
-      continue;
-    }
-
-    corHttpStreamEnd(bP->subs[ix]);
-    bP->subs[ix] = bP->subs[--bP->nSubs];
-  }
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// sseLines - complete lines of output as one server-sent event: a "data:" line each, the log's byte
-// offset after them as its id (where a page that reconnects goes on from: Last-Event-ID)
-//
-static void sseLines(Str* sP, const char* data, int len, int64_t endOffset)
-{
-  int start = 0;
-
-  if (len <= 0)
-    return;
-
-  for (int ix = 0; ix <= len; ix++)
-  {
-    if ((ix < len) && (data[ix] != '\n'))
-      continue;
-
-    if ((ix == len) && (start == len))
-      break;                                     // the newline ended the data: no empty line after it
-
-    strAdd(sP, "data: ");
-    for (int jx = start; jx < ix; jx++)
-    {
-      if (data[jx] != '\r')                      // an event's line ends at a CR too
-        strAddN(sP, &data[jx], 1);
-    }
-    strAdd(sP, "\n");
-    start = ix + 1;
-  }
-
-  strAddf(sP, "id: %lld\n\n", (long long) endOffset);
-}
-
 static void sseEvent(Str* sP, const char* event, Build* bP)
 {
   strAddf(sP, "event: %s\ndata: ", event);
@@ -850,33 +504,11 @@ static void outputAdd(Build* bP, const char* data, int len)
     buildSave(bP);
     sseEvent(&s, "build", bP);
   }
-  broadcast(bP, s.s, s.len);
+  sseSubsSend(&bP->subs, s.s, s.len);
   strFree(&s);
 
   memmove(bP->part, &bP->part[complete], bP->partLen - complete);
   bP->partLen -= complete;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// groupStop - what is left of a process group: SIGTERM, up to 3 s, then SIGKILL
-//
-static void groupStop(pid_t pgid)
-{
-  if (kill(-pgid, 0) != 0)
-    return;                                      // nothing left
-
-  kill(-pgid, SIGTERM);
-  for (int ix = 0; ix < 30; ix++)
-  {
-    if (kill(-pgid, 0) != 0)
-      return;
-    usleep(100 * 1000);
-  }
-
-  kill(-pgid, SIGKILL);
 }
 
 
@@ -950,7 +582,7 @@ static void buildFinish(Build* bP, int status)
 
     Str s = { NULL, 0, 0 };
     sseLines(&s, bP->part, bP->partLen, bP->logEnd);
-    broadcast(bP, s.s, s.len);
+    sseSubsSend(&bP->subs, s.s, s.len);
     strFree(&s);
     bP->partLen = 0;
   }
@@ -979,12 +611,10 @@ static void buildFinish(Build* bP, int status)
 
   Str s = { NULL, 0, 0 };
   sseEvent(&s, "end", bP);
-  broadcast(bP, s.s, s.len);
+  sseSubsSend(&bP->subs, s.s, s.len);
   strFree(&s);
 
-  for (int ix = 0; ix < bP->nSubs; ix++)
-    corHttpStreamEnd(bP->subs[ix]);
-  bP->nSubs = 0;
+  sseSubsEnd(&bP->subs);
 
   close(bP->logFd);
   close(bP->pipeFd);
@@ -1072,7 +702,7 @@ static void* buildThread(void* vP)
     }
     if (now - lastBeat >= 15)
     {
-      broadcast(bP, ":\n\n", 3);                 // a comment: the page knows the stream is alive
+      sseSubsSend(&bP->subs, ":\n\n", 3);                 // a comment: the page knows the stream is alive
       lastBeat = now;
     }
     pthread_mutex_unlock(&bMutex);
@@ -1341,19 +971,6 @@ static void planRender(Plan* pP, Str* sP)
 
 // -----------------------------------------------------------------------------
 //
-// respondStr - a JSON answer from a Str (copied into the connection, the Str freed)
-//
-static void respondStr(CorHttpConn* connP, int status, Str* sP)
-{
-  char* body = corAllocStrdup(&connP->alloc, (sP->s != NULL) ? sP->s : "null");
-  strFree(sP);
-  serveJson(connP, status, body);
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
 // buildStart - POST /api/builds
 //
 static void buildStart(CorHttpConn* connP)
@@ -1439,37 +1056,10 @@ static void buildStart(CorHttpConn* connP)
 
   //
   // The child: a process group of its own (Cancel signals the whole group), SIGTERM if c3 dies, stdout and
-  // stderr into the pipe, nothing else of c3's open, the signals as a shell would have them. Only
-  // async-signal-safe calls between fork and exec: c3 has threads.
+  // stderr into the pipe, nothing else of c3's open
   //
-  pid_t pid = fork();
-
-  if (pid == 0)
-  {
-    setpgid(0, 0);
-    prctl(PR_SET_PDEATHSIG, SIGTERM);
-
-    int null = open("/dev/null", O_RDONLY);
-    if (null != -1)
-      dup2(null, 0);
-    dup2(fds[1], 1);
-    dup2(fds[1], 2);
-    close_range(3, ~0U, 0);
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = SIG_DFL;
-    sigaction(SIGPIPE, &sa, NULL);
-    sigaction(SIGINT,  &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-
-    sigset_t none;
-    sigemptyset(&none);
-    sigprocmask(SIG_SETMASK, &none, NULL);
-
-    execv(bP->argv[0], bP->argv);
-    _exit(127);
-  }
+  ProcSpawn spawn = { bP->argv, NULL, fds[1], NULL, true, false, SIGTERM };
+  pid_t     pid   = procSpawn(&spawn);
 
   close(fds[1]);
 
@@ -1485,7 +1075,6 @@ static void buildStart(CorHttpConn* connP)
     return;
   }
 
-  setpgid(pid, pid);                             // also here: the child may not have run yet
   bP->pid    = pid;
   bP->pipeFd = fds[0];
 
@@ -1556,39 +1145,6 @@ static void buildCommand(CorHttpConn* connP)
   planRender(&plan, &s);
   planFree(&plan);
   respondStr(connP, 200, &s);
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
-// fileText - a whole (small) file, malloc'ed; NULL if it cannot be read
-//
-static char* fileText(const char* path)
-{
-  int fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd == -1)
-    return NULL;
-
-  struct stat st;
-  if ((fstat(fd, &st) != 0) || (st.st_size < 0) || (st.st_size > 4 * 1024 * 1024))
-  {
-    close(fd);
-    return NULL;
-  }
-
-  char*   text = malloc(st.st_size + 1);
-  ssize_t n    = read(fd, text, st.st_size);
-  close(fd);
-
-  if (n != st.st_size)
-  {
-    free(text);
-    return NULL;
-  }
-
-  text[n] = 0;
-  return text;
 }
 
 
@@ -1736,30 +1292,6 @@ static void buildGet(CorHttpConn* connP, const char* name)
 
 // -----------------------------------------------------------------------------
 //
-// removeAll - rm -rf (nftw, depth first, not following links)
-//
-static int removeOne(const char* path, const struct stat* stP, int flag, struct FTW* ftwP)
-{
-  (void) stP;
-  (void) flag;
-  (void) ftwP;
-  return remove(path);
-}
-
-static bool removeAll(const char* path)
-{
-  struct stat st;
-
-  if (lstat(path, &st) != 0)
-    return true;
-
-  return nftw(path, removeOne, 16, FTW_DEPTH | FTW_PHYS) == 0;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
 // buildDelete - DELETE /api/builds/<name>: cancel it if it runs, else delete it
 //
 static void buildDelete(CorHttpConn* connP, const char* name)
@@ -1878,42 +1410,7 @@ static void buildLog(CorHttpConn* connP, const char* name)
   int64_t end = (bP != NULL) ? bP->logEnd : st.st_size;
   Str     s   = { NULL, 0, 0 };
 
-  if ((from < 0) || (from > end))
-    from = 0;
-
-  strAdd(&s, "retry: 2000\n\n");
-
-  //
-  // A long log: its last LOG_BACKLOG_MAX, from a line's start - the file has the rest
-  //
-  bool cut = false;
-  if (end - from > LOG_BACKLOG_MAX)
-  {
-    strAddf(&s, "event: skipped\ndata: %lld\n\n", (long long) (end - LOG_BACKLOG_MAX - from));
-    from = end - LOG_BACKLOG_MAX;
-    cut  = true;
-  }
-
-  if (end > from)
-  {
-    int   len = end - from;
-    char* buf = malloc(len);
-    int   got = pread(fd, buf, len, from);
-
-    if (got == len)
-    {
-      int skip = 0;
-      if (cut)                                   // from the start of the next line
-      {
-        while ((skip < len) && (buf[skip] != '\n'))
-          ++skip;
-        if (skip < len)
-          ++skip;
-      }
-      sseLines(&s, &buf[skip], len - skip, end);
-    }
-    free(buf);
-  }
+  sseFromFile(&s, fd, from, end);
   close(fd);
 
   corHttpResponseStatus(connP, 200);
@@ -1927,9 +1424,7 @@ static void buildLog(CorHttpConn* connP, const char* name)
     sseEvent(&s, "build", bP);
     corHttpStreamWrite(streamP, s.s, s.len);
 
-    if (bP->nSubs < SUBSCRIBERS_MAX)
-      bP->subs[bP->nSubs++] = streamP;
-    else
+    if (sseSubsAdd(&bP->subs, streamP) == false)
     {
       corHttpStreamWrite(streamP, "event: busy\ndata: too many pages follow this build\n\n", 53);
       corHttpStreamEnd(streamP);
@@ -2160,7 +1655,9 @@ static void capabilities(CorHttpConn* connP)
 #else
   strAdd(&s, ", \"liveLog\": false");
 #endif
-  strAdd(&s, "}}");
+  strAdd(&s, "}, \"run\": ");
+  runCapabilities(&s);
+  strAdd(&s, "}");
 
   respondStr(connP, 200, &s);
 }
@@ -2307,14 +1804,7 @@ static void interruptedMark(void)
 //
 bool compileInit(void)
 {
-  const char* xdg  = getenv("XDG_DATA_HOME");
-  const char* home = getenv("HOME");
-
-  if ((xdg != NULL) && (xdg[0] == '/'))
-    snprintf(buildsDir, sizeof(buildsDir), "%s/c3/builds", xdg);
-  else if ((home != NULL) && (home[0] != 0))
-    snprintf(buildsDir, sizeof(buildsDir), "%s/.local/share/c3/builds", home);
-  else
+  if (dataHome("builds", buildsDir, sizeof(buildsDir)) == false)
     return false;
 
   interruptedMark();

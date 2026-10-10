@@ -79,3 +79,18 @@ export async function brokerGet(broker, pathAndQuery) {
   const reached = !(body && body.broker === false);
   return { ok: response.ok, status: response.status, headers: response.headers, body, reached };
 }
+
+//
+// Run: brokers started here and the services they use (run.c)
+//
+const runName = (name) => encodeURIComponent(name);
+export const run              = () => call('GET', '/api/run');
+export const runSources       = () => call('GET', '/api/run/sources');
+export const runImages        = () => call('GET', '/api/run/images');
+export const runCommand       = (def) => call('POST', '/api/run/command', def);
+export const runStart         = (def) => call('POST', '/api/run/brokers', def);
+export const runStartKept     = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/start');
+export const runStop          = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/stop');
+export const runForget        = (name, data) => call('DELETE', '/api/run/brokers/' + runName(name) + (data ? '?data=true' : ''));
+export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
+export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' + runName(volume));

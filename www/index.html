@@ -7,6 +7,7 @@
 <link rel="icon" href="img/coraine-mark.png">
 <link rel="stylesheet" href="css/c3.css">
 <link rel="stylesheet" href="css/compile.css">
+<link rel="stylesheet" href="css/run.css">
 </head>
 <body>
 
@@ -31,6 +32,7 @@
     <nav class="pages" aria-label="Parts">
       <a href="#compile" id="nav-compile">Compile</a>
       <span class="later" title="Later">Configure</span>
+      <a href="#run" id="nav-run">Run</a>
       <a href="#connect" id="nav-connect" class="active" aria-current="page">Connect</a>
     </nav>
     <div class="top-right"><span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware"></div>
@@ -148,6 +150,113 @@
           <div class="row"><h2 class="section">Builds kept</h2><span class="sub" id="cp-bcount"></span></div>
           <div class="cp-builds" id="cp-builds"></div>
           <span class="cp-note mono" id="cp-bdir"></span>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <main class="page" id="page-run" hidden>
+    <div class="cp-wrap">
+      <div class="cp-main">
+        <div class="cp-head">
+          <div>
+            <h1>Run brokers</h1>
+            <p>Start and stop brokers on this machine - the installed one, a build of Compile's, or a published image - natively or in a container, with the services they use.</p>
+          </div>
+          <span class="chip host" id="rn-engine">containers</span>
+        </div>
+
+        <section class="cp-card cp-unavail" id="rn-nocont" hidden>
+          <h2 class="section">Containers are not available here</h2>
+          <p class="cp-note" id="rn-nocont-why"></p>
+          <p class="cp-note">Brokers still run natively with corDB alone; MongoDB, PostgreSQL/TimescaleDB and Mosquitto, and the published images, need a container engine.</p>
+        </section>
+
+        <section class="cp-card" aria-label="Brokers">
+          <div class="row"><h2 class="section">Brokers</h2><span class="sub" id="rn-bcount"></span></div>
+          <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
+        </section>
+
+        <section class="cp-card" aria-label="Services" id="rn-svccard">
+          <div class="row"><h2 class="section">Services</h2><span class="sub">containers, started before the brokers that use them and stopped when nothing started here uses them</span></div>
+          <div class="rn-list" id="rn-services"></div>
+        </section>
+
+        <section class="cp-card" aria-label="Log" id="rn-logcard">
+          <div class="cp-runhead">
+            <h2 class="section">Log</h2>
+            <span class="nm" id="rn-log-name">-</span>
+            <span class="grow"></span>
+            <a id="rn-log-file" target="_blank" hidden>the whole file</a>
+          </div>
+          <pre class="cp-log" id="rn-log" tabindex="0" aria-label="The log"></pre>
+          <div class="cp-note mono" id="rn-log-note"></div>
+        </section>
+      </div>
+
+      <aside class="cp-aside">
+        <section class="cp-card" aria-label="Start a broker" id="rn-form">
+          <div class="row"><h2 class="section" id="rn-form-title">Start a broker</h2><span class="sub" id="rn-form-sub"></span></div>
+
+          <div class="cp-field">
+            <span class="cp-label">Set</span>
+            <div class="rn-sets" id="rn-sets"></div>
+          </div>
+
+          <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="rn-name" maxlength="64" spellcheck="false" autocomplete="off"></label>
+
+          <div class="cp-field">
+            <span class="cp-label">From</span>
+            <div class="cp-seg" id="rn-from"></div>
+            <select class="rn-select" id="rn-build" aria-label="The build" hidden></select>
+            <div class="rn-image" id="rn-image" hidden>
+              <span class="mono rn-repo" id="rn-repo">quay.io/seamware/coraine:</span>
+              <input class="cp-input" id="rn-tag" list="rn-tags" placeholder="a tag" spellcheck="false" autocomplete="off" aria-label="The image's tag">
+              <datalist id="rn-tags"></datalist>
+            </div>
+            <span class="cp-note" id="rn-from-note"></span>
+          </div>
+
+          <div class="cp-field">
+            <span class="cp-label">Runs</span>
+            <div class="cp-seg" id="rn-where"></div>
+          </div>
+
+          <div class="cp-field">
+            <span class="cp-label">Store</span>
+            <div class="cp-seg" id="rn-store"></div>
+            <label class="rn-check"><input type="checkbox" id="rn-dbdir"> keep it on disk <span class="mono">--dbDir</span></label>
+          </div>
+
+          <div class="cp-field">
+            <span class="cp-label">History</span>
+            <div class="cp-seg" id="rn-history"></div>
+          </div>
+
+          <div class="rn-ports">
+            <label class="cp-field"><span class="cp-label">Port</span><input class="cp-input" id="rn-port" inputmode="numeric" maxlength="5"></label>
+            <label class="cp-field"><span class="cp-label">Health port</span><input class="cp-input" id="rn-hport" inputmode="numeric" maxlength="5" placeholder="none"></label>
+            <label class="cp-field"><span class="cp-label">Grace (s)</span><input class="cp-input" id="rn-grace" inputmode="numeric" maxlength="3"></label>
+          </div>
+
+          <div class="cp-field">
+            <span class="cp-label">Plugins</span>
+            <div class="rn-checks" id="rn-plugins"></div>
+            <span class="cp-note" id="rn-tenants"></span>
+          </div>
+
+          <div class="cp-field">
+            <span class="cp-label">Bridges</span>
+            <div class="rn-checks" id="rn-bridges"></div>
+            <input class="cp-input" id="rn-bconf" placeholder="bridge configuration file (none: c3 writes the MQTT one)" spellcheck="false" autocomplete="off" aria-label="Bridge configuration file">
+          </div>
+
+          <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
+
+          <div class="rn-svcneed" id="rn-need"></div>
+          <pre class="cp-cmd" id="rn-cmd" aria-label="The command"></pre>
+          <span class="cp-note" id="rn-problem"></span>
+          <button class="btn primary cp-build" type="button" id="rn-start">Start</button>
         </section>
       </aside>
     </div>

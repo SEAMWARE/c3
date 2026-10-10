@@ -12,11 +12,13 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | **Docs** | All of coraine's documentation in one place, much easier to read than Markdown on GitHub: the broker (everything on Read the Docs), every cor-lib, the plugin and bridge contracts, searchable, offline. And help to write a new plugin: a skeleton repository - makefile, template `.c`/`.h` files, a functest - for each kind of plugin. |
 | **Connect** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
 
-Status: **milestone 2** - the `c3` command, its backend, the configuration file, the splash screen,
+Status: **milestone 2b** - the `c3` command, its backend, the configuration file, the splash screen,
 **Connect, read-only**: discovery, the types picked, an entity's menu (linked entities, neighbourhood),
 the entities **on a map**, online or from downloaded areas offline, and **live values** - over the
 broker's WebSocket transport, or HTTP notifications to the backend - and **Compile**: a broker built by
-`coraine-build` with the features chosen, its output followed live, the builds kept. [doc/design.md](doc/design.md)
+`coraine-build` with the features chosen, its output followed live, the builds kept - and **Run**: brokers
+started and stopped natively or in a container, with MongoDB, PostgreSQL/TimescaleDB and Mosquitto as
+containers. [doc/design.md](doc/design.md)
 is the plan, [doc/areas.md](doc/areas.md) the milestones, [design/](design/) the screen designs.
 
 ## Try it
@@ -140,6 +142,14 @@ markers are coloured by), the downloaded map areas, and the last page:
     "choice": { "mode": "release", "features": { "REGISTRATIONS": false, "MONGOC": false } },
     "presets": [ { "name": "edge node", "mode": "release", "features": { "REGISTRATIONS": false, "SUBSCRIPTIONS": false, "MONGOC": false } } ]
   },
+  "run": {
+    "brokers": [
+      { "name": "mt", "from": "installed", "build": null, "image": null, "where": "native", "set": "mongoc-timescale",
+        "store": "mongoc", "dbDir": false, "history": "timescale", "port": 1592, "healthPort": 1593,
+        "transports": ["ws"], "bridges": [], "bridgeConfig": null, "admin": true, "verbose": true, "args": "",
+        "grace": 30, "lastStarted": "2026-10-10T08:00:00Z" }
+    ]
+  },
   "ui": { "lastPage": "connect" }
 }
 ```
@@ -158,6 +168,8 @@ markers are coloured by), the downloaded map areas, and the last page:
 - `compile.choice`: Compile's choice as it is (`mode`, the `features` set by hand, `workload`), kept as it
   changes; `compile.presets`: the choices saved under a name. The builds themselves are not listed here:
   their directory is the truth (Compile, below).
+- `run.brokers`: the brokers Run started, with their options (Run, below) - kept when one is started, removed
+  with **Forget**. What runs is not in the file: the processes and containers are the truth.
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
   written.
@@ -386,7 +398,7 @@ is the command shown, run by the backend, the same build as on the command line.
   **Cancel**: SIGTERM to the build's process group, SIGKILL 5 s later.
 - **The result** - the size of `install/` and of the broker, the mode and time, the features as the
   built broker reports them (`install/bin/coraine --version`, the switches off struck through), its
-  `--version`, the directory, the whole log. **Run it** is greyed until Run (milestone 2b).
+  `--version`, the directory, the whole log. **Run it** opens Run with that build in the form.
 - **Builds kept** - newest first, with their mode, date, size and the features turned off; a click
   opens one (its log and result); **Delete** (press twice) removes its directory, log and record.
 - **Presets** - the choice (mode, the features changed, the workload) saved under a name in `c3.json`,
@@ -444,13 +456,119 @@ its byte offset, which `EventSource` does by itself (`Last-Event-ID`); and a wri
 never waits - bytes a page has not taken wait in the stream (16 MiB at most, then that page is
 disconnected) - so a slow page cannot hold up the thread that reads the build's pipe.
 
+## Run
+
+Brokers started and stopped on this machine, and the services they use ([doc/design.md](doc/design.md), Run).
+
+**What a broker is started from**
+
+| From | Runs | How |
+|---|---|---|
+| the installed `coraine` (`$PATH`) | natively | `coraine -fg <options>` |
+| a build of Compile's | natively | `/bin/sh -c '. "$0" && exec "$@"' <build>/install/env <build>/install/bin/coraine -fg <options>` - its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand |
+| an image (`quay.io/seamware/coraine:<tag>`) | in a container | `docker run -d --name c3-broker-<name> ... <image> <options>` - the image's entry point is `coraine -fg` |
+
+An image of Compile's is greyed (Compile makes no image yet), and so is a build in a container. The tag is
+chosen from the images here and the tags published on quay.io (`GET /api/run/images`, which reads quay.io's
+API: the multi-architecture tags, not the `-amd64`/`-arm64` ones), or typed; a tag that is not here is
+pulled at the start, its progress in the broker's log. Images are named by their tags - none is
+`latest`.
+
+**The form** - one of three sets, then each option as wanted:
+
+| Set | Store | History | Bridges | Services (containers) |
+|---|---|---|---|---|
+| corDB alone | corDB, on disk | corDB | - | - |
+| mongoc + timescale | mongoc | timescale | - | MongoDB (`mongo:8.2`), PostgreSQL + TimescaleDB (`timescale/timescaledb-ha:pg16`) |
+| with MQTT | corDB, on disk | corDB | mqtt | Mosquitto (`eclipse-mosquitto:2`, `/mosquitto-no-auth.conf`) |
+
+- **Store** corDB or mongoc; corDB's **keep it on disk** is `--dbDir`: natively `<run>/<name>/data`, in a
+  container the volume `c3-broker-<name>` at `/data`.
+- **History** `--troe` none, corDB or timescale.
+- **Port** and **health port** (`--healthPort`; empty: none), **grace** - the seconds from SIGTERM to SIGKILL.
+- **Plugins** - the WebSocket transport (`--transports ws`), the admin API (`--apiPlugins admin`), `-v`.
+- **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
+  configuration file; with mqtt and no file, c³ writes `<run>/<name>/bridges.json` naming the set's Mosquitto.
+- **More options** - anything else, as typed (quotes keep words together).
+- What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
+  without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
+  `--version` (the installed one's, or the build's record); an image's are not known before it runs.
+  Tenants have no switch at start: the form says whether the broker has them compiled in.
+- The command, exactly as it will run, from the backend (`POST /api/run/command`), and the services it
+  starts first with their ports.
+
+**Services.** A set's services are containers of its own, `c3-<set>-<service>`, shared by the brokers of the
+set, each with a volume of the same name and on the network `c3`; published on `127.0.0.1` only, on the
+service's port + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is
+taken), so they do not collide with a MongoDB or PostgreSQL of one's own. Each broker has its own
+database in them: mongoc `--dbName c3_<name>`, timescale `--troeName c3_<name>_h` (`.` and `-` as `_`).
+A native broker reaches them on `127.0.0.1:<port>`, a container broker by name on the network
+(`c3-mongoc-timescale-mongo:27017`).
+
+- Started before the broker that needs them and waited for: MongoDB until `mongosh` answers its ping,
+  PostgreSQL until `pg_isready`, Mosquitto until it takes a connection (3 minutes at most). MongoDB is a
+  single node, not a replica set: coraine needs one only for `--high-availability mongo`.
+- `mongo:8.2`, not 8.0: mongo 8.0 does not start on Linux 6.19 and newer (SERVER-121912).
+- Stopped (`docker stop`, then `docker rm`) when the broker using them stops and nothing else started from
+  c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice) removes
+  it, and only a volume c³ made (label `c3=run`) whose container does not run.
+
+**Starting.** The broker joins Connect's list (`http://localhost:<port>`, named as in Run) and is kept in
+`c3.json`. A native broker is started in a session of its own (`setsid`), its stdout and stderr appended
+to its log, in its directory, with c³'s environment less `CORAINE_*` and `SEAMWARE_PLUGIN_DIR` (each option
+of the broker's can be set from the environment; the form is the whole of it). It does not need c³: when
+c³ stops, the brokers keep running. A container broker listens on 1026 inside its container, the port
+chosen published on `127.0.0.1` - the image's `HEALTHCHECK` asks `localhost:1026/version`, and a broker on
+another port inside is reported `unhealthy`.
+
+**Stopping.** SIGTERM to the broker's process group - corDB syncs its log and writes its snapshots - and
+SIGKILL when the grace period is over; the page counts it down. A container: `docker stop -t <grace>`
+(the same two signals), then `docker rm`. Then its services, as above.
+
+**Status** - every 2 s for each broker that runs: `GET /ready` on its health port, whose answer is the
+health report (uptime, the store and the history plugin loaded and reachable, memory, requests), else
+`GET /version` on its port. Shown as ready, not ready, answers (no health port) or no answer. A broker
+that ends by itself is shown with its exit status and why.
+
+**After a restart of c³.** A native broker's `state.json` holds its pid and the start time of that process
+(`/proc/<pid>/stat`): when that process still runs, c³ attaches to it - it is watched by pid and start time,
+not reaped (it is not c³'s child any more), and its exit status is not known. Containers are found by
+their label `c3=run`. A container's log follower (`docker logs -f`) is started again from the time the log
+file last changed.
+
+**The log** - `GET /api/run/brokers/<name>/log` (and `/api/run/services/<container>/log`) as server-sent
+events, as a build's: the file from `Last-Event-ID`, then each new line; `event: reset` when a new run
+starts its log (the run before is `broker.log.1`). Without `Accept: text/event-stream`, the file (Range
+taken). A native broker writes its log itself; a container's is filled by `docker logs -f`; c³'s own lines
+start with `c3: `.
+
+**Containers** go through `docker`, else `podman` (the same commands), found in `$PATH` and asked for its
+version. Without either, or with a daemon that does not answer, the container parts are greyed with what
+to install. c³ creates only `c3-*` containers, volumes and the network `c3`, all labelled `c3=run`, and
+touches nothing else.
+
+**Where it lives**: `$XDG_DATA_HOME/c3/run/` (else `~/.local/share/c3/run/`):
+
+```
+<name>/broker.log     its output and c3's lines about it; broker.log.1 the run before
+<name>/state.json     a native broker that runs: {pid, procStart, started} - and broker.pid, the pid alone
+<name>/data/          --dbDir of a native corDB
+<name>/bridges.json   the MQTT bridge's configuration c3 writes
+services/<container>.log
+```
+
+**Forget** (press, then keep or delete the data) removes a broker that does not run from `c3.json`; with its
+data, also its directory and its volume.
+
 ## How it is built
 
-**Backend - C, on coraine's own libraries.** One binary, `c3`, from nine files in [src/](src/) - `maps.c`
+**Backend - C, on coraine's own libraries.** One binary, `c3`, from eleven files in [src/](src/) - `maps.c`
 is the map's downloaded areas (the planet read by Range, the extract, the fonts, the job and its API),
 `live.c` the live values (the page's sessions, their subscriptions, the notifications) and `ws.c`
 WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page - and
-`compile.c` Compile (the capabilities, the feature list, the builds and their processes, the live log):
+`compile.c` Compile (the capabilities, the feature list, the builds and their processes, the live log),
+`run.c` Run (brokers and services, their processes and containers, status, logs) and `util.c` what those two
+share (a growing string, files, processes spawned and stopped, a log followed as server-sent events):
 
 | Library | Used for |
 |---|---|
@@ -472,8 +590,8 @@ The backend's API, used by the pages:
 | `DELETE /api/brokers` `{"url"}` | forget a broker |
 | `PUT /api/brokers/types` `{"url", "types"}` | the types Connect loads from a broker, as its `connect.types` (the broker must be in the list) |
 | `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy"}` | Connect's view of a broker: each member given replaces the stored one |
-| `PUT /api/ui` `{"lastPage"}` | `compile` or `connect` |
-| `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`) |
+| `PUT /api/ui` `{"lastPage"}` | `compile`, `run` or `connect` |
+| `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`), `run` (`coraine`, `coraineWhy`, `containers`, `engine`, `engineVersion`, `containersWhy`, `dir`) |
 | `GET /api/compile/features` | `coraine-build --list-features --json` as `{"coraineBuild", "source", "version", "features": [{"name", "default", "description", "requires"}]}` |
 | `PUT /api/compile/choice` `{"mode", "features", "workload"}` | Compile's choice, kept as `compile.choice` |
 | `PUT /api/compile/presets` `{"name", "mode", "features", "workload"}` | a preset, added or replaced (in its place) in `compile.presets` |
@@ -484,6 +602,17 @@ The backend's API, used by the pages:
 | `GET /api/builds/<name>` | a record |
 | `GET /api/builds/<name>/log` | the live log as server-sent events (`Accept: text/event-stream`), else the log file |
 | `DELETE /api/builds/<name>` | the build that runs: cancelled (`202`); a finished one: deleted (`204`) |
+| `GET /api/run` | `{dir, engine, brokers, services, sets}`: each broker kept with its options (`def`), `state` (`stopped`, `starting`, `running`, `stopping`, `exited`, `failed`), `why`, `pid`, `attached`, `container`, `url`, `started`, `ended`, `stop` (`asked`, `grace`, `killIn`, `killed`), `exitStatus`, `ready`, `health` (the report), `services`, `log`, `dataDir`/`volume`; each service with `container`, `set`, `service`, `image`, `state`, `port`, `volume`, `volumeExists`, `usedBy`, `neededBy` |
+| `GET /api/run/sources` | the installed broker and the builds that succeeded: `version` (`--version`), their plugin directory and bridges |
+| `GET /api/run/images` | `{repository, local: [{tag, created, size}], published: [{tag, modified}], publishedError}` |
+| `POST /api/run/command` `{broker}` | `{def, argv, command, services, problem}` - nothing run |
+| `POST /api/run/brokers` `{broker}` | kept (replacing one of that name) and started: `202`; `409` while it runs or when a port is taken; `422` when it cannot start from its source (`problem`) |
+| `POST /api/run/brokers/<name>/start` | start one kept |
+| `POST /api/run/brokers/<name>/stop` | `202`; SIGTERM, SIGKILL after its grace |
+| `DELETE /api/run/brokers/<name>` | forget one that does not run (`204`); `?data=true` its directory and volume too |
+| `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
+| `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
+| `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
 | `POST /api/maps/estimate` `{"bbox", "maxzoom"}` | tiles and bytes of an area, from the planet's directories (`422` past 1 000 000 tiles) |
 | `POST /api/maps/download` `{"name", "bbox", "maxzoom"}` | start the download (`202`; `409` while one runs); `GET` its progress, `DELETE` cancels it |
@@ -508,7 +637,8 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 |---|---|
 | `index.html`, `css/c3.css` | the shell and the look (dark only - Seamware magenta `#A72E60` on `#0E1014`) |
 | `css/compile.css`, `js/compile.js` | the Compile page |
-| `js/main.js` | the splash screen, then the pages (`#compile`, `#connect`; the last one shown is `ui.lastPage`) |
+| `css/run.css`, `js/run.js` | the Run page |
+| `js/main.js` | the splash screen, then the pages (`#compile`, `#run`, `#connect`; the last one shown is `ui.lastPage`) |
 | `js/api.js` | the backend's API |
 | `js/ngsild.js` | discovery, the paged load (all, or the types picked), linked entities, Relationships, values as text |
 | `js/layout.js` | the layout |

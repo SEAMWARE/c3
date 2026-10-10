@@ -20,6 +20,7 @@
 //   GET    /api/capabilities    what this machine can do (compile.c)
 //   ...    /api/compile/...     Compile: the feature list (compile.c); the choice and the presets (config.c)
 //   ...    /api/builds...       Compile: the builds - start, follow, cancel, delete (compile.c)
+//   ...    /api/run...          Run: brokers and their services - start, stop, follow (run.c)
 //   GET    /<file>              a file of the www directory; / is index.html (Range taken)
 //
 // Only for this machine: a connection from another address is refused, and so is a request whose Host
@@ -491,6 +492,8 @@ void serveRequest(CorHttpConn* connP)
   else if ((strcmp(path, "/api/capabilities") == 0) || (strncmp(path, "/api/compile/", 13) == 0) ||
            (strcmp(path, "/api/builds") == 0) || (strncmp(path, "/api/builds/", 12) == 0))
     compileRequest(connP, path);
+  else if ((strcmp(path, "/api/run") == 0) || (strncmp(path, "/api/run/", 9) == 0))
+    runRequest(connP, path);
   else if ((strcmp(path, "/api/status") == 0) && (strcmp(method, "GET") == 0))
     serveStatus(connP);
   else if ((strcmp(path, "/api/config") == 0) && (strcmp(method, "GET") == 0))

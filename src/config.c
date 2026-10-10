@@ -1392,3 +1392,140 @@ bool configCompilePresetDelete(char* body, char* errBuf, int errLen)
   docRelease(&doc);
   return ok;
 }
+
+
+
+// -----------------------------------------------------------------------------
+//
+// runBrokers - the configuration's "run": {"brokers": [...]}, created if missing
+//
+static CorNode* runBrokers(Doc* docP)
+{
+  CorNode* runP = corTreeLookup(docP->treeP, "run");
+
+  if ((runP == NULL) || (runP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(docP->treeP, "run", corTreeObject(&docP->alloc, "run"));
+    runP = corTreeLookup(docP->treeP, "run");
+  }
+
+  CorNode* brokersP = corTreeLookup(runP, "brokers");
+  if ((brokersP == NULL) || (brokersP->type != CorArray))
+  {
+    corTreeChildAddOrReplace(runP, "brokers", corTreeArray(&docP->alloc, "brokers"));
+    brokersP = corTreeLookup(runP, "brokers");
+  }
+
+  return brokersP;
+}
+
+static CorNode* runBrokerFind(CorNode* brokersP, const char* name)
+{
+  for (CorNode* bP = brokersP->value.head; bP != NULL; bP = bP->next)
+  {
+    CorNode* nameP = (bP->type == CorObject) ? corTreeLookup(bP, "name") : NULL;
+
+    if ((nameP != NULL) && (nameP->type == CorString) && (strcmp(nameP->value.s, name) == 0))
+      return bP;
+  }
+
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configRunBrokerPut - a broker of Run (run.c checked and rendered it): replaced in its place, or added at
+// the end. Members of the old one that the new one does not have are kept (a later c3's).
+//
+bool configRunBrokerPut(const char* defJson, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* defP = bodyParse(&doc, (char*) defJson, errBuf, errLen);
+  CorNode* nameP = (defP != NULL) ? corTreeLookup(defP, "name") : NULL;
+
+  if ((nameP == NULL) || (nameP->type != CorString))
+  {
+    if (defP != NULL)
+      snprintf(errBuf, errLen, "a broker of Run has a name");
+    goto done;
+  }
+
+  CorNode* brokersP = runBrokers(&doc);
+  CorNode* oldP     = runBrokerFind(brokersP, nameP->value.s);
+
+  if (oldP != NULL)
+  {
+    for (CorNode* mP = oldP->value.head; mP != NULL; mP = mP->next)
+    {
+      if ((mP->name == NULL) || (corTreeLookup(defP, mP->name) != NULL))
+        continue;
+
+      CorNode* nP = corTreeString(&doc.alloc, mP->name, "");   // the old member's value, on a node of its own
+      nP->type  = mP->type;
+      nP->value = mP->value;
+      corTreeChildAdd(defP, nP);
+    }
+
+    CorNode* prevP = NULL;
+    for (CorNode* pP = brokersP->value.head; pP != oldP; pP = pP->next)
+      prevP = pP;
+
+    defP->name = NULL;
+    defP->next = oldP->next;
+    if (prevP == NULL)
+      brokersP->value.head = defP;
+    else
+      prevP->next = defP;
+    if (brokersP->value.tail == oldP)
+      brokersP->value.tail = defP;
+  }
+  else
+  {
+    defP->name = NULL;
+    corTreeChildAdd(brokersP, defP);
+  }
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configRunBrokerDelete - a broker of Run forgotten
+//
+bool configRunBrokerDelete(const char* name, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* brokersP = runBrokers(&doc);
+  CorNode* oldP     = runBrokerFind(brokersP, name);
+
+  if (oldP == NULL)
+  {
+    snprintf(errBuf, errLen, "no broker '%s' in Run", name);
+    goto done;
+  }
+
+  corTreeChildRemove(brokersP, oldP);
+  ok = commit(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}

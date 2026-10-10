@@ -31,39 +31,6 @@
 
 // -----------------------------------------------------------------------------
 //
-// inPath - the full path of 'name' in $PATH, or NULL
-//
-static const char* inPath(const char* name, char* out, int outLen)
-{
-  const char* path = getenv("PATH");
-
-  if (path == NULL)
-    path = "/usr/local/bin:/usr/bin:/bin";
-
-  while (*path != 0)
-  {
-    const char* colon = strchr(path, ':');
-    int         len   = (colon != NULL) ? (int) (colon - path) : (int) strlen(path);
-
-    if (len > 0)
-    {
-      snprintf(out, outLen, "%.*s/%s", len, path, name);
-      if (access(out, X_OK) == 0)
-        return out;
-    }
-
-    if (colon == NULL)
-      break;
-    path = colon + 1;
-  }
-
-  return NULL;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
 // chromeFind -
 //
 static const char* chromeFind(char* out, int outLen)
@@ -72,7 +39,7 @@ static const char* chromeFind(char* out, int outLen)
 
   for (unsigned int ix = 0; ix < sizeof(names) / sizeof(names[0]); ix++)
   {
-    if (inPath(names[ix], out, outLen) != NULL)
+    if (inPath(names[ix], out, outLen))
       return out;
   }
 
@@ -232,7 +199,7 @@ void browserOpen(const char* url, bool noBrowser)
   const char* opener = "xdg-open";
 #endif
 
-  if (inPath(opener, prog, sizeof(prog)) != NULL)
+  if (inPath(opener, prog, sizeof(prog)))
   {
     char* argV[] = { prog, (char*) url, NULL };
 
