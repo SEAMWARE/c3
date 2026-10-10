@@ -528,3 +528,12 @@ details.raw pre {
   .cols { flex-wrap: nowrap; }
   .types, .entity { max-height: 100%; }
 }
+
+/* Documentation: the components */
+.docs { max-width: 900px; margin: 24px auto; }
+.docs h1 { font-family: var(--display, inherit); font-weight: 300; margin: 0 0 6px; }
+.doclist { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
+.doclist li { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: baseline; padding: 10px 12px; border-radius: 8px; background: var(--bg-deep); }
+.doclist .dname { font-family: var(--mono); }
+.doclist .ddesc { color: var(--text-2); }
+@media (max-width: 600px) { .doclist li { grid-template-columns: 1fr; gap: 2px; } }

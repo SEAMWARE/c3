@@ -99,7 +99,7 @@ async function splash() {
 //
 // The pages: #compile, #run and #connect, the one shown kept as ui.lastPage
 //
-const PAGES = ['compile', 'run', 'connect'];
+const PAGES = ['compile', 'run', 'connect', 'docs'];
 
 function pageShow(page, compile, run) {
   for (const p of PAGES) {
