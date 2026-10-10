@@ -38,6 +38,13 @@ authorisation, not after it: how a browser presents a token on the socket (in a 
 or a cookie), and an `Origin` check for a page not served by the broker itself (as `--corsOrigin`
 does for HTTP).
 
+As built (live values, milestone 1c): the backend holds the broker side - it opens the WebSocket to the
+broker, creates the subscription over it and forwards the notifications to the page over the page's own
+WebSocket to the backend (`GET /api/live`), so the browser never talks to a broker and the questions of
+a token and an `Origin` on the broker's socket wait for authorisation. A broker without the transport
+gets an ordinary HTTP subscription notifying the backend (`POST /api/notify/<session>`) - any broker that
+can reach it. The README's "Live values" has the details.
+
 
 ### Connect - discovery, choosing what to see, linked entities
 

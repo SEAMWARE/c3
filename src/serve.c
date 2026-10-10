@@ -15,6 +15,8 @@
 //   PUT    /api/ui              {"lastPage"}
 //   ...    /api/maps/...        the map's downloaded areas (maps.c)
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
+//   GET    /api/live            the page's WebSocket: live values (live.c)
+//   POST   /api/notify/<id>     a broker's notification for a session's HTTP subscription (live.c)
 //   GET    /<file>              a file of the www directory; / is index.html (Range taken)
 //
 // Only for this machine: a connection from another address is refused, and so is a request whose Host
@@ -446,6 +448,10 @@ void serveRequest(CorHttpConn* connP)
 
   if (strncmp(path, "/api/proxy/", 11) == 0)
     proxyRequest(connP, &path[10]);
+  else if (strcmp(path, "/api/live") == 0)
+    liveUpgrade(connP);
+  else if (strncmp(path, "/api/notify/", 12) == 0)
+    liveNotify(connP, &path[12]);
   else if ((strcmp(path, "/api/maps") == 0) || (strncmp(path, "/api/maps/", 10) == 0))
     mapsRequest(connP, path);
   else if ((strcmp(path, "/api/status") == 0) && (strcmp(method, "GET") == 0))

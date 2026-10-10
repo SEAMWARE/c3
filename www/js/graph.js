@@ -18,6 +18,28 @@ const SVG = 'http://www.w3.org/2000/svg';
 const K_MIN = 0.05;
 const K_MAX = 3;
 
+function attrRow(a) {
+  const row = document.createElement('div');
+  row.className = 'a';
+  const k = document.createElement('span');
+  k.className = 'k';
+  k.textContent = a.k;
+  const v = document.createElement('span');
+  v.className = 'v';
+  v.textContent = a.v;
+  row.append(k, v);
+  return row;
+}
+
+//
+// restart - a CSS animation played again from its start
+//
+function restart(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
 export class Graph {
   constructor(els) {
     this.vp = els.viewport;
@@ -97,20 +119,9 @@ export class Graph {
       id.textContent = n.short;
       head.append(t, id);
       el.append(stripe, head);
-      for (const a of n.attrs) {
-        const row = document.createElement('div');
-        row.className = 'a';
-        const k = document.createElement('span');
-        k.className = 'k';
-        k.textContent = a.k;
-        const v = document.createElement('span');
-        v.className = 'v';
-        v.textContent = a.v;
-        row.append(k, v);
-        el.append(row);
-      }
+      for (const a of n.attrs) el.append(attrRow(a));
 
-      const node = { id: n.id, x: p.x, y: p.y, types: n.types, el };
+      const node = { id: n.id, x: p.x, y: p.y, types: n.types, el, pinned: !!p.pinned };
       this.place(node);
       this.nodes.set(n.id, node);
       this.edgesAt.set(n.id, []);
@@ -147,6 +158,49 @@ export class Graph {
     this.linesG.append(lines);
     this.labelsG.append(labels);
     this.applyFilter();
+  }
+
+  //
+  // patch - the graph again with entities added, removed or changed (live values): the view, the selection
+  // and the boxes moved by hand are kept; the others go where 'positions' puts them - or, without
+  // positions, stay where they are (a new box then where 'fallback' puts it)
+  //
+  patch(nodes, edges, positions, fallback) {
+    const old = this.nodes;
+    const sel = this.sel;
+    const view = { k: this.k, tx: this.tx, ty: this.ty, autoFit: this.autoFit };
+    const at = new Map();
+    for (const n of nodes) {
+      const o = old.get(n.id);
+      if (o && (o.pinned || !positions)) at.set(n.id, { x: o.x, y: o.y, pinned: o.pinned });
+      else at.set(n.id, (positions || fallback).get(n.id) || { x: 0, y: 0 });
+    }
+    const onSelect = this.onSelect;
+    this.onSelect = () => {};
+    this.set(nodes, edges, at);
+    for (const n of nodes) if (!old.has(n.id)) restart(this.nodes.get(n.id).el, 'born');
+    if (sel && this.nodes.has(sel)) this.select(sel);
+    this.onSelect = onSelect;
+    if (sel && !this.nodes.has(sel)) this.onSelect(null);
+    Object.assign(this, view);
+    if (this.autoFit) this.fit(); else this.applyTransform();
+  }
+
+  //
+  // update - a box's attributes changed: its rows written again, the box and the rows that changed flashed
+  //
+  update(id, attrs) {
+    const n = this.nodes.get(id);
+    if (!n) return;
+    const rows = [...n.el.querySelectorAll(':scope > .a')];
+    const before = new Map(rows.map((r) => [r.firstChild.textContent, r.lastChild.textContent]));
+    rows.forEach((r) => r.remove());
+    for (const a of attrs) {
+      const row = attrRow(a);
+      n.el.append(row);
+      if (before.get(a.k) !== a.v) restart(row, 'chg');
+    }
+    restart(n.el, 'flash');
   }
 
   place(node) {
@@ -398,6 +452,7 @@ export class Graph {
       const n = this.nodes.get(d.id);
       n.x = d.ox + dx / this.k;
       n.y = d.oy + dy / this.k;
+      n.pinned = true;                           // live changes leave it where it was put
       this.place(n);
       for (const edge of this.edgesAt.get(d.id)) this.drawEdge(edge);
     } else {

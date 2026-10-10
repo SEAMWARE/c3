@@ -29,7 +29,7 @@ endif
 
 CFLAGS      = $(OPT) -Wall -Werror -Wundef -Wno-format-truncation -fstack-protector-all -I$(COR_LIBS) -MMD -MP $(EXTRA_CFLAGS)
 
-SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/browser.c src/maps.c
+SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/browser.c src/maps.c src/live.c src/ws.c
 OBJDIR      = obj/$(BUILD)
 OBJECTS     = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 DEPS        = $(OBJECTS:.o=.d)

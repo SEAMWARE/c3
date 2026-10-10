@@ -253,8 +253,9 @@ int main(int argC, char* argV[])
     return 1;
   }
 
-  server.maxRequestSize = 1024 * 1024;
+  server.maxRequestSize = 16 * 1024 * 1024;      // a notification carries whole entities
   configLoad();
+  liveInit();
 
   if (mapsInit() == false)
     fprintf(stderr, "c3: no $HOME and no $XDG_DATA_HOME - the map cannot download areas\n");
@@ -265,6 +266,7 @@ int main(int argC, char* argV[])
   browserOpen(url, noBrowser);
 
   corHttpServe(&server);
+  liveShutdown();                                // no subscription left behind on any broker
   corHttpRelease(&server);
 
   printf("c3: stopped\n");

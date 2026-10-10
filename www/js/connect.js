@@ -15,6 +15,7 @@ import { Graph } from './graph.js';
 import { openMenu, closeMenu } from './menu.js';
 import { EntityMap, geometries, nameOf } from './map.js';
 import { OfflinePanel } from './offline.js';
+import { Live, isNullAttr } from './live.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -76,6 +77,31 @@ function plural(n, word) {
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
+//
+// relSignature - an entity's Relationships, as one string: what the arrows depend on
+//
+function relSignature(e) {
+  return attributes(e).filter(([, v]) => relationshipTargets(v).length).map(([n, v]) => n + '>' + relationshipTargets(v).join(',')).join('|');
+}
+
+//
+// applyChange - a notified state of an entity onto the one held: every attribute in it replaces the
+// held one, an attribute notified as deleted (urn:ngsi-ld:null) goes
+//
+function applyChange(e, n) {
+  for (const [k, v] of Object.entries(n)) {
+    if (k === 'id' || k === '@context') continue;
+    if (isNullAttr(v)) delete e[k];
+    else e[k] = v;
+  }
+}
+
+function withoutNulls(n) {
+  const e = {};
+  for (const [k, v] of Object.entries(n)) if (k !== '@context' && !isNullAttr(v)) e[k] = v;
+  return e;
+}
+
 export class Connect {
   constructor() {
     this.broker = null;
@@ -122,6 +148,11 @@ export class Connect {
       this.viewTimer = setTimeout(() => url && api.brokerConnect(url, { map: v }).catch(() => {}), 800);
     };
     this.emap.onOnline = (ok) => { $('map-offline').hidden = ok; };
+
+    //
+    // Live values: one subscription for the types loaded, its notifications applied in batches
+    //
+    this.live = new Live({ onBatch: (batch) => this.applyLive(batch), onStatus: (st) => this.liveStatus(st) });
     this.offline = new OfflinePanel({ map: this.emap, toast: (t) => this.toast(t), onAreas: (areas, fonts) => this.emap.setAreas(areas, fonts) });
     $('view-graph').onclick = () => this.setView('graph', true);
     $('view-map').onclick = () => this.setView('map', true);
@@ -299,6 +330,7 @@ export class Connect {
 
     this.draw([]);
     this.loadedPicks = [];
+    this.liveWatch();
     this.renderDiscovery();
     this.setState('ok', 'Connected');
     $('counts').textContent = `${plural(disc.types.length, 'type')} · ${disc.total} entities`;
@@ -351,6 +383,8 @@ export class Connect {
       $('notice').textContent = `showing the first ${result.entities.length} of ${result.total} - c³ loads at most ${ENTITY_CAP}`;
     }
 
+    this.liveWatch();
+
     if (result.entities.length === 0) {
       if (types && types.length === 0) this.empty('Nothing picked', 'Tick the types to see on the left and press Load.');
       else this.empty('No entities', `${url} answered, and has no entities${types ? ' of the types picked' : ''} (in the default tenant).`);
@@ -376,6 +410,8 @@ export class Connect {
   }
 
   failed(url, err) {
+    this.live.unwatch();
+    this.liveStatus(null);
     this.setState('bad', err.reached === false ? 'Not reachable' : 'Error');
     this.draw([]);
     this.renderDiscovery();
@@ -438,16 +474,7 @@ export class Connect {
     const edges = edgesOf(sorted, this.byId);
     this.edges = edges;
 
-    const nodes = sorted.map((e) => {
-      const types = typesOf(e);
-      return {
-        id: e.id, types,
-        color: typeColor(types[0]),
-        label: types.map(typeLabel).join(', '),
-        short: shortId(e),
-        attrs: boxAttrs(e),
-      };
-    });
+    const nodes = sorted.map((e) => this.nodeOf(e));
     const positions = layout(nodes.map((n) => ({ id: n.id, type: n.types[0] })), edges);
 
     this.graph.set(nodes, edges, positions);
@@ -459,6 +486,146 @@ export class Connect {
     this.showEntity(null);
     this.mapPlaced = false;
     this.mapPlace();
+  }
+
+  nodeOf(e) {
+    const types = typesOf(e);
+    return {
+      id: e.id, types,
+      color: typeColor(types[0]),
+      label: types.map(typeLabel).join(', '),
+      short: shortId(e),
+      attrs: boxAttrs(e),
+    };
+  }
+
+  //
+  // liveWatch - the types loaded watched on the broker (the types of the loaded entities when the broker
+  // has no discovery)
+  //
+  liveWatch() {
+    if (!this.broker) return;
+    const types = this.loadedPicks ? this.loadedPicks : [...new Set(this.loaded.flatMap((e) => typesOf(e)))];
+    this.live.watch(this.broker, types);
+  }
+
+  //
+  // liveStatus - the Live chip: how the changes arrive, or why they do not
+  //
+  liveStatus(st) {
+    const chip = $('live');
+    if (!st) { chip.hidden = true; return; }
+    chip.hidden = false;
+    const ok = (st.mode === 'ws' || st.mode === 'http') && (st.subscription || !(st.types || []).length);
+    const how = st.mode === 'ws' ? 'WebSocket' : 'HTTP';
+    let label, title;
+    if (ok && st.subscription) {
+      label = `Live · ${how}`;
+      title = st.mode === 'ws'
+        ? `Changes arrive over the broker's WebSocket transport (GET /ngsi-ld/v1/ws).\nSubscription ${st.subscription}`
+        : `Changes arrive as HTTP notifications to the c³ backend.\nSubscription ${st.subscription}\nWhy not the WebSocket: ${st.why}`;
+    } else if (ok) {
+      label = `Live · ${how}`;
+      title = 'Nothing to watch: no types loaded';
+    } else {
+      label = st.retrying ? 'Live · reconnecting' : 'Not live';
+      title = st.detail || 'No subscription';
+      if (st.why) title += `\n(${st.why})`;
+    }
+    chip.className = 'live ' + (ok ? 'ok' : st.retrying ? 'busy' : 'bad');
+    $('live-label').textContent = label;
+    chip.title = title;
+  }
+
+  //
+  // applyLive - a batch of changes: values written into the boxes, the panel and the map; an entity of the
+  // loaded types created or deleted is added or removed; a changed Relationship redraws the arrows
+  //
+  applyLive(batch) {
+    if (!this.broker || this.loadedPicks === undefined) return;
+    const picks = this.loadedPicks ? new Set(this.loadedPicks) : null;
+    const changed = new Set();
+    let structural = false;
+    let rels = false;
+
+    for (const n of batch) {
+      const cur = this.loadedById.get(n.id);
+      if (n.deletedAt) {
+        if (!cur) continue;
+        this.loaded = this.loaded.filter((e) => e.id !== n.id);
+        this.loadedById.delete(n.id);
+        structural = true;
+        continue;
+      }
+      if (cur) {
+        const before = relSignature(cur);
+        applyChange(cur, n);
+        if (relSignature(cur) !== before) rels = true;
+        changed.add(n.id);
+        const shown = this.byId.get(n.id);                  // a neighbourhood's copy
+        if (shown && shown !== cur) applyChange(shown, n);
+        continue;
+      }
+      if (picks && !typesOf(n).some((t) => picks.has(t))) continue;
+      if (this.loaded.length >= ENTITY_CAP) continue;
+      const e = withoutNulls(n);
+      this.loaded.push(e);
+      this.loadedById.set(e.id, e);
+      structural = true;
+      changed.add(e.id);
+    }
+    if (!changed.size && !structural) return;
+
+    this.summarise();
+
+    if (this.mode) {
+      //
+      // A neighbourhood: its boxes' values only - what was created or deleted shows on Back
+      //
+      for (const id of changed) if (this.byId.has(id)) this.graph.update(id, boxAttrs(this.byId.get(id)));
+      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e));
+      this.emap.flash([...changed].filter((id) => this.byId.has(id)));
+    } else if (structural || rels) {
+      this.redrawLive(structural);
+      for (const id of changed) if (this.graph.nodes.has(id)) this.graph.update(id, boxAttrs(this.byId.get(id)));
+      this.emap.flash([...changed]);
+      this.renderDiscovery();
+      $('counts').textContent = `${this.loaded.length} entities${this.loadedPicks && this.disc ? ` of ${plural(this.loadedPicks.length, 'type')}` : ''} · ${plural(this.graph.edges.length, 'relationship')}`;
+      if (this.loaded.length) this.overlay(null);
+    } else {
+      for (const id of changed) this.graph.update(id, boxAttrs(this.byId.get(id)));
+      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e));
+      this.emap.flash([...changed]);
+    }
+
+    const sel = this.graph.sel;
+    if (sel && changed.has(sel)) {
+      const panel = $('entity-body');
+      const top = panel.parentElement ? panel.parentElement.scrollTop : 0;
+      const raw = panel.querySelector('details.raw');
+      const rawOpen = raw && raw.open;
+      this.showEntity(sel);
+      const raw2 = panel.querySelector('details.raw');
+      if (raw2 && rawOpen) raw2.open = true;
+      if (panel.parentElement) panel.parentElement.scrollTop = top;
+    }
+  }
+
+  //
+  // redrawLive - the loaded entities drawn again after a live change: the graph patched (the view, the
+  // selection and boxes moved by hand kept - laid out again when entities came or went), the map set again
+  //
+  redrawLive(relayout) {
+    const sorted = [...this.loaded].sort((a, b) => cmp(a.id, b.id));
+    this.entities = sorted;
+    this.byId = new Map(sorted.map((e) => [e.id, e]));
+    const edges = edgesOf(sorted, this.byId);
+    this.edges = edges;
+    const nodes = sorted.map((e) => this.nodeOf(e));
+    const positions = layout(nodes.map((n) => ({ id: n.id, type: n.types[0] })), edges);
+    this.graph.patch(nodes, edges, relayout ? positions : null, positions);
+    this.emap.set(sorted, edges, (e) => this.mapColor(e));
+    this.renderMapChrome();
   }
 
   //

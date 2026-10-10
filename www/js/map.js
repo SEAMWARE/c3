@@ -265,6 +265,15 @@ export class EntityMap {
       id: 'sel-point', type: 'circle', source: 'c3-ent', filter: ['all', ['==', ['geometry-type'], 'Point'], isSel],
       paint: { 'circle-color': ['get', 'color'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 6, 14, 10, 18, 13], 'circle-stroke-color': '#F3B3CE', 'circle-stroke-width': 3 },
     });
+    //
+    // Live values: the entities that just changed, ringed for a moment (flash)
+    //
+    const none = ['in', ['get', 'id'], ['literal', []]];
+    add({ id: 'flash-line', type: 'line', source: 'c3-ent', filter: ['all', ['!=', ['geometry-type'], 'Point'], none], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#F2B84B', 'line-width': width(4, 8), 'line-opacity': 0.55, 'line-blur': 2 } });
+    add({
+      id: 'flash-point', type: 'circle', source: 'c3-ent', filter: ['all', ['==', ['geometry-type'], 'Point'], none],
+      paint: { 'circle-color': 'rgba(0,0,0,0)', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 8, 14, 13, 18, 18], 'circle-stroke-color': '#F2B84B', 'circle-stroke-width': 2.5, 'circle-stroke-opacity': 0.9 },
+    });
     add({
       id: 'rel-label', type: 'symbol', source: 'c3-rel', filter: relHot,
       layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true },
@@ -364,6 +373,25 @@ export class EntityMap {
       }),
     });
     this.applySelection();
+    this.applyFlash();
+  }
+
+  //
+  // flash - the entities that changed (live values) ringed for a moment
+  //
+  flash(ids) {
+    this.flashIds = ids;
+    this.applyFlash();
+    clearTimeout(this.flashTimer);
+    this.flashTimer = setTimeout(() => { this.flashIds = []; this.applyFlash(); }, 900);
+  }
+
+  applyFlash() {
+    const map = this.map;
+    if (!map || !map.getLayer('flash-point')) return;
+    const f = ['in', ['get', 'id'], ['literal', this.flashIds || []]];
+    map.setFilter('flash-point', ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'anchor']], f]);
+    map.setFilter('flash-line', ['all', ['!=', ['geometry-type'], 'Point'], f]);
   }
 
   //

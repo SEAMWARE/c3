@@ -211,6 +211,22 @@ nav.pages span.later { color: var(--faint); cursor: default; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 
 .counts { color: var(--muted); }
+
+/* Live values: the chip, a box or a row that just changed, a box just created */
+.live { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-2); cursor: default; }
+.live .dot { width: 8px; height: 8px; }
+.live.ok   .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: c3pulse 2s ease-in-out infinite; }
+.live.busy .dot { background: var(--warn); }
+.live.bad  .dot { background: var(--bad); }
+.live.bad  .label { color: var(--bad); }
+@keyframes c3pulse { 50% { opacity: 0.35; } }
+.box.flash { animation: c3flash 1.1s ease-out; }
+.box.born  { animation: c3born 1.6s ease-out; }
+.box .a.chg .v { animation: c3value 1.4s ease-out; }
+@keyframes c3flash { 0% { box-shadow: 0 0 0 3px #F2B84B, 0 0 26px #F2B84B99; } 100% { box-shadow: 0 0 0 0 #F2B84B00, 0 6px 18px #0006; } }
+@keyframes c3born  { 0% { box-shadow: 0 0 0 4px #6FDCA0, 0 0 30px #6FDCA0AA; opacity: 0.2; } 30% { opacity: 1; } 100% { box-shadow: 0 0 0 0 #6FDCA000, 0 6px 18px #0006; } }
+@keyframes c3value { 0% { color: #F2B84B; background: #F2B84B22; } 100% { color: var(--text-2); background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .live.ok .dot, .box.flash, .box.born, .box .a.chg .v { animation: none; } }
 .notice { color: var(--warn); }
 
 .cols { flex: 1; display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; min-height: 0; }

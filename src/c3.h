@@ -11,6 +11,7 @@
 //
 #include <stdbool.h>                             // bool
 #include <stdint.h>                              // int64_t
+#include <pthread.h>                             // pthread_mutex_t
 
 #include "corHttp/CorHttp.h"                     // CorHttpConn
 
@@ -103,6 +104,43 @@ extern void  serveRequest(CorHttpConn* connP);
 extern void  serveJson(CorHttpConn* connP, int status, const char* json);
 extern void  serveError(CorHttpConn* connP, int status, const char* title, const char* detail);
 extern void  serveFileRange(CorHttpConn* connP, const char* file, const char* contentType, int maxWhole);
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ws.c - WebSocket (RFC 6455): the client end to a broker's WebSocket transport, the server end for the page
+//
+typedef struct WsConn
+{
+  int              fd;
+  bool             client;                       // a client masks its frames
+  bool             closeSent;
+  char             pre[8192];                    // bytes read behind the handshake, read before the socket
+  int              preLen;
+  int              preOff;
+  pthread_mutex_t  writeLock;                    // one message at a time, from any thread
+} WsConn;
+
+extern void  wsInit(WsConn* wP, int fd, bool client, const char* extra, int extraLen);
+extern void  wsRelease(WsConn* wP);
+extern bool  wsAcceptKey(const char* key, char* out, int outLen);
+extern int   wsConnect(WsConn* wP, const char* url, const char* path, int timeoutMs, int* statusP, char* errBuf, int errLen);
+extern bool  wsSendText(WsConn* wP, const char* text, int len);
+extern bool  wsSendClose(WsConn* wP, int code);
+extern int   wsRead(WsConn* wP, char** dataP, int* lenP, int maxLen);
+extern bool  urlSplit(const char* url, char* host, int hostLen, char* port, int portLen);
+
+
+
+// -----------------------------------------------------------------------------
+//
+// live.c - live values: a subscription per page on the broker it shows, the notifications to the page
+//
+extern void  liveInit(void);                                     // before the server starts: old subscriptions swept
+extern void  liveUpgrade(CorHttpConn* connP);                    // GET /api/live - the page's WebSocket
+extern void  liveNotify(CorHttpConn* connP, const char* session); // POST /api/notify/<session> - a broker's notification
+extern void  liveShutdown(void);                                 // the backend stops: every subscription deleted
 
 
 

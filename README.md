@@ -14,7 +14,8 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 
 Status: **milestone 1c** - the `c3` command, its backend, the configuration file, the splash screen and
 **Connect, read-only**: discovery, the types picked, an entity's menu (linked entities, neighbourhood),
-and the entities **on a map**, online or from downloaded areas offline. [doc/design.md](doc/design.md)
+the entities **on a map**, online or from downloaded areas offline, and **live values** - over the
+broker's WebSocket transport, or HTTP notifications to the backend. [doc/design.md](doc/design.md)
 is the plan, [doc/areas.md](doc/areas.md) the milestones, [design/](design/) the screen designs.
 
 ## Try it
@@ -34,8 +35,9 @@ the map files. Two corRest fixes matter:
 ```sh
 make                                                   # ./c3
 
-coraine -fg -db corDB -p 1090 &                        # a broker, in RAM, on a port of its own
+coraine -fg -db corDB -p 1090 --transports ws &        # a broker, in RAM, on a port of its own, with its WebSocket transport
 examples/factory.sh http://localhost:1090              # 25 entities with Relationships, locations, areas and routes
+examples/live.sh http://localhost:1090 &               # ... and its robots at work: the values change every 0.5 s
 examples/factory.sh http://localhost:1090 300          # ... and 300 sensors more, to page through
 examples/ckan-bikes.sh http://localhost:1090           # real open data: 572 Boston bike stations + 13 districts (areas) from a CKAN portal
 
@@ -47,6 +49,10 @@ everything is loaded at once; with the bike stations too (610), tick the types t
 then **BikeStation** - and press **Load**. Right-click a Robot for its linked entities (Dock, Floor,
 Building) or its neighbourhood. The next start connects to the last broker by itself, with the types
 picked last time.
+
+With `examples/live.sh` running, the robots' boxes show their speed and battery as they change, and on
+the map they drive their Missions' routes; every 8 s a Mission appears or disappears. **Live ·
+WebSocket** at the top says how the changes arrive (below).
 
 **Map** (top left of the graph) puts the same entities on a map. With the bike stations: **colour by**
 `inDistrict →` gives each district its colour - its stations and its area; click a station for its
@@ -270,22 +276,81 @@ in `src/maps.c`, rather than running the CLI:
 The cost: the tiles of the online map (OpenMapTiles schema) and of the downloaded areas (Protomaps
 schema) need two sets of style layers, kept in the same colours.
 
-Not yet: the WebSocket transport and live values, a rectangle drawn on the map as a `georel=within`
-query, saved views, tenants, Compile, Configure, Docs, Operate.
+### Live values
+
+When an attribute of a loaded entity changes in the broker, its box and its marker change within about
+a second - flashed for a moment, the rows that changed in amber; an entity of the loaded types created
+in the broker appears (in green), one deleted disappears; a changed Relationship moves its arrow. The
+attribute panel of the selected entity follows. Nothing is reloaded.
+
+- **One subscription per page**, for the types loaded, watching every attribute and every kind of
+  change: `notificationTrigger` `entityCreated`, `entityDeleted`, `attributeCreated`,
+  `attributeUpdated`, `attributeDeleted`; `format` `normalized`; named `c3-live:<port>`. Created after
+  a load, replaced when the picks change (the new one first, then the old one deleted - no change is
+  missed in between), deleted when the page closes (the window, or the page left - it is closed on
+  `pagehide`, so a page kept in the browser's back/forward cache keeps none) and when the backend
+  stops.
+- **How the notifications arrive** - the backend holds the broker side; the page has one WebSocket to
+  the backend, `GET /api/live`:
+  - **(a) the broker's WebSocket transport** ([coraine's doc/websocket.md](https://github.com/SEAMWARE/coraine/blob/main/doc/websocket.md),
+    `coraine --transports ws`): the backend opens `GET /ngsi-ld/v1/ws` on the broker, creates the
+    subscription over it (`POST /ngsi-ld/v1/subscriptions` in a message's `metadata`, the endpoint the
+    connection's name, `urn:ngsi-ld:WebSocket:<n>`) and the notifications come back on the same
+    socket. The broker needs to reach nothing, and it deletes the subscription itself when the socket
+    closes - also when c³ is killed. **Tried first.**
+  - **(b) an HTTP subscription** whose endpoint is the backend,
+    `http://127.0.0.1:<port>/api/notify/<session>` (a random 128-bit session id): any NGSI-LD
+    broker, as long as it can reach the backend - a broker on the same machine. Used when the broker
+    does not upgrade `GET /ngsi-ld/v1/ws` (a broker without the transport answers 404).
+
+  **Live · WebSocket** / **Live · HTTP** next to the counts says which; its tooltip gives the
+  subscription and, for HTTP, why not the WebSocket. **Not live** with the broker's answer when the
+  subscription is refused.
+- **No orphans.** A subscription made over the WebSocket dies with the socket. An HTTP one of a backend
+  that was killed (`kill -9`, a crash) is deleted by the next start on that port: the brokers of the
+  configuration (the 10 most recent) and, before its first subscription, any broker connected to, are
+  asked for their subscriptions, and those named `c3-live` that notify this port's `/api/notify/` for a
+  session that is not running are deleted.
+- **In batches.** The changes are gathered and applied every 250 ms - one entity notified several times
+  in that time is applied once - not one redraw per notification. A changed value rewrites the box's
+  rows and moves the marker; an entity created or deleted lays the graph out again (keeping the view,
+  the selection and the boxes moved by hand); a changed Relationship redraws the arrows only.
+- **When the broker goes away** (stopped, restarted): **Live · reconnecting**, and the page watches
+  again every few seconds until it is back; when the backend goes away, the page reconnects to it.
+- In a neighbourhood, the values of its boxes change; created and deleted entities show on **Back**.
+- A broker with no discovery (milestone 1's "every entity") is watched for the types of the entities
+  loaded.
+
+The page gets the changes over a WebSocket to the backend, not Server-Sent Events: corHttp has no
+streaming response, and its `corHttpUpgrade` hands the backend the socket - the same contract coraine's
+WebSocket transport is built on. If WebSocket between the backend and the brokers turns out too slow,
+[cor:// in the backend](doc/design.md) is the plan; not before measuring.
+
+**[examples/live.sh](examples/live.sh)** `[broker-url] [seconds-per-step] [steps]` - the factory at work:
+the robots of the three running Missions drive their Mission's route (`route`, a LineString) to the end
+and back - `location`, `speed` and `batteryLevel` change, the Mission's `progress` follows; the robots at
+a charger charge; every 16 steps a Mission (`urn:ngsi-ld:Mission:m-live`) is created, 16 steps later
+deleted (`CHURN=0` leaves that out). Ctrl-C deletes it if it is there.
+
+Not yet: a rectangle drawn on the map as a `georel=within` query, saved views, tenants, Compile,
+Configure, Docs, Operate.
 
 ## How it is built
 
-**Backend - C, on coraine's own libraries.** One binary, `c3`, from six files in [src/](src/) - `maps.c`
-is the map's downloaded areas (the planet read by Range, the extract, the fonts, the job and its API):
+**Backend - C, on coraine's own libraries.** One binary, `c3`, from eight files in [src/](src/) - `maps.c`
+is the map's downloaded areas (the planet read by Range, the extract, the fonts, the job and its API),
+`live.c` the live values (the page's sessions, their subscriptions, the notifications) and `ws.c`
+WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page:
 
 | Library | Used for |
 |---|---|
-| corHttp | the HTTP server: one event loop, one request callback - the pages and the API |
+| corHttp | the HTTP server: one event loop, one request callback - the pages and the API; `corHttpUpgrade` hands over the page's WebSocket |
 | corRest | the HTTP client the proxy and the map downloads send with - its multi engine, for the cap on the response size and a response that stays valid until the engine is destroyed |
 | corJson, corTree | reading and writing the configuration file, and the API's JSON bodies |
 | corArgs | the command line |
 | corAlloc, corBase, corLog | under the others |
 | zlib | the PMTiles directories (gzip) |
+| OpenSSL (libcrypto) | also `Sec-WebSocket-Accept` (SHA-1, base64) |
 
 The backend's API, used by the pages:
 
@@ -304,6 +369,8 @@ The backend's API, used by the pages:
 | `DELETE /api/maps/areas` `{"id"}` | delete an area: its file and its entry |
 | `GET /api/maps/areas/<id>.pmtiles` | the file, with Range |
 | `GET /api/maps/fonts/<fontstack>/<range>.pbf` | a glyph range of a downloaded font stack |
+| `GET /api/live` | the page's WebSocket (live values). The page sends `{"op": "watch", "broker", "types"}` or `{"op": "unwatch"}`; the backend sends `hello` (the session), `status` (`mode` `ws`, `http` or `off`, `subscription`, `types`, `why` not the WebSocket, `detail` of a failure), `notify` (`{"broker", "message"}` - the broker's WebSocket message as it came, or `{"body": ...}` for an HTTP notification: `message.body` is the Notification) and `lost` (the broker closed its WebSocket). The `Origin`, when sent, must be this machine. |
+| `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
 | `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`) and `/version` only. Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
@@ -326,7 +393,8 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/graph.js` | boxes, arrows, zoom, pan, drag, selection, filters, a box expanded in place |
 | `js/menu.js` | the context menu, mouse and keyboard |
 | `js/connect.js` | the Connect page: discovery panel, picks, an entity's menu, neighbourhood, linked entities, graph or map, colour by |
-| `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads, selection, click and menu |
+| `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads, selection, click and menu, the changed entities ringed |
+| `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), reconnecting |
 | `js/basemap.js` | the base map: c³'s dark style for OpenFreeMap's tiles, the downloaded areas' Protomaps layers, the tile and glyph protocols |
 | `js/offline.js` | "Download this area": the estimate, the download's progress, the list of areas |
 
@@ -339,7 +407,8 @@ licences beside them); the coraine mark and the Seamware logo in `www/img/`.
 src/               the backend (C)
 www/               the pages, served by the backend
 www/vendor/        MapLibre GL JS, pmtiles, @protomaps/basemaps - as published, with their licences
-examples/          factory.sh - sample entities for Connect; ckan-bikes.sh - real open data from a CKAN portal
+examples/          factory.sh - sample entities for Connect; live.sh - its robots at work (live values);
+                   ckan-bikes.sh - real open data from a CKAN portal
 doc/design.md      what c³ is and how it is built
 doc/areas.md       the parts of the work and the milestones
 design/            screen designs (Splash, Compile, Configure, Connect)
