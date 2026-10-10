@@ -146,7 +146,8 @@ header.top {
   background: var(--bg-deep); border-bottom: 1px solid var(--line);
 }
 header.top .mark { height: 56px; width: auto; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 0.4em; }
+.brand .sep { letter-spacing: 0; }
 .word { font-family: var(--title); font-size: 44px; font-weight: 400; color: var(--text); }
 .word .cube { color: var(--accent-2); }
 .brand .tag { font-family: var(--title); font-size: 36px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
