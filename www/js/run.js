@@ -400,8 +400,16 @@ export class Run {
   append(text) {
     const pre = $('rn-log');
     const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
-    const frag = document.createDocumentFragment();
+    let frag = document.createDocumentFragment();
     for (const line of text.split('\n')) {
+      //
+      // A start begins the broker's log again: only the latest attempt is shown - the earlier ones are
+      // in the whole file (the link). Without this, every attempt added its lines under the last.
+      //
+      if (/^c3: \S+ start '/.test(line)) {
+        pre.replaceChildren();
+        frag = document.createDocumentFragment();
+      }
       let cls = '';
       if (line.startsWith('c3: ')) cls = 'c3';
       else if (line.startsWith('E: ') || line.startsWith('X: ')) cls = 'er';
