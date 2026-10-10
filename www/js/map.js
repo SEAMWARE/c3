@@ -286,8 +286,8 @@ export class EntityMap {
       paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#0E1014', 'text-halo-width': 1.6 },
     });
     add({
-      id: 'ent-label', type: 'symbol', source: 'c3-ent', minzoom: 14.5, filter: ['all', ['==', ['get', 'label'], 1], ['!', ['has', 'anchor']]],
-      layout: { 'text-field': ['step', ['zoom'], ['get', 'short'], 16.5, ['get', 'name']], 'text-font': LABEL_FONT, 'text-size': 12, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true },
+      id: 'ent-label', type: 'symbol', source: 'c3-ent', minzoom: 11, filter: ['all', ['==', ['get', 'label'], 1], ['!', ['has', 'anchor']]],
+      layout: { 'text-field': ['step', ['zoom'], ['get', 'short'], 16.5, ['get', 'name']], 'text-font': LABEL_FONT, 'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 12], 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true },
       paint: { 'text-color': '#CDD2DB', 'text-halo-color': '#0E1014', 'text-halo-width': 1.4 },
     });
     add({
