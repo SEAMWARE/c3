@@ -270,6 +270,14 @@ what is installed when it starts, and shows each part only as far as it can work
 Greyed rather than hidden: the user sees what c³ can do and what to install for it. The backend
 reports what it found (`GET /api/capabilities`), and checks again when asked, after an install.
 
+### Versions
+
+c³ has coraine's version number and is released with it: c³ 0.5.0 goes with coraine 0.5.0. The
+`coraine-c3` package depends on `coraine (>= <its version>)`. A patch release of one need not wait for
+the other; the minor version always matches. c³ still checks every broker it connects to - its
+`/version` - and greys what that broker does not have, since it also connects to brokers it did not
+install.
+
 ### The configuration file
 
 c³ remembers everything between starts in one JSON file, written by the backend as the user works -
