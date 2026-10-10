@@ -145,20 +145,20 @@ header.top {
   padding: 0 32px; min-height: 64px;
   background: var(--bg-deep); border-bottom: 1px solid var(--line);
 }
-header.top .mark { height: 34px; width: auto; }
+header.top .mark { height: 56px; width: auto; }
 .brand { display: flex; align-items: baseline; gap: 10px; }
-.word { font-family: var(--title); font-size: 26px; font-weight: 400; color: var(--text); }
+.word { font-family: var(--title); font-size: 44px; font-weight: 400; color: var(--text); }
 .word .cube { color: var(--accent-2); }
-.brand .tag { font-family: var(--title); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.brand .tag { font-family: var(--title); font-size: 36px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 
-nav.pages { display: flex; gap: 4px; margin-left: 16px; }
+nav.pages { display: flex; gap: 4px; margin-left: auto; }
 nav.pages a, nav.pages span {
   padding: 18px 16px 20px; color: var(--muted); text-decoration: none;
 }
 nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600; border-bottom: 3px solid var(--accent-2); }
 nav.pages span.later { color: var(--faint); cursor: default; }
 
-.top-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.top-right { margin-left: 24px; display: flex; align-items: center; gap: 16px; }
 .chip {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
   font-family: var(--mono); font-size: 13px; color: var(--muted);
@@ -169,6 +169,7 @@ nav.pages span.later { color: var(--faint); cursor: default; }
 @media (max-width: 720px) {
   header.top { padding: 0 16px; }
   .brand .tag { display: none; }
+  nav.pages { margin-left: 0; }
   nav.pages { margin-left: 0; }
   nav.pages a, nav.pages span { padding-left: 8px; padding-right: 8px; }
   .top-right .chip { display: none; }

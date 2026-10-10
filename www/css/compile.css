@@ -8,14 +8,14 @@
 #page-compile { padding: 0; overflow: auto; }
 
 .cp-wrap {
-  max-width: 1440px; width: 100%; margin: 0 auto; padding: 32px; box-sizing: border-box;
+  width: 100%; margin: 0; padding: 32px; box-sizing: border-box;
   display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start;
 }
 @media (max-width: 720px) { .cp-wrap { padding: 16px; gap: 16px; } }
 
 .cp-main  { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
-.cp-aside { flex: 1 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 16px; }
-@media (max-width: 720px) { .cp-aside { min-width: 0; } }
+.cp-aside { flex: 0 0 420px; min-width: 300px; margin-left: auto; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 720px) { .cp-aside { min-width: 0; flex: 1 1 100%; } }
 
 .cp-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 24px; }
 .cp-head h1 { margin: 0; font-family: var(--title); font-size: 36px; line-height: 44px; font-weight: 300; letter-spacing: 0.01em; }
