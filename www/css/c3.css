@@ -145,7 +145,7 @@ header.top {
   padding: 0 32px; min-height: 64px;
   background: var(--bg-deep); border-bottom: 1px solid var(--line);
 }
-header.top .mark { height: 56px; width: auto; }
+header.top .mark { height: 56px; width: auto; margin-right: 24px; }
 .brand { display: flex; align-items: baseline; gap: 0.4em; }
 .brand .sep { letter-spacing: 0; }
 .word { font-family: var(--title); font-size: 44px; font-weight: 400; color: var(--text); }
