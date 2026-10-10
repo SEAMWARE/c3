@@ -166,7 +166,7 @@ export class EntityMap {
         pitch: view ? view.pitch || 0 : 0,
         attributionControl: false,
         dragRotate: true,
-        maxPitch: 60,
+        maxPitch: 85,
         fadeDuration: 0,
       });
       this.map = map;
