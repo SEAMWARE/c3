@@ -551,3 +551,5 @@ details.raw pre {
 .fsec-on { font-family: var(--mono, monospace); font-size: 12px; color: var(--accent-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
 .idform { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .idform .row { display: flex; gap: 8px; }
+#label-zoom { width: 90px; vertical-align: middle; accent-color: var(--accent-2); }
+#label-zoom-v { display: inline-block; min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; }

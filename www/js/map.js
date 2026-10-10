@@ -131,6 +131,7 @@ export class EntityMap {
     this.el = els.container;
     this.onSelect = () => {};                    // (id) - clicked
     this.onMenu = () => {};                      // (id, {x, y}, element)
+    this.labelZoom = 14.5;                       // entity labels from this zoom (setLabelZoom)
     this.onView = () => {};                      // ({center, zoom, bearing, pitch}) - moved by the user
     this.onOnline = () => {};                    // (ok) - online tiles reached or not
     this.map = null;
@@ -286,7 +287,7 @@ export class EntityMap {
       paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#0E1014', 'text-halo-width': 1.6 },
     });
     add({
-      id: 'ent-label', type: 'symbol', source: 'c3-ent', minzoom: 11, filter: ['all', ['==', ['get', 'label'], 1], ['!', ['has', 'anchor']]],
+      id: 'ent-label', type: 'symbol', source: 'c3-ent', minzoom: this.labelZoom, filter: ['all', ['==', ['get', 'label'], 1], ['!', ['has', 'anchor']]],
       layout: { 'text-field': ['step', ['zoom'], ['get', 'short'], 16.5, ['get', 'name']], 'text-font': LABEL_FONT, 'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 12], 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true },
       paint: { 'text-color': '#CDD2DB', 'text-halo-color': '#0E1014', 'text-halo-width': 1.4 },
     });
@@ -325,6 +326,14 @@ export class EntityMap {
   //
   // render - the GeoJSON of the entities, the Relationships and the arrows
   //
+  //
+  // setLabelZoom - the zoom from which the entities have labels (as many as fit)
+  //
+  setLabelZoom(z) {
+    this.labelZoom = z;
+    if (this.map && this.map.getLayer('ent-label')) this.map.setLayerZoomRange('ent-label', z, 24);
+  }
+
   //
   // setLabelAttr - the attribute whose value labels the entities on the map; null: their names
   //
@@ -471,7 +480,7 @@ export class EntityMap {
   // Input - a click selects (a point before a line before an area), a right-click opens the menu
   //
   hit(point) {
-    const layers = ['sel-point', 'ent-point', 'ent-label', 'area-label', 'ent-line', 'ent-fill'].filter((l) => this.map.getLayer(l));
+    const layers = ['sel-point', 'ent-point', 'area-label', 'ent-line', 'ent-fill']   // a label is not the entity: its dot is.filter((l) => this.map.getLayer(l));
     const box = [[point.x - 5, point.y - 5], [point.x + 5, point.y + 5]];
     const f = this.map.queryRenderedFeatures(box, { layers });
     if (!f.length) return null;

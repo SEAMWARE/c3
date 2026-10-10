@@ -159,6 +159,18 @@ export class Connect {
     $('map-in').onclick = () => this.emap.zoomBy(1);
     $('map-out').onclick = () => this.emap.zoomBy(-1);
     $('map-fit').onclick = () => this.emap.fit();
+    {
+      // the zoom from which the map labels its entities - kept in this browser
+      let z = 14.5;
+      try { z = parseFloat(localStorage.getItem('c3.labelZoom')) || 14.5; } catch (e) { /* no storage */ }
+      const show = (v) => { $('label-zoom').value = v; $('label-zoom-v').textContent = v; this.emap.setLabelZoom(v); };
+      show(z);
+      $('label-zoom').oninput = () => {
+        const v = parseFloat($('label-zoom').value);
+        show(v);
+        try { localStorage.setItem('c3.labelZoom', String(v)); } catch (e) { /* no storage */ }
+      };
+    }
     $('map-download').onclick = () => (this.offline.isOpen() ? this.offline.close() : this.offline.open());
     $('colour-by').onchange = () => {
       this.colourBy = $('colour-by').value;
