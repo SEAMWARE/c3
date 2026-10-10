@@ -85,7 +85,7 @@ export class Run {
     return {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
       store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
-      ws: true, admin: true, verbose: true, bridges: [], bridgeConfig: '', args: '',
+      ws: true, admin: true, verbose: true, bridges: [], bridgeConfig: '', ckan: [], args: '',
     };
   }
 
@@ -207,6 +207,7 @@ export class Run {
     const meta = [this.sourceLabel(d), d.where === 'container' ? 'in a container' : 'natively',
       d.store + (d.store === 'corDB' ? (d.dbDir ? ' on disk' : ' in RAM') : ''), 'history ' + d.history];
     if (d.bridges && d.bridges.length) meta.push('bridges ' + d.bridges.join(', '));
+    if (d.ckan && d.ckan.length) meta.push('CKAN ' + d.ckan.join(', '));
     meta.push('port ' + d.port + (d.healthPort ? ', health ' + d.healthPort : ''));
     if (b.pid) meta.push('pid ' + b.pid + (b.attached ? ' (attached)' : ''));
     if (b.container && runs) meta.push(b.container);
@@ -342,7 +343,7 @@ export class Run {
       name: d.name, set: d.set, from: d.from, build: d.build || '', tag, where: d.where,
       store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
       ws: (d.transports || []).includes('ws'), admin: d.admin, verbose: d.verbose, bridges: [...(d.bridges || [])],
-      bridgeConfig: d.bridgeConfig || '', args: d.args || '',
+      bridgeConfig: d.bridgeConfig || '', ckan: [...(d.ckan || [])], args: d.args || '',
     };
     this.nameTouched = true;
     this.editing = d.name;
@@ -620,10 +621,43 @@ export class Run {
       return l;
     }) : [el('span', 'cp-note', 'this broker has no bridge plugins')]));
     if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
+    this.renderCkan(cont);
     if ($('rn-args').value !== f.args) $('rn-args').value = f.args;
 
     this.renderName();
     this.commandSoon();
+  }
+
+  //
+  // renderCkan - the CKAN datasets c3 knows (data/ckan.json), ticked into the broker's bridge configuration
+  //
+  renderCkan(cont) {
+    const f = this.f;
+    if (this.ckanSets === undefined) {
+      this.ckanSets = null;
+      fetch('data/ckan.json').then((r) => r.json()).then((j) => { this.ckanSets = j.datasets || []; this.renderCkan(cont); })
+        .catch(() => { this.ckanSets = []; this.renderCkan(cont); });
+    }
+    const sets = this.ckanSets || [];
+    const why = f.where === 'container' ? 'a native broker only: the image has no ckan bridge'
+      : (f.bridgeConfig ? 'not with a bridge configuration file of one\'s own' : '');
+    $('rn-ckan').replaceChildren(...sets.map((ds) => {
+      const l = el('label', 'rn-check');
+      const c = el('input');
+      c.type = 'checkbox';
+      c.checked = f.ckan.includes(ds.id);
+      c.disabled = !!why;
+      c.addEventListener('change', () => {
+        f.ckan = c.checked ? [...f.ckan, ds.id] : f.ckan.filter((x) => x !== ds.id);
+        this.changed();
+      });
+      l.title = ds.portal + ' - resource ' + ds.resource;
+      l.append(c, document.createTextNode(ds.label + (ds.rows ? ' (' + ds.rows + ')' : '')));
+      return l;
+    }));
+    const n = f.ckan.length;
+    $('rn-ckan-sum').textContent = why ? why : (n ? n + ' dataset' + (n > 1 ? 's' : '') + ': ' +
+      f.ckan.map((id) => (sets.find((d) => d.id === id) || { label: id }).label.replace(/^.* - /, '')).join(', ') : 'none');
   }
 
   def() {
@@ -635,6 +669,7 @@ export class Run {
       args: f.args,
     };
     if (f.bridgeConfig) d.bridgeConfig = f.bridgeConfig;
+    if (f.ckan.length) d.ckan = f.ckan;
     if (f.from === 'build') d.build = f.build;
     if (f.from === 'image') d.image = f.tag.includes('/') ? f.tag : this.repo() + ':' + f.tag;
     return d;

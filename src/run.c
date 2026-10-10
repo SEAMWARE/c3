@@ -26,7 +26,7 @@
 //   <name>/state.json     a native broker that runs: its pid and the process's start time - c3 attaches to it
 //                         again after a restart when that process still runs
 //   <name>/data/          corDB's --dbDir (a native broker)
-//   <name>/bridges.json   the bridge configuration c3 writes for the MQTT set
+//   <name>/bridges.json   the bridge configuration c3 writes: the MQTT set's, the CKAN datasets
 //   services/<container>.log
 //
 // A native broker is started in a session of its own (setsid), its stdout and stderr appended to its log
@@ -67,6 +67,8 @@
 #include "corJson/CorJson.h"                     // CorJson
 #include "corJson/corJsonCreate.h"               // corJsonCreate
 #include "corJson/corJsonParse.h"                // corJsonParse
+#include "corJson/corJsonRender.h"               // corJsonRender
+#include "corJson/corJsonRenderSize.h"           // corJsonRenderSize
 #include "corTree/CorNode.h"                     // CorNode
 #include "corTree/corTreeLookup.h"               // corTreeLookup
 #include "corRest/corRestClient.h"               // corRestClientMulti*
@@ -181,7 +183,8 @@ typedef struct Def
   bool  ws;                                      // --transports ws
   bool  admin;                                   // --apiPlugins admin
   char  bridges[128];                            // comma-separated
-  char  bridgeConfig[1024];                      // a file; "": the one c3 writes for mqtt
+  char  bridgeConfig[1024];                      // a file; "": the one c3 writes for mqtt and ckan
+  char  ckan[512];                               // CKAN datasets (ids in www/data/ckan.json), comma-separated
   bool  verbose;                                 // -v
   char  args[2048];                              // more options, as typed
   int   grace;
@@ -735,6 +738,23 @@ static bool memberInt(CorNode* oP, const char* name, int* out, int min, int max,
 //
 // memberList - ["a", "b"] (or "a,b") as "a,b"; each of 'allowed'
 //
+//
+// listHas - 'name' one of the comma-separated 'list'
+//
+static bool listHas(const char* list, const char* name)
+{
+  char  copy[512];
+  char* save = NULL;
+
+  snprintf(copy, sizeof(copy), "%s", list);
+  for (char* t = strtok_r(copy, ",", &save); t != NULL; t = strtok_r(NULL, ",", &save))
+  {
+    if (strcmp(t, name) == 0)
+      return true;
+  }
+  return false;
+}
+
 static bool memberList(CorNode* oP, const char* name, const char** allowed, char* out, int outLen, char* err, int errLen)
 {
   CorNode* nP = corTreeLookup(oP, name);
@@ -773,8 +793,8 @@ static bool memberList(CorNode* oP, const char* name, const char** allowed, char
   char* copy = strdup(s.s);
   for (char* t = strtok_r(copy, ",", &save); t != NULL; t = strtok_r(NULL, ",", &save))
   {
-    bool ok = false;
-    for (int ix = 0; allowed[ix] != NULL; ix++)
+    bool ok = (allowed == NULL);                  // NULL: any name
+    for (int ix = 0; (allowed != NULL) && (allowed[ix] != NULL); ix++)
       ok = ok || (strcmp(t, allowed[ix]) == 0);
     if (!ok)
     {
@@ -798,7 +818,7 @@ static bool memberList(CorNode* oP, const char* name, const char** allowed, char
   return true;
 }
 
-static const char* bridgeNames[] = { "dds", "loopback", "modbus", "mqtt", NULL };
+static const char* bridgeNames[] = { "ckan", "dds", "loopback", "modbus", "mqtt", NULL };
 
 static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 {
@@ -847,8 +867,26 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberInt(oP,    "port",         &dP->port,        1, 65535, err, errLen) ||
       !memberInt(oP,    "healthPort",   &dP->healthPort,  0, 65535, err, errLen) ||
       !memberInt(oP,    "grace",        &dP->grace,       1, 600, err, errLen) ||
-      !memberList(oP,   "bridges",      bridgeNames,      dP->bridges, sizeof(dP->bridges), err, errLen))
+      !memberList(oP,   "bridges",      bridgeNames,      dP->bridges, sizeof(dP->bridges), err, errLen) ||
+      !memberList(oP,   "ckan",         NULL,             dP->ckan,    sizeof(dP->ckan),    err, errLen))
     return false;
+
+  //
+  // CKAN datasets are Channels of the ckan bridge, in the bridge configuration c3 writes
+  //
+  if (dP->ckan[0] != 0)
+  {
+    if (dP->bridgeConfig[0] != 0)
+    {
+      snprintf(err, errLen, "CKAN datasets go in the bridge configuration c3 writes - not with a bridge configuration file of one's own");
+      return false;
+    }
+    if (!listHas(dP->bridges, "ckan"))
+    {
+      int len = strlen(dP->bridges);
+      snprintf(&dP->bridges[len], sizeof(dP->bridges) - len, "%sckan", (len > 0) ? "," : "");
+    }
+  }
 
   if (transportsP != NULL)
   {
@@ -971,6 +1009,21 @@ static void defRender(const Def* dP, Str* sP)
   }
   strAdd(sP, "]");
   strAdd(sP, ", \"bridgeConfig\": "); strAddJson(sP, (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : NULL);
+  strAdd(sP, ", \"ckan\": [");
+  {
+    char  copy[512];
+    char* save  = NULL;
+    bool  first = true;
+
+    snprintf(copy, sizeof(copy), "%s", dP->ckan);
+    for (char* t = strtok_r(copy, ",", &save); t != NULL; t = strtok_r(NULL, ",", &save))
+    {
+      strAdd(sP, first ? "" : ", ");
+      strAddJson(sP, t);
+      first = false;
+    }
+  }
+  strAdd(sP, "]");
   strAddf(sP, ", \"admin\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->verbose ? "true" : "false");
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
   strAddf(sP, ", \"grace\": %d", dP->grace);
@@ -1047,8 +1100,14 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
 
   if (hasBridge(dP, "mqtt") || (dP->bridgeConfig[0] != 0))
     snprintf(bridgeFile, sizeof(bridgeFile), "%s", (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : "");
-  if (hasBridge(dP, "mqtt") && (dP->bridgeConfig[0] == 0))
+  if ((hasBridge(dP, "mqtt") || (dP->ckan[0] != 0)) && (dP->bridgeConfig[0] == 0))
     snprintf(bridgeFile, sizeof(bridgeFile), "%s/bridges.json", dir);
+
+  if (container && (dP->ckan[0] != 0))
+  {
+    snprintf(err, errLen, "CKAN datasets need a native broker: the image has no ckan bridge");
+    return false;
+  }
 
   if (container)
   {
@@ -1803,10 +1862,117 @@ static char** cleanEnv(void)
 
 // -----------------------------------------------------------------------------
 //
-// mqttConfigWrite - the MQTT bridge's configuration for the set's Mosquitto: no Channels, the server only
-// (notifications to mqtt:// work; Channels come from Configure later, or a file of one's own)
+// ckanMember - the ckan bridge's member of the bridge configuration: one record Channel per dataset of
+// the broker, its mapping as www/data/ckan.json has it; the datasets of one portal
 //
-static bool mqttConfigWrite(const Def* dP, int port, char* err, int errLen)
+static bool ckanMember(const Def* dP, Str* sP, char* err, int errLen)
+{
+  char path[4200];
+  snprintf(path, sizeof(path), "%s/data/ckan.json", c3WwwDir);
+
+  FILE* fP = fopen(path, "r");
+  if (fP == NULL)
+  {
+    snprintf(err, errLen, "cannot read %s: %s", path, strerror(errno));
+    return false;
+  }
+
+  Str  text = { NULL, 0, 0 };
+  char buf[4096];
+  int  n;
+  while ((n = fread(buf, 1, sizeof(buf), fP)) > 0)
+    strAddN(&text, buf, n);
+  fclose(fP);
+
+  CorAlloc alloc;
+  char     allocBuf[32 * 1024];
+  CorJson  json;
+  bool     ok     = false;
+  char*    portal = NULL;
+  int      found  = 0;
+
+  corAllocBufferInit(&alloc, allocBuf, sizeof(allocBuf), 64 * 1024, NULL, "c3 ckan");
+  corJsonCreate(&json, &alloc);
+
+  CorNode* treeP     = (text.s != NULL) ? corJsonParse(&json, corAllocStrdup(&alloc, text.s)) : NULL;
+  CorNode* datasetsP = (treeP != NULL) ? corTreeLookup(treeP, "datasets") : NULL;
+
+  if ((datasetsP == NULL) || (datasetsP->type != CorArray))
+  {
+    snprintf(err, errLen, "%s: no \"datasets\" list", path);
+    goto done;
+  }
+
+  Str records = { NULL, 0, 0 };
+  strAdd(&records, "");
+  for (CorNode* dsP = datasetsP->value.head; dsP != NULL; dsP = dsP->next)
+  {
+    CorNode* idP       = corTreeLookup(dsP, "id");
+    CorNode* portalP   = corTreeLookup(dsP, "portal");
+    CorNode* resourceP = corTreeLookup(dsP, "resource");
+    CorNode* entitiesP = corTreeLookup(dsP, "entities");
+
+    if ((idP == NULL) || (idP->type != CorString) || !listHas(dP->ckan, idP->value.s))
+      continue;
+
+    if ((portalP == NULL) || (portalP->type != CorString) || (resourceP == NULL) || (resourceP->type != CorString) || (entitiesP == NULL))
+    {
+      snprintf(err, errLen, "%s: the dataset '%s' lacks its portal, resource or entities", path, idP->value.s);
+      strFree(&records);
+      goto done;
+    }
+
+    if ((portal != NULL) && (strcmp(portal, portalP->value.s) != 0))
+    {
+      snprintf(err, errLen, "the CKAN datasets of one broker come from one portal - %s and %s", portal, portalP->value.s);
+      strFree(&records);
+      goto done;
+    }
+    portal = portalP->value.s;
+
+    char* name = entitiesP->name;               // the value alone, not the member
+    entitiesP->name = NULL;
+    int   size = corJsonRenderSize(&json, entitiesP) + 1;
+    char* out  = malloc(size);
+    corJsonRender(&json, entitiesP, out);
+    entitiesP->name = name;
+
+    strAdd(&records, (found > 0) ? ", " : "");
+    strAddJson(&records, resourceP->value.s);
+    strAdd(&records, ": {\"channelInfo\": [{\"key\": \"mode\", \"value\": \"once\"}, {\"key\": \"pageSize\", \"value\": \"100\"}], \"entities\": ");
+    strAdd(&records, out);
+    strAdd(&records, "}");
+    free(out);
+    found++;
+  }
+
+  if (found == 0)
+  {
+    snprintf(err, errLen, "none of the CKAN datasets '%s' is in %s", dP->ckan, path);
+    strFree(&records);
+    goto done;
+  }
+
+  strAdd(sP, "\"ckan\": {\"server\": {\"url\": ");
+  strAddJson(sP, portal);
+  strAddf(sP, ", \"timeoutMs\": 30000}, \"ngsild\": {\"defaultEntity\": false, \"records\": {%s}}}", records.s);
+  strFree(&records);
+  ok = true;
+
+ done:
+  corAllocBufferReset(&alloc, false);
+  strFree(&text);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// bridgesConfigWrite - the bridge configuration c3 writes: the MQTT bridge for the set's Mosquitto (no
+// Channels, the server only - notifications to mqtt:// work), and the CKAN datasets of the broker
+//
+static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
 {
   char path[2400];
   char dir[2300];
@@ -1815,12 +1981,26 @@ static bool mqttConfigWrite(const Def* dP, int port, char* err, int errLen)
 
   brokerDir(dP->name, dir, sizeof(dir));
   snprintf(path, sizeof(path), "%s/bridges.json", dir);
-  svcName(dP->set, KIND_MOSQUITTO, svc, sizeof(svc));
 
-  if (strcmp(dP->where, "container") == 0)
-    strAddf(&s, "{\"mqtt\": {\"server\": {\"uri\": \"mqtt://%s:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}}\n", svc, kinds[KIND_MOSQUITTO].port, dP->name);
-  else
-    strAddf(&s, "{\"mqtt\": {\"server\": {\"uri\": \"mqtt://127.0.0.1:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}}\n", port, dP->name);
+  strAdd(&s, "{");
+  if (hasBridge(dP, "mqtt"))
+  {
+    svcName(dP->set, KIND_MOSQUITTO, svc, sizeof(svc));
+    if (strcmp(dP->where, "container") == 0)
+      strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://%s:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", svc, kinds[KIND_MOSQUITTO].port, dP->name);
+    else
+      strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://127.0.0.1:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", port, dP->name);
+  }
+  if (dP->ckan[0] != 0)
+  {
+    strAdd(&s, (s.len > 1) ? ", " : "");
+    if (ckanMember(dP, &s, err, errLen) == false)
+    {
+      strFree(&s);
+      return false;
+    }
+  }
+  strAdd(&s, "}\n");
 
   int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   bool ok = (fd != -1) && (write(fd, s.s, s.len) == s.len);
@@ -1898,7 +2078,7 @@ static void* startThread(void* vP)
     }
   }
 
-  if (hasBridge(&d, "mqtt") && (d.bridgeConfig[0] == 0) && (mqttConfigWrite(&d, ports[KIND_MOSQUITTO], err, sizeof(err)) == false))
+  if ((hasBridge(&d, "mqtt") || (d.ckan[0] != 0)) && (d.bridgeConfig[0] == 0) && (bridgesConfigWrite(&d, ports[KIND_MOSQUITTO], err, sizeof(err)) == false))
   {
     startFail(bP, err);
     svcRelease(bP);

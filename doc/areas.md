@@ -113,3 +113,9 @@ Everything else plugs into it.
 - **Logging explained**: what `-v` adds; every trace level explained; a widget with a tick box per
   trace level, a tooltip on each saying what it traces, setting them on a running broker
   (`/admin/log`) or at start (`--traceLevels`; debug builds only).
+- **A dataset tool for any CKAN portal** (today: the hand-mapped datasets of `www/data/ckan.json`,
+  ticked in Run's "CKAN data"): pick a portal, list its datasets (`package_search`, the resources with
+  `datastore_active`), view a dataset's rows, decide the mapping - entity type, id column, the
+  Properties and their types, the two location columns, Relationships to other types (most of it
+  guessed from the column names and the first rows) - and make it a Channel: written into the broker's
+  bridge configuration, the broker restarted. A mapping kept is a new entry of the dataset file.

@@ -252,6 +252,15 @@
             <input class="cp-input" id="rn-bconf" placeholder="bridge configuration file (none: c3 writes the MQTT one)" spellcheck="false" autocomplete="off" aria-label="Bridge configuration file">
           </div>
 
+          <div class="cp-field">
+            <span class="cp-label">CKAN data</span>
+            <details class="rn-drop" id="rn-ckan-drop">
+              <summary id="rn-ckan-sum">none</summary>
+              <div class="rn-checks rn-col" id="rn-ckan"></div>
+            </details>
+            <span class="cp-note">open-data datasets read through the ckan bridge when the broker starts - one entity per row (www/data/ckan.json)</span>
+          </div>
+
           <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
 
           <div class="rn-svcneed" id="rn-need"></div>

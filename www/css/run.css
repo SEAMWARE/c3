@@ -89,3 +89,9 @@
 #rn-log { height: 340px; }
 #rn-log .er { color: var(--bad); }
 #rn-log .wa { color: var(--warn); }
+
+/* CKAN data: a dropdown of ticks */
+.rn-drop { border: 1px solid var(--line, rgba(255,255,255,.15)); border-radius: 6px; padding: 6px 10px; }
+.rn-drop > summary { cursor: pointer; font-size: 14px; min-height: 24px; }
+.rn-drop[open] > summary { margin-bottom: 6px; }
+.rn-checks.rn-col { flex-direction: column; gap: 2px; }

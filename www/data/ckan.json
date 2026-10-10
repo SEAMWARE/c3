@@ -1,0 +1,74 @@
+{
+  "about": "CKAN datasets c3 offers in 'Start a broker': each one a record Channel of the ckan bridge (ckan.so) - the portal, the DataStore resource and how a row becomes entities. Read once when the broker starts.",
+  "datasets": [
+    {
+      "id": "boston-bikes", "label": "Boston - Blue Bike stations", "rows": 572,
+      "portal": "https://data.boston.gov", "resource": "44c931aa-4577-4caa-a8f2-ed1e38263e70",
+      "entities": [
+        { "type": "BikeStation", "id": "urn:ngsi-ld:BikeStation:{Number}",
+          "attributes": {
+            "name":       { "column": "Name" },
+            "totalDocks": { "column": "Total_docks", "as": "number" },
+            "public":     { "column": "Public_", "as": "boolean" },
+            "location":   { "point": { "longitude": "Longitude", "latitude": "Latitude" } },
+            "inDistrict": { "relationship": "urn:ngsi-ld:District:{District}" } } },
+        { "type": "District", "id": "urn:ngsi-ld:District:{District}",
+          "attributes": { "name": { "column": "District" } } } ]
+    },
+    {
+      "id": "boston-police", "label": "Boston - police stations", "rows": 13,
+      "portal": "https://data.boston.gov", "resource": "c2b3f4c4-2339-4f14-9f44-86bee255e07d",
+      "entities": [
+        { "type": "PoliceStation", "id": "urn:ngsi-ld:PoliceStation:{BID}",
+          "attributes": {
+            "name":           { "column": "NAME" },
+            "address":        { "column": "ADDRESS" },
+            "policeDistrict": { "column": "District" },
+            "floorArea":      { "column": "FT_SQFT", "as": "number" },
+            "location":       { "point": { "longitude": "POINT_X", "latitude": "POINT_Y" } },
+            "inNeighborhood": { "relationship": "urn:ngsi-ld:Neighborhood:{NEIGHBORHOOD}" } } },
+        { "type": "Neighborhood", "id": "urn:ngsi-ld:Neighborhood:{NEIGHBORHOOD}",
+          "attributes": { "name": { "column": "NEIGHBORHOOD" } } } ]
+    },
+    {
+      "id": "boston-community", "label": "Boston - community centres", "rows": 35,
+      "portal": "https://data.boston.gov", "resource": "002b5f37-b10c-419d-ab77-1542f75f7cd2",
+      "entities": [
+        { "type": "CommunityCenter", "id": "urn:ngsi-ld:CommunityCenter:{_id}",
+          "attributes": {
+            "name":           { "column": "SITE" },
+            "address":        { "column": "STREET" },
+            "phone":          { "column": "PHONE" },
+            "location":       { "point": { "longitude": "POINT_X", "latitude": "POINT_Y" } },
+            "inNeighborhood": { "relationship": "urn:ngsi-ld:Neighborhood:{NEIGH}" } } },
+        { "type": "Neighborhood", "id": "urn:ngsi-ld:Neighborhood:{NEIGH}",
+          "attributes": { "name": { "column": "NEIGH" } } } ]
+    },
+    {
+      "id": "boston-schools", "label": "Boston - public schools", "rows": 134,
+      "portal": "https://data.boston.gov", "resource": "6ceeff38-a0db-46df-b5be-f8cfdea0186d",
+      "entities": [
+        { "type": "School", "id": "urn:ngsi-ld:School:{_id}",
+          "attributes": {
+            "name":       { "column": "SCH_NAME" },
+            "building":   { "column": "BLDG_NAME" },
+            "schoolType": { "column": "SCH_TYPE" },
+            "address":    { "column": "ADDRESS" },
+            "location":   { "point": { "longitude": "POINT_X", "latitude": "POINT_Y" } },
+            "inNeighborhood": { "relationship": "urn:ngsi-ld:Neighborhood:{CITY}" } } },
+        { "type": "Neighborhood", "id": "urn:ngsi-ld:Neighborhood:{CITY}",
+          "attributes": { "name": { "column": "CITY" } } } ]
+    },
+    {
+      "id": "boston-libraries", "label": "Boston - public libraries", "rows": 26,
+      "portal": "https://data.boston.gov", "resource": "b48474af-b5b8-42d3-8205-a5f110a0ade8",
+      "entities": [
+        { "type": "Library", "id": "urn:ngsi-ld:Library:{_id}",
+          "attributes": {
+            "name":     { "column": "BRANCH" },
+            "address":  { "column": "ST_ADDRESS" },
+            "zip":      { "column": "ZIPCODE" },
+            "location": { "point": { "longitude": "POINT_X", "latitude": "POINT_Y" } } } } ]
+    }
+  ]
+}
