@@ -88,13 +88,15 @@ export function typeParam(types) {
 // types an array: the entities of those types only - one query, type=A,B,..., or one query per type
 // when the list is too long for a URL; local=true unless the broker refuses it (400).
 //
+// filter: more of the query, e.g. '&idPattern=...' (encoded).
+//
 // onProgress(loaded, total) after each page. Answers { entities, total, truncated } or throws
 // { reached, status, title, detail }.
 //
-export async function loadEntities(broker, onProgress, types = null) {
-  if (types !== null) return loadTypes(broker, onProgress, types);
+export async function loadEntities(broker, onProgress, types = null, filter = '') {
+  if (types !== null) return loadTypes(broker, onProgress, types, filter);
 
-  let first = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true`;
+  let first = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true${filter}`;
   let r = await brokerGet(broker, first);
 
   if (r.status === 400) {
@@ -102,7 +104,7 @@ export async function loadEntities(broker, onProgress, types = null) {
     if (!t.ok) throw problem(r);
     const list = (t.body && (t.body.typeList || (Array.isArray(t.body) ? t.body.map((x) => x.typeName || x.id) : null))) || [];
     if (list.length === 0) return { entities: [], total: 0, truncated: false };
-    return loadTypes(broker, onProgress, list);
+    return loadTypes(broker, onProgress, list, filter);
   }
 
   const seen = new Map();
@@ -111,7 +113,7 @@ export async function loadEntities(broker, onProgress, types = null) {
   return { entities: [...seen.values()], total: total === null ? seen.size : total, truncated };
 }
 
-async function loadTypes(broker, onProgress, types) {
+async function loadTypes(broker, onProgress, types, filter = '') {
   const seen = new Map();
   if (types.length === 0) return { entities: [], total: 0, truncated: false };
 
@@ -123,7 +125,7 @@ async function loadTypes(broker, onProgress, types) {
 
   for (const g of groups) {
     if (seen.size >= ENTITY_CAP) { more = true; known = false; break; }
-    const q = `/ngsi-ld/v1/entities?type=${g}&limit=${PAGE_SIZE}&count=true`;
+    const q = `/ngsi-ld/v1/entities?type=${g}&limit=${PAGE_SIZE}&count=true${filter}`;
     let r = await brokerGet(broker, q + '&local=true');
     if (r.status === 400) r = await brokerGet(broker, q);
     const before = seen.size;

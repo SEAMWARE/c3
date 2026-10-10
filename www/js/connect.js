@@ -174,6 +174,21 @@ export class Connect {
     $('pick-all').onclick = () => this.setPicks(this.disc ? this.disc.types.map((t) => t.name) : []);
     $('pick-none').onclick = () => this.setPicks([]);
     $('load-btn').onclick = () => this.loadPicks(true);
+
+    //
+    // IDs: idPattern on every load, until cleared
+    //
+    this.idPattern = '';
+    const idApply = (pattern) => {
+      this.idPattern = pattern.trim();
+      $('id-pattern').value = this.idPattern;
+      $('ids-on').hidden = !this.idPattern;
+      $('ids-on').textContent = this.idPattern;
+      if (!this.broker) return;
+      if (this.picks && this.picks.length) this.loadPicks(false); else this.load(null, false);
+    };
+    $('idform').onsubmit = (ev) => { ev.preventDefault(); idApply($('id-pattern').value); };
+    $('id-clear').onclick = () => idApply('');
     $('mode-back').onclick = () => this.back();
     $('json-close').onclick = () => this.closeJson();
     $('json-copy').onclick = () => this.copy($('json-pre').textContent, 'the JSON');
@@ -358,7 +373,7 @@ export class Connect {
         if (ticket !== this.loading) return;
         const of = total !== null ? Math.min(total, ENTITY_CAP) : null;
         card.set(of ? `${n} of ${of} entities` : `${n} entities`, of ? n / Math.max(of, 1) : null);
-      }, types);
+      }, types, this.idPattern ? '&idPattern=' + encodeURIComponent(this.idPattern) : '');
     } catch (err) {
       if (ticket !== this.loading) return;
       this.failed(url, err);

@@ -288,11 +288,21 @@
 
     <div class="cols">
       <aside class="panel types" aria-label="What the broker holds">
-        <h2 class="section">Types</h2>
-        <div class="disc-sum" id="disc-sum"></div>
-        <div class="typeall" id="typeall" hidden><span>load</span><button type="button" id="pick-all">all</button><button type="button" id="pick-none">none</button></div>
-        <div class="typelist" id="typelist" role="list"></div>
-        <button class="btn primary" type="button" id="load-btn" hidden>Load</button>
+        <details class="fsec" open>
+          <summary><h2 class="section">Types</h2></summary>
+          <div class="disc-sum" id="disc-sum"></div>
+          <div class="typeall" id="typeall" hidden><span>load</span><button type="button" id="pick-all">all</button><button type="button" id="pick-none">none</button></div>
+          <div class="typelist" id="typelist" role="list"></div>
+          <button class="btn primary" type="button" id="load-btn" hidden>Load</button>
+        </details>
+        <details class="fsec" id="ids-sec">
+          <summary><h2 class="section">IDs</h2><span class="fsec-on" id="ids-on" hidden></span></summary>
+          <form class="idform" id="idform">
+            <input class="cp-input" id="id-pattern" placeholder="idPattern, e.g. .*BikeStation:A3.*" spellcheck="false" autocomplete="off" aria-label="idPattern">
+            <div class="row"><button class="btn primary" type="submit">Apply</button><button class="btn" type="button" id="id-clear">Clear</button></div>
+            <div class="help">A regular expression on the entity id - the broker's <span class="mono">idPattern</span>; with the types ticked above.</div>
+          </form>
+        </details>
         <h2 class="section">Relationships</h2>
         <div class="rels" id="rels"></div>
         <div class="disc-notes" id="disc-notes"></div>
