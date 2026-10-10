@@ -1156,3 +1156,239 @@ char* configMapsAreasText(CorAlloc* allocP)
   docRelease(&doc);
   return out;
 }
+
+
+
+// -----------------------------------------------------------------------------
+//
+// compileObject - the configuration's "compile": {...}, created if missing
+//
+static CorNode* compileObject(Doc* docP)
+{
+  CorNode* compileP = corTreeLookup(docP->treeP, "compile");
+
+  if ((compileP == NULL) || (compileP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(docP->treeP, "compile", corTreeObject(&docP->alloc, "compile"));
+    compileP = corTreeLookup(docP->treeP, "compile");
+  }
+
+  return compileP;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// compileChoiceCheck - {"name"?, "mode", "features": {"NAME": bool}, "workload"?}: only these, of these types
+//
+static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int errLen)
+{
+  const char* s;
+
+  if (stringMember(bodyP, "name", needName, 64, &s, errBuf, errLen) == false)
+    return false;
+  if ((needName == true) && (s[0] == 0))
+  {
+    snprintf(errBuf, errLen, "\"name\" is empty");
+    return false;
+  }
+
+  if (stringMember(bodyP, "mode", false, 16, &s, errBuf, errLen) == false)
+    return false;
+  if ((s != NULL) && (strcmp(s, "release") != 0) && (strcmp(s, "debug") != 0) && (strcmp(s, "pgo") != 0) && (strcmp(s, "tune") != 0))
+  {
+    snprintf(errBuf, errLen, "\"mode\" is release, debug, pgo or tune");
+    return false;
+  }
+
+  if (stringMember(bodyP, "workload", false, 4096, &s, errBuf, errLen) == false)
+    return false;
+
+  CorNode* featuresP = corTreeLookup(bodyP, "features");
+  if (featuresP != NULL)
+  {
+    if (featuresP->type != CorObject)
+    {
+      snprintf(errBuf, errLen, "\"features\" is not an object");
+      return false;
+    }
+    for (CorNode* fP = featuresP->value.head; fP != NULL; fP = fP->next)
+    {
+      if (fP->type != CorBoolean)
+      {
+        snprintf(errBuf, errLen, "\"features\": %s is not true or false", fP->name);
+        return false;
+      }
+    }
+  }
+
+  for (CorNode* mP = bodyP->value.head; mP != NULL; mP = mP->next)
+  {
+    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0))
+    {
+      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, features, workload)", mP->name);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompileChoice - PUT /api/compile/choice {"mode", "features", "workload"}: Compile's choice as it is
+//
+bool configCompileChoice(char* body, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (compileChoiceCheck(bodyP, false, errBuf, errLen) == false))
+    goto done;
+
+  bodyP->name = (char*) "choice";
+  corTreeChildAddOrReplace(compileObject(&doc), "choice", bodyP);
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// presetsArray - "compile": {"presets": [...]}, created if missing
+//
+static CorNode* presetsArray(Doc* docP)
+{
+  CorNode* compileP = compileObject(docP);
+  CorNode* presetsP = corTreeLookup(compileP, "presets");
+
+  if ((presetsP == NULL) || (presetsP->type != CorArray))
+  {
+    corTreeChildAddOrReplace(compileP, "presets", corTreeArray(&docP->alloc, "presets"));
+    presetsP = corTreeLookup(compileP, "presets");
+  }
+
+  return presetsP;
+}
+
+static CorNode* presetFind(CorNode* presetsP, const char* name)
+{
+  for (CorNode* pP = presetsP->value.head; pP != NULL; pP = pP->next)
+  {
+    CorNode* nameP = (pP->type == CorObject) ? corTreeLookup(pP, "name") : NULL;
+
+    if ((nameP != NULL) && (nameP->type == CorString) && (strcmp(nameP->value.s, name) == 0))
+      return pP;
+  }
+
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompilePreset - PUT /api/compile/presets {"name", "mode", "features", "workload"}: a preset saved
+// under its name (one of that name is replaced, in its place)
+//
+bool configCompilePreset(char* body, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (compileChoiceCheck(bodyP, true, errBuf, errLen) == false))
+    goto done;
+
+  CorNode*    presetsP = presetsArray(&doc);
+  const char* name     = corTreeLookup(bodyP, "name")->value.s;
+  CorNode*    oldP     = presetFind(presetsP, name);
+
+  bodyP->name = NULL;
+
+  if (oldP != NULL)
+  {
+    //
+    // In its place: the list keeps its order
+    //
+    CorNode* prevP = NULL;
+    for (CorNode* pP = presetsP->value.head; pP != oldP; pP = pP->next)
+      prevP = pP;
+
+    bodyP->next = oldP->next;
+    if (prevP == NULL)
+      presetsP->value.head = bodyP;
+    else
+      prevP->next = bodyP;
+    if (presetsP->value.tail == oldP)
+      presetsP->value.tail = bodyP;
+  }
+  else
+  {
+    int n = 0;
+    for (CorNode* pP = presetsP->value.head; pP != NULL; pP = pP->next)
+      ++n;
+    if (n >= 100)
+    {
+      snprintf(errBuf, errLen, "100 presets at most");
+      goto done;
+    }
+    corTreeChildAdd(presetsP, bodyP);
+  }
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompilePresetDelete - DELETE /api/compile/presets {"name"}
+//
+bool configCompilePresetDelete(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* name;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (stringMember(bodyP, "name", true, 64, &name, errBuf, errLen) == false))
+    goto done;
+
+  CorNode* presetsP = presetsArray(&doc);
+  CorNode* oldP     = presetFind(presetsP, name);
+
+  if (oldP == NULL)
+  {
+    snprintf(errBuf, errLen, "no preset '%s'", name);
+    goto done;
+  }
+
+  corTreeChildRemove(presetsP, oldP);
+  ok = commit(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}

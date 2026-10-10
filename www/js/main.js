@@ -9,6 +9,7 @@
 import * as api from './api.js';
 import { brokerGet } from './api.js';
 import { Connect } from './connect.js';
+import { Compile } from './compile.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -94,6 +95,23 @@ async function splash() {
   return { status, config, last, lastReachable };
 }
 
+//
+// The pages: #compile and #connect, the one shown kept as ui.lastPage
+//
+const PAGES = ['compile', 'connect'];
+
+function pageShow(page, compile) {
+  for (const p of PAGES) {
+    $('page-' + p).hidden = (p !== page);
+    const a = $('nav-' + p);
+    a.classList.toggle('active', p === page);
+    if (p === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  }
+  if (page === 'compile') compile.refresh();
+  window.dispatchEvent(new Event('resize'));          // a page shown again measures itself
+  api.uiSet({ lastPage: page }).catch(() => {});
+}
+
 async function main() {
   const boot = await splash();
   if (!boot) return;
@@ -101,17 +119,24 @@ async function main() {
   const connect = new Connect();
   connect.setBrokers(boot.config.brokers);
 
+  const compile = new Compile();
+  compile.init(boot.config);                          // the choice and the presets; the rest when the page is shown
+
   await new Promise((r) => setTimeout(r, 250));
   $('app').hidden = false;
   $('splash').classList.add('leaving');
   setTimeout(() => $('splash').remove(), 400);
 
-  api.uiSet({ lastPage: 'connect' }).catch(() => {});
+  const fromHash = () => PAGES.find((p) => location.hash === '#' + p);
+  const first = fromHash() || (PAGES.includes((boot.config.ui || {}).lastPage) ? boot.config.ui.lastPage : 'connect');
+  if (location.hash !== '#' + first) history.replaceState(null, '', '#' + first);
+  pageShow(first, compile);
+  window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile));
 
   if (boot.last) {
     $('broker-url').value = boot.last.url;
     connect.connect(boot.last.url);
-  } else {
+  } else if (first === 'connect') {
     $('broker-url').focus();
   }
 }

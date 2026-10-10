@@ -74,6 +74,9 @@ extern bool         configBrokerTypes(char* body, char* errBuf, int errLen);   /
 extern bool         configBrokerConnect(char* body, char* errBuf, int errLen); // PUT /api/brokers/connect
 extern bool         configMapsSync(const MapsArea* disk, int n, const MapsArea* added, char* errBuf, int errLen);
 extern char*        configMapsAreasText(CorAlloc* allocP);                   // "maps": {"areas": [...]}, rendered
+extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
+extern bool         configCompilePreset(char* body, char* errBuf, int errLen);       // PUT /api/compile/presets
+extern bool         configCompilePresetDelete(char* body, char* errBuf, int errLen); // DELETE /api/compile/presets
 
 
 
@@ -93,6 +96,19 @@ extern void  proxyRequest(CorHttpConn* connP, const char* path);
 extern bool  mapsInit(void);
 extern void  mapsSync(void);
 extern void  mapsRequest(CorHttpConn* connP, const char* path);
+
+
+
+// -----------------------------------------------------------------------------
+//
+// compile.c - Compile: builds of the broker by coraine-build (/api/capabilities, /api/compile/..., /api/builds...)
+//
+extern char* c3CoraineBuild;                     // --coraine-build: coraine-build's path (NULL: found in $PATH)
+extern char* c3Source;                           // --source: the source tarball (NULL: coraine-build's default)
+
+extern bool  compileInit(void);
+extern void  compileRequest(CorHttpConn* connP, const char* path);
+extern void  compileShutdown(void);
 
 
 

@@ -17,6 +17,9 @@
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
 //   GET    /api/live            the page's WebSocket: live values (live.c)
 //   POST   /api/notify/<id>     a broker's notification for a session's HTTP subscription (live.c)
+//   GET    /api/capabilities    what this machine can do (compile.c)
+//   ...    /api/compile/...     Compile: the feature list (compile.c); the choice and the presets (config.c)
+//   ...    /api/builds...       Compile: the builds - start, follow, cancel, delete (compile.c)
 //   GET    /<file>              a file of the www directory; / is index.html (Range taken)
 //
 // Only for this machine: a connection from another address is refused, and so is a request whose Host
@@ -239,9 +242,13 @@ static int rangeParse(const char* h, int64_t size, int64_t* fromP, int64_t* toP)
 //
 // serveFileRange - a file, whole or the part a Range header asks for (206, Content-Range)
 //
-// A request without Range gets the whole file if it has 'maxWhole' bytes or fewer (0: 32 MiB); a larger
-// one is read by ranges only - the page's PMTiles reader does that. A range is at most 16 MiB. The ETag
-// (size and modification time) lets the reader see the file change under it.
+// The ETag (size and modification time) lets the reader see the file change under it.
+//
+// Built on a corHttp with file responses (corHttpResponseFile - COR_HTTP_STREAM_PENDING_MAX is its
+// mark): the bytes are sent from the file, whole or the range, whatever the size. On a corHttp without
+// them, the part is read into memory: a request without Range gets the whole file if it has 'maxWhole'
+// bytes or fewer (0: 32 MiB), a larger one is read by ranges only - the page's PMTiles reader does that -
+// and a range is at most 16 MiB.
 //
 #define RANGE_MAX  (16 * 1024 * 1024)
 
@@ -285,6 +292,27 @@ void serveFileRange(CorHttpConn* connP, const char* file, const char* type, int 
     corHttpResponseBody(connP, (char*) "", 0);
     return;
   }
+
+#ifdef COR_HTTP_STREAM_PENDING_MAX
+  (void) maxWhole;
+
+  if (r == 1)
+  {
+    char* cr = corAlloc(&connP->alloc, 96);
+    snprintf(cr, 96, "bytes %lld-%lld/%lld", (long long) from, (long long) to, (long long) size);
+    corHttpResponseStatus(connP, 206);
+    corHttpResponseHeader(connP, "Content-Range", cr);
+  }
+  else
+    corHttpResponseStatus(connP, 200);
+
+  corHttpResponseHeader(connP, "Content-Type", type);
+  corHttpResponseHeader(connP, "Accept-Ranges", "bytes");
+  corHttpResponseHeader(connP, "ETag", etag);
+  corHttpResponseHeader(connP, "Cache-Control", "no-cache");
+  corHttpResponseFile(connP, fd, from, (size == 0) ? 0 : to - from + 1);   // the fd is corHttp's now
+  return;
+#endif
 
   if ((r == 0) && (size > maxWhole))
   {
@@ -454,6 +482,15 @@ void serveRequest(CorHttpConn* connP)
     liveNotify(connP, &path[12]);
   else if ((strcmp(path, "/api/maps") == 0) || (strncmp(path, "/api/maps/", 10) == 0))
     mapsRequest(connP, path);
+  else if ((strcmp(path, "/api/compile/choice") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configCompileChoice);
+  else if ((strcmp(path, "/api/compile/presets") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configCompilePreset);
+  else if ((strcmp(path, "/api/compile/presets") == 0) && (strcmp(method, "DELETE") == 0))
+    serveConfigChange(connP, configCompilePresetDelete);
+  else if ((strcmp(path, "/api/capabilities") == 0) || (strncmp(path, "/api/compile/", 13) == 0) ||
+           (strcmp(path, "/api/builds") == 0) || (strncmp(path, "/api/builds/", 12) == 0))
+    compileRequest(connP, path);
   else if ((strcmp(path, "/api/status") == 0) && (strcmp(method, "GET") == 0))
     serveStatus(connP);
   else if ((strcmp(path, "/api/config") == 0) && (strcmp(method, "GET") == 0))

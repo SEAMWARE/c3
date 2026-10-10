@@ -46,6 +46,21 @@ export const mapsCancel   = () => call('DELETE', '/api/maps/download');
 export const mapsDelete   = (id) => call('DELETE', '/api/maps/areas', { id });
 
 //
+// Compile: what this machine can do, the feature switches, the builds (compile.c); the choice and the
+// presets (c3.json)
+//
+export const capabilities        = () => call('GET', '/api/capabilities');
+export const compileFeatures     = () => call('GET', '/api/compile/features');
+export const compileChoice       = (choice) => call('PUT', '/api/compile/choice', choice);
+export const compilePresetSave   = (preset) => call('PUT', '/api/compile/presets', preset);
+export const compilePresetDelete = (name) => call('DELETE', '/api/compile/presets', { name });
+export const buildCommand        = (body) => call('POST', '/api/builds/command', body);
+export const buildStart          = (body) => call('POST', '/api/builds', body);
+export const builds              = () => call('GET', '/api/builds');
+export const build               = (name) => call('GET', '/api/builds/' + encodeURIComponent(name));
+export const buildDelete         = (name) => call('DELETE', '/api/builds/' + encodeURIComponent(name));
+
+//
 // brokerGet - a GET to the broker, through the backend's proxy
 //
 // pathAndQuery starts with /ngsi-ld/ or is /version. The answer:

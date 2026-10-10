@@ -9,6 +9,7 @@
 // Starts the backend on a local port, serves the pages and the API, and opens the application.
 //
 //   c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
+//      [--coraine-build <path>] [--source <tarball>]
 //
 // If the port is taken by a c3 already, that one is opened and this one exits.
 //
@@ -58,6 +59,8 @@ static CorArg options[] =
   { "--no-browser", "-nb", CorArgBool,   &noBrowser, CorArgOpt, _vp false, NULL, NULL,      "serve only - print the URL, open no browser" },
   { "--www",        "-w",  CorArgString, &wwwArg,    CorArgOpt, NULL,     NULL,  NULL,      "directory of the pages (default: next to the binary, or ../share/c3/www)" },
   { "--planet",     "-pl", CorArgString, &c3Planet,  CorArgOpt, NULL,     NULL,  NULL,      "the Protomaps planet (.pmtiles URL) map areas are extracted from (default: the newest daily build)" },
+  { "--coraine-build", "-cb", CorArgString, &c3CoraineBuild, CorArgOpt, NULL, NULL, NULL,   "coraine-build, for Compile (default: the one in $PATH - coraine-dev)" },
+  { "--source",     "-src", CorArgString, &c3Source, CorArgOpt, NULL,     NULL,  NULL,      "the coraine source tarball Compile builds from (default: coraine-build's, the one coraine-dev installs)" },
   CORARGS_END
 };
 
@@ -260,6 +263,9 @@ int main(int argC, char* argV[])
   if (mapsInit() == false)
     fprintf(stderr, "c3: no $HOME and no $XDG_DATA_HOME - the map cannot download areas\n");
 
+  if (compileInit() == false)
+    fprintf(stderr, "c3: no $HOME and no $XDG_DATA_HOME - Compile has nowhere to build\n");
+
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);
 
@@ -267,6 +273,7 @@ int main(int argC, char* argV[])
 
   corHttpServe(&server);
   liveShutdown();                                // no subscription left behind on any broker
+  compileShutdown();                             // a build that runs is cancelled: nothing of it outlives c3
   corHttpRelease(&server);
 
   printf("c3: stopped\n");

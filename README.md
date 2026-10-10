@@ -12,10 +12,11 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | **Docs** | All of coraine's documentation in one place, much easier to read than Markdown on GitHub: the broker (everything on Read the Docs), every cor-lib, the plugin and bridge contracts, searchable, offline. And help to write a new plugin: a skeleton repository - makefile, template `.c`/`.h` files, a functest - for each kind of plugin. |
 | **Connect** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
 
-Status: **milestone 1c** - the `c3` command, its backend, the configuration file, the splash screen and
+Status: **milestone 2** - the `c3` command, its backend, the configuration file, the splash screen,
 **Connect, read-only**: discovery, the types picked, an entity's menu (linked entities, neighbourhood),
 the entities **on a map**, online or from downloaded areas offline, and **live values** - over the
-broker's WebSocket transport, or HTTP notifications to the backend. [doc/design.md](doc/design.md)
+broker's WebSocket transport, or HTTP notifications to the backend - and **Compile**: a broker built by
+`coraine-build` with the features chosen, its output followed live, the builds kept. [doc/design.md](doc/design.md)
 is the plan, [doc/areas.md](doc/areas.md) the milestones, [design/](design/) the screen designs.
 
 ## Try it
@@ -23,7 +24,14 @@ is the plan, [doc/areas.md](doc/areas.md) the milestones, [design/](design/) the
 The backend builds against the cor-libs as coraine does: sibling checkouts (`../corHttp`, `../corRest`,
 `../corJson`, `../corTree`, `../corArgs`, `../corLog`, `../corAlloc`, `../corBase`), each one built
 (`make` in it). It also needs OpenSSL (`libssl-dev`), for corRest's client, and zlib (`zlib1g-dev`), for
-the map files. Two corRest fixes matter:
+the map files. One corHttp change and two corRest fixes matter:
+
+- [SEAMWARE/corHttp#13](https://github.com/SEAMWARE/corHttp/pull/13) - file and streamed response bodies:
+  Compile's live log (server-sent events) and files sent from the file. Until it is merged, build against
+  its branch `feat/stream-file` (`COR_LIBS=<dir>` with that checkout as `<dir>/corHttp`). Built against a
+  corHttp without it, c³ still works: `GET /api/capabilities` says `"liveLog": false`, the page reads a
+  build's log by Range once a second, and files are read into memory (a range of 16 MiB at most).
+
 
 - [SEAMWARE/corRest#37](https://github.com/SEAMWARE/corRest/pull/37) - a neighbourhood's query (below) is
   a long URL, and the multi client's send buffer must count the path; without it, a request whose path
@@ -66,6 +74,7 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 
 ```
 c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
+   [--coraine-build <path>] [--source <tarball>]
 ```
 
 | Option | Default | |
@@ -75,6 +84,11 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--no-browser`, `-nb` | | serve only, and print the URL |
 | `--www`, `-w` | `<binary's dir>/www`, else `<binary's dir>/../share/c3/www` | the pages |
 | `--planet`, `-pl` | the newest daily build at `build.protomaps.com` | the Protomaps planet (`.pmtiles` URL) map areas are extracted from |
+| `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package) | the script Compile runs |
+| `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz` | the coraine source tarball Compile builds from (passed on as `--source`) |
+
+Every option can also be given in the environment: `C3_` and the option's name, upper case, `-` as `_`
+(`C3_CORAINE_BUILD`, `C3_SOURCE`).
 
 Opening the application:
 
@@ -122,6 +136,10 @@ markers are coloured by), the downloaded map areas, and the last page:
         "maxzoom": 15, "bytes": 13929458, "created": "2026-10-09T19:19:00Z", "build": "20261009" }
     ]
   },
+  "compile": {
+    "choice": { "mode": "release", "features": { "REGISTRATIONS": false, "MONGOC": false } },
+    "presets": [ { "name": "edge node", "mode": "release", "features": { "REGISTRATIONS": false, "SUBSCRIPTIONS": false, "MONGOC": false } } ]
+  },
   "ui": { "lastPage": "connect" }
 }
 ```
@@ -137,6 +155,9 @@ markers are coloured by), the downloaded map areas, and the last page:
   the truth: a finished download is added, an area whose file is gone is dropped, a file with no entry
   is added under its id (its bounds and levels read from the file's header).
 - Written whole to `c3.json.tmp`, then renamed over `c3.json` (mode 600, the directory 700).
+- `compile.choice`: Compile's choice as it is (`mode`, the `features` set by hand, `workload`), kept as it
+  changes; `compile.presets`: the choices saved under a name. The builds themselves are not listed here:
+  their directory is the truth (Compile, below).
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
   written.
@@ -321,8 +342,8 @@ attribute panel of the selected entity follows. Nothing is reloaded.
 - A broker with no discovery (milestone 1's "every entity") is watched for the types of the entities
   loaded.
 
-The page gets the changes over a WebSocket to the backend, not Server-Sent Events: corHttp has no
-streaming response, and its `corHttpUpgrade` hands the backend the socket - the same contract coraine's
+The page gets the changes over a WebSocket to the backend - the page sends on it too (what it
+watches) - and corHttp's `corHttpUpgrade` hands the backend the socket - the same contract coraine's
 WebSocket transport is built on. If WebSocket between the backend and the brokers turns out too slow,
 [cor:// in the backend](doc/design.md) is the plan; not before measuring.
 
@@ -332,19 +353,108 @@ and back - `location`, `speed` and `batteryLevel` change, the Mission's `progres
 a charger charge; every 16 steps a Mission (`urn:ngsi-ld:Mission:m-live`) is created, 16 steps later
 deleted (`CHURN=0` leaves that out). Ctrl-C deletes it if it is there.
 
-Not yet: a rectangle drawn on the map as a `georel=within` query, saved views, tenants, Compile,
-Configure, Docs, Operate.
+Not yet: a rectangle drawn on the map as a `georel=within` query, saved views, tenants, Configure,
+Docs, Operate.
+
+## Compile
+
+A front-end to `coraine-build` ([doc/compile.md](doc/compile.md)): c³ builds nothing itself - every build
+is the command shown, run by the backend, the same build as on the command line.
+
+- **What this machine can do** - `GET /api/capabilities`: `coraine-build` (`--coraine-build`, else
+  `$PATH`) and the source tarball (`--source`, else the one `coraine-dev` installs) must both be there.
+  Without them the page is greyed with *Install coraine-dev to build brokers*; the builds kept are still
+  listed and can be deleted. Also: whether `--pgo`/`--tune` can train here (`curl`, `wrk`, `python3`),
+  whether the mongo-c driver v2 is installed (MONGOC), the host's architecture and distribution. Asked
+  again every time the page is shown.
+- **Features** - from `coraine-build --list-features --json` (cached per `coraine-build` and tarball):
+  each switch with its default and description; one changed from its default is marked; one whose
+  `requires` are off is greyed with what it needs (CMakeLists.txt turns it off). MONGOC is the **Stores**
+  choice (corDB only / corDB + mongoc); without the mongo-c driver the page starts at corDB only.
+- **Optimisation** - Release, Profile-guided (`--pgo`), Tuned for a workload (`--tune <file>`, the
+  workload by its absolute path on this machine), Debug. The training modes are greyed when the tools
+  are missing.
+- **Target, HTTP server** - shown greyed: `coraine-build` builds a binary for the host, with its default
+  HTTP server.
+- **The command** - `POST /api/builds/command` answers the exact `argv` for the choice; the page shows it,
+  one option a line. Only the switches that differ from their defaults are passed. **Build** starts that
+  command under the name it showed (the name field, else `<mode>-<date>-<time>`).
+- **Following a build** - its output line by line, a bar over the phases `coraine-build` announces
+  (`coraine-build: phase build`, `install`, `bridges`, `check`, `done`; `tools` and `train` for the
+  training modes; *unpack* before the first): how far into a phase is its line count against the same
+  phase of the last build of that mode that succeeded, with that build's phase times as the weights.
+  **Cancel**: SIGTERM to the build's process group, SIGKILL 5 s later.
+- **The result** - the size of `install/` and of the broker, the mode and time, the features as the
+  built broker reports them (`install/bin/coraine --version`, the switches off struck through), its
+  `--version`, the directory, the whole log. **Run it** is greyed until Run (milestone 2b).
+- **Builds kept** - newest first, with their mode, date, size and the features turned off; a click
+  opens one (its log and result); **Delete** (press twice) removes its directory, log and record.
+- **Presets** - the choice (mode, the features changed, the workload) saved under a name in `c3.json`,
+  loaded again, deleted. The current choice is kept there too, as it changes.
+
+**Where the builds live**: `$XDG_DATA_HOME/c3/builds/` (else `~/.local/share/c3/builds/`):
+
+```
+<name>/          coraine-build's <dir>: the source, the build tree, install/ (the result)
+<name>.json      the build's record - c3-build.json
+<name>.log       everything coraine-build wrote, stdout and stderr, after two lines of c³'s own
+```
+
+The record and the log are beside the directory, not in it: `coraine-build` takes a new or empty
+directory (or one it unpacked into), so nothing of c³'s can be there first. The record:
+
+```json
+{
+  "name": "page-edge", "state": "succeeded", "mode": "release",
+  "features": {"REGISTRATIONS": false, "SUBSCRIPTIONS": false, "MONGOC": false},
+  "workload": null,
+  "command": "/usr/bin/coraine-build --release --features REGISTRATIONS=OFF,SUBSCRIPTIONS=OFF,MONGOC=OFF ~/.local/share/c3/builds/page-edge",
+  "dir": ".../builds/page-edge", "install": ".../builds/page-edge/install", "log": ".../builds/page-edge.log",
+  "phase": "done", "phases": [{"name": "build", "at": "2026-10-10T00:08:14Z", "line": 4}, ...],
+  "lines": 741, "started": "2026-10-10T00:08:14Z", "ended": "2026-10-10T00:08:38Z", "seconds": 24,
+  "exitStatus": 0, "signal": null, "installBytes": 11415094, "binaryBytes": 4569928,
+  "version": "coraine 0.4.0\nfeatures: SUBSCRIPTIONS=0 REGISTRATIONS=0 ...\nhttpServer: mhd\n",
+  "builtFeatures": {"SUBSCRIPTIONS": false, "REGISTRATIONS": false, "GEOQ": true, ...},
+  "error": null
+}
+```
+
+`state`: `running`, `succeeded`, `failed` (with `error`), `cancelled`, or `interrupted` - a record c³
+finds `running` when it starts (it stopped during the build).
+
+**Process control.** One build at a time (`409` for a second). `coraine-build` runs as a child in a
+process group of its own, stdin `/dev/null`, stdout and stderr into a pipe, none of c³'s file descriptors
+(its listening socket least of all), SIGTERM if c³ dies; a thread of the build reads the pipe, writes the
+log, counts the lines and notes the phases. When the script has exited, whatever is left of its process
+group is stopped too (SIGTERM, then SIGKILL after 3 s), and when c³ stops, a build that runs is cancelled
+and waited for: no make, gcc or training broker outlives a build. `coraine-build` writes only under its
+`<dir>`: it passes `PLUGIN_DIR=<dir>/install/plugins` to every make, and never runs the broker's own
+`install` (whose `ETC_DIR` is `/opt/seamware/etc`).
+
+**The live log** - `GET /api/builds/<name>/log` with `Accept: text/event-stream` (the page's
+`EventSource`): server-sent events over a chunked response (corHttp's `corHttpResponseStream`). Each read
+of the pipe is one event of its complete lines, `data:` a line, its `id` the log's byte offset after
+them - a page that reconnects (`Last-Event-ID`) goes on from there; at most the last 4 MiB of the log
+first (an `event: skipped` says how much is left out). `event: build` carries the record at the start
+and at each phase, `event: end` the final record, and the stream ends; a comment every 15 s while the
+build is quiet. Without that `Accept`, the request answers the log file (`text/plain`, Range taken).
+
+Server-sent events and not the page's WebSocket (`/api/live`): the log only flows one way and resumes by
+its byte offset, which `EventSource` does by itself (`Last-Event-ID`); and a write to a corHttp stream
+never waits - bytes a page has not taken wait in the stream (16 MiB at most, then that page is
+disconnected) - so a slow page cannot hold up the thread that reads the build's pipe.
 
 ## How it is built
 
-**Backend - C, on coraine's own libraries.** One binary, `c3`, from eight files in [src/](src/) - `maps.c`
+**Backend - C, on coraine's own libraries.** One binary, `c3`, from nine files in [src/](src/) - `maps.c`
 is the map's downloaded areas (the planet read by Range, the extract, the fonts, the job and its API),
 `live.c` the live values (the page's sessions, their subscriptions, the notifications) and `ws.c`
-WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page:
+WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page - and
+`compile.c` Compile (the capabilities, the feature list, the builds and their processes, the live log):
 
 | Library | Used for |
 |---|---|
-| corHttp | the HTTP server: one event loop, one request callback - the pages and the API; `corHttpUpgrade` hands over the page's WebSocket |
+| corHttp | the HTTP server: one event loop, one request callback - the pages and the API; `corHttpUpgrade` hands over the page's WebSocket; files sent from the file, a build's log as a stream |
 | corRest | the HTTP client the proxy and the map downloads send with - its multi engine, for the cap on the response size and a response that stays valid until the engine is destroyed |
 | corJson, corTree | reading and writing the configuration file, and the API's JSON bodies |
 | corArgs | the command line |
@@ -362,7 +472,18 @@ The backend's API, used by the pages:
 | `DELETE /api/brokers` `{"url"}` | forget a broker |
 | `PUT /api/brokers/types` `{"url", "types"}` | the types Connect loads from a broker, as its `connect.types` (the broker must be in the list) |
 | `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy"}` | Connect's view of a broker: each member given replaces the stored one |
-| `PUT /api/ui` `{"lastPage"}` | |
+| `PUT /api/ui` `{"lastPage"}` | `compile` or `connect` |
+| `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`) |
+| `GET /api/compile/features` | `coraine-build --list-features --json` as `{"coraineBuild", "source", "version", "features": [{"name", "default", "description", "requires"}]}` |
+| `PUT /api/compile/choice` `{"mode", "features", "workload"}` | Compile's choice, kept as `compile.choice` |
+| `PUT /api/compile/presets` `{"name", "mode", "features", "workload"}` | a preset, added or replaced (in its place) in `compile.presets` |
+| `DELETE /api/compile/presets` `{"name"}` | |
+| `POST /api/builds/command` `{"name"?, "mode", "features", "workload"?}` | the build that body would start: `name`, `dir`, `argv`, `command` - nothing run |
+| `POST /api/builds` (the same body) | start it: `202` with the record; `409` while a build runs or when the name is taken; `503` without `coraine-build`; `422` for a training mode without its tools or a tune without its workload |
+| `GET /api/builds` | `{"dir", "builds": [records, newest first]}` |
+| `GET /api/builds/<name>` | a record |
+| `GET /api/builds/<name>/log` | the live log as server-sent events (`Accept: text/event-stream`), else the log file |
+| `DELETE /api/builds/<name>` | the build that runs: cancelled (`202`); a finished one: deleted (`204`) |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
 | `POST /api/maps/estimate` `{"bbox", "maxzoom"}` | tiles and bytes of an area, from the planet's directories (`422` past 1 000 000 tiles) |
 | `POST /api/maps/download` `{"name", "bbox", "maxzoom"}` | start the download (`202`; `409` while one runs); `GET` its progress, `DELETE` cancels it |
@@ -386,7 +507,8 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | File | |
 |---|---|
 | `index.html`, `css/c3.css` | the shell and the look (dark only - Seamware magenta `#A72E60` on `#0E1014`) |
-| `js/main.js` | the splash screen, then Connect |
+| `css/compile.css`, `js/compile.js` | the Compile page |
+| `js/main.js` | the splash screen, then the pages (`#compile`, `#connect`; the last one shown is `ui.lastPage`) |
 | `js/api.js` | the backend's API |
 | `js/ngsild.js` | discovery, the paged load (all, or the types picked), linked entities, Relationships, values as text |
 | `js/layout.js` | the layout |

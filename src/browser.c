@@ -14,13 +14,16 @@
 // - No screen (no $DISPLAY, no $WAYLAND_DISPLAY, on Linux): the URL is printed, to open from another
 //   machine through ssh -L.
 //
+#define _GNU_SOURCE                              // close_range
+
+#include <errno.h>                               // errno
 #include <fcntl.h>                               // open
-#include <signal.h>                              // signal, SIGCHLD
 #include <stdio.h>                               // printf, snprintf
 #include <stdlib.h>                              // getenv
 #include <string.h>                              // strchr, strlen
 #include <sys/stat.h>                            // mkdir
-#include <unistd.h>                              // fork, execv, setsid, access, dup2
+#include <sys/wait.h>                            // waitpid
+#include <unistd.h>                              // fork, execv, setsid, access, dup2, close_range
 
 #include "c3.h"
 
@@ -126,6 +129,13 @@ static bool spawn(const char* prog, char* const argV[])
 
   if (pid == 0)
   {
+    //
+    // A grandchild runs the browser, and this child exits at once: the browser is init's to reap, not
+    // c3's - and SIGCHLD stays as it is, so c3's own children (Compile's builds) can be waited for
+    //
+    if (fork() != 0)
+      _exit(0);
+
     setsid();
 
     int fd = open("/dev/null", O_RDWR);
@@ -136,9 +146,14 @@ static bool spawn(const char* prog, char* const argV[])
       dup2(fd, 2);
     }
 
+    close_range(3, ~0U, 0);                      // c3's listening socket is not the browser's to keep
+
     execv(prog, argV);
     _exit(127);
   }
+
+  while ((waitpid(pid, NULL, 0) == -1) && (errno == EINTR))
+    ;
 
   return true;
 }
@@ -175,8 +190,6 @@ static void profileDir(char* out, int outLen)
 void browserOpen(const char* url, bool noBrowser)
 {
   char prog[4096];
-
-  signal(SIGCHLD, SIG_IGN);                      // the browser is not waited for
 
   if (noBrowser)
   {

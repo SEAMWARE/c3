@@ -39,29 +39,31 @@ As in the design (`design/Main.dc.html`):
   `/build` of the built broker), "Run it" (Run, milestone 2b), and the directory.
 - **Builds kept** - the list of earlier builds with their options, size and date; delete one.
 
-## What has to exist first
+## What it rests on
 
-1. **`coraine-build --list-features --json`** (coraine) - today the list is text formatted for a
-   terminal. c³ needs `[{ "name", "default", "description", "requires": [...] }]`, generated from
-   `CMakeLists.txt` the same way the text is, so the two cannot disagree.
-2. **Phase markers in `coraine-build`'s output** (coraine) - one line per phase
-   (`coraine-build: phase <name>`), so c³ can show progress without parsing make's output.
-3. **A streaming response in corHttp** (corHttp) - a response is one buffer in memory today. The
-   build's output needs to reach the page as it is produced: chunked transfer encoding, or
-   server-sent events, or a WebSocket. A WebSocket needs the framing as a reusable library (the one
-   in coraine's `ws.so` is inside the plugin). The smallest step: chunked responses in corHttp.
-4. **A file-streaming response in corHttp** - downloading a built image or package without
-   reading it into memory first.
-5. **Process control in c³'s backend** - start `coraine-build` as a child process, its output to a
-   file and to the stream, Cancel (SIGTERM to the process group), one build at a time, the exit
-   status kept with the build.
+1. **`coraine-build --list-features --json`** (coraine #316) - `[{ "name", "default", "description",
+   "requires": [...] }]`, generated from `CMakeLists.txt` the same way the text is.
+2. **Phase markers in `coraine-build`'s output** (coraine #316) - `coraine-build: phase <name>`: `build`,
+   `tools` and `train` (`--pgo`, `--tune`), `install`, `bridges`, `check`, `done`.
+3. **A streamed response in corHttp** ([corHttp#13](https://github.com/SEAMWARE/corHttp/pull/13)) -
+   `corHttpResponseStream`: a chunked body written from any thread. The build's output reaches the page
+   as server-sent events over it (`EventSource`: no library, reconnects by itself, `Last-Event-ID` to go
+   on from where it was).
+4. **A file response in corHttp** (the same PR) - `corHttpResponseFile`: bytes of a file sent with
+   `sendfile`, never read into memory; c³'s files and the map areas' Range answers use it.
+5. **Process control in c³'s backend** (`src/compile.c`) - `coraine-build` as a child in a process group of
+   its own, its output to a file and to the stream, Cancel (SIGTERM to the process group, SIGKILL 5 s
+   later), one build at a time, the exit status kept with the build.
 
 Later, in `coraine-build` itself: the target architecture (cross-compiling for arm64), the
-distribution, and the output kind (a container image, a Debian package) - shown greyed in c³ until
-then.
+distribution, the HTTP server, and the output kind (a container image, a Debian package) - shown greyed
+in c³ until then.
 
 ## Where the builds live
 
-`~/.local/share/c3/builds/<name>/` (`$XDG_DATA_HOME`): one directory per build, `coraine-build`'s
-`<dir>`, with a `c3-build.json` beside it - the options, the start and end time, the exit status, the
-log file. The configuration file lists them by name.
+`~/.local/share/c3/builds/` (`$XDG_DATA_HOME`): `<name>/` is `coraine-build`'s `<dir>`; beside it
+`<name>.json` - the build's record (c3-build.json): the options, the command, the start and end, the
+phases, the exit status, the size of `install/`, the built broker's `--version` - and `<name>.log`.
+Beside and not inside: `coraine-build` takes only a new or empty directory, or one it unpacked into.
+The directory is the truth: the configuration file keeps the current choice and the presets, not the
+list of builds. The API and the details: the README's Compile section.

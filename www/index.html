@@ -6,6 +6,7 @@
 <title>c³ Control Center</title>
 <link rel="icon" href="img/coraine-mark.png">
 <link rel="stylesheet" href="css/c3.css">
+<link rel="stylesheet" href="css/compile.css">
 </head>
 <body>
 
@@ -28,12 +29,129 @@
     <img class="mark" src="img/coraine-mark.png" alt="coraine">
     <div class="brand"><span class="word">c<span class="cube">³</span></span><span class="tag">coraine control center</span></div>
     <nav class="pages" aria-label="Parts">
-      <span class="later" title="Milestone 2">Compile</span>
+      <a href="#compile" id="nav-compile">Compile</a>
       <span class="later" title="Later">Configure</span>
-      <a href="#connect" class="active" aria-current="page">Connect</a>
+      <a href="#connect" id="nav-connect" class="active" aria-current="page">Connect</a>
     </nav>
     <div class="top-right"><span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware"></div>
   </header>
+
+  <main class="page" id="page-compile" hidden>
+    <div class="cp-wrap">
+      <div class="cp-main">
+        <div class="cp-head">
+          <div>
+            <h1>Build a broker</h1>
+            <p>Choose what goes into the binary, train it on your workload - built here by <span class="mono">coraine-build</span>, from the source <span class="mono">coraine-dev</span> installs.</p>
+          </div>
+          <span class="chip host" id="cp-host">build host</span>
+        </div>
+
+        <section class="cp-card cp-unavail" id="cp-unavail" hidden>
+          <h2 class="section">Compile is not available here</h2>
+          <p class="cp-note" id="cp-unavail-why"></p>
+          <p class="cp-note">The builds kept on this machine are still listed, and can be deleted.</p>
+        </section>
+
+        <section class="cp-card" id="cp-run" hidden aria-live="polite">
+          <div class="cp-runhead">
+            <h2 class="section">Build</h2>
+            <span class="nm" id="cp-run-name"></span>
+            <span class="badge" id="cp-run-state"></span>
+            <span class="grow"></span>
+            <span class="el" id="cp-run-elapsed"></span>
+            <button class="btn" type="button" id="cp-cancel" hidden>Cancel</button>
+            <button class="btn" type="button" id="cp-run-close" aria-label="Close">×</button>
+          </div>
+          <div class="cp-phases" id="cp-phases"></div>
+          <div class="cp-bar" id="cp-bar"><div id="cp-bar-fill"></div></div>
+          <pre class="cp-log" id="cp-log" tabindex="0" aria-label="The build's output"></pre>
+          <div class="cp-note" id="cp-log-note"></div>
+          <dl class="cp-result" id="cp-result" hidden></dl>
+        </section>
+
+        <div class="cp-gate" id="cp-gate">
+          <div class="cp-stack">
+            <section class="cp-card cp-later" aria-label="Target">
+              <h2 class="section">Target</h2>
+              <div class="cp-grid3">
+                <div class="cp-field"><span class="cp-label">Architecture</span><div class="cp-seg" id="cp-arch"></div></div>
+                <div class="cp-field"><span class="cp-label">Distribution</span><div class="cp-seg" id="cp-dist"></div></div>
+                <div class="cp-field"><span class="cp-label">Output</span><div class="cp-seg" id="cp-output"></div></div>
+              </div>
+              <span class="cp-note">Not in coraine-build yet: it builds a binary for the machine it runs on.</span>
+            </section>
+
+            <section class="cp-card" aria-label="Server and stores">
+              <h2 class="section">Server and stores</h2>
+              <div class="cp-grid3">
+                <div class="cp-field cp-later"><span class="cp-label">HTTP server</span><div class="cp-seg" id="cp-http"></div><span class="cp-note">not in coraine-build yet</span></div>
+                <div class="cp-field"><span class="cp-label">Current-state stores</span><div class="cp-seg" id="cp-store"></div><span class="cp-note" id="cp-store-note"></span></div>
+                <div class="cp-field"><span class="cp-label">Temporal history</span><span class="cp-note" style="font-size: 15px; line-height: 22px; color: var(--text)">none, corDB and timescale are always built; <span class="mono">--troe</span> picks one at start</span></div>
+              </div>
+            </section>
+
+            <section class="cp-card" aria-label="Features">
+              <div class="row">
+                <h2 class="section">Features</h2>
+                <span class="sub" id="cp-fcount"></span>
+              </div>
+              <div class="cp-features" id="cp-features" role="group" aria-label="Feature switches"></div>
+              <span class="cp-note" id="cp-fnote"></span>
+            </section>
+
+            <section class="cp-card" aria-label="Optimisation">
+              <h2 class="section">Optimisation</h2>
+              <div class="cp-opts" id="cp-opts"></div>
+              <div class="cp-workload" id="cp-workload" hidden>
+                <label class="cp-label" for="cp-workload-path">Workload file (tune)</label>
+                <input class="cp-input" id="cp-workload-path" placeholder="/path/to/workload.json" spellcheck="false" autocomplete="off">
+                <span class="cp-note">The absolute path of a workload file on this machine (doc/extreme-performance.md in the source).</span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <aside class="cp-aside">
+        <section class="cp-card cp-gate2" aria-label="This build">
+          <h2 class="section">This build</h2>
+          <dl class="cp-sum">
+            <dt>Target</dt><dd id="cp-sum-target"></dd>
+            <dt>Server</dt><dd id="cp-sum-server"></dd>
+            <dt>Stores</dt><dd id="cp-sum-stores"></dd>
+            <dt>Built as</dt><dd id="cp-sum-opt"></dd>
+            <dt>Features</dt><dd id="cp-sum-features"></dd>
+            <dt>Source</dt><dd id="cp-sum-source"></dd>
+          </dl>
+          <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="cp-name" maxlength="64" spellcheck="false" autocomplete="off" placeholder="mode-date-time"></label>
+          <pre class="cp-cmd" id="cp-cmd" aria-label="The command"></pre>
+          <span class="cp-note">Exactly what runs: c³ builds nothing itself. The result is <span class="mono">install/</span> in the build's directory.</span>
+          <button class="btn primary cp-build" type="button" id="cp-build">Build</button>
+        </section>
+
+        <section class="cp-card cp-gate2" aria-label="Presets">
+          <h2 class="section">Presets</h2>
+          <div class="cp-presets">
+            <select id="cp-preset" aria-label="Preset"></select>
+            <button class="btn" type="button" id="cp-preset-load">Load</button>
+            <button class="btn" type="button" id="cp-preset-del">Delete</button>
+          </div>
+          <div class="cp-presets">
+            <input class="cp-input" id="cp-preset-name" maxlength="64" placeholder="a name for this choice" spellcheck="false" autocomplete="off" style="flex: 1 1 140px">
+            <button class="btn" type="button" id="cp-preset-save">Save</button>
+          </div>
+          <span class="cp-note">Kept in c3.json: the optimisation, the features, the workload.</span>
+        </section>
+
+        <section class="cp-card" aria-label="Builds kept">
+          <div class="row"><h2 class="section">Builds kept</h2><span class="sub" id="cp-bcount"></span></div>
+          <div class="cp-builds" id="cp-builds"></div>
+          <span class="cp-note mono" id="cp-bdir"></span>
+        </section>
+      </aside>
+    </div>
+  </main>
 
   <main class="page" id="page-connect">
     <div class="panel connbar">
