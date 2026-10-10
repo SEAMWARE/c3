@@ -122,3 +122,6 @@ Everything else plugs into it.
 - **Labels from a zoom c³ picks**: on a load, the typical distance between neighbouring dots gives the
   zoom at which their labels mostly fit - the starting value of the map bar's "labels from" slider,
   which still overrides it.
+- **Operate** (the tab that was Run) **gets the rest of its name**: per running broker, the trace levels
+  (`/admin/log`) as a tick box each with a tooltip saying what it traces, set live; the log level; the
+  metrics (`/admin/metrics`) as charts; health.
