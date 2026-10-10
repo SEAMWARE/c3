@@ -103,3 +103,13 @@ Everything else plugs into it.
 - Suggestions in Configure (models that fit an entity type), the model's IRIs in the output @context.
 - Checking entities against a model's schema in Connect (warnings), the models a broker's types follow.
 - The catalogue browsable in Docs.
+
+## ToDo
+
+- **Every option documented in c³ itself**, not a link: each `coraine` command-line option and its
+  environment variable, with what it does, its default and its range - shown where it is set (Run's
+  form, Compile), and read from the broker or image (`coraine -u`, or a machine-readable listing) so
+  an image's options are known before it runs.
+- **Logging explained**: what `-v` adds; every trace level explained; a widget with a tick box per
+  trace level, a tooltip on each saying what it traces, setting them on a running broker
+  (`/admin/log`) or at start (`--traceLevels`; debug builds only).
