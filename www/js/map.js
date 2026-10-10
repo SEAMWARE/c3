@@ -480,8 +480,9 @@ export class EntityMap {
   // Input - a click selects (a point before a line before an area), a right-click opens the menu
   //
   hit(point) {
-    const layers = ['sel-point', 'ent-point', 'area-label', 'ent-line', 'ent-fill']   // a label is not the entity: its dot is.filter((l) => this.map.getLayer(l));
-    const box = [[point.x - 5, point.y - 5], [point.x + 5, point.y + 5]];
+    // a label is not the entity: its dot is
+    const layers = ['sel-point', 'ent-point', 'area-label', 'ent-line', 'ent-fill'].filter((l) => this.map.getLayer(l));
+    const box = [[point.x - 8, point.y - 8], [point.x + 8, point.y + 8]];
     const f = this.map.queryRenderedFeatures(box, { layers });
     if (!f.length) return null;
     const rank = { 'sel-point': 0, 'ent-point': 0, 'ent-label': 1, 'area-label': 2, 'ent-line': 2, 'ent-fill': 3 };
