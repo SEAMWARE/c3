@@ -231,7 +231,7 @@ export class Run {
     const acts = el('div', 'racts');
     if (runs) {
       acts.append(button('Stop', '', () => this.stop(b)));
-      acts.append(button('Connect', '', () => this.onConnect(b.url)));
+      acts.append(button('Explore', '', () => this.onConnect(b.url)));
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
       const st = button('Start', 'primary', () => this.startKept(b));
       st.disabled = b.busy;
