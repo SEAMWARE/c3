@@ -1231,11 +1231,29 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
     }
   }
 
+  CorNode* bridgesP = corTreeLookup(bodyP, "bridges");
+  if (bridgesP != NULL)
+  {
+    if (bridgesP->type != CorObject)
+    {
+      snprintf(errBuf, errLen, "\"bridges\" is not an object");
+      return false;
+    }
+    for (CorNode* bP = bridgesP->value.head; bP != NULL; bP = bP->next)
+    {
+      if (bP->type != CorBoolean)
+      {
+        snprintf(errBuf, errLen, "\"bridges\": %s is not true or false", bP->name);
+        return false;
+      }
+    }
+  }
+
   for (CorNode* mP = bodyP->value.head; mP != NULL; mP = mP->next)
   {
-    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0) && (strcmp(mP->name, "httpServer") != 0))
+    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0) && (strcmp(mP->name, "httpServer") != 0) && (strcmp(mP->name, "bridges") != 0))
     {
-      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, httpServer, features, workload)", mP->name);
+      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, httpServer, features, bridges, workload)", mP->name);
       return false;
     }
   }
@@ -1247,7 +1265,7 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
 
 // -----------------------------------------------------------------------------
 //
-// configCompileChoice - PUT /api/compile/choice {"mode", "features", "workload"}: Compile's choice as it is
+// configCompileChoice - PUT /api/compile/choice {"mode", "features", "bridges", "workload"}: Compile's choice as it is
 //
 bool configCompileChoice(char* body, char* errBuf, int errLen)
 {

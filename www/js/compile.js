@@ -105,6 +105,7 @@ const DOC_BASE = 'https://github.com/SEAMWARE/coraine/blob/main/doc/';
 const MODE_DOC = { release: 'Build mode: Release', pgo: 'Build mode: Profile-guided', tune: 'Build mode: Tuned for a workload', debug: 'Build mode: Debug' };
 const HTTP_DOC = { mhd: 'HTTP server: libmicrohttpd', builtin: 'HTTP server: corHttp (built in)' };
 const STORE_DOC = { false: 'Store: corDB only', true: 'Store: corDB + mongoc' };
+const BRIDGE_DOC = { mqtt: 'MQTT', modbus: 'Modbus', dds: 'DDS', ckan: 'CKAN' };
 
 function docSections(md) {
   const out = new Map();
@@ -275,7 +276,8 @@ export class Compile {
     this.openGroups = openGroupsLoad();   // the groups shown open
     this.featureError = '';
     this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
-    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, workload: '' };
+    this.bridges = [];            // [{name, default, description, available, why}] - coraine-build --list-bridges
+    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '' };
     this.presets = [];
     this.builds = [];
     this.plan = null;             // the last POST /api/builds/command answer
@@ -308,6 +310,7 @@ export class Compile {
         mode: c.choice.mode || 'release',
         httpServer: c.choice.httpServer || 'mhd',
         features: { ...(c.choice.features || {}) },
+        bridges: { ...(c.choice.bridges || {}) },
         workload: c.choice.workload || '',
       };
     }
@@ -337,6 +340,7 @@ export class Compile {
         const f = await api.compileFeatures();
         this.features = f.features || [];
         this.doc = docSections(f.doc);
+        this.bridges = Array.isArray(f.bridges) ? f.bridges : [];
         this.featureError = '';
       } catch (e) {
         this.featureError = e.message;
@@ -471,6 +475,24 @@ export class Compile {
   //
   // changedFeatures - only the switches that differ from their defaults: the command says what is different
   //
+  //
+  // isBridgeOn - the choice made, else the bridge's default
+  //
+  isBridgeOn(br) {
+    return (br.name in this.choice.bridges) ? !!this.choice.bridges[br.name] : !!br.default;
+  }
+
+  //
+  // bridgesArg - the bridges to build when they differ from coraine-build's default, else undefined (the
+  // command says what is different); [] is none
+  //
+  bridgesArg() {
+    if (!this.bridges.length) return undefined;
+    const on = this.bridges.filter((br) => br.available && this.isBridgeOn(br)).map((br) => br.name);
+    const def = this.bridges.filter((br) => br.default).map((br) => br.name);
+    return (on.join(',') === def.join(',')) ? undefined : on;
+  }
+
   changedFeatures() {
     const out = {};
     for (const [name, on] of Object.entries(this.choice.features)) {
@@ -586,36 +608,69 @@ export class Compile {
       return { b: withHelp(b, section, 'cp-fwrap'), isOn };
     };
 
-    list.replaceChildren(...groups.map((g) => {
-      const open = this.openGroups.has(g.name);
+    const groupSection = (name, items, changed) => {
+      const open = this.openGroups.has(name);
       const sec = el('div', 'cp-fgroup' + (open ? ' open' : ''));
       const head = el('button', 'cp-fghead');
       head.type = 'button';
       head.setAttribute('aria-expanded', String(open));
 
-      const items = g.features.map(featureButton);
       const gOn = items.filter((x) => x.isOn).length;
-      const gChanged = g.features.filter((f) => this.isOn(f.name) !== !!f.default).length;
-      on += gOn;
-
-      head.append(el('span', 'chev', open ? '▾' : '▸'), el('span', 'gname', g.name),
-                  el('span', 'gcount', `${gOn} of ${g.features.length} on`));
-      if (gChanged) head.append(el('span', 'gchanged', gChanged + ' changed'));
+      head.append(el('span', 'chev', open ? '▾' : '▸'), el('span', 'gname', name),
+                  el('span', 'gcount', `${gOn} of ${items.length} on`));
+      if (changed) head.append(el('span', 'gchanged', changed + ' changed'));
       head.addEventListener('click', () => {
-        if (this.openGroups.has(g.name)) this.openGroups.delete(g.name); else this.openGroups.add(g.name);
+        if (this.openGroups.has(name)) this.openGroups.delete(name); else this.openGroups.add(name);
         openGroupsSave(this.openGroups);
         this.render();
       });
 
       const body = el('div', 'cp-features');
       body.setAttribute('role', 'group');
-      body.setAttribute('aria-label', g.name);
+      body.setAttribute('aria-label', name);
       body.hidden = !open;
       body.replaceChildren(...items.map((x) => x.b));
 
       sec.append(head, body);
       return sec;
-    }));
+    };
+
+    const sections = groups.map((g) => {
+      const items = g.features.map(featureButton);
+      on += items.filter((x) => x.isOn).length;
+      return groupSection(g.name, items, g.features.filter((f) => this.isOn(f.name) !== !!f.default).length);
+    });
+
+    //
+    // Bridges: plugins built from repositories of their own (coraine-build --bridges), a group of their own
+    //
+    const bridgeButton = (br) => {
+      const isOn = br.available && this.isBridgeOn(br);
+      const changed = this.isBridgeOn(br) !== !!br.default;
+      const b = el('button', 'cp-feature' + (changed ? ' changed' : ''));
+      b.type = 'button';
+      b.setAttribute('role', 'switch');
+      b.setAttribute('aria-checked', String(isOn));
+      if (!br.available) b.setAttribute('aria-disabled', 'true');
+      b.title = br.available ? br.description : 'Not here: ' + br.why;
+      const txt = el('span', 'txt');
+      txt.append(el('span', 'fn', br.name), el('span', 'fd', br.description));
+      const section = this.docAt('Bridge: ' + (BRIDGE_DOC[br.name] || br.name));
+      const size = docSize(section && section.text);
+      if (size) txt.append(el('span', 'fsz', 'on: ' + size));
+      if (!br.available) txt.append(el('span', 'fr', 'Not here: ' + br.why));
+      txt.append(el('span', 'fdef', 'default ' + (br.default ? 'on' : 'off') + (changed ? ' · changed' : '')));
+      b.append(el('span', 'cp-fbox'), txt);
+      b.addEventListener('click', () => { if (!br.available) return; this.choice.bridges[br.name] = !this.isBridgeOn(br); this.changed(); });
+      return { b: withHelp(b, section, 'cp-fwrap'), isOn };
+    };
+    if (this.bridges.length) {
+      const items = this.bridges.map(bridgeButton);
+      sections.push(groupSection('Bridges', items, this.bridges.filter((br) => this.isBridgeOn(br) !== !!br.default).length));
+      groups.push({ name: 'Bridges', features: [] });
+    }
+
+    list.replaceChildren(...sections);
 
     const all = $('cp-fexpand');
     const allOpen = groups.length > 0 && groups.every((g) => this.openGroups.has(g.name));
@@ -663,6 +718,8 @@ export class Compile {
     $('cp-sum-stores').textContent = (mongoc ? 'corDB + mongoc' : 'corDB only') + '; history none, corDB, timescale';
     $('cp-sum-opt').textContent = MODE_LABEL[this.choice.mode] + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
     $('cp-sum-features').textContent = shown.length ? (off.length ? off.length + ' off: ' + off.join(', ') : 'all ' + shown.length + ' on') : '-';
+    const brOn = this.bridges.filter((br) => br.available && this.isBridgeOn(br)).map((br) => br.name);
+    $('cp-sum-bridges').textContent = this.bridges.length ? (brOn.length ? brOn.join(', ') : 'none') : '-';
     $('cp-sum-source').textContent = cc.version ? 'coraine ' + cc.version : (cc.source || '-');
 
     this.commandSoon();
@@ -675,12 +732,14 @@ export class Compile {
     this.render();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, workload: this.choice.workload }).catch(() => {});
+      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload }).catch(() => {});
     }, 400);
   }
 
   body() {
     const b = { mode: this.choice.mode, features: this.changedFeatures() };
+    const bridges = this.bridgesArg();
+    if (bridges) b.bridges = bridges;
     if (this.choice.httpServer !== 'mhd') b.httpServer = this.choice.httpServer;
     const name = $('cp-name').value.trim();
     if (name) b.name = name;
@@ -1056,7 +1115,7 @@ export class Compile {
   presetSave() {
     const name = $('cp-preset-name').value.trim();
     if (!name) { $('cp-preset-name').focus(); return; }
-    const p = { name, mode: this.choice.mode, features: this.changedFeatures() };
+    const p = { name, mode: this.choice.mode, features: this.changedFeatures(), bridges: { ...this.choice.bridges } };
     if (this.choice.httpServer !== 'mhd') p.httpServer = this.choice.httpServer;
     if (this.choice.mode === 'tune' && this.choice.workload) p.workload = this.choice.workload;
     api.compilePresetSave(p).then((config) => {
@@ -1070,7 +1129,7 @@ export class Compile {
   presetLoad() {
     const p = this.presets.find((x) => x.name === $('cp-preset').value);
     if (!p) return;
-    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, workload: p.workload || '' };
+    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, bridges: { ...(p.bridges || {}) }, workload: p.workload || '' };
     this.changed();
   }
 
