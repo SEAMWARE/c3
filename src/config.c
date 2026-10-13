@@ -1180,7 +1180,7 @@ static CorNode* compileObject(Doc* docP)
 
 // -----------------------------------------------------------------------------
 //
-// compileChoiceCheck - {"name"?, "mode", "features": {"NAME": bool}, "workload"?}: only these, of these types
+// compileChoiceCheck - {"name"?, "mode", "httpServer"?, "features": {"NAME": bool}, "workload"?}: only these, of these types
 //
 static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int errLen)
 {
@@ -1205,6 +1205,14 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
   if (stringMember(bodyP, "workload", false, 4096, &s, errBuf, errLen) == false)
     return false;
 
+  if (stringMember(bodyP, "httpServer", false, 16, &s, errBuf, errLen) == false)
+    return false;
+  if ((s != NULL) && (strcmp(s, "mhd") != 0) && (strcmp(s, "builtin") != 0))
+  {
+    snprintf(errBuf, errLen, "\"httpServer\" is mhd or builtin");
+    return false;
+  }
+
   CorNode* featuresP = corTreeLookup(bodyP, "features");
   if (featuresP != NULL)
   {
@@ -1225,9 +1233,9 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
 
   for (CorNode* mP = bodyP->value.head; mP != NULL; mP = mP->next)
   {
-    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0))
+    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0) && (strcmp(mP->name, "httpServer") != 0))
     {
-      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, features, workload)", mP->name);
+      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, httpServer, features, workload)", mP->name);
       return false;
     }
   }

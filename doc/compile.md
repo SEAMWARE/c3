@@ -36,6 +36,12 @@ As in the design (`design/Main.dc.html`):
   setting coraine-build always builds with (`HTTP_SERVER=mhd`, POLICY_API's). Presets from the
   configuration file ("edge node", "full").
 - **Optimisation** - release, profile-guided, tuned (with a workload file chosen or recorded).
+- **HTTP server** - libmicrohttpd (coraine-build's default) or corHttp, the built-in server
+  (`--http-server builtin`). Choosing corHttp when a switch that needs libmicrohttpd is on asks first: a
+  dialog lists what is not built with it (POLICY_API - its port is a second listener) and why; Escape or
+  "Keep libmicrohttpd" leaves the choice as it was. With corHttp those switches are greyed out, their
+  tooltip saying why and how to have them back; Profile-guided and Tuned are greyed out too (coraine-build
+  trains with libmicrohttpd only), and corHttp while one of them is chosen.
 - **Stores** - MONGOC on or off (corDB is always built); temporal plugins are always built.
 - **Build** - the command shown before it runs; the build's output streamed as it happens; a
   progress line per phase (unpack, libraries, broker, training, profile-use, plugins, install);

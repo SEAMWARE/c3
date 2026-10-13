@@ -73,7 +73,8 @@
   cursor: pointer; color: var(--text); text-align: left; background: var(--panel-2); border: 1px solid #6B2C47;
 }
 .cp-feature[aria-checked="false"] { background: #12151B; border-color: var(--line); opacity: 0.7; }
-.cp-feature:disabled { cursor: default; }
+.cp-feature:disabled, .cp-feature[aria-disabled="true"] { cursor: not-allowed; }
+.cp-seg button[aria-disabled="true"], .cp-opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .cp-feature .cp-fbox {
   flex: 0 0 auto; margin-top: 5px; width: 12px; height: 12px; border-radius: 3px; background: var(--accent-2);
 }
@@ -177,3 +178,8 @@
 .cp-unavail h2 { color: var(--warn) !important; }
 .cp-stack { display: flex; flex-direction: column; gap: 24px; }
 .cp-off .cp-gate, .cp-off .cp-gate2 { opacity: 0.45; pointer-events: none; user-select: none; }
+
+/* the dialog before a choice turns switches off */
+.cp-modal { position: fixed; z-index: 50; }
+.cp-lost { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--text); }
+.cp-lost .why { font-size: 13px; line-height: 19px; color: var(--warn); }

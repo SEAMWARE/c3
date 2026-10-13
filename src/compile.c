@@ -9,7 +9,7 @@
 //   GET    /api/capabilities           what this machine can do: Compile needs coraine-build and its source
 //   GET    /api/compile/features       coraine-build --list-features --json: every switch, its default, its
 //                                      description, what it requires (cached per source tarball)
-//   POST   /api/builds/command         {name?, mode, features, workload?}: the command a build would run,
+//   POST   /api/builds/command         {name?, mode, httpServer?, features, workload?}: the command a build would run,
 //                                      without running it
 //   POST   /api/builds                 the same body: start the build (202; 409 while one runs)
 //   GET    /api/builds                 the builds kept, newest first
@@ -248,6 +248,7 @@ typedef struct Build
 {
   char            name[65];
   char            mode[16];
+  char            httpServer[16];                // mhd, builtin
   char            workload[2048];
   char*           featuresJson;                  // the features asked for, as JSON ({"REGISTRATIONS": false})
   char*           command;                       // as shown: shell-quoted
@@ -341,6 +342,7 @@ static void buildRender(Build* bP, Str* sP)
   strAdd(sP, "{\"name\": ");          strAddJson(sP, bP->name);
   strAdd(sP, ", \"state\": ");        strAddJson(sP, bP->state);
   strAdd(sP, ", \"mode\": ");         strAddJson(sP, bP->mode);
+  strAdd(sP, ", \"httpServer\": ");   strAddJson(sP, bP->httpServer);
   strAdd(sP, ", \"features\": ");     strAdd(sP, (bP->featuresJson != NULL) ? bP->featuresJson : "{}");
   strAdd(sP, ", \"workload\": ");     strAddJson(sP, (bP->workload[0] != 0) ? bP->workload : NULL);
   strAdd(sP, ", \"command\": ");      strAddJson(sP, bP->command);
@@ -767,6 +769,7 @@ typedef struct Plan
 {
   char   name[65];
   char   mode[16];
+  char   httpServer[16];                         // mhd (coraine-build's default), builtin
   char   workload[2048];
   Str    features;                               // the JSON object, as asked for
   Str    featuresArg;                            // NAME=ON,NAME=OFF
@@ -829,6 +832,26 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     snprintf(errBuf, errLen, "--%s: %s", mode, cP->pgoWhy);
     return false;
   }
+
+  //
+  // httpServer: mhd (the default) or builtin - not with pgo / tune (coraine-build refuses: its training
+  // tools are tried with libmicrohttpd only)
+  //
+  CorNode*    httpP = corTreeLookup(bodyP, "httpServer");
+  const char* http  = ((httpP != NULL) && (httpP->type == CorString)) ? httpP->value.s : "mhd";
+
+  if ((strcmp(http, "mhd") != 0) && (strcmp(http, "builtin") != 0))
+  {
+    snprintf(errBuf, errLen, "\"httpServer\" is mhd or builtin - not '%s'", http);
+    return false;
+  }
+  if ((strcmp(http, "builtin") == 0) && ((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "the built-in HTTP server is not built with --%s yet", mode);
+    return false;
+  }
+  snprintf(pP->httpServer, sizeof(pP->httpServer), "%s", http);
 
   //
   // workload (tune)
@@ -926,6 +949,11 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   pP->argv[pP->argc++] = strdup(modeArg);
   if (pP->workload[0] != 0)
     pP->argv[pP->argc++] = strdup(pP->workload);
+  if (strcmp(pP->httpServer, "mhd") != 0)            // the default is left out: the command says what is different
+  {
+    pP->argv[pP->argc++] = strdup("--http-server");
+    pP->argv[pP->argc++] = strdup(pP->httpServer);
+  }
   if (pP->featuresArg.len > 0)
   {
     pP->argv[pP->argc++] = strdup("--features");
@@ -953,6 +981,7 @@ static void planRender(Plan* pP, Str* sP)
 {
   strAdd(sP, "{\"name\": ");     strAddJson(sP, pP->name);
   strAdd(sP, ", \"mode\": ");    strAddJson(sP, pP->mode);
+  strAdd(sP, ", \"httpServer\": "); strAddJson(sP, pP->httpServer);
   strAdd(sP, ", \"features\": "); strAdd(sP, pP->features.s);
   strAdd(sP, ", \"workload\": "); strAddJson(sP, (pP->workload[0] != 0) ? pP->workload : NULL);
   strAdd(sP, ", \"dir\": ");     strAddJson(sP, pP->dir);
@@ -1027,6 +1056,7 @@ static void buildStart(CorHttpConn* connP)
 
   snprintf(bP->name, sizeof(bP->name), "%s", plan.name);
   snprintf(bP->mode, sizeof(bP->mode), "%s", plan.mode);
+  snprintf(bP->httpServer, sizeof(bP->httpServer), "%s", plan.httpServer);
   snprintf(bP->workload, sizeof(bP->workload), "%s", plan.workload);
   snprintf(bP->dir, sizeof(bP->dir), "%s", plan.dir);
   snprintf(bP->logPath, sizeof(bP->logPath), "%s/%s.log", buildsDir, plan.name);

@@ -53,11 +53,25 @@ const duration = (s) => (s >= 60 ? Math.floor(s / 60) + ' min ' : '') + (s % 60)
 // shellQuote - as the backend quotes the command it runs
 //
 //
-// The build settings a switch may need ("requires": ["HTTP_SERVER=mhd"]) - what coraine-build builds with
-// (it has no choice of them), and what to call them
+// The HTTP servers coraine-build builds with (--http-server); mhd is its default
 //
-const BUILT = { HTTP_SERVER: 'mhd' };
-const SETTING_LABEL = { 'HTTP_SERVER=mhd': 'the libmicrohttpd HTTP server' };
+const HTTP_SERVERS = [
+  ['mhd',     'libmicrohttpd',      'An external library (libmicrohttpd 1.0.10). Everything is built.'],
+  ['builtin', 'corHttp (built in)', 'No external library. One listener - what needs a second port is not built.'],
+];
+const HTTP_LABEL = Object.fromEntries(HTTP_SERVERS.map(([id, label]) => [id, label]));
+
+//
+// The build settings a switch may need ("requires": ["HTTP_SERVER=mhd"]): what to call them, why the
+// switch needs them, and the choice that gives them back
+//
+const SETTINGS = {
+  'HTTP_SERVER=mhd': {
+    label: 'the libmicrohttpd HTTP server',
+    why:   'it listens on a port of its own, and only libmicrohttpd has a second listener - corHttp has one',
+    give:  'choose libmicrohttpd under HTTP server',
+  },
+};
 
 //
 // openGroupsKey - the groups the Features card has open, remembered in this browser
@@ -88,7 +102,7 @@ export class Compile {
     this.features = [];           // [{name, default, description, group, requires}]
     this.openGroups = openGroupsLoad();   // the groups shown open
     this.featureError = '';
-    this.choice = { mode: 'release', features: {}, workload: '' };
+    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, workload: '' };
     this.presets = [];
     this.builds = [];
     this.plan = null;             // the last POST /api/builds/command answer
@@ -119,6 +133,7 @@ export class Compile {
     if (c.choice) {
       this.choice = {
         mode: c.choice.mode || 'release',
+        httpServer: c.choice.httpServer || 'mhd',
         features: { ...(c.choice.features || {}) },
         workload: c.choice.workload || '',
       };
@@ -190,11 +205,79 @@ export class Compile {
   //
   reqMet(r) {
     const eq = r.indexOf('=');
-    return (eq < 0) ? this.isOn(r) : (BUILT[r.slice(0, eq)] === r.slice(eq + 1));
+    if (eq < 0) return this.isOn(r);
+    const built = { HTTP_SERVER: this.choice.httpServer || 'mhd' };
+    return built[r.slice(0, eq)] === r.slice(eq + 1);
   }
 
   reqLabel(r) {
-    return (r.indexOf('=') < 0) ? r : (SETTING_LABEL[r] || r);
+    return (r.indexOf('=') < 0) ? r : ((SETTINGS[r] && SETTINGS[r].label) || r);
+  }
+
+  //
+  // forcedWhy - a forced-off switch's explanation, for its tooltip: what it needs, why, and how to have it
+  //
+  forcedWhy(f, forced) {
+    return forced.map((r) => {
+      const st = SETTINGS[r];
+      return st ? `${f.name} needs ${st.label}: ${st.why}. To have it, ${st.give}.`
+                : `${f.name} needs ${r}, which is off. To have it, switch ${r} on.`;
+    }).join('\n');
+  }
+
+  //
+  // lostWith - the switches a choice of HTTP server would turn off: on now, and needing what it does not give
+  //
+  lostWith(httpServer) {
+    const was = this.choice.httpServer;
+    const onNow = this.features.filter((f) => this.isOn(f.name) && this.forcedBy(f).length === 0);
+    this.choice.httpServer = httpServer;
+    const lost = onNow.filter((f) => this.forcedBy(f).length > 0);
+    this.choice.httpServer = was;
+    return lost;
+  }
+
+  //
+  // httpServerSet - the choice, after asking when it turns switches off
+  //
+  httpServerSet(id) {
+    if (id === this.choice.httpServer) return;
+    const lost = this.lostWith(id);
+    const apply = () => { this.choice.httpServer = id; this.changed(); };
+    if (lost.length === 0) { apply(); return; }
+
+    const ov = el('div', 'overlay cp-modal');
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Switch to ' + HTTP_LABEL[id]);
+    const card = el('div', 'card');
+    const list = el('ul', 'cp-lost');
+    for (const f of lost) {
+      const li = el('li');
+      li.append(el('span', 'mono', f.name), el('span', '', ' - ' + f.description));
+      const why = (f.requires || []).filter((r) => SETTINGS[r]).map((r) => SETTINGS[r].why);
+      if (why.length) li.append(el('div', 'why', 'Not built: ' + why.join('; ') + '.'));
+      list.append(li);
+    }
+    const yes = el('button', 'btn primary', 'Switch to ' + HTTP_LABEL[id]);
+    const no = el('button', 'btn', 'Keep ' + HTTP_LABEL[this.choice.httpServer]);
+    yes.type = no.type = 'button';
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    yes.addEventListener('click', () => { close(); apply(); });
+    no.addEventListener('click', close);
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    document.addEventListener('keydown', onKey);
+    const actions = el('div', 'actions');
+    actions.append(yes, no);
+    card.append(el('h3', '', 'Switch to ' + HTTP_LABEL[id] + '?'),
+                el('p', '', `With ${HTTP_LABEL[id]}, ${lost.length === 1 ? 'this switch is' : 'these switches are'} not built:`),
+                list,
+                el('p', '', 'Switching back to ' + HTTP_LABEL[this.choice.httpServer] + ' turns ' + (lost.length === 1 ? 'it' : 'them') + ' on again.'),
+                actions);
+    ov.append(card);
+    document.body.append(ov);
+    no.focus();
   }
 
   //
@@ -243,7 +326,26 @@ export class Compile {
     seg('cp-arch', ['amd64', 'arm64'], arch === 'x86_64' ? 'amd64' : arch === 'aarch64' ? 'arm64' : '');
     seg('cp-dist', ['this machine'], 'this machine');
     seg('cp-output', ['Binary', 'Docker image', 'Debian package'], 'Binary');
-    seg('cp-http', ['libmicrohttpd', 'corHttp (built in)'], 'libmicrohttpd');
+
+    //
+    // HTTP server: libmicrohttpd or corHttp - corHttp not with a training build (coraine-build refuses)
+    //
+    const isTraining = (m) => (m === 'pgo' || m === 'tune');
+    const http = $('cp-http');
+    http.replaceChildren(...HTTP_SERVERS.map(([id, label, desc]) => {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(this.choice.httpServer === id));
+      const blocked = (id === 'builtin') && isTraining(this.choice.mode);
+      if (blocked) b.setAttribute('aria-disabled', 'true');
+      b.title = blocked ? `Not with ${MODE_LABEL[this.choice.mode]} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for corHttp.` : desc;
+      b.addEventListener('click', () => { if (!blocked) this.httpServerSet(id); });
+      return b;
+    }));
+    const lostNow = this.features.filter((f) => (f.requires || []).some((r) => SETTINGS[r]) && this.forcedBy(f).length > 0).map((f) => f.name);
+    $('cp-http-note').textContent = (this.choice.httpServer === 'builtin')
+      ? 'No external library.' + (lostNow.length ? ' Not built with it: ' + lostNow.join(', ') + '.' : '')
+      : '';
 
     //
     // Stores: corDB is always built; mongoc is the MONGOC switch
@@ -277,8 +379,8 @@ export class Compile {
       b.type = 'button';
       b.setAttribute('role', 'switch');
       b.setAttribute('aria-checked', String(isOn));
-      b.disabled = forced.length > 0;
-      b.title = f.description;
+      if (forced.length > 0) b.setAttribute('aria-disabled', 'true');    // not disabled: a disabled button shows no tooltip
+      b.title = forced.length ? this.forcedWhy(f, forced) : f.description;
       const txt = el('span', 'txt');
       txt.append(el('span', 'fn', f.name), el('span', 'fd', f.description));
       const needs = (f.requires || []).map((r) => this.reqLabel(r));
@@ -286,7 +388,7 @@ export class Compile {
       else if (needs.length) txt.append(el('span', 'fq', 'Needs ' + needs.join(' and ')));
       txt.append(el('span', 'fdef', 'default ' + (f.default ? 'on' : 'off') + ((this.isOn(f.name) !== !!f.default) ? ' · changed' : '')));
       b.append(el('span', 'cp-fbox'), txt);
-      b.addEventListener('click', () => { this.choice.features[f.name] = !this.isOn(f.name); this.changed(); });
+      b.addEventListener('click', () => { if (forced.length) return; this.choice.features[f.name] = !this.isOn(f.name); this.changed(); });
       return { b, isOn };
     };
 
@@ -344,9 +446,15 @@ export class Compile {
       b.setAttribute('aria-pressed', String(this.choice.mode === id));
       const trains = (id === 'pgo' || id === 'tune');
       b.disabled = trains && cc.available && !cc.pgo;
+      const byServer = trains && !b.disabled && (this.choice.httpServer === 'builtin');
       b.append(el('span', 'ol', label), el('span', 'od', desc));
       if (b.disabled) b.append(el('span', 'ow', cc.pgoWhy || 'not available here'));
-      b.addEventListener('click', () => { this.choice.mode = id; this.changed(); });
+      if (byServer) {
+        b.setAttribute('aria-disabled', 'true');
+        b.title = 'Not with corHttp yet: coraine-build trains with libmicrohttpd only. Choose libmicrohttpd under HTTP server for this.';
+        b.append(el('span', 'ow', 'not with corHttp yet'));
+      }
+      b.addEventListener('click', () => { if (byServer) return; this.choice.mode = id; this.changed(); });
       return b;
     }));
     $('cp-workload').hidden = this.choice.mode !== 'tune';
@@ -357,7 +465,7 @@ export class Compile {
     //
     const off = shown.filter((f) => !(this.isOn(f.name) && this.forcedBy(f).length === 0)).map((f) => f.name);
     $('cp-sum-target').textContent = (arch || 'this machine') + ' · ' + ((this.caps && this.caps.distribution) || 'this distribution') + ' · binary';
-    $('cp-sum-server').textContent = 'libmicrohttpd (coraine-build\'s default)';
+    $('cp-sum-server').textContent = HTTP_LABEL[this.choice.httpServer] + (this.choice.httpServer === 'mhd' ? ' (coraine-build\'s default)' : '');
     $('cp-sum-stores').textContent = (mongoc ? 'corDB + mongoc' : 'corDB only') + '; history none, corDB, timescale';
     $('cp-sum-opt').textContent = MODE_LABEL[this.choice.mode] + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
     $('cp-sum-features').textContent = shown.length ? (off.length ? off.length + ' off: ' + off.join(', ') : 'all ' + shown.length + ' on') : '-';
@@ -373,12 +481,13 @@ export class Compile {
     this.render();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      api.compileChoice({ mode: this.choice.mode, features: this.choice.features, workload: this.choice.workload }).catch(() => {});
+      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, workload: this.choice.workload }).catch(() => {});
     }, 400);
   }
 
   body() {
     const b = { mode: this.choice.mode, features: this.changedFeatures() };
+    if (this.choice.httpServer !== 'mhd') b.httpServer = this.choice.httpServer;
     const name = $('cp-name').value.trim();
     if (name) b.name = name;
     if (this.choice.mode === 'tune') b.workload = this.choice.workload;
@@ -754,6 +863,7 @@ export class Compile {
     const name = $('cp-preset-name').value.trim();
     if (!name) { $('cp-preset-name').focus(); return; }
     const p = { name, mode: this.choice.mode, features: this.changedFeatures() };
+    if (this.choice.httpServer !== 'mhd') p.httpServer = this.choice.httpServer;
     if (this.choice.mode === 'tune' && this.choice.workload) p.workload = this.choice.workload;
     api.compilePresetSave(p).then((config) => {
       this.presets = (config.compile && config.compile.presets) || [];
@@ -766,7 +876,7 @@ export class Compile {
   presetLoad() {
     const p = this.presets.find((x) => x.name === $('cp-preset').value);
     if (!p) return;
-    this.choice = { mode: p.mode || 'release', features: { ...(p.features || {}) }, workload: p.workload || '' };
+    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, workload: p.workload || '' };
     this.changed();
   }
 
