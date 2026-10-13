@@ -96,12 +96,185 @@ function shellQuote(a) {
   return "'" + a.replace(/'/g, "'\\''") + "'";
 }
 
+//
+// What each choice is and what it costs: the source's own doc/building-details.md, a "#### <heading>" per
+// choice ("Build mode: Release", "HTTP server: libmicrohttpd", "Store: corDB only", "`SUBSCRIPTIONS`" - or
+// several switches in one heading, comma-separated), shown behind each box's '?'
+//
+const DOC_BASE = 'https://github.com/SEAMWARE/coraine/blob/main/doc/';
+const MODE_DOC = { release: 'Build mode: Release', pgo: 'Build mode: Profile-guided', tune: 'Build mode: Tuned for a workload', debug: 'Build mode: Debug' };
+const HTTP_DOC = { mhd: 'HTTP server: libmicrohttpd', builtin: 'HTTP server: corHttp (built in)' };
+const STORE_DOC = { false: 'Store: corDB only', true: 'Store: corDB + mongoc' };
+
+function docSections(md) {
+  const out = new Map();
+  if (!md) return out;
+  let key = null;
+  let body = [];
+  let fence = false;
+  const flush = () => { if (key) out.set(key, body.join('\n').trim()); };
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) fence = !fence;
+    if (!fence && /^#{1,4} /.test(line)) {
+      flush();
+      key = line.startsWith('#### ') ? line.slice(5).replace(/`/g, '').trim() : null;
+      body = [];
+      continue;
+    }
+    if (key) body.push(line);
+  }
+  flush();
+  return out;
+}
+
+//
+// docFeature - the section of a switch: its own heading, or one that names it among others
+//
+function docFeature(doc, name) {
+  for (const [k, v] of doc) {
+    if (k.split(/,\s*/).includes(name)) return { title: k, text: v };
+  }
+  return null;
+}
+
+//
+// docSize - what the section says the choice changes in the install: "-64 KiB", "+39.2 MiB", "< 4 KiB",
+// "no effect yet" (a switch declared that removes nothing); '' when it says no size
+//
+function docSize(text) {
+  if (!text) return '';
+  if (/\*\*Declared, removes nothing/.test(text)) return 'no effect yet';
+  const m = text.match(/Size(?:, on)?:\s+\**([+-]?[\d.]+\s(?:KiB|MiB))/);
+  if (m) return m[1].replace('-', '−').replace(/\s/, ' ');
+  if (/Size:\s+under a page/.test(text)) return '< 4 KiB';
+  return '';
+}
+
+//
+// mdInline / mdRender - the little Markdown the doc's sections use: paragraphs, "- " lists, ``` blocks,
+// `code`, **bold**, [links]. DOM nodes, never innerHTML: the text is the source's
+//
+function mdHref(href) {
+  if (/^https?:/.test(href)) return href;
+  if (href.startsWith('#')) return DOC_BASE + 'building-details.md' + href;
+  return DOC_BASE + href;
+}
+
+function mdInline(text) {
+  const frag = document.createDocumentFragment();
+  const re = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
+  let at = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > at) frag.append(text.slice(at, m.index));
+    if (m[1] !== undefined) frag.append(el('code', '', m[1]));
+    else if (m[2] !== undefined) frag.append(el('strong', '', m[2]));
+    else {
+      const a = el('a');
+      a.href = mdHref(m[4]);
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.append(mdInline(m[3]));
+      frag.append(a);
+    }
+    at = re.lastIndex;
+  }
+  if (at < text.length) frag.append(text.slice(at));
+  return frag;
+}
+
+function mdRender(md) {
+  const root = el('div', 'cp-doc');
+  const lines = md.split('\n');
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    if (line.trim() === '') { i++; continue; }
+    if (line.trim().startsWith('```')) {
+      const code = [];
+      for (i++; i < lines.length && !lines[i].trim().startsWith('```'); i++) code.push(lines[i].replace(/^ {2}/, ''));
+      i++;
+      root.append(el('pre', '', code.join('\n')));
+      continue;
+    }
+    if (/^- /.test(line)) {
+      const ul = el('ul');
+      while (i < lines.length && lines[i].trim() !== '' && !lines[i].trim().startsWith('```')) {
+        const item = [lines[i].replace(/^- /, '')];
+        for (i++; i < lines.length && /^ {2}\S/.test(lines[i]) && !lines[i].trim().startsWith('```'); i++) item.push(lines[i].trim());
+        const li = el('li');
+        li.append(mdInline(item.join(' ')));
+        ul.append(li);
+        if (i < lines.length && !/^- /.test(lines[i])) break;
+      }
+      root.append(ul);
+      continue;
+    }
+    const para = [];
+    for (; i < lines.length && lines[i].trim() !== '' && !/^- /.test(lines[i]) && !lines[i].trim().startsWith('```'); i++) para.push(lines[i].trim());
+    const p = el('p');
+    p.append(mdInline(para.join(' ')));
+    root.append(p);
+  }
+  return root;
+}
+
+//
+// helpShow - a section in a dialog; Escape, the button or a click beside it closes it
+//
+function helpShow(title, text) {
+  const ov = el('div', 'overlay cp-modal');
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.setAttribute('aria-label', title);
+  const card = el('div', 'card cp-help-card');
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const ok = el('button', 'btn', 'Close');
+  ok.type = 'button';
+  ok.addEventListener('click', close);
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  const h = el('h3');
+  h.append(mdInline(title));
+  const actions = el('div', 'actions');
+  actions.append(ok);
+  card.append(h, mdRender(text), actions);
+  ov.append(card);
+  document.body.append(ov);
+  ok.focus();
+}
+
+//
+// helpButton - the '?' of a box; null when the source's doc has no section for it
+//
+function helpButton(section, inline) {
+  if (!section) return null;
+  const q = el('button', 'cp-q' + (inline ? ' inline' : ''), '?');
+  q.type = 'button';
+  q.title = 'What is ' + section.title.replace(/`/g, '') + '?';
+  q.setAttribute('aria-label', q.title);
+  q.addEventListener('click', (e) => { e.stopPropagation(); helpShow(section.title, section.text); });
+  return q;
+}
+
+//
+// withHelp - a box and its '?' in the top right corner
+//
+function withHelp(box, section, cls) {
+  const q = helpButton(section, false);
+  if (!q) return box;
+  const w = el('div', cls);
+  w.append(box, q);
+  return w;
+}
+
 export class Compile {
   constructor() {
     this.caps = null;             // GET /api/capabilities
     this.features = [];           // [{name, default, description, group, requires}]
     this.openGroups = openGroupsLoad();   // the groups shown open
     this.featureError = '';
+    this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
     this.choice = { mode: 'release', httpServer: 'mhd', features: {}, workload: '' };
     this.presets = [];
     this.builds = [];
@@ -163,6 +336,7 @@ export class Compile {
       try {
         const f = await api.compileFeatures();
         this.features = f.features || [];
+        this.doc = docSections(f.doc);
         this.featureError = '';
       } catch (e) {
         this.featureError = e.message;
@@ -306,6 +480,23 @@ export class Compile {
     return out;
   }
 
+  //
+  // pill - a segmented choice, its size and its '?' beside it
+  //
+  pill(b, section) {
+    const size = docSize(section && section.text);
+    if (size) b.append(el('span', 'psz', ' ' + size));
+    const q = helpButton(section, true);
+    if (!q) return b;
+    const w = el('span', 'cp-segitem');
+    w.append(b, q);
+    return w;
+  }
+
+  docAt(title) {
+    return this.doc.has(title) ? { title, text: this.doc.get(title) } : null;
+  }
+
   render() {
     const cc = (this.caps && this.caps.compile) || {};
 
@@ -340,7 +531,7 @@ export class Compile {
       if (blocked) b.setAttribute('aria-disabled', 'true');
       b.title = blocked ? `Not with ${MODE_LABEL[this.choice.mode]} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for corHttp.` : desc;
       b.addEventListener('click', () => { if (!blocked) this.httpServerSet(id); });
-      return b;
+      return this.pill(b, this.docAt(HTTP_DOC[id]));
     }));
     const lostNow = this.features.filter((f) => (f.requires || []).some((r) => SETTINGS[r]) && this.forcedBy(f).length > 0).map((f) => f.name);
     $('cp-http-note').textContent = (this.choice.httpServer === 'builtin')
@@ -357,7 +548,7 @@ export class Compile {
       b.type = 'button';
       b.setAttribute('aria-pressed', String(mongoc === value));
       b.addEventListener('click', () => { this.choice.features.MONGOC = value; this.changed(); });
-      return b;
+      return this.pill(b, this.docAt(STORE_DOC[value]));
     }));
     const sn = $('cp-store-note');
     sn.textContent = (!cc.mongoc && mongoc) ? 'The mongo-c driver v2 is not installed here: this build would stop. corDB only, or install it.' : (!cc.mongoc ? 'mongoc needs the mongo-c driver v2 (not installed here).' : '');
@@ -383,13 +574,16 @@ export class Compile {
       b.title = forced.length ? this.forcedWhy(f, forced) : f.description;
       const txt = el('span', 'txt');
       txt.append(el('span', 'fn', f.name), el('span', 'fd', f.description));
+      const section = docFeature(this.doc, f.name);
+      const size = docSize(section && section.text);
+      if (size) txt.append(el('span', 'fsz', (size === 'no effect yet') ? 'compiled out: no effect yet' : (f.default ? 'off: ' : 'on: ') + size));
       const needs = (f.requires || []).map((r) => this.reqLabel(r));
       if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + needs.join(' and ') + ' - ' + forced.map((r) => this.reqLabel(r)).join(' and ') + (forced.length > 1 ? ' are' : ' is') + ' off'));
       else if (needs.length) txt.append(el('span', 'fq', 'Needs ' + needs.join(' and ')));
       txt.append(el('span', 'fdef', 'default ' + (f.default ? 'on' : 'off') + ((this.isOn(f.name) !== !!f.default) ? ' · changed' : '')));
       b.append(el('span', 'cp-fbox'), txt);
       b.addEventListener('click', () => { if (forced.length) return; this.choice.features[f.name] = !this.isOn(f.name); this.changed(); });
-      return { b, isOn };
+      return { b: withHelp(b, section, 'cp-fwrap'), isOn };
     };
 
     list.replaceChildren(...groups.map((g) => {
@@ -455,7 +649,7 @@ export class Compile {
         b.append(el('span', 'ow', 'not with corHttp yet'));
       }
       b.addEventListener('click', () => { if (byServer) return; this.choice.mode = id; this.changed(); });
-      return b;
+      return withHelp(b, this.docAt(MODE_DOC[id]), 'cp-owrap');
     }));
     $('cp-workload').hidden = this.choice.mode !== 'tune';
     if ($('cp-workload-path').value !== this.choice.workload) $('cp-workload-path').value = this.choice.workload;

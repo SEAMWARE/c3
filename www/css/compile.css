@@ -183,3 +183,29 @@
 .cp-modal { position: fixed; z-index: 50; }
 .cp-lost { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--text); }
 .cp-lost .why { font-size: 13px; line-height: 19px; color: var(--warn); }
+
+/* the '?' of a box: what it is and what it costs, from the source's doc/building-details.md */
+.cp-fwrap, .cp-owrap { position: relative; display: flex; min-width: 0; }
+.cp-fwrap > .cp-feature, .cp-owrap > .cp-opt { flex: 1 1 auto; min-width: 0; padding-right: 34px; }
+.cp-q {
+  position: absolute; top: 7px; right: 7px; width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--bg-deep); color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 18px; text-align: center; cursor: pointer;
+}
+.cp-q:hover, .cp-q:focus-visible { color: var(--text); border-color: var(--accent-2); }
+.cp-segitem { display: inline-flex; align-items: center; gap: 4px; }
+.cp-seg .cp-q.inline {
+  position: static; flex: 0 0 auto; width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%;
+  background: var(--bg-deep); color: var(--muted); border: 1px solid var(--line); font-size: 12px; font-weight: 600;
+}
+.cp-seg .cp-q.inline:hover, .cp-seg .cp-q.inline:focus-visible { color: var(--text); border-color: var(--accent-2); }
+.cp-feature .fsz { font-size: 12px; line-height: 17px; font-family: var(--mono); color: var(--accent-text); }
+.cp-seg button .psz { font-family: var(--mono); font-size: 12px; opacity: 0.8; }
+.cp-help-card { max-width: 640px; max-height: 80vh; overflow: auto; }
+.cp-doc { display: flex; flex-direction: column; gap: 10px; color: var(--muted); font-size: 14px; line-height: 21px; }
+.cp-doc p, .cp-doc ul { margin: 0; }
+.cp-doc ul { padding-left: 20px; }
+.cp-doc code { font-family: var(--mono); font-size: 13px; color: var(--text-2); }
+.cp-doc strong { color: var(--text); }
+.cp-doc a { color: var(--accent-text); }
+.cp-doc pre { margin: 0; padding: 10px; overflow: auto; border-radius: 6px; background: var(--bg-deep); font-family: var(--mono); font-size: 12px; }

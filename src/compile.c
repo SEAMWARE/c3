@@ -1536,7 +1536,21 @@ static void* featuresThread(void* vP)
     strAdd(&s, ", \"source\": ");      strAddJson(&s, cP->source);
     strAdd(&s, ", \"version\": ");     strAddJson(&s, (cP->version[0] != 0) ? cP->version : NULL);
     strAdd(&s, ", \"features\": ");    strAdd(&s, list);
+
+    //
+    // What each choice is and costs: the source's own doc/building-details.md (a "#### " heading per
+    // choice), shown behind each box's '?'. A source without it: "doc": null
+    //
+    int         docSize = 512 * 1024;
+    char*       doc     = (char*) malloc(docSize);
+    char*       tarv[]  = { (char*) "tar", (char*) "-xJOf", cP->source, (char*) "--wildcards", (char*) "--no-anchored",
+                           (char*) "coraine/doc/building-details.md", NULL };
+    int         dStatus = (doc != NULL) ? runCapture(tarv, doc, docSize, 60) : -1;
+
+    strAdd(&s, ", \"doc\": ");
+    strAddJson(&s, (dStatus == 0) ? doc : NULL);
     strAdd(&s, "}");
+    free(doc);
   }
   else
   {
