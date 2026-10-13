@@ -28,9 +28,20 @@ The result is `<dir>/install`: `bin/coraine`, `bin/coraine-import`, `plugins/`, 
 As in the design (`design/Main.dc.html`):
 
 - **Features** - every switch with its default and description, from `coraine-build
-  --list-features`; dependencies shown (SNAPSHOT_SUBSCRIPTIONS needs SUBSCRIPTIONS and
-  SNAPSHOT_WRITE); presets from the configuration file ("edge node", "full").
+  --list-features`, in the groups `CMakeLists.txt` puts them in (NGSI-LD API, Snapshots, JSON-LD
+  @context, Geo, Security, Beyond NGSI-LD, Operations, Stores and tools): a header per group, its
+  switches shown when it is opened, "n of m on" and how many are changed on the header; Expand all /
+  Collapse all; the open groups remembered in the browser. Dependencies shown on the switch ("Needs
+  ADMIN_API"), and a switch whose dependency is off is off ("Off: needs ..."): a switch, or a build
+  setting coraine-build always builds with (`HTTP_SERVER=mhd`, POLICY_API's). Presets from the
+  configuration file ("edge node", "full").
 - **Optimisation** - release, profile-guided, tuned (with a workload file chosen or recorded).
+- **HTTP server** - libmicrohttpd (coraine-build's default) or corHttp, the built-in server
+  (`--http-server builtin`). Choosing corHttp when a switch that needs libmicrohttpd is on asks first: a
+  dialog lists what is not built with it (POLICY_API - its port is a second listener) and why; Escape or
+  "Keep libmicrohttpd" leaves the choice as it was. With corHttp those switches are greyed out, their
+  tooltip saying why and how to have them back; Profile-guided and Tuned are greyed out too (coraine-build
+  trains with libmicrohttpd only), and corHttp while one of them is chosen.
 - **Stores** - MONGOC on or off (corDB is always built); temporal plugins are always built.
 - **Build** - the command shown before it runs; the build's output streamed as it happens; a
   progress line per phase (unpack, libraries, broker, training, profile-use, plugins, install);
@@ -41,8 +52,10 @@ As in the design (`design/Main.dc.html`):
 
 ## What it rests on
 
-1. **`coraine-build --list-features --json`** (coraine #316) - `[{ "name", "default", "description",
-   "requires": [...] }]`, generated from `CMakeLists.txt` the same way the text is.
+1. **`coraine-build --list-features --json`** (coraine #316; "group" and `NAME=value` requirements:
+   coraine `feat/feature-groups`) - `[{ "name", "default", "description", "group", "requires": [...] }]`,
+   generated from `CMakeLists.txt` the same way the text is. A source without groups puts every switch
+   in "Other".
 2. **Phase markers in `coraine-build`'s output** (coraine #316) - `coraine-build: phase <name>`: `build`,
    `tools` and `train` (`--pgo`, `--tune`), `install`, `bridges`, `check`, `done`.
 3. **A streamed response in corHttp** ([corHttp#13](https://github.com/SEAMWARE/corHttp/pull/13)) -

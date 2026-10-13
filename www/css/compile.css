@@ -47,6 +47,24 @@
 .cp-note.warn { color: var(--warn); }
 
 /* features */
+/* the groups: a header each, its switches shown when it is open */
+.cp-fgroups { display: flex; flex-direction: column; gap: 8px; }
+.cp-fgroup { border: 1px solid var(--line); border-radius: 8px; background: #12151B; }
+.cp-fgroup.open { padding-bottom: 10px; }
+.cp-fghead {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: none;
+  color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.cp-fghead .chev { width: 12px; color: var(--muted); }
+.cp-fghead .gname { font-weight: 600; font-size: 14px; }
+.cp-fghead .gcount { font-size: 13px; color: var(--muted); }
+.cp-fghead .gchanged { margin-left: auto; font-size: 11px; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.08em; }
+.cp-fgroup .cp-features { padding: 0 10px; }
+.cp-fexpand {
+  margin-left: auto; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: none;
+  color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+.cp-feature .fq { font-size: 12px; line-height: 17px; color: var(--muted); }
 .cp-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 1100px) { .cp-features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px)  { .cp-features { grid-template-columns: minmax(0, 1fr); } }
@@ -55,7 +73,8 @@
   cursor: pointer; color: var(--text); text-align: left; background: var(--panel-2); border: 1px solid #6B2C47;
 }
 .cp-feature[aria-checked="false"] { background: #12151B; border-color: var(--line); opacity: 0.7; }
-.cp-feature:disabled { cursor: default; }
+.cp-feature:disabled, .cp-feature[aria-disabled="true"] { cursor: not-allowed; }
+.cp-seg button[aria-disabled="true"], .cp-opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .cp-feature .cp-fbox {
   flex: 0 0 auto; margin-top: 5px; width: 12px; height: 12px; border-radius: 3px; background: var(--accent-2);
 }
@@ -159,3 +178,8 @@
 .cp-unavail h2 { color: var(--warn) !important; }
 .cp-stack { display: flex; flex-direction: column; gap: 24px; }
 .cp-off .cp-gate, .cp-off .cp-gate2 { opacity: 0.45; pointer-events: none; user-select: none; }
+
+/* the dialog before a choice turns switches off */
+.cp-modal { position: fixed; z-index: 50; }
+.cp-lost { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--text); }
+.cp-lost .why { font-size: 13px; line-height: 19px; color: var(--warn); }
