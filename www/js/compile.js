@@ -52,6 +52,31 @@ const duration = (s) => (s >= 60 ? Math.floor(s / 60) + ' min ' : '') + (s % 60)
 //
 // shellQuote - as the backend quotes the command it runs
 //
+//
+// The build settings a switch may need ("requires": ["HTTP_SERVER=mhd"]) - what coraine-build builds with
+// (it has no choice of them), and what to call them
+//
+const BUILT = { HTTP_SERVER: 'mhd' };
+const SETTING_LABEL = { 'HTTP_SERVER=mhd': 'the libmicrohttpd HTTP server' };
+
+//
+// openGroupsKey - the groups the Features card has open, remembered in this browser
+//
+const OPEN_GROUPS_KEY = 'c3.compile.openGroups';
+
+function openGroupsLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(OPEN_GROUPS_KEY) || '[]');
+    return new Set(Array.isArray(v) ? v : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function openGroupsSave(set) {
+  try { localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...set])); } catch (e) { /* not kept: fine */ }
+}
+
 function shellQuote(a) {
   if (a !== '' && /^[A-Za-z0-9_./=,:@+%-]+$/.test(a)) return a;
   return "'" + a.replace(/'/g, "'\\''") + "'";
@@ -60,7 +85,8 @@ function shellQuote(a) {
 export class Compile {
   constructor() {
     this.caps = null;             // GET /api/capabilities
-    this.features = [];           // [{name, default, description, requires}]
+    this.features = [];           // [{name, default, description, group, requires}]
+    this.openGroups = openGroupsLoad();   // the groups shown open
     this.featureError = '';
     this.choice = { mode: 'release', features: {}, workload: '' };
     this.presets = [];
@@ -156,7 +182,33 @@ export class Compile {
   // forcedOff - a switch is off whatever is chosen when one it requires is off (CMakeLists.txt)
   //
   forcedBy(f) {
-    return (f.requires || []).filter((r) => !this.isOn(r));
+    return (f.requires || []).filter((r) => !this.reqMet(r));
+  }
+
+  //
+  // reqMet - a requirement holds: a switch that is on, or a build setting coraine-build builds with (NAME=value)
+  //
+  reqMet(r) {
+    const eq = r.indexOf('=');
+    return (eq < 0) ? this.isOn(r) : (BUILT[r.slice(0, eq)] === r.slice(eq + 1));
+  }
+
+  reqLabel(r) {
+    return (r.indexOf('=') < 0) ? r : (SETTING_LABEL[r] || r);
+  }
+
+  //
+  // featureGroups - the switches shown, by group, in the order the source lists them
+  //
+  featureGroups(shown) {
+    const groups = [];
+    for (const f of shown) {
+      const name = f.group || 'Other';
+      let g = groups.find((x) => x.name === name);
+      if (!g) groups.push(g = { name, features: [] });
+      g.features.push(f);
+    }
+    return groups;
   }
 
   //
@@ -212,13 +264,14 @@ export class Compile {
     //
     // Features
     //
-    const grid = $('cp-features');
+    const list = $('cp-features');
     const shown = this.features.filter((f) => f.name !== 'MONGOC');
+    const groups = this.featureGroups(shown);
     let on = 0;
-    grid.replaceChildren(...shown.map((f) => {
+
+    const featureButton = (f) => {
       const forced = this.forcedBy(f);
       const isOn = this.isOn(f.name) && forced.length === 0;
-      if (isOn) on++;
 
       const b = el('button', 'cp-feature' + ((this.isOn(f.name) !== !!f.default) ? ' changed' : ''));
       b.type = 'button';
@@ -228,12 +281,55 @@ export class Compile {
       b.title = f.description;
       const txt = el('span', 'txt');
       txt.append(el('span', 'fn', f.name), el('span', 'fd', f.description));
-      if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + f.requires.join(' and ') + ' - ' + forced.join(' and ') + (forced.length > 1 ? ' are' : ' is') + ' off'));
+      const needs = (f.requires || []).map((r) => this.reqLabel(r));
+      if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + needs.join(' and ') + ' - ' + forced.map((r) => this.reqLabel(r)).join(' and ') + (forced.length > 1 ? ' are' : ' is') + ' off'));
+      else if (needs.length) txt.append(el('span', 'fq', 'Needs ' + needs.join(' and ')));
       txt.append(el('span', 'fdef', 'default ' + (f.default ? 'on' : 'off') + ((this.isOn(f.name) !== !!f.default) ? ' · changed' : '')));
       b.append(el('span', 'cp-fbox'), txt);
       b.addEventListener('click', () => { this.choice.features[f.name] = !this.isOn(f.name); this.changed(); });
-      return b;
+      return { b, isOn };
+    };
+
+    list.replaceChildren(...groups.map((g) => {
+      const open = this.openGroups.has(g.name);
+      const sec = el('div', 'cp-fgroup' + (open ? ' open' : ''));
+      const head = el('button', 'cp-fghead');
+      head.type = 'button';
+      head.setAttribute('aria-expanded', String(open));
+
+      const items = g.features.map(featureButton);
+      const gOn = items.filter((x) => x.isOn).length;
+      const gChanged = g.features.filter((f) => this.isOn(f.name) !== !!f.default).length;
+      on += gOn;
+
+      head.append(el('span', 'chev', open ? '▾' : '▸'), el('span', 'gname', g.name),
+                  el('span', 'gcount', `${gOn} of ${g.features.length} on`));
+      if (gChanged) head.append(el('span', 'gchanged', gChanged + ' changed'));
+      head.addEventListener('click', () => {
+        if (this.openGroups.has(g.name)) this.openGroups.delete(g.name); else this.openGroups.add(g.name);
+        openGroupsSave(this.openGroups);
+        this.render();
+      });
+
+      const body = el('div', 'cp-features');
+      body.setAttribute('role', 'group');
+      body.setAttribute('aria-label', g.name);
+      body.hidden = !open;
+      body.replaceChildren(...items.map((x) => x.b));
+
+      sec.append(head, body);
+      return sec;
     }));
+
+    const all = $('cp-fexpand');
+    const allOpen = groups.length > 0 && groups.every((g) => this.openGroups.has(g.name));
+    all.hidden = groups.length === 0;
+    all.textContent = allOpen ? 'Collapse all' : 'Expand all';
+    all.onclick = () => {
+      if (allOpen) this.openGroups.clear(); else groups.forEach((g) => this.openGroups.add(g.name));
+      openGroupsSave(this.openGroups);
+      this.render();
+    };
     $('cp-fcount').textContent = shown.length ? `${on} of ${shown.length} compiled in · a feature switched off is not in the binary at all` : '';
     $('cp-fnote').textContent = this.featureError ? 'The feature list could not be read: ' + this.featureError
       : (!cc.available ? 'The switches come from the source coraine-dev installs.' : '');
