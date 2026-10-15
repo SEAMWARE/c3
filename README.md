@@ -652,6 +652,7 @@ The backend's API, used by the pages:
 | `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
 | `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version` and coraine's `/admin/tenants` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities only (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`), with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
 is no CORS to configure on the broker. A proxied request leaves the event loop (`corHttpSuspend`) and

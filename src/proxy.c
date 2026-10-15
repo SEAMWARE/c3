@@ -4,13 +4,16 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// GET /api/proxy/<path>?<query> - the same request to a broker, its answer back to the page
+// /api/proxy/<path>?<query> - the same request to a broker, its answer back to the page
 //
 // The page names the broker in the X-C3-Broker header (http://host:port). The page and the API come
 // from the same origin, so the browser has no CORS rule to apply, and the broker needs no --corsOrigin.
 //
-// Read-only: GET, and only the NGSI-LD API (/ngsi-ld/...), /version and coraine's /admin/tenants (the
-// tenants Connect offers). The broker's access token (creds.c) goes with every request, as
+// GET: the NGSI-LD API (/ngsi-ld/...), /version and coraine's /admin/tenants (the tenants Connect offers).
+// POST, PATCH, PUT, DELETE: the entities only (/ngsi-ld/v1/entities, /ngsi-ld/v1/entities/...), with the
+// body and its Content-Type - and only from c3's own page: a write must carry an Origin of this machine
+// (a browser always sends one on them; a page of another site cannot set it, nor the X-C3-Broker header
+// without a preflight c3 never answers). The broker's access token (creds.c) goes with every request, as
 // Authorization: Bearer; the tenant is the page's NGSILD-Tenant.
 //
 // The broker may be slow or not there at all, and the HTTP loop has one thread: the request is
@@ -54,6 +57,10 @@ typedef struct ProxyJob
   char          url[PROXY_URL_MAX];
   char          tenant[256];
   char*         auth;                            // "Bearer <token>" (malloc), or NULL
+  CorRestVerb   verb;
+  char*         body;                            // a write's body (malloc), or NULL
+  int           bodyLen;
+  char          contentType[128];
 } ProxyJob;
 
 
@@ -158,7 +165,7 @@ static void* proxyThread(void* vP)
 {
   ProxyJob*          jobP  = (ProxyJob*) vP;
   CorHttpConn*       connP = jobP->connP;
-  CorRestKeyValue    headers[3];
+  CorRestKeyValue    headers[4];
   int                headerCount = 0;
   CorRestClientMulti* multiP     = corRestClientMultiCreate(1);
 
@@ -180,6 +187,13 @@ static void* proxyThread(void* vP)
     ++headerCount;
   }
 
+  if (jobP->body != NULL)
+  {
+    headers[headerCount].key   = (char*) "Content-Type";
+    headers[headerCount].value = jobP->contentType;
+    ++headerCount;
+  }
+
   if (multiP == NULL)
   {
     answerError(jobP, "Request failed", "out of memory");
@@ -188,7 +202,7 @@ static void* proxyThread(void* vP)
 
   corRestClientMultiMaxResponse(multiP, PROXY_MAX_RESPONSE);
 
-  if (corRestClientMultiAdd(multiP, CorVerbGet, jobP->url, headers, headerCount, NULL, 0, NULL, NULL) < 0)
+  if (corRestClientMultiAdd(multiP, jobP->verb, jobP->url, headers, headerCount, jobP->body, jobP->bodyLen, NULL, NULL) < 0)
   {
     answerError(jobP, "Bad broker URL", "the URL could not be used");
     goto done;
@@ -245,6 +259,8 @@ static void* proxyThread(void* vP)
       corHttpResponseHeader(connP, "Content-Type", corAllocStrdup(&connP->alloc, value));
     else if (strcasecmp(key, "NGSILD-Results-Count") == 0)
       corHttpResponseHeader(connP, "NGSILD-Results-Count", corAllocStrdup(&connP->alloc, value));
+    else if (strcasecmp(key, "Location") == 0)
+      corHttpResponseHeader(connP, "Location", corAllocStrdup(&connP->alloc, value));
   }
 
   if (link != NULL)
@@ -264,6 +280,7 @@ static void* proxyThread(void* vP)
     corRestClientMultiDestroy(multiP);
 
   free(jobP->auth);
+  free(jobP->body);
   free(jobP);
   corHttpResume(connP);
   return NULL;
@@ -280,9 +297,17 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   const char* broker = corHttpHeader(connP, "X-C3-Broker");
   const char* tenant = corHttpHeader(connP, "NGSILD-Tenant");
 
-  if (strcmp(connP->method.s, "GET") != 0)
+  const char*  method = connP->method.s;
+  CorRestVerb  verb;
+
+  if      (strcmp(method, "GET")    == 0) verb = CorVerbGet;
+  else if (strcmp(method, "POST")   == 0) verb = CorVerbPost;
+  else if (strcmp(method, "PATCH")  == 0) verb = CorVerbPatch;
+  else if (strcmp(method, "PUT")    == 0) verb = CorVerbPut;
+  else if (strcmp(method, "DELETE") == 0) verb = CorVerbDelete;
+  else
   {
-    serveError(connP, 405, "Method not allowed", "the proxy is read-only: GET");
+    serveError(connP, 405, "Method not allowed", "GET, POST, PATCH, PUT or DELETE");
     return;
   }
 
@@ -298,10 +323,29 @@ void proxyRequest(CorHttpConn* connP, const char* path)
     return;
   }
 
-  if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0))
+  if (verb == CorVerbGet)
   {
-    serveError(connP, 403, "Forbidden", "the proxy forwards the NGSI-LD API (/ngsi-ld/...), /version and /admin/tenants only");
-    return;
+    if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0))
+    {
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version and /admin/tenants only");
+      return;
+    }
+  }
+  else
+  {
+    if ((strcmp(path, "/ngsi-ld/v1/entities") != 0) && (strncmp(path, "/ngsi-ld/v1/entities/", 21) != 0))
+    {
+      serveError(connP, 403, "Forbidden", "the proxy forwards writes for the entities only (/ngsi-ld/v1/entities...)");
+      return;
+    }
+
+    const char* origin = corHttpHeader(connP, "Origin");
+    if ((origin == NULL) ||
+        ((strncmp(origin, "http://localhost:", 17) != 0) && (strncmp(origin, "http://127.0.0.1:", 17) != 0) && (strncmp(origin, "http://[::1]:", 13) != 0)))
+    {
+      serveError(connP, 403, "Forbidden", "a write must come from c3's own page (Origin: this machine)");
+      return;
+    }
   }
 
   ProxyJob* jobP = calloc(1, sizeof(ProxyJob));
@@ -327,6 +371,28 @@ void proxyRequest(CorHttpConn* connP, const char* path)
 
   if (tenant != NULL)
     snprintf(jobP->tenant, sizeof(jobP->tenant), "%s", tenant);
+
+  jobP->verb = verb;
+
+  //
+  // A write's body, as the page sent it, with its Content-Type (application/json by default)
+  //
+  if ((verb != CorVerbGet) && (verb != CorVerbDelete) && (connP->body.s != NULL) && (connP->body.len > 0))
+  {
+    const char* ct = corHttpHeader(connP, "Content-Type");
+
+    jobP->body = malloc(connP->body.len + 1);
+    if (jobP->body == NULL)
+    {
+      free(jobP);
+      serveError(connP, 500, "Internal error", "out of memory");
+      return;
+    }
+    memcpy(jobP->body, connP->body.s, connP->body.len);
+    jobP->body[connP->body.len] = 0;
+    jobP->bodyLen = connP->body.len;
+    snprintf(jobP->contentType, sizeof(jobP->contentType), "%s", ((ct != NULL) && (strlen(ct) < sizeof(jobP->contentType))) ? ct : "application/json");
+  }
 
   //
   // The broker's token - the broker as the configuration names it: no trailing slash
@@ -357,6 +423,7 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   if (pthread_create(&tid, &attr, proxyThread, jobP) != 0)
   {
     free(jobP->auth);
+    free(jobP->body);
     free(jobP);
     serveError(connP, 503, "Busy", "no thread for the request");
     corHttpResumeHere(connP);
