@@ -393,6 +393,65 @@ nav.pages span.later { color: var(--faint); cursor: default; }
   flex: 1; margin: 0; padding: 12px 16px; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 17px; color: var(--text-2);
 }
 
+/* The entity editor - over the graph's right side, the graph left usable (a target is picked in it) */
+.editor {
+  position: absolute; right: 12px; top: 72px; bottom: 12px; z-index: 8; width: min(600px, calc(100% - 24px));
+  display: flex; flex-direction: column; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 16px 48px #000C; font-size: 13px;
+}
+.editor.picking { opacity: 0.55; }
+.editor .ehead { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line-soft); }
+.editor .etitle { flex: 1; min-width: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor .emode { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.editor .eidrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 16px; border-bottom: 1px solid var(--line-soft); }
+.editor .eidrow .k { color: var(--muted); font-size: 12px; }
+.editor .eidrow input { flex: 1 1 160px; }
+.editor .ebody { flex: 1; overflow: auto; padding: 8px 10px 12px; }
+.editor .enone { color: var(--muted); margin: 8px 6px; }
+.editor .erow { border: 1px solid var(--line-soft); border-radius: 8px; padding: 6px 8px; margin: 6px 0; background: var(--panel-2); }
+.editor .erow.changed { border-color: var(--accent-2); }
+.editor .erow.gone, .editor .esub.gone { opacity: 0.55; }
+.editor .erow.gone .ename, .editor .esub.gone .ename { text-decoration: line-through; }
+.editor .eline { display: flex; align-items: center; gap: 8px; }
+.editor .ecaret { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; padding: 0; font-size: 12px; }
+.editor .ecaret[data-n]::after { content: attr(data-n); font-size: 10px; color: var(--dim); margin-left: 1px; }
+.editor .ename { font-weight: 600; overflow-wrap: anywhere; }
+.editor .ekind { color: var(--muted); font-size: 12px; }
+.editor .eds { font-family: var(--mono); font-size: 11px; color: var(--accent-soft); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; overflow-wrap: anywhere; }
+.editor .ebin { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; font-size: 13px; }
+.editor .ebin:hover { color: var(--bad); }
+.editor .ecell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 2px 28px; }
+.editor .esubs { margin: 6px 0 0 28px; border-left: 2px solid var(--line); padding-left: 8px; }
+.editor .esub { display: grid; grid-template-columns: minmax(90px, auto) auto 1fr auto; align-items: center; gap: 6px; margin: 4px 0; }
+.editor .esub .ecell { margin: 0; }
+.editor input, .editor select, .editor textarea {
+  min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-deep);
+  font-size: 13px; color: var(--text-2); box-sizing: border-box;
+}
+.editor input { flex: 1 1 180px; min-width: 0; }
+.editor input.short { flex: 0 1 110px; }
+.editor textarea { flex: 1 1 100%; width: 100%; padding: 6px 8px; resize: vertical; line-height: 17px; }
+.editor .mono { font-family: var(--mono); }
+.editor .bad { border-color: var(--bad) !important; }
+.editor .eholder { display: flex; flex: 1 1 200px; min-width: 0; }
+.editor .eholder > * { flex: 1; }
+.editor .elab { color: var(--muted); font-size: 12px; }
+.editor .elist { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.editor .eitem { display: flex; gap: 6px; align-items: center; }
+.editor .eitem .ebin { margin-left: 0; }
+.editor .eplus { align-self: flex-start; border: 1px dashed var(--line); background: none; color: var(--accent-text); border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px; }
+.editor .eplus:hover { border-color: var(--accent-2); }
+.editor .eadd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 0; }
+.editor .eadd.sub { margin: 6px 0 2px; }
+.editor .efoot { border-top: 1px solid var(--line-soft); padding: 8px 16px 10px; max-height: 40%; overflow: auto; }
+.editor .ereq summary { cursor: pointer; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.editor .ereq pre { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; line-height: 17px; color: var(--text-2); white-space: pre-wrap; }
+.editor .eerr { color: var(--bad); margin-bottom: 8px; overflow-wrap: anywhere; }
+.editor .eerr .muted { color: var(--muted); }
+.btn.small { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.eidrow { display: flex; align-items: center; gap: 8px; }
+.eidrow .eid { flex: 1; min-width: 0; }
+
 .toast {
   position: absolute; left: 50%; bottom: 16px; z-index: 8; transform: translateX(-50%); max-width: calc(100% - 32px);
   padding: 8px 14px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 14px; color: var(--text-2);

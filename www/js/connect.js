@@ -16,6 +16,7 @@ import { openMenu, closeMenu } from './menu.js';
 import { EntityMap, geometries, nameOf } from './map.js';
 import { OfflinePanel } from './offline.js';
 import { Live, isNullAttr } from './live.js';
+import { EntityEditor, NULL } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -130,7 +131,11 @@ export class Connect {
       viewport: $('viewport'), world: $('world'), svg: $('edges'),
       lines: $('edge-lines'), labels: $('edge-labels'), boxes: $('boxes'), pct: $('zoom-pct'),
     });
-    this.graph.onSelect = (id) => { this.showEntity(id); this.emap.select(id); };
+    this.graph.onSelect = (id) => {
+      if (this.picking && id) { this.picked(id); return; }
+      this.showEntity(id);
+      this.emap.select(id);
+    };
     this.graph.onMenu = (id, at, target) => this.menu(id, at, target);
     this.graph.onCollapse = (id) => {
       const n = this.graph.nodes.get(id);
@@ -141,7 +146,10 @@ export class Connect {
     // The map
     //
     this.emap = new EntityMap({ container: $('mapview') });
-    this.emap.onSelect = (id) => this.graph.select(id);
+    this.emap.onSelect = (id) => {
+      if (this.picking && id) { this.picked(id); return; }
+      this.graph.select(id);
+    };
     this.emap.onMenu = (id, at, target) => this.menu(id, at, target);
     this.emap.onView = (v) => {
       this.mapView = v;
@@ -155,6 +163,17 @@ export class Connect {
     // Live values: one subscription for the types loaded, its notifications applied in batches
     //
     this.live = new Live({ onBatch: (batch) => this.applyLive(batch), onStatus: (st) => this.liveStatus(st) });
+
+    //
+    // The entity editor - Save sends one request; a target can be picked in the graph or on the map
+    //
+    this.picking = null;
+    this.editor = new EntityEditor({
+      root: $('editor'),
+      toast: (t) => this.toast(t),
+      onSaved: (id) => this.refetch(id),
+      pick: (prompt, done) => { this.picking = done; this.pickSel = this.graph.sel; },
+    });
     this.offline = new OfflinePanel({ map: this.emap, toast: (t) => this.toast(t), onAreas: (areas, fonts) => this.emap.setAreas(areas, fonts) });
     $('view-graph').onclick = () => this.setView('graph', true);
     $('view-map').onclick = () => this.setView('map', true);
@@ -417,6 +436,7 @@ export class Connect {
 
     const ticket = ++this.loading;
     if (url !== this.broker) this.tokenClose();
+    if (url !== this.broker || tenant !== this.tenant) this.editor.close();
     this.broker = url;
     this.tokenUrl = url;
     this.tenant = tenant;
@@ -1164,6 +1184,15 @@ export class Connect {
     else if (geometries(e).length) items.push({ label: 'Show on the map', action: async () => { await this.setView('map', true); this.graph.select(id); this.emap.centerOn(id); } });
     items.push({ label: 'Copy id', action: () => this.copy(id, 'the id') });
     items.push({ label: 'Show JSON', action: () => this.showJson(id) });
+    items.push({ separator: true });
+    items.push({ label: 'Edit…', hint: 'attributes, as rows', action: () => this.edit(id) });
+    items.push({
+      label: 'Delete entity…',
+      items: [
+        { label: `Delete ${shortId(e)} - at the broker`, action: () => this.deleteEntity(id) },
+        { label: 'Cancel', action: () => {} },
+      ],
+    });
 
     openMenu({ x: at.x, y: at.y, items, label: `${types.map(typeLabel).join(', ')} ${shortId(e)}`, returnFocus: target });
   }
@@ -1186,6 +1215,99 @@ export class Connect {
       if (!ok) { this.toast('Could not copy ' + what); return; }
     }
     this.toast('Copied ' + (what === 'the id' ? text : what));
+  }
+
+  //
+  // edit - the entity, as the broker has it now, in the editor ('focus': an attribute to open)
+  //
+  async edit(id, focus = null) {
+    let e;
+    try {
+      e = await entityGet(this.broker, id);
+    } catch (err) {
+      this.toast(`The broker answered ${err.status || ''}: ${[err.title, err.detail].filter(Boolean).join(' - ')}`);
+      return;
+    }
+    this.closeJson();
+    const names = new Set();
+    for (const t of typesOf(e)) for (const n of (this.loadedKinds.get(t) || new Map()).keys()) names.add(n);
+    this.editor.open({ broker: this.broker, entity: e, mode: 'edit', focus, names: [...names].sort(cmp) });
+  }
+
+  //
+  // picked - an entity clicked while the editor waits for a target
+  //
+  // The click picks; it does not move the selection - the entity being edited stays selected
+  //
+  picked(id) {
+    const done = this.picking;
+    const sel = this.pickSel;
+    this.picking = null;
+    this.pickSel = null;
+    if (done) done(id);
+    if (sel && sel !== this.graph.sel) this.graph.select(sel);
+  }
+
+  //
+  // refetch - an entity as the broker has it after a write, into what Connect shows: the attributes it
+  // no longer has deleted, as a notification would report them; gone (404): deleted
+  //
+  async refetch(id) {
+    let e;
+    try {
+      e = await entityGet(this.broker, id);
+    } catch (err) {
+      if (err.status === 404) this.applyLive([{ id, deletedAt: new Date().toISOString() }]);
+      return;
+    }
+    const n = { ...e };
+    const cur = this.loadedById.get(id);
+    if (cur) for (const k of Object.keys(cur)) if (!(k in e) && k !== 'id' && k !== 'type') n[k] = { type: 'Property', value: NULL };
+    this.applyLive([n]);
+    if (this.shownId === id) this.showEntity(id);
+  }
+
+  async deleteEntity(id) {
+    const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
+    if (!r.ok) {
+      this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
+      return;
+    }
+    if (this.editor.isOpen && this.editor.id === id) this.editor.close();
+    this.toast('Deleted ' + id);
+    this.applyLive([{ id, deletedAt: new Date().toISOString() }]);
+  }
+
+  //
+  // attrMenu - an attribute's menu, from the entity panel: Edit it, Delete it (one instance, or all)
+  //
+  attrMenu(id, name, v, at, target) {
+    const ds = v && typeof v === 'object' && typeof v.datasetId === 'string' ? v.datasetId : null;
+    const e = this.byId.get(id);
+    const several = e && Array.isArray(e[name]) && e[name].length > 1;
+    const what = ds ? `${name} (${ds})` : (several ? `${name} - the default instance` : name);
+    const del = async (query) => {
+      const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '/attrs/' + encodeURIComponent(name) + query);
+      if (!r.ok) {
+        this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
+        return;
+      }
+      this.toast(`Deleted ${what}`);
+      this.refetch(id);
+    };
+    const items = [
+      { label: `Edit ${name}…`, action: () => this.edit(id, name) },
+      { separator: true },
+      { label: `Delete ${what}…`, items: [
+        { label: `Delete it - at the broker`, action: () => del(ds ? '?datasetId=' + encodeURIComponent(ds) : '') },
+        { label: 'Cancel', action: () => {} },
+      ] },
+    ];
+    if (several) items.push({ label: `Delete every instance of ${name}…`, items: [
+      { label: 'Delete them all - at the broker', action: () => del('?deleteAll=true') },
+      { label: 'Cancel', action: () => {} },
+    ] });
+    openMenu({ x: at.x, y: at.y, items, label: name, returnFocus: target });
   }
 
   //
@@ -1409,6 +1531,7 @@ export class Connect {
   // showEntity - the attribute panel
   //
   showEntity(id) {
+    this.shownId = id;
     const body = $('entity-body');
     const e = id ? this.byId.get(id) : null;
     $('entity-empty').hidden = !!e;
@@ -1416,7 +1539,14 @@ export class Connect {
     body.textContent = '';
     if (!e) return;
 
-    body.append(el('div', 'eid', e.id));
+    const head = el('div', 'eidrow');
+    head.append(el('div', 'eid', e.id));
+    const eb = el('button', 'btn small', 'Edit…');
+    eb.type = 'button';
+    eb.title = 'Edit the attributes';
+    eb.onclick = () => this.edit(id);
+    head.append(eb);
+    body.append(head);
     const types = el('div', 'etypes');
     for (const t of typesOf(e)) {
       const s = el('span', 'etype', typeLabel(t));
@@ -1428,6 +1558,10 @@ export class Connect {
 
     for (const [name, v] of attributes(e)) {
       const row = el('div', 'attr');
+      row.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        this.attrMenu(id, name, v, { x: ev.clientX, y: ev.clientY }, row);
+      });
       const kind = kindOf(v);
       if (kind !== 'Relationship' && kind !== 'ListRelationship') {
         //

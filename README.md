@@ -257,6 +257,31 @@ markers are coloured by), the downloaded map areas, and the last page:
     when it is not loaded.
   - **Hide type <T>**, **Copy id**, **Show JSON** (the entity as the broker returned it, in a panel
     with **Copy**; Esc closes it).
+  - **Edit…** - the editor (below), also the **Edit…** button of the attribute panel.
+  - **Delete entity…** › **Delete <id> - at the broker**: `DELETE /entities/{id}`.
+- **An attribute's menu** - right-click it in the attribute panel: **Edit <name>…** (the editor, that
+  attribute opened), **Delete <name>…** (`DELETE /entities/{id}/attrs/{name}`, with `datasetId` for an
+  instance of its own) and, for an attribute with several instances, **Delete every instance**
+  (`deleteAll=true`).
+- **The editor** - the entity as rows, over the graph's right side (the graph stays usable):
+  - each attribute instance is a row: **▸** opens its sub-attributes, **🗑** marks it deleted (struck
+    through until Save; **↺** restores it); a `datasetId` shows as a badge;
+  - the row's input is its kind's: a Property's value with its JSON type (number, text, true/false,
+    JSON), a Relationship's target - typed, or **pick in graph** (the next entity clicked, in the graph
+    or on the map) -, a Point's longitude and latitude, a LanguageProperty's languages, a list's items,
+    a JsonProperty's JSON; `observedAt` with **now**;
+  - **＋ sub-attribute** at the end of a row's sub-attributes, **＋ attribute** at the bottom - its name
+    (the names of the loaded entities' types offered), its kind, and a `datasetId` for another
+    instance of an attribute; an existing attribute keeps its kind;
+  - changed rows are marked, and an input that does not parse is marked and stops Save;
+  - **The request** at the bottom: what Save sends. Save sends **one** request - a merge
+    (`PATCH /entities/{id}`, TS 104 175 § 10.2.9): what changed, `"urn:ngsi-ld:null"` for what was
+    deleted - an attribute, a sub-attribute, a key inside an object value, one instance (with its
+    `datasetId`). A changed attribute always carries its main member (`value`, `object`, ...) and a
+    GeoProperty its whole value: the merge needs neither, some brokers refuse a fragment without them;
+  - after Save the entity is read again and drawn; the broker's error (a 401, a 403, a 400's detail,
+    a 207's attributes not updated) shows in the editor, which stays open; Esc closes it (twice, with
+    unsaved changes).
 - **States.** A splash screen while the backend gets ready - each step a real request (the backend,
   the configuration, the last broker's `/version`, at most 3 s); discovering, with progress over the
   types; loading, with progress over the pages; connected; an error card when the broker cannot be
