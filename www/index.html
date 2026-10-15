@@ -36,7 +36,21 @@
       <a href="#connect" id="nav-connect" class="active" aria-current="page">Explore</a>
       <a href="#docs" id="nav-docs">Documentation</a>
     </nav>
-    <div class="top-right"><span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware"></div>
+    <div class="top-right">
+      <button class="aibtn" type="button" id="ai-btn" aria-haspopup="dialog" aria-expanded="false" title="AI Assist - coming soon">✦ AI Assist</button>
+      <span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware">
+    </div>
+    <div class="aipop" id="ai-pop" role="dialog" aria-labelledby="ai-title" hidden>
+      <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">coming soon</span></h2><button class="iconbtn" type="button" id="ai-close" aria-label="Close">✕</button></div>
+      <p>Ask about the connected broker in your own words - <em>which vehicles near the depot were above 90 today?</em> - and c³ answers by querying it, with the entities of the answer highlighted in Explore.</p>
+      <p>When it comes, this is where you set it up:</p>
+      <ul>
+        <li><strong>Provider</strong> and <strong>model</strong> - the model is reached with your own key; c³ is the client.</li>
+        <li><strong>API key</strong> - kept by c³'s backend on this machine (with <em>remember</em>, beside <span class="mono">c3.json</span>, mode 600), never sent to the page. Or from the environment when c³ starts.</li>
+        <li><strong>A monthly limit</strong> - and the tokens each answer used, shown under it.</li>
+      </ul>
+      <p>The broker's own access token and tenant - <strong>Token</strong> and the tenant field in Explore - are what the assistant uses: it can do exactly what you can, and asks you before anything it would change.</p>
+    </div>
   </header>
 
   <main class="page" id="page-compile" hidden>

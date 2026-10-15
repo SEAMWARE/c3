@@ -11,6 +11,7 @@ import { brokerGet } from './api.js';
 import { Connect } from './connect.js';
 import { Compile } from './compile.js';
 import { Run } from './run.js';
+import { assistInit } from './assist.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -118,6 +119,7 @@ async function main() {
   const boot = await splash();
   if (!boot) return;
 
+  assistInit();
   const connect = new Connect();
   connect.setBrokers(boot.config.brokers);
 
