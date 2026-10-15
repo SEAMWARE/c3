@@ -9,7 +9,9 @@
 // The page names the broker in the X-C3-Broker header (http://host:port). The page and the API come
 // from the same origin, so the browser has no CORS rule to apply, and the broker needs no --corsOrigin.
 //
-// Milestone 1 is read-only: GET, and only the NGSI-LD API (/ngsi-ld/...) and /version.
+// Read-only: GET, and only the NGSI-LD API (/ngsi-ld/...), /version and coraine's /admin/tenants (the
+// tenants Connect offers). The broker's access token (creds.c) goes with every request, as
+// Authorization: Bearer; the tenant is the page's NGSILD-Tenant.
 //
 // The broker may be slow or not there at all, and the HTTP loop has one thread: the request is
 // suspended (corHttpSuspend), a thread of its own sends it with corRest's client, and the answer goes
@@ -51,6 +53,7 @@ typedef struct ProxyJob
   CorHttpConn*  connP;
   char          url[PROXY_URL_MAX];
   char          tenant[256];
+  char*         auth;                            // "Bearer <token>" (malloc), or NULL
 } ProxyJob;
 
 
@@ -155,7 +158,7 @@ static void* proxyThread(void* vP)
 {
   ProxyJob*          jobP  = (ProxyJob*) vP;
   CorHttpConn*       connP = jobP->connP;
-  CorRestKeyValue    headers[2];
+  CorRestKeyValue    headers[3];
   int                headerCount = 0;
   CorRestClientMulti* multiP     = corRestClientMultiCreate(1);
 
@@ -167,6 +170,13 @@ static void* proxyThread(void* vP)
   {
     headers[headerCount].key   = (char*) "NGSILD-Tenant";
     headers[headerCount].value = jobP->tenant;
+    ++headerCount;
+  }
+
+  if (jobP->auth != NULL)
+  {
+    headers[headerCount].key   = (char*) "Authorization";
+    headers[headerCount].value = jobP->auth;
     ++headerCount;
   }
 
@@ -253,6 +263,7 @@ static void* proxyThread(void* vP)
   if (multiP != NULL)
     corRestClientMultiDestroy(multiP);
 
+  free(jobP->auth);
   free(jobP);
   corHttpResume(connP);
   return NULL;
@@ -275,15 +286,21 @@ void proxyRequest(CorHttpConn* connP, const char* path)
     return;
   }
 
+  if ((tenant != NULL) && (tenantValid(tenant) == false))
+  {
+    serveError(connP, 400, "Bad request", "NGSILD-Tenant: 1-255 printable characters, no blank");
+    return;
+  }
+
   if ((broker == NULL) || ((strncmp(broker, "http://", 7) != 0) && (strncmp(broker, "https://", 8) != 0)))
   {
     serveError(connP, 400, "Bad request", "X-C3-Broker must name the broker: http://host:port");
     return;
   }
 
-  if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0))
+  if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0))
   {
-    serveError(connP, 403, "Forbidden", "the proxy forwards the NGSI-LD API (/ngsi-ld/...) and /version only");
+    serveError(connP, 403, "Forbidden", "the proxy forwards the NGSI-LD API (/ngsi-ld/...), /version and /admin/tenants only");
     return;
   }
 
@@ -311,6 +328,22 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   if (tenant != NULL)
     snprintf(jobP->tenant, sizeof(jobP->tenant), "%s", tenant);
 
+  //
+  // The broker's token - the broker as the configuration names it: no trailing slash
+  //
+  char brokerKey[512];
+  snprintf(brokerKey, sizeof(brokerKey), "%.*s", blen, broker);
+
+  char* token = credsToken(brokerKey, NULL);
+  if (token != NULL)
+  {
+    int alen   = strlen(token) + 8;
+    jobP->auth = malloc(alen);
+    if (jobP->auth != NULL)
+      snprintf(jobP->auth, alen, "Bearer %s", token);
+    free(token);
+  }
+
   jobP->connP = connP;
 
   pthread_t      tid;
@@ -323,6 +356,7 @@ void proxyRequest(CorHttpConn* connP, const char* path)
 
   if (pthread_create(&tid, &attr, proxyThread, jobP) != 0)
   {
+    free(jobP->auth);
     free(jobP);
     serveError(connP, 503, "Busy", "no thread for the request");
     corHttpResumeHere(connP);

@@ -280,12 +280,28 @@
       <form class="connform" id="connform">
         <input id="broker-url" list="broker-list" placeholder="http://localhost:1026" aria-label="Broker URL" autocomplete="off" spellcheck="false">
         <datalist id="broker-list"></datalist>
+        <input class="tenant" id="tenant" list="tenant-list" placeholder="default tenant" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant (NGSILD-Tenant) everything in Connect is read from - empty: the default tenant" autocomplete="off" spellcheck="false">
+        <datalist id="tenant-list"></datalist>
         <button class="btn primary" type="submit" id="connect-btn">Connect</button>
+        <button class="btn tokenbtn" type="button" id="token-btn" title="The access token sent to this broker" aria-haspopup="dialog" aria-expanded="false"><span class="tdot" id="token-dot"></span>Token</button>
         <button class="btn" type="button" id="reload-btn" title="Load the entities again" disabled>Reload</button>
       </form>
       <span class="counts" id="counts"></span>
       <span class="live" id="live" hidden><span class="dot"></span><span class="label" id="live-label"></span></span>
       <span class="notice" id="notice" hidden></span>
+      <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token" hidden>
+        <div class="tp-head"><span>Access token for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
+        <p class="tp-state" id="tp-state"></p>
+        <form id="tp-form">
+          <input type="password" id="tp-token" placeholder="the token - a JWT, or Bearer &lt;JWT&gt;" aria-label="Access token" autocomplete="off" spellcheck="false">
+          <label class="tp-remember"><input type="checkbox" id="tp-remember"> Remember it on this machine <span class="muted">(secrets.json beside c3.json, mode 600)</span></label>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="tp-set">Use it</button>
+            <button class="btn" type="button" id="tp-forget">Forget</button>
+          </div>
+        </form>
+        <p class="tp-note">Sent as <code>Authorization: Bearer</code> with every request to this broker - reads, live values, writes. The broker decides what it allows. Without one of its own, a broker gets c³'s default: <code>--token-file</code>, else <code>$C3_TOKEN</code>.</p>
+      </div>
     </div>
 
     <div class="cols">

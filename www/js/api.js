@@ -32,8 +32,24 @@ export const config       = () => call('GET', '/api/config');
 export const brokerTouch  = (url, name) => call('POST', '/api/brokers', name ? { url, name } : { url });
 export const brokerForget = (url) => call('DELETE', '/api/brokers', { url });
 export const uiSet        = (ui) => call('PUT', '/api/ui', ui);
-export const brokerTypes  = (url, types) => call('PUT', '/api/brokers/types', { url, types });
+export const brokerTypes  = (url, types, tenant = '') => call('PUT', '/api/brokers/types', tenant ? { url, types, tenant } : { url, types });
 export const brokerConnect = (url, patch) => call('PUT', '/api/brokers/connect', { url, ...patch });
+
+//
+// The brokers' access tokens - kept by the backend (creds.c); the page learns where one comes from and its
+// last characters, never the token
+//
+export const brokerTokens      = () => call('GET', '/api/brokers/tokens');
+export const brokerTokenSet    = (url, token, remember) => call('PUT', '/api/brokers/token', { url, token, remember });
+export const brokerTokenForget = (url) => call('DELETE', '/api/brokers/token', { url });
+
+//
+// The tenant each broker is worked on in - every request to it through the proxy carries it
+//
+const tenants = new Map();
+export function setTenant(broker, tenant) {
+  if (tenant) tenants.set(broker, tenant); else tenants.delete(broker);
+}
 
 //
 // The map's downloaded areas
@@ -63,7 +79,8 @@ export const buildDelete         = (name) => call('DELETE', '/api/builds/' + enc
 //
 // brokerGet - a GET to the broker, through the backend's proxy
 //
-// pathAndQuery starts with /ngsi-ld/ or is /version. The answer:
+// pathAndQuery starts with /ngsi-ld/, or is /version or /admin/tenants; the broker's tenant (setTenant)
+// goes with it as NGSILD-Tenant, its token the backend adds. The answer:
 //   { ok, status, headers, body, reached }
 // reached is false when the backend could not reach the broker at all (the proxy's own 502); body is
 // the parsed JSON, or null.
@@ -71,7 +88,9 @@ export const buildDelete         = (name) => call('DELETE', '/api/builds/' + enc
 export async function brokerGet(broker, pathAndQuery) {
   let response;
   try {
-    response = await fetch('/api/proxy' + pathAndQuery, { headers: { 'X-C3-Broker': broker } });
+    const headers = { 'X-C3-Broker': broker };
+    if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
+    response = await fetch('/api/proxy' + pathAndQuery, { headers });
   } catch (e) {
     return { ok: false, status: 0, headers: new Headers(), body: { title: 'c3 backend not reachable', detail: String(e.message || e) }, reached: false };
   }

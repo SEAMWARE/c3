@@ -653,3 +653,24 @@ void sseFromFile(Str* sP, int fd, int64_t from, int64_t end)
 
   free(buf);
 }
+
+
+
+// -----------------------------------------------------------------------------
+//
+// tenantValid - a tenant c3 sends as NGSILD-Tenant: 1-255 printable ASCII characters, no blank
+//
+bool tenantValid(const char* t)
+{
+  int len = strlen(t);
+
+  if ((len == 0) || (len > 255))
+    return false;
+
+  for (int ix = 0; ix < len; ix++)
+  {
+    if ((t[ix] <= ' ') || (t[ix] > '~'))
+      return false;
+  }
+  return true;
+}

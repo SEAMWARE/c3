@@ -12,6 +12,8 @@
 //   DELETE /api/brokers         {"url"}: forget a broker
 //   PUT    /api/brokers/types   {"url", "types"}: the entity types Connect loads from a broker
 //   PUT    /api/brokers/connect {"url", "view", "map", "colourBy"}: Connect's view of a broker
+//   GET    /api/brokers/tokens  which brokers have an access token, from where - never the token (creds.c)
+//   PUT    /api/brokers/token   {"url", "token", "remember"}; DELETE {"url"} (creds.c)
 //   PUT    /api/ui              {"lastPage"}
 //   ...    /api/maps/...        the map's downloaded areas (maps.c)
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
@@ -506,6 +508,8 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configBrokerTypes);
   else if ((strcmp(path, "/api/brokers/connect") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configBrokerConnect);
+  else if ((strcmp(path, "/api/brokers/token") == 0) || (strcmp(path, "/api/brokers/tokens") == 0))
+    credsRequest(connP, path);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configUiSet);
   else
