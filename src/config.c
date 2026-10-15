@@ -16,7 +16,9 @@
 //         "url":      "http://localhost:1026",
 //         "name":     "localhost:1026",
 //         "lastUsed": "2026-10-09T17:30:00Z",
-//         "connect":  { "types": ["Building", "Floor"], "view": "map",
+//         "tenant":   "city",                       the tenant Connect works on ("": the default)
+//         "tenants":  ["city", "airport"],          the ones used, most recent first
+//         "connect":  { "types": ["Building", "Floor"], "tenantTypes": { "city": ["Street"] }, "view": "map",
 //                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type" }
 //       }
 //     ],
@@ -24,6 +26,8 @@
 //                               "maxzoom": 15, "bytes": 31457280, "created": "...", "build": "20261009" } ] },
 //     "ui":      { "lastPage": "connect" }
 //   }
+//
+// No access token is ever in it - those are in secrets.json beside it, when remembered (creds.c).
 //
 // The most recently used broker is first. Members this version does not know are kept as they are,
 // also inside a broker.
@@ -73,6 +77,7 @@ static int    cfgBrokerCount = 0;
 #define CONFIG_VERSION      1
 #define CONFIG_BROKERS_MAX  50
 #define CONFIG_TYPES_MAX    1000
+#define CONFIG_TENANTS_MAX  20
 
 static const char* configDefault = "{\"version\": 1, \"brokers\": [], \"ui\": {\"lastPage\": \"connect\"}}";
 
@@ -793,7 +798,9 @@ bool configUiSet(char* body, char* errBuf, int errLen)
 //
 // configBrokerTypes - PUT /api/brokers/types {"url": "...", "types": ["Building", "Floor"]}
 //
-// The entity types Connect loads from this broker, kept as the broker's "connect": {"types": [...]}.
+// The entity types Connect loads from this broker, kept as the broker's "connect": {"types": [...]} - for
+// the default tenant; for another one ("tenant" in the body), in "connect": {"tenantTypes": {"<tenant>":
+// [...]}}: each tenant holds types of its own.
 // An empty list is a choice too (nothing loaded); a broker that never had a choice has no "types".
 // The broker must be in the list already (Connect adds it when the broker has answered).
 //
@@ -812,6 +819,15 @@ bool configBrokerTypes(char* body, char* errBuf, int errLen)
 
   if (stringMember(bodyP, "url", true, 2048, &url, errBuf, errLen) == false)
     goto done;
+
+  const char* tenant;
+  if (stringMember(bodyP, "tenant", false, 255, &tenant, errBuf, errLen) == false)
+    goto done;
+  if ((tenant != NULL) && (tenant[0] != 0) && (tenantValid(tenant) == false))
+  {
+    snprintf(errBuf, errLen, "\"tenant\": 1-255 printable characters, no blank");
+    goto done;
+  }
 
   CorNode* typesP = corTreeLookup(bodyP, "types");
   if ((typesP == NULL) || (typesP->type != CorArray))
@@ -852,11 +868,23 @@ bool configBrokerTypes(char* body, char* errBuf, int errLen)
     connectP = corTreeLookup(brokerP, "connect");
   }
 
-  CorNode* listP = corTreeArray(&doc.alloc, "types");
+  bool     other = (tenant != NULL) && (tenant[0] != 0);
+  CorNode* listP = corTreeArray(&doc.alloc, other ? tenant : "types");
   for (CorNode* tP = typesP->value.head; tP != NULL; tP = tP->next)
     corTreeChildAdd(listP, corTreeString(&doc.alloc, NULL, tP->value.s));
 
-  corTreeChildAddOrReplace(connectP, "types", listP);
+  if (other)
+  {
+    CorNode* perP = corTreeLookup(connectP, "tenantTypes");
+    if ((perP == NULL) || (perP->type != CorObject))
+    {
+      corTreeChildAddOrReplace(connectP, "tenantTypes", corTreeObject(&doc.alloc, "tenantTypes"));
+      perP = corTreeLookup(connectP, "tenantTypes");
+    }
+    corTreeChildAddOrReplace(perP, tenant, listP);
+  }
+  else
+    corTreeChildAddOrReplace(connectP, "types", listP);
   ok = commit(&doc, errBuf, errLen);
 
  done:
@@ -887,13 +915,15 @@ static bool numberOf(CorNode* nodeP, double* vP)
 
 // -----------------------------------------------------------------------------
 //
-// configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy"}
+// configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy", "tenant"}
 //
 // Connect's view of a broker, kept in its "connect" object beside "types":
 //
 //   "view":     "graph" or "map" - the one shown
 //   "map":      {"center": [lon, lat], "zoom": z, "bearing": b, "pitch": p} - the map's view
 //   "colourBy": "type", or the name of a Relationship: the map's markers coloured by its target
+//   "tenant":   the tenant Connect works on ("": the default one) - kept in the broker itself, beside
+//               "tenants": the ones used before, most recent first, CONFIG_TENANTS_MAX of them
 //
 // Each member is optional; the ones given replace the stored ones, the others stay.
 //
@@ -918,6 +948,15 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     goto done;
   if (stringMember(bodyP, "colourBy", false, 2048, &colourBy, errBuf, errLen) == false)
     goto done;
+
+  const char* tenant;
+  if (stringMember(bodyP, "tenant", false, 255, &tenant, errBuf, errLen) == false)
+    goto done;
+  if ((tenant != NULL) && (tenant[0] != 0) && (tenantValid(tenant) == false))
+  {
+    snprintf(errBuf, errLen, "\"tenant\": 1-255 printable characters, no blank");
+    goto done;
+  }
 
   if ((view != NULL) && (strcmp(view, "graph") != 0) && (strcmp(view, "map") != 0))
   {
@@ -977,6 +1016,34 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     corTreeChildAddOrReplace(connectP, "colourBy", corTreeString(&doc.alloc, "colourBy", colourBy));
   if (newMapP != NULL)
     corTreeChildAddOrReplace(connectP, "map", newMapP);
+
+  if (tenant != NULL)
+  {
+    corTreeChildAddOrReplace(brokerP, "tenant", corTreeString(&doc.alloc, "tenant", tenant));
+
+    if (tenant[0] != 0)
+    {
+      //
+      // "tenants": this one first, the others after it as they were, CONFIG_TENANTS_MAX in all
+      //
+      CorNode* oldP = corTreeLookup(brokerP, "tenants");
+      CorNode* newP = corTreeArray(&doc.alloc, "tenants");
+      int      n    = 1;
+
+      corTreeChildAdd(newP, corTreeString(&doc.alloc, NULL, tenant));
+      if ((oldP != NULL) && (oldP->type == CorArray))
+      {
+        for (CorNode* tP = oldP->value.head; (tP != NULL) && (n < CONFIG_TENANTS_MAX); tP = tP->next)
+        {
+          if ((tP->type != CorString) || (strcmp(tP->value.s, tenant) == 0))
+            continue;
+          corTreeChildAdd(newP, corTreeString(&doc.alloc, NULL, tP->value.s));
+          ++n;
+        }
+      }
+      corTreeChildAddOrReplace(brokerP, "tenants", newP);
+    }
+  }
 
   ok = commitIfChanged(&doc, errBuf, errLen);
 

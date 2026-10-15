@@ -5,7 +5,7 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// The page says what it shows - watch(broker, types) - and the backend keeps one subscription for it on
+// The page says what it shows - watch(broker, types, tenant) - and the backend keeps one subscription for it on
 // the broker: over the broker's WebSocket transport when it has one, else an HTTP subscription that
 // notifies the backend. Either way the notifications arrive here, as {"op": "notify", "broker",
 // "message": {"body": <Notification>}}.
@@ -126,17 +126,17 @@ export class Live {
 
   send() {
     if (!this.ready || !this.ws) return;
-    const msg = this.want ? { op: 'watch', broker: this.want.broker, types: this.want.types } : { op: 'unwatch' };
+    const msg = this.want ? { op: 'watch', broker: this.want.broker, tenant: this.want.tenant, types: this.want.types } : { op: 'unwatch' };
     this.ws.send(JSON.stringify(msg));
   }
 
   //
-  // watch - the entities of 'types' on 'broker'; the same again is not sent again
+  // watch - the entities of 'types' on 'broker', in 'tenant' ('': the default); the same again is not sent again
   //
-  watch(broker, types) {
+  watch(broker, types, tenant = '') {
     const t = [...types].sort();
-    if (this.want && this.want.broker === broker && JSON.stringify(this.want.types) === JSON.stringify(t)) return;
-    this.want = { broker, types: t };
+    if (this.want && this.want.broker === broker && this.want.tenant === tenant && JSON.stringify(this.want.types) === JSON.stringify(t)) return;
+    this.want = { broker, tenant, types: t };
     clearTimeout(this.lostTimer);
     this.pending.clear();
     this.send();

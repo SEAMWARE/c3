@@ -76,7 +76,7 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 
 ```
 c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
-   [--coraine-build <path>] [--source <tarball>]
+   [--coraine-build <path>] [--source <tarball>] [--token-file <file>]
 ```
 
 | Option | Default | |
@@ -88,6 +88,7 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--planet`, `-pl` | the newest daily build at `build.protomaps.com` | the Protomaps planet (`.pmtiles` URL) map areas are extracted from |
 | `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package) | the script Compile runs |
 | `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz` | the coraine source tarball Compile builds from (passed on as `--source`) |
+| `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Connect, below) - read again whenever it changes |
 
 Every option can also be given in the environment: `C3_` and the option's name, upper case, `-` as `_`
 (`C3_CORAINE_BUILD`, `C3_SOURCE`).
@@ -124,8 +125,11 @@ markers are coloured by), the downloaded map areas, and the last page:
       "url": "http://localhost:1090",
       "name": "localhost:1090",
       "lastUsed": "2026-10-09T17:35:43Z",
+      "tenant": "",
+      "tenants": ["city"],
       "connect": {
         "types": ["BikeStation", "District"],
+        "tenantTypes": { "city": ["Street"] },
         "view": "map",
         "colourBy": "inDistrict",
         "map": { "center": [-71.135, 42.3836], "zoom": 13.3 }
@@ -156,8 +160,11 @@ markers are coloured by), the downloaded map areas, and the last page:
 
 - A broker is added, or moved to the front with a new `lastUsed`, when it has answered the discovery;
   the 50 most recent are kept. A broker already in the list keeps its other members.
-- `connect.types`: the types loaded with **Load**, sorted. `[]` is a choice too (nothing loaded); a
-  broker with no `types` was never picked for.
+- `tenant`: the tenant Connect works on at this broker (`""`: the default one); `tenants`: the ones used,
+  most recent first, 20 at most.
+- `connect.types`: the types loaded with **Load** in the default tenant, sorted; `connect.tenantTypes`:
+  the same per tenant. `[]` is a choice too (nothing loaded); a broker with no `types` was never picked
+  for.
 - `connect.view` (`graph` or `map`), `connect.colourBy` (`type`, or a Relationship's name) and
   `connect.map` (`center` `[lon, lat]`, `zoom`, `bearing`, `pitch`): kept as they change - the map's view
   when the map is moved by hand.
@@ -170,12 +177,32 @@ markers are coloured by), the downloaded map areas, and the last page:
   their directory is the truth (Compile, below).
 - `run.brokers`: the brokers Run started, with their options (Run, below) - kept when one is started, removed
   with **Forget**. What runs is not in the file: the processes and containers are the truth.
+- No access token is ever in it: a remembered token is in `secrets.json` beside it (Connect, below).
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
   written.
 
 ## Connect
 
+- **The tenant.** The field beside the URL: the tenant (`NGSILD-Tenant`) everything is read from - the
+  discovery, the entities, the live values; empty, the default tenant. It is kept per broker, and offered
+  again with the ones used before and, from coraine with its admin plugin, `GET /admin/tenants`. Another
+  tenant is a new connection: its own types, its own picks.
+- **The access token.** **Token** beside **Connect** - its dot is green when a token is sent. Every
+  request to the broker carries `Authorization: Bearer <token>` - through the proxy, the live values'
+  subscription over HTTP, and each message over the broker's WebSocket (in its `metadata`, as coraine
+  reads it). The broker decides what it allows: a **401** shows the broker's reason with a **Token…**
+  button, a **403** says the token was understood and the request not allowed. A broker's token, in
+  this order:
+  - its own, typed in **Token**: kept in memory, and with **Remember it on this machine** in
+    `secrets.json` beside `c3.json` (mode 600 - a file others can read is not used);
+  - `--token-file <file>`: the default for every broker, read again whenever the file changes - so a
+    script outside c³ can keep a short-lived token (the Data Space Connector's last about 30 minutes)
+    fresh;
+  - `$C3_TOKEN`, when there is no `--token-file`.
+
+  A token is never on the command line, never in `c3.json`, and never sent to the page: the page learns
+  where it comes from and its last four characters (`GET /api/brokers/tokens`).
 - **Discovery** - what a broker holds, before any entity is loaded:
   - `GET /ngsi-ld/v1/types?details=true` - the types and their attribute names (a broker that does not
     answer it is asked for `GET /types`);
@@ -619,9 +646,12 @@ The backend's API, used by the pages:
 | `DELETE /api/maps/areas` `{"id"}` | delete an area: its file and its entry |
 | `GET /api/maps/areas/<id>.pmtiles` | the file, with Range |
 | `GET /api/maps/fonts/<fontstack>/<range>.pbf` | a glyph range of a downloaded font stack |
-| `GET /api/live` | the page's WebSocket (live values). The page sends `{"op": "watch", "broker", "types"}` or `{"op": "unwatch"}`; the backend sends `hello` (the session), `status` (`mode` `ws`, `http` or `off`, `subscription`, `types`, `why` not the WebSocket, `detail` of a failure), `notify` (`{"broker", "message"}` - the broker's WebSocket message as it came, or `{"body": ...}` for an HTTP notification: `message.body` is the Notification) and `lost` (the broker closed its WebSocket). The `Origin`, when sent, must be this machine. |
+| `GET /api/live` | the page's WebSocket (live values). The page sends `{"op": "watch", "broker", "tenant", "types"}` (`tenant` optional, `""` the default one) or `{"op": "unwatch"}`; the backend sends `hello` (the session), `status` (`mode` `ws`, `http` or `off`, `subscription`, `types`, `why` not the WebSocket, `detail` of a failure), `notify` (`{"broker", "message"}` - the broker's WebSocket message as it came, or `{"body": ...}` for an HTTP notification: `message.body` is the Notification) and `lost` (the broker closed its WebSocket). The `Origin`, when sent, must be this machine. |
+| `GET /api/brokers/tokens` | which brokers have an access token of their own, and c³'s default: `{"brokers": {"<url>": {"source", "tail", "length"}}, "default": {...} or null, "tokenFile"}` - `source` is `typed`, `remembered`, `file` or `env`; never the token |
+| `PUT /api/brokers/token` | `{"url", "token", "remember"}`: the broker's token (`Bearer ` in front is taken off); RFC 6750's characters only, 16 KB at most |
+| `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`) and `/version` only. Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version` and coraine's `/admin/tenants` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
 is no CORS to configure on the broker. A proxied request leaves the event loop (`corHttpSuspend`) and

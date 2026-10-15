@@ -78,6 +78,7 @@ extern bool  dataHome(const char* sub, char* out, int outLen);   // $XDG_DATA_HO
 
 extern int   runCapture(char* const argv[], char* out, int outSize, int timeoutS);   // the exit status (waitpid's), -1: not run
 extern bool  inPath(const char* name, char* out, int outLen);
+extern bool  tenantValid(const char* t);          // 1-255 printable ASCII characters, no blank - an NGSILD-Tenant
 extern void  groupStop(pid_t pgid);               // SIGTERM to what is left of a process group, SIGKILL 3 s later
 
 typedef struct ProcSpawn
@@ -152,6 +153,16 @@ extern char*        configMapsAreasText(CorAlloc* allocP);                   // 
 extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
 extern bool         configCompilePreset(char* body, char* errBuf, int errLen);       // PUT /api/compile/presets
 extern bool         configCompilePresetDelete(char* body, char* errBuf, int errLen); // DELETE /api/compile/presets
+
+
+
+// -----------------------------------------------------------------------------
+//
+// creds.c - the access tokens sent to brokers
+//
+extern void   credsInit(const char* tokenFile);                           // after configPathResolve
+extern char*  credsToken(const char* broker, const char** sourceP);       // malloc'ed, or NULL
+extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s)
 extern bool         configRunBrokerPut(const char* defJson, char* errBuf, int errLen);  // a broker of Run, added or replaced (by name)
 extern bool         configRunBrokerDelete(const char* name, char* errBuf, int errLen);  // and forgotten
 

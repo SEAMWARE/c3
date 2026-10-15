@@ -44,6 +44,7 @@ char            c3ConfigPath[4096];
 static char*    configArg  = NULL;
 static char*    wwwArg     = NULL;
 static bool     noBrowser  = false;
+static char*    tokenFileArg = NULL;
 static CorHttpServer server;
 
 
@@ -61,6 +62,7 @@ static CorArg options[] =
   { "--planet",     "-pl", CorArgString, &c3Planet,  CorArgOpt, NULL,     NULL,  NULL,      "the Protomaps planet (.pmtiles URL) map areas are extracted from (default: the newest daily build)" },
   { "--coraine-build", "-cb", CorArgString, &c3CoraineBuild, CorArgOpt, NULL, NULL, NULL,   "coraine-build, for Compile (default: the one in $PATH - coraine-dev)" },
   { "--source",     "-src", CorArgString, &c3Source, CorArgOpt, NULL,     NULL,  NULL,      "the coraine source tarball Compile builds from (default: coraine-build's, the one coraine-dev installs)" },
+  { "--token-file", "-tf", CorArgString, &tokenFileArg, CorArgOpt, NULL,  NULL,  NULL,      "a file holding the access token sent to brokers that have none of their own - read again when it changes (default: $C3_TOKEN)" },
   CORARGS_END
 };
 
@@ -258,6 +260,7 @@ int main(int argC, char* argV[])
 
   server.maxRequestSize = 16 * 1024 * 1024;      // a notification carries whole entities
   configLoad();
+  credsInit(tokenFileArg);                       // before liveInit: its sweep sends the tokens
   liveInit();
 
   if (mapsInit() == false)

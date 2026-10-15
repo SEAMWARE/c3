@@ -201,6 +201,31 @@ nav.pages span.later { color: var(--faint); cursor: default; }
   font-family: var(--mono); font-size: 13px; color: var(--text-2);
 }
 .connform input:focus { border-color: var(--accent-2); outline: none; }
+.connform input.tenant { flex: 0 1 170px; }
+
+.connbar { position: relative; }
+.tokenbtn { display: inline-flex; align-items: center; gap: 7px; }
+.tokenbtn .tdot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tokenbtn.set .tdot { background: var(--ok, #3FB27F); }
+.tokenpop {
+  position: absolute; right: 14px; top: calc(100% + 6px); z-index: 30; width: min(460px, calc(100vw - 32px));
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); font-size: 13px;
+}
+.tokenpop .tp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; }
+.tokenpop .tp-head .mono { font-family: var(--mono); font-weight: 400; }
+.tokenpop .tp-state { margin: 8px 0; color: var(--text-2); }
+.tokenpop input[type="password"] {
+  width: 100%; box-sizing: border-box; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg-deep); font-family: var(--mono); font-size: 13px; color: var(--text-2);
+}
+.tokenpop .tp-remember { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.tokenpop .actions { display: flex; gap: 8px; }
+.tokenpop .tp-note { margin: 10px 0 0; color: var(--muted); }
+.tokenpop .tp-note code { font-family: var(--mono); font-size: 12px; }
+.tokenpop .muted { color: var(--muted); }
+.iconbtn { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px; }
+.iconbtn:hover { color: var(--text); }
 
 .btn {
   min-height: 36px; padding: 0 14px; border-radius: 8px;

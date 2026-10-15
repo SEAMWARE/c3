@@ -105,6 +105,8 @@ function withoutNulls(n) {
 export class Connect {
   constructor() {
     this.broker = null;
+    this.tenant = '';                            // the tenant everything is read from ('': the default one)
+    this.brokers = [];                           // the configuration's brokers
     this.disc = null;                            // discover()'s answer, null when the broker has none
     this.picks = [];                             // the types ticked, sorted
     this.loadedPicks = null;                     // the types the loaded entities are of (null: all)
@@ -181,8 +183,27 @@ export class Connect {
     $('zoom-in').onclick = () => this.graph.zoomCenter(1.25);
     $('zoom-out').onclick = () => this.graph.zoomCenter(0.8);
     $('zoom-fit').onclick = () => this.graph.fit();
-    $('connform').onsubmit = (e) => { e.preventDefault(); this.connect($('broker-url').value); };
-    $('reload-btn').onclick = () => this.broker && this.connect(this.broker);
+    $('connform').onsubmit = (e) => { e.preventDefault(); this.connect($('broker-url').value, $('tenant').value); };
+    $('reload-btn').onclick = () => this.broker && this.connect(this.broker, this.tenant);
+    $('tenant').onchange = () => { if (this.broker && $('tenant').value.trim() !== this.tenant) this.connect($('broker-url').value, $('tenant').value); };
+    $('broker-url').onchange = () => {
+      //
+      // Another broker picked: the tenant it was worked on in last time
+      //
+      const b = this.brokers.find((x) => x.url === $('broker-url').value.trim().replace(/\/+$/, ''));
+      $('tenant').value = b && typeof b.tenant === 'string' ? b.tenant : '';
+    };
+
+    //
+    // The access token
+    //
+    $('token-btn').onclick = () => ($('tokenpop').hidden ? this.tokenOpen() : this.tokenClose());
+    $('tp-close').onclick = () => this.tokenClose();
+    $('tp-form').onsubmit = (e) => { e.preventDefault(); this.tokenSet(); };
+    $('tp-forget').onclick = () => this.tokenForget();
+    $('tokenpop').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.tokenClose(); }
+    });
     $('pick-all').onclick = () => this.setPicks(this.disc ? this.disc.types.map((t) => t.name) : []);
     $('pick-none').onclick = () => this.setPicks([]);
     $('load-btn').onclick = () => this.loadPicks(true);
@@ -222,6 +243,7 @@ export class Connect {
   // brokers - the configuration's brokers, for the URL field's list
   //
   setBrokers(brokers) {
+    this.brokers = brokers || [];
     const list = $('broker-list');
     list.textContent = '';
     for (const b of brokers || []) {
@@ -262,6 +284,111 @@ export class Connect {
     };
   }
 
+  //
+  // tenantText - "the default tenant", or "tenant <name>"
+  //
+  tenantText() {
+    return this.tenant ? `tenant ${this.tenant}` : 'the default tenant';
+  }
+
+  //
+  // tenantsOffer - the tenant field's list: the ones used before at this broker, and the ones coraine
+  // names (GET /admin/tenants, with the admin plugin)
+  //
+  async tenantsOffer(url, b) {
+    const names = new Set(b && Array.isArray(b.tenants) ? b.tenants.filter((t) => typeof t === 'string') : []);
+    const r = await api.brokerGet(url, '/admin/tenants');
+    if (r.ok && Array.isArray(r.body)) for (const t of r.body) if (typeof t === 'string' && t) names.add(t);
+    if (url !== this.broker) return;
+    const list = $('tenant-list');
+    list.textContent = '';
+    for (const t of names) {
+      const o = document.createElement('option');
+      o.value = t;
+      list.append(o);
+    }
+  }
+
+  //
+  // The access token: the backend keeps it; the page shows where it comes from and its last characters
+  //
+  async tokenState() {
+    let t;
+    try { t = await api.brokerTokens(); } catch (e) { return null; }
+    const url = this.tokenUrl || this.broker;
+    const own = url && t.brokers ? t.brokers[url] : null;
+    return { own, def: t.default, tokenFile: t.tokenFile };
+  }
+
+  tokenText(st) {
+    if (!st) return 'c³ could not say.';
+    const tail = (i) => (i.tail ? ` (…${i.tail}, ${i.length} characters)` : '');
+    if (st.own) return st.own.source === 'remembered' ? `Its own token, remembered on this machine${tail(st.own)}.` : `Its own token, for as long as c³ runs${tail(st.own)}.`;
+    if (st.def) return st.def.source === 'file' ? `c³'s default, from ${st.tokenFile}${tail(st.def)} - read again when the file changes.` : `c³'s default, from $C3_TOKEN${tail(st.def)}.`;
+    return st.tokenFile ? `None - ${st.tokenFile} holds no token. Requests go without one.` : 'None - requests go without one.';
+  }
+
+  async tokenShow() {
+    const st = await this.tokenState();
+    const set = !!(st && (st.own || st.def));
+    $('token-btn').classList.toggle('set', set);
+    $('token-btn').title = set ? 'An access token is sent to this broker' : 'No access token is sent to this broker';
+    if (!$('tokenpop').hidden) {
+      $('tp-state').textContent = this.tokenText(st);
+      $('tp-forget').disabled = !(st && st.own);
+      $('tp-remember').checked = !!(st && st.own && st.own.source === 'remembered');
+    }
+    return st;
+  }
+
+  async tokenOpen(why) {
+    let url = $('broker-url').value.trim().replace(/\/+$/, '') || this.broker;
+    if (!url) { this.toast('Enter the broker\'s URL first'); $('broker-url').focus(); return; }
+    if (!/^https?:\/\//.test(url)) url = 'http://' + url;
+    this.tokenUrl = url;                         // the broker in the URL field - connected to or not yet
+    $('tp-broker').textContent = url;
+    $('tokenpop').hidden = false;
+    $('token-btn').setAttribute('aria-expanded', 'true');
+    $('tp-token').value = '';
+    await this.tokenShow();
+    if (why) $('tp-state').textContent = why + ' ' + $('tp-state').textContent;
+    $('tp-token').focus();
+  }
+
+  tokenClose() {
+    if ($('tokenpop').hidden) return;
+    $('tokenpop').hidden = true;
+    $('token-btn').setAttribute('aria-expanded', 'false');
+    $('tp-token').value = '';
+    $('token-btn').focus({ preventScroll: true });
+  }
+
+  async tokenSet() {
+    const token = $('tp-token').value.trim();
+    if (!token) { $('tp-token').focus(); return; }
+    try {
+      await api.brokerTokenSet(this.tokenUrl, token, $('tp-remember').checked);
+    } catch (e) {
+      $('tp-state').textContent = 'Not taken: ' + e.message;
+      return;
+    }
+    $('tp-token').value = '';
+    this.tokenClose();
+    this.toast('The token is sent to ' + this.tokenUrl + ' from now on');
+    this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
+  }
+
+  async tokenForget() {
+    try {
+      await api.brokerTokenForget(this.tokenUrl);
+    } catch (e) {
+      $('tp-state').textContent = 'Not forgotten: ' + e.message;
+      return;
+    }
+    await this.tokenShow();
+    this.toast('The token is forgotten');
+  }
+
   toast(text) {
     const t = $('toast');
     t.textContent = text;
@@ -273,26 +400,39 @@ export class Connect {
   //
   // connect - what the broker holds, then the entities of the types picked
   //
-  async connect(input) {
+  // 'tenant': the tenant to work in ('': the default one); not given, the one this broker was worked on in
+  // last time
+  //
+  async connect(input, tenant) {
     let url = String(input || '').trim();
     if (!url) { $('broker-url').focus(); return; }
     if (!/^https?:\/\//.test(url)) url = 'http://' + url;
     url = url.replace(/\/+$/, '');
     $('broker-url').value = url;
 
+    const stored = this.brokers.find((x) => x.url === url);
+    if (tenant === undefined) tenant = url === this.broker ? this.tenant : (stored && typeof stored.tenant === 'string' ? stored.tenant : '');
+    tenant = String(tenant).trim();
+    $('tenant').value = tenant;
+
     const ticket = ++this.loading;
+    if (url !== this.broker) this.tokenClose();
     this.broker = url;
+    this.tokenUrl = url;
+    this.tenant = tenant;
+    api.setTenant(url, tenant);
     this.mode = null;
     $('modebar').hidden = true;
     this.closeJson();
     closeMenu(false);
-    $('chip').textContent = url;
+    $('chip').textContent = tenant ? `${url} · ${tenant}` : url;
     $('reload-btn').disabled = false;
     $('notice').hidden = true;
     $('counts').textContent = '';
     this.setState('busy', 'Discovering');
 
-    const card = this.progressCard('Discovering', url, 'Asking for the entity types…');
+    const card = this.progressCard('Discovering', url + (tenant ? ` - tenant ${tenant}` : ''), 'Asking for the entity types…');
+    this.tokenShow();
 
     let disc;
     try {
@@ -313,11 +453,16 @@ export class Connect {
     //
     let saved;
     try {
-      const config = await api.brokerTouch(url);
+      let config = await api.brokerTouch(url);
+      const was = (config.brokers || []).find((x) => x.url === url);
+      if (!was || (was.tenant || '') !== tenant || (tenant && !(Array.isArray(was.tenants) && was.tenants[0] === tenant)))
+        config = await api.brokerConnect(url, { tenant });
       this.setBrokers(config.brokers);
       const b = (config.brokers || []).find((x) => x.url === url);
       const c = (b && b.connect) || {};
-      if (Array.isArray(c.types)) saved = c.types.map(String);
+      const types = tenant ? (c.tenantTypes || {})[tenant] : c.types;
+      if (Array.isArray(types)) saved = types.map(String);
+      this.tenantsOffer(url, b);
       this.mapView = c.map && Array.isArray(c.map.center) ? c.map : null;
       this.pendingView = this.mapView;
       this.colourBy = typeof c.colourBy === 'string' ? c.colourBy : 'type';
@@ -364,7 +509,7 @@ export class Connect {
     const why = saved !== undefined
       ? 'No types are picked for this broker.'
       : `${url} holds ${disc.total} entities of ${plural(disc.types.length, 'type')} - more than c³ loads without asking (${SMALL_BROKER}).`;
-    if (disc.types.length === 0) this.empty('No entities', `${url} answered, and has no entities (in the default tenant).`);
+    if (disc.types.length === 0) this.empty('No entities', `${url} answered, and has no entities (in ${this.tenantText()}).`);
     else this.overlay({ children: [el('h3', null, 'Choose what to see'), el('p', null, why), el('p', null, 'Tick the types on the left and press Load. The choice is kept for this broker.')] });
   }
 
@@ -414,12 +559,12 @@ export class Connect {
 
     if (result.entities.length === 0) {
       if (types && types.length === 0) this.empty('Nothing picked', 'Tick the types to see on the left and press Load.');
-      else this.empty('No entities', `${url} answered, and has no entities${types ? ' of the types picked' : ''} (in the default tenant).`);
+      else this.empty('No entities', `${url} answered, and has no entities${types ? ' of the types picked' : ''} (in ${this.tenantText()}).`);
     } else this.overlay(null);
 
     if (save) {
       try {
-        await api.brokerTypes(url, types || []);
+        await api.brokerTypes(url, types || [], this.tenant);
       } catch (e) {
         console.warn('c3: the types picked were not saved:', e.message);
       }
@@ -453,6 +598,15 @@ export class Connect {
       el('p', null, [err.title, err.detail].filter(Boolean).join(' - ') || String(err.message || err)),
     ];
     if (err.reached === false) children.push(el('p', null, 'Is it running, and is the URL right? c³ reaches the broker from the machine c³ runs on.'));
+    if (err.status === 401) {
+      children.push(el('p', null, 'The broker wants an access token - or did not accept the one c³ sent.'));
+      const tok = el('button', 'btn', 'Token…');
+      tok.type = 'button';
+      tok.onclick = () => this.tokenOpen('The broker answered 401.');
+      actions.append(tok);
+    } else if (err.status === 403) {
+      children.push(el('p', null, `The broker knows who is asking, and does not allow it - for ${this.tenantText()}.`));
+    }
     children.push(actions);
     this.overlay({ cls: 'bad', children });
   }
@@ -533,7 +687,7 @@ export class Connect {
   liveWatch() {
     if (!this.broker) return;
     const types = this.loadedPicks ? this.loadedPicks : [...new Set(this.loaded.flatMap((e) => typesOf(e)))];
-    this.live.watch(this.broker, types);
+    this.live.watch(this.broker, types, this.tenant);
   }
 
   //

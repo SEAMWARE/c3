@@ -9,8 +9,8 @@
 //   GET  /api/live              the page's WebSocket to the backend (one per page)
 //   POST /api/notify/<session>  a broker's notification, for a subscription made over HTTP
 //
-// The page says what it shows - {"op": "watch", "broker", "types"} - and the backend keeps ONE
-// subscription on that broker for those types, every attribute, every change (entityCreated,
+// The page says what it shows - {"op": "watch", "broker", "tenant", "types"} - and the backend keeps ONE
+// subscription on that broker, in that tenant, for those types, every attribute, every change (entityCreated,
 // entityDeleted, attributeCreated/Updated/Deleted), normalized. Two ways to get its notifications:
 //
 //   (a) the broker's WebSocket transport (coraine --transports ws): the backend opens a WebSocket to
@@ -20,6 +20,9 @@
 //   (b) any other broker: an ordinary HTTP subscription whose endpoint is this backend,
 //       http://127.0.0.1:<port>/api/notify/<session> - the broker must reach it (a broker on this
 //       machine).
+//
+// Every request to the broker carries the tenant (NGSILD-Tenant - over the WebSocket in each message's
+// metadata, as coraine reads it) and the broker's access token (creds.c, Authorization: Bearer).
 //
 // (a) is tried first; a broker that does not upgrade GET /ngsi-ld/v1/ws gets (b). Whichever it is, each
 // notification goes to the page as {"op": "notify", "broker", "message": {"body": <Notification>}}.
@@ -98,6 +101,7 @@ typedef struct Live
   pthread_mutex_t   lock;
   pthread_cond_t    cond;
   char              broker[512];
+  char              tenant[256];                 // "": the default tenant
   char*             brokerE;                     // the broker, JSON-escaped (malloc)
   char*             typesJson;                   // ["A", "B"] (malloc)
   LiveMode          mode;
@@ -210,9 +214,9 @@ typedef struct HttpAnswer
   char   error[256];
 } HttpAnswer;
 
-static void httpCall(CorRestVerb verb, const char* url, const char* body, int timeoutMs, HttpAnswer* aP)
+static void httpCall(CorRestVerb verb, const char* broker, const char* tenant, const char* url, const char* body, int timeoutMs, HttpAnswer* aP)
 {
-  CorRestKeyValue     headers[2];
+  CorRestKeyValue     headers[4];
   int                 headerCount = 0;
   CorRestClientMulti* multiP      = corRestClientMultiCreate(1);
 
@@ -229,9 +233,33 @@ static void httpCall(CorRestVerb verb, const char* url, const char* body, int ti
     ++headerCount;
   }
 
+  if ((tenant != NULL) && (tenant[0] != 0))
+  {
+    headers[headerCount].key   = (char*) "NGSILD-Tenant";
+    headers[headerCount].value = (char*) tenant;
+    ++headerCount;
+  }
+
+  char* token = credsToken(broker, NULL);
+  char* auth  = NULL;
+  if (token != NULL)
+  {
+    int alen = strlen(token) + 8;
+    auth     = malloc(alen);
+    if (auth != NULL)
+    {
+      snprintf(auth, alen, "Bearer %s", token);
+      headers[headerCount].key   = (char*) "Authorization";
+      headers[headerCount].value = auth;
+      ++headerCount;
+    }
+    free(token);
+  }
+
   if (multiP == NULL)
   {
     snprintf(aP->error, sizeof(aP->error), "out of memory");
+    free(auth);
     return;
   }
 
@@ -241,6 +269,7 @@ static void httpCall(CorRestVerb verb, const char* url, const char* body, int ti
   {
     snprintf(aP->error, sizeof(aP->error), "the URL could not be used");
     corRestClientMultiDestroy(multiP);
+    free(auth);
     return;
   }
 
@@ -272,6 +301,7 @@ static void httpCall(CorRestVerb verb, const char* url, const char* body, int ti
   }
 
   corRestClientMultiDestroy(multiP);
+  free(auth);
 }
 
 
@@ -332,34 +362,37 @@ static bool sessionLive(const char* id, int idLen)
 // notifying this port, for a session that is not ours. Once per broker and run.
 //
 static pthread_mutex_t sweepLock = PTHREAD_MUTEX_INITIALIZER;
-static char            swept[64][512];
+static char            swept[64][800];         // "<broker> <tenant>"
 static int             sweptN = 0;
 
-static void sweep(const char* broker, int timeoutMs)
+static void sweep(const char* broker, const char* tenant, int timeoutMs)
 {
+  char key[800];
+  snprintf(key, sizeof(key), "%s %s", broker, tenant);
+
   pthread_mutex_lock(&sweepLock);
   for (int ix = 0; ix < sweptN; ix++)
   {
-    if (strcmp(swept[ix], broker) == 0)
+    if (strcmp(swept[ix], key) == 0)
     {
       pthread_mutex_unlock(&sweepLock);
       return;
     }
   }
   if (sweptN < 64)
-    snprintf(swept[sweptN++], sizeof(swept[0]), "%s", broker);
+    snprintf(swept[sweptN++], sizeof(swept[0]), "%s", key);
   pthread_mutex_unlock(&sweepLock);
 
   char       url[1024];
   HttpAnswer a;
 
   snprintf(url, sizeof(url), "%s/ngsi-ld/v1/subscriptions?limit=1000", broker);
-  httpCall(CorVerbGet, url, NULL, timeoutMs, &a);
+  httpCall(CorVerbGet, broker, tenant, url, NULL, timeoutMs, &a);
   if (a.status == 400)                           // a broker with a lower maximum
   {
     free(a.body);
     snprintf(url, sizeof(url), "%s/ngsi-ld/v1/subscriptions?limit=100", broker);
-    httpCall(CorVerbGet, url, NULL, timeoutMs, &a);
+    httpCall(CorVerbGet, broker, tenant, url, NULL, timeoutMs, &a);
   }
 
   if ((a.status != 200) || (a.body == NULL))
@@ -392,7 +425,7 @@ static void sweep(const char* broker, int timeoutMs)
 
       HttpAnswer d;
       snprintf(url, sizeof(url), "%s/ngsi-ld/v1/subscriptions/%s", broker, id);
-      httpCall(CorVerbDelete, url, NULL, timeoutMs, &d);
+      httpCall(CorVerbDelete, broker, tenant, url, NULL, timeoutMs, &d);
       if ((d.status == 204) || (d.status == 200))
         ++deleted;
       free(d.body);
@@ -401,7 +434,7 @@ static void sweep(const char* broker, int timeoutMs)
 
   if (deleted > 0)
   {
-    printf("c3 live: %s - %d subscription%s of an earlier run deleted\n", broker, deleted, (deleted == 1) ? "" : "s");
+    printf("c3 live: %s%s%s - %d subscription%s of an earlier run deleted\n", broker, (tenant[0] != 0) ? ", tenant " : "", tenant, deleted, (deleted == 1) ? "" : "s");
     fflush(stdout);
   }
 
@@ -595,14 +628,21 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
 {
   char  reqId[32];
   char* pathE = jsonEscapeDup(path);
-  int   size  = 256 + strlen(pathE) + ((body != NULL) ? strlen(body) : 0);
+  char* token = credsToken(s->broker, NULL);    // b64token characters: nothing to escape
+  char* extraE = (s->tenant[0] != 0) ? jsonEscapeDup(s->tenant) : NULL;
+  int   size  = 512 + strlen(pathE) + ((body != NULL) ? strlen(body) : 0) + ((token != NULL) ? strlen(token) : 0) + ((extraE != NULL) ? strlen(extraE) : 0);
   char* msg   = malloc(size);
+  char* extra = malloc(size);
 
   locOut[0]    = 0;
   detailOut[0] = 0;
 
-  if (msg == NULL)
+  if ((msg == NULL) || (extra == NULL))
   {
+    free(msg);
+    free(extra);
+    free(token);
+    free(extraE);
     free(pathE);
     snprintf(detailOut, detailLen, "out of memory");
     return 0;
@@ -614,11 +654,24 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
   s->gotResp = false;
   pthread_mutex_unlock(&s->lock);
 
+  //
+  // The tenant and the token, in the metadata: a connection carries neither (coraine, doc/websocket.md)
+  //
+  int eo = 0;
+  extra[0] = 0;
+  if (extraE != NULL)
+    eo += snprintf(&extra[eo], size - eo, ", \"NGSILD-Tenant\": \"%s\"", extraE);
+  if (token != NULL)
+    snprintf(&extra[eo], size - eo, ", \"Authorization\": \"Bearer %s\"", token);
+
   if (body != NULL)
-    snprintf(msg, size, "{\"metadata\": {\"method\": \"%s\", \"path\": \"%s\", \"requestId\": \"%s\", \"Content-Type\": \"application/json\"}, \"body\": %s}", method, pathE, reqId, body);
+    snprintf(msg, size, "{\"metadata\": {\"method\": \"%s\", \"path\": \"%s\", \"requestId\": \"%s\", \"Content-Type\": \"application/json\"%s}, \"body\": %s}", method, pathE, reqId, extra, body);
   else
-    snprintf(msg, size, "{\"metadata\": {\"method\": \"%s\", \"path\": \"%s\", \"requestId\": \"%s\"}}", method, pathE, reqId);
+    snprintf(msg, size, "{\"metadata\": {\"method\": \"%s\", \"path\": \"%s\", \"requestId\": \"%s\"%s}}", method, pathE, reqId, extra);
   free(pathE);
+  free(extra);
+  free(extraE);
+  free(token);
 
   bool sent = wsSendText(&s->bws, msg, strlen(msg));
   free(msg);
@@ -825,7 +878,7 @@ static bool subCreate(Live* s, char** types, int nTypes, char* idOut, int idLen,
     char       err[600];
 
     snprintf(url, sizeof(url), "%s/ngsi-ld/v1/subscriptions", s->broker);
-    httpCall(CorVerbPost, url, body, LIVE_TIMEOUT_MS, &a);
+    httpCall(CorVerbPost, s->broker, s->tenant, url, body, LIVE_TIMEOUT_MS, &a);
     status = a.status;
     snprintf(loc, sizeof(loc), "%s", a.location);
     problemText(a.body, err, sizeof(err));
@@ -879,7 +932,7 @@ static void subDelete(Live* s)
     HttpAnswer a;
 
     snprintf(url, sizeof(url), "%s%s", s->broker, path);
-    httpCall(CorVerbDelete, url, NULL, LIVE_TIMEOUT_MS, &a);
+    httpCall(CorVerbDelete, s->broker, s->tenant, url, NULL, LIVE_TIMEOUT_MS, &a);
     status = a.status;
     problemText(a.body, detail, sizeof(detail));
     if (status == 0)
@@ -915,6 +968,7 @@ static void unwatch(Live* s)
   pthread_mutex_lock(&s->lock);
   s->mode      = LiveOff;
   s->broker[0] = 0;
+  s->tenant[0] = 0;
   free(s->brokerE);
   s->brokerE   = NULL;
   pthread_mutex_unlock(&s->lock);
@@ -924,14 +978,14 @@ static void unwatch(Live* s)
 
 // -----------------------------------------------------------------------------
 //
-// watch - the entities of 'types' on 'broker': one subscription, (a) or (b)
+// watch - the entities of 'types' on 'broker', in 'tenant': one subscription, (a) or (b)
 //
-static void watch(Live* s, const char* broker, char** types, int nTypes)
+static void watch(Live* s, const char* broker, const char* tenant, char** types, int nTypes)
 {
   //
-  // Another broker, or a WebSocket the broker closed: start over
+  // Another broker or tenant, or a WebSocket the broker closed: start over
   //
-  if ((s->mode != LiveOff) && ((strcmp(s->broker, broker) != 0) || ((s->mode == LiveWs) && s->bwsClosed)))
+  if ((s->mode != LiveOff) && ((strcmp(s->broker, broker) != 0) || (strcmp(s->tenant, tenant) != 0) || ((s->mode == LiveWs) && s->bwsClosed)))
     unwatch(s);
 
   //
@@ -959,10 +1013,11 @@ static void watch(Live* s, const char* broker, char** types, int nTypes)
   {
     pthread_mutex_lock(&s->lock);
     snprintf(s->broker, sizeof(s->broker), "%s", broker);
+    snprintf(s->tenant, sizeof(s->tenant), "%s", tenant);
     s->brokerE = jsonEscapeDup(broker);
     pthread_mutex_unlock(&s->lock);
 
-    sweep(broker, 3000);
+    sweep(broker, tenant, 3000);
 
     LiveMode mode = bwsOpen(s) ? LiveWs : LiveHttp;
 
@@ -1013,7 +1068,7 @@ static void watch(Live* s, const char* broker, char** types, int nTypes)
 
 // -----------------------------------------------------------------------------
 //
-// pageMessage - {"op": "watch", "broker", "types"} or {"op": "unwatch"}
+// pageMessage - {"op": "watch", "broker", "tenant", "types"} or {"op": "unwatch"}
 //
 static void pageMessage(Live* s, const char* text)
 {
@@ -1030,11 +1085,13 @@ static void pageMessage(Live* s, const char* text)
   if (strcmp(op, "watch") == 0)
   {
     const char* broker = stringOf(treeP, "broker");
+    const char* tenant = stringOf(treeP, "tenant");
     CorNode*    typesP = corTreeLookup(treeP, "types");
     char*       types[LIVE_TYPES_MAX];
     int         nTypes = 0;
     bool        ok     = (broker != NULL) && (strlen(broker) < 500) && ((strncmp(broker, "http://", 7) == 0) || (strncmp(broker, "https://", 8) == 0)) &&
-                         (typesP != NULL) && (typesP->type == CorArray);
+                         (typesP != NULL) && (typesP->type == CorArray) &&
+                         ((tenant == NULL) || (tenant[0] == 0) || tenantValid(tenant));
 
     if (ok)
     {
@@ -1050,9 +1107,9 @@ static void pageMessage(Live* s, const char* text)
     }
 
     if (ok)
-      watch(s, broker, types, nTypes);
+      watch(s, broker, (tenant != NULL) ? tenant : "", types, nTypes);
     else
-      pageSend(s, "{\"op\": \"error\", \"detail\": \"watch: {\\\"broker\\\": \\\"http://host:port\\\", \\\"types\\\": [up to 1000 type names]}\"}");
+      pageSend(s, "{\"op\": \"error\", \"detail\": \"watch: {\\\"broker\\\": \\\"http://host:port\\\", \\\"tenant\\\": \\\"optional\\\", \\\"types\\\": [up to 1000 type names]}\"}");
   }
   else if (strcmp(op, "unwatch") == 0)
   {
@@ -1286,6 +1343,7 @@ typedef struct SweepList
 {
   int   n;
   char  url[10][512];
+  char  tenant[10][256];
 } SweepList;
 
 static void* startupSweep(void* vP)
@@ -1293,7 +1351,7 @@ static void* startupSweep(void* vP)
   SweepList* lP = (SweepList*) vP;
 
   for (int ix = 0; ix < lP->n; ix++)
-    sweep(lP->url[ix], 2000);
+    sweep(lP->url[ix], lP->tenant[ix], 2000);
 
   free(lP);
   return NULL;
@@ -1322,9 +1380,14 @@ void liveInit(void)
   {
     for (CorNode* bP = brokersP->value.head; (bP != NULL) && (lP->n < 10); bP = bP->next)
     {
-      const char* url = stringOf(bP, "url");
+      const char* url    = stringOf(bP, "url");
+      const char* tenant = stringOf(bP, "tenant");      // the tenant Connect works on, at this broker
       if ((url != NULL) && (strncmp(url, "http://", 7) == 0) && (strlen(url) < 500))
-        snprintf(lP->url[lP->n++], sizeof(lP->url[0]), "%s", url);
+      {
+        snprintf(lP->url[lP->n], sizeof(lP->url[0]), "%s", url);
+        snprintf(lP->tenant[lP->n], sizeof(lP->tenant[0]), "%s", ((tenant != NULL) && tenantValid(tenant)) ? tenant : "");
+        ++lP->n;
+      }
     }
   }
   parsedRelease(&p);
