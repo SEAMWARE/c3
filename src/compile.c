@@ -773,6 +773,8 @@ typedef struct Plan
   char   workload[2048];
   Str    features;                               // the JSON object, as asked for
   Str    featuresArg;                            // NAME=ON,NAME=OFF
+  bool   bridgesGiven;                           // false: coraine-build's default bridges
+  char   bridges[256];                           // mqtt,dds - or none
   char*  argv[16];
   int    argc;
   char   dir[2300];
@@ -914,6 +916,39 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   strAdd(&pP->features, "}");
 
   //
+  // bridges: ["mqtt", "dds"] - the bridge plugins to build; [] none; absent: coraine-build's default
+  //
+  CorNode* bridgesP = corTreeLookup(bodyP, "bridges");
+  if ((bridgesP != NULL) && (bridgesP->type != CorNull))
+  {
+    if (bridgesP->type != CorArray)
+    {
+      snprintf(errBuf, errLen, "\"bridges\" is an array of bridge names: [\"mqtt\", \"dds\"]");
+      return false;
+    }
+
+    pP->bridgesGiven = true;
+    for (CorNode* bP = bridgesP->value.head; bP != NULL; bP = bP->next)
+    {
+      bool ok = (bP->type == CorString) && (bP->value.s[0] != 0) && (strlen(bP->value.s) <= 20);
+
+      for (const char* c = (ok ? bP->value.s : ""); ok && (*c != 0); ++c)
+        ok = ((*c >= 'a') && (*c <= 'z')) || ((*c >= '0') && (*c <= '9'));
+
+      if ((ok == false) || (strlen(pP->bridges) + strlen(bP->value.s) + 2 >= sizeof(pP->bridges)))
+      {
+        snprintf(errBuf, errLen, "\"bridges\": '%s' - a bridge's name (a-z, 0-9)", (bP->type == CorString) ? bP->value.s : "");
+        return false;
+      }
+      if (pP->bridges[0] != 0)
+        strcat(pP->bridges, ",");
+      strcat(pP->bridges, bP->value.s);
+    }
+    if (pP->bridges[0] == 0)
+      strcpy(pP->bridges, "none");
+  }
+
+  //
   // name
   //
   CorNode* nameP = corTreeLookup(bodyP, "name");
@@ -959,6 +994,11 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     pP->argv[pP->argc++] = strdup("--features");
     pP->argv[pP->argc++] = strdup(pP->featuresArg.s);
   }
+  if (pP->bridgesGiven)
+  {
+    pP->argv[pP->argc++] = strdup("--bridges");
+    pP->argv[pP->argc++] = strdup(pP->bridges);
+  }
   if (cP->sourceGiven)
   {
     pP->argv[pP->argc++] = strdup("--source");
@@ -983,6 +1023,7 @@ static void planRender(Plan* pP, Str* sP)
   strAdd(sP, ", \"mode\": ");    strAddJson(sP, pP->mode);
   strAdd(sP, ", \"httpServer\": "); strAddJson(sP, pP->httpServer);
   strAdd(sP, ", \"features\": "); strAdd(sP, pP->features.s);
+  strAdd(sP, ", \"bridges\": ");  strAddJson(sP, pP->bridgesGiven ? pP->bridges : NULL);
   strAdd(sP, ", \"workload\": "); strAddJson(sP, (pP->workload[0] != 0) ? pP->workload : NULL);
   strAdd(sP, ", \"dir\": ");     strAddJson(sP, pP->dir);
   strAdd(sP, ", \"command\": "); strAddJson(sP, pP->command.s);
@@ -1536,7 +1577,48 @@ static void* featuresThread(void* vP)
     strAdd(&s, ", \"source\": ");      strAddJson(&s, cP->source);
     strAdd(&s, ", \"version\": ");     strAddJson(&s, (cP->version[0] != 0) ? cP->version : NULL);
     strAdd(&s, ", \"features\": ");    strAdd(&s, list);
+
+    //
+    // What each choice is and costs: the source's own doc/building-details.md (a "#### " heading per
+    // choice), shown behind each box's '?'. A source without it: "doc": null
+    //
+    int         docSize = 512 * 1024;
+    char*       doc     = (char*) malloc(docSize);
+    char*       tarv[]  = { (char*) "tar", (char*) "-xJOf", cP->source, (char*) "--wildcards", (char*) "--no-anchored",
+                           (char*) "coraine/doc/building-details.md", NULL };
+    int         dStatus = (doc != NULL) ? runCapture(tarv, doc, docSize, 60) : -1;
+
+    strAdd(&s, ", \"doc\": ");
+    strAddJson(&s, (dStatus == 0) ? doc : NULL);
+    free(doc);
+
+    //
+    // The bridges coraine-build can build (--list-bridges --json): null from one that has no such option
+    //
+    int         bridgesSize = 64 * 1024;
+    char*       bridges     = (char*) malloc(bridgesSize);
+    char*       bargv[8];
+    int         bargc = 0;
+
+    bargv[bargc++] = cP->coraineBuild;
+    bargv[bargc++] = (char*) "--list-bridges";
+    bargv[bargc++] = (char*) "--json";
+    if (cP->sourceGiven)
+    {
+      bargv[bargc++] = (char*) "--source";
+      bargv[bargc++] = cP->source;
+    }
+    bargv[bargc] = NULL;
+
+    int   bStatus = (bridges != NULL) ? runCapture(bargv, bridges, bridgesSize, 120) : -1;
+    char* bList   = (bridges != NULL) ? bridges : (char*) "";
+    while ((*bList == ' ') || (*bList == '\n'))
+      ++bList;
+
+    strAdd(&s, ", \"bridges\": ");
+    strAdd(&s, ((bStatus == 0) && (*bList == '[')) ? bList : "null");
     strAdd(&s, "}");
+    free(bridges);
   }
   else
   {
