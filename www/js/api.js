@@ -113,3 +113,29 @@ export const runStop          = (name) => call('POST', '/api/run/brokers/' + run
 export const runForget        = (name, data) => call('DELETE', '/api/run/brokers/' + runName(name) + (data ? '?data=true' : ''));
 export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
 export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' + runName(volume));
+
+//
+// brokerWrite - a POST, PATCH, PUT or DELETE to the broker's entities, through the backend's proxy
+//
+// pathAndQuery starts with /ngsi-ld/v1/entities; 'body' (an object, or undefined) is sent as JSON - with
+// 'contentType' (application/json by default; application/merge-patch+json for a merge). The answer as
+// brokerGet's, with 'location' (a create's Location).
+//
+export async function brokerWrite(broker, method, pathAndQuery, body, contentType = 'application/json') {
+  let response;
+  try {
+    const headers = { 'X-C3-Broker': broker };
+    if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
+    const init = { method, headers };
+    if (body !== undefined) {
+      headers['Content-Type'] = contentType;
+      init.body = JSON.stringify(body);
+    }
+    response = await fetch('/api/proxy' + pathAndQuery, init);
+  } catch (e) {
+    return { ok: false, status: 0, headers: new Headers(), body: { title: 'c3 backend not reachable', detail: String(e.message || e) }, reached: false, location: null };
+  }
+  const data = await json(response);
+  const reached = !(data && data.broker === false);
+  return { ok: response.ok, status: response.status, headers: response.headers, body: data, reached, location: response.headers.get('Location') };
+}
