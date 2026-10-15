@@ -167,6 +167,26 @@ nav.pages span.later { color: var(--faint); cursor: default; }
 }
 .top-right .sw { height: 18px; width: auto; opacity: 0.85; }
 
+/* AI Assist - the button, and its popup (coming soon) */
+header.top { position: relative; }
+.aibtn {
+  min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--accent-text); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.aibtn:hover, .aibtn[aria-expanded="true"] { border-color: var(--accent-2); }
+.aipop {
+  position: absolute; right: 16px; top: calc(100% + 6px); z-index: 40; width: min(440px, calc(100vw - 32px));
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  box-shadow: 0 16px 48px #000C; font-size: 14px; line-height: 1.45; color: var(--text-2);
+}
+.aipop .ai-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.aipop h2 { margin: 0; font-size: 16px; color: var(--text); }
+.aipop .soon { margin-left: 6px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line); font-size: 11px; font-weight: 600; color: var(--warn); vertical-align: 2px; }
+.aipop p { margin: 10px 0; }
+.aipop ul { margin: 6px 0 10px; padding-left: 20px; }
+.aipop li { margin: 4px 0; }
+.aipop .mono { font-family: var(--mono); font-size: 12px; }
+
 @media (max-width: 720px) {
   header.top { padding: 0 16px; }
   .brand .tag { display: none; }
