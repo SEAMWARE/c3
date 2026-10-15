@@ -257,18 +257,24 @@ markers are coloured by), the downloaded map areas, and the last page:
     when it is not loaded.
   - **Hide type <T>**, **Copy id**, **Show JSON** (the entity as the broker returned it, in a panel
     with **Copy**; Esc closes it).
-  - **Edit…** - the editor (below), also the **Edit…** button of the attribute panel.
+  - **Edit…** - the editor (below), also the **Edit…** button of the attribute panel; **Replace…** - the
+    same rows, Save sends the whole entity (`PUT /entities/{id}`).
   - **Delete entity…** › **Delete <id> - at the broker**: `DELETE /entities/{id}`.
 - **An attribute's menu** - right-click it in the attribute panel: **Edit <name>…** (the editor, that
   attribute opened), **Delete <name>…** (`DELETE /entities/{id}/attrs/{name}`, with `datasetId` for an
   instance of its own) and, for an attribute with several instances, **Delete every instance**
   (`deleteAll=true`).
+- **Creating an entity** - right-click where there is no entity: in the graph **Create entity…**, on the
+  map **Create entity here…** (its `location` that point). The editor, with the id and the type typed
+  in - the types of the broker offered, and **＋ <type>'s attributes**: the attributes its loaded
+  entities have, each empty of its kind (a Property with the JSON type of a loaded value). Save sends
+  `POST /entities`; an entity of a type not loaded is created and not shown, and a toast says so.
 - **The editor** - the entity as rows, over the graph's right side (the graph stays usable):
   - each attribute instance is a row: **▸** opens its sub-attributes, **🗑** marks it deleted (struck
     through until Save; **↺** restores it); a `datasetId` shows as a badge;
   - the row's input is its kind's: a Property's value with its JSON type (number, text, true/false,
     JSON), a Relationship's target - typed, or **pick in graph** (the next entity clicked, in the graph
-    or on the map) -, a Point's longitude and latitude, a LanguageProperty's languages, a list's items,
+    or on the map) -, a Point's longitude and latitude - typed, or **pick on map**, the next point clicked -, a LanguageProperty's languages, a list's items,
     a JsonProperty's JSON; `observedAt` with **now**;
   - **＋ sub-attribute** at the end of a row's sub-attributes, **＋ attribute** at the bottom - its name
     (the names of the loaded entities' types offered), its kind, and a `datasetId` for another

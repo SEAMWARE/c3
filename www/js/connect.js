@@ -172,8 +172,30 @@ export class Connect {
       root: $('editor'),
       toast: (t) => this.toast(t),
       onSaved: (id) => this.refetch(id),
-      pick: (prompt, done) => { this.picking = done; this.pickSel = this.graph.sel; },
+      pick: (prompt, done) => {
+        if (!done) { this.picking = null; this.pickSel = null; this.emap.onPoint = null; return; }
+        this.picking = done;
+        this.pickSel = this.graph.sel;
+      },
+      pickPoint: async (done) => {
+        if (this.view !== 'map') await this.setView('map', true);
+        this.emap.onPoint = done;
+      },
     });
+
+    //
+    // Right-click where there is no entity: create one - on the map, at that point
+    //
+    this.graph.onBackMenu = (at) => {
+      if (!this.broker) return;
+      openMenu({ x: at.x, y: at.y, label: 'The graph', items: [{ label: 'Create entity…', action: () => this.create() }] });
+    };
+    this.emap.onBackMenu = (ll, at) => {
+      if (!this.broker) return;
+      openMenu({ x: at.x, y: at.y, label: 'The map', items: [
+        { label: 'Create entity here…', hint: `${ll[0]}, ${ll[1]}`, action: () => this.create({ location: { type: 'GeoProperty', value: { type: 'Point', coordinates: ll } } }) },
+      ] });
+    };
     this.offline = new OfflinePanel({ map: this.emap, toast: (t) => this.toast(t), onAreas: (areas, fonts) => this.emap.setAreas(areas, fonts) });
     $('view-graph').onclick = () => this.setView('graph', true);
     $('view-map').onclick = () => this.setView('map', true);
@@ -1186,6 +1208,7 @@ export class Connect {
     items.push({ label: 'Show JSON', action: () => this.showJson(id) });
     items.push({ separator: true });
     items.push({ label: 'Edit…', hint: 'attributes, as rows', action: () => this.edit(id) });
+    items.push({ label: 'Replace…', hint: 'the whole entity', action: () => this.edit(id, null, 'replace') });
     items.push({
       label: 'Delete entity…',
       items: [
@@ -1220,7 +1243,9 @@ export class Connect {
   //
   // edit - the entity, as the broker has it now, in the editor ('focus': an attribute to open)
   //
-  async edit(id, focus = null) {
+  // mode 'replace': the same rows, Save sends the whole entity (PUT)
+  //
+  async edit(id, focus = null, mode = 'edit') {
     let e;
     try {
       e = await entityGet(this.broker, id);
@@ -1231,7 +1256,27 @@ export class Connect {
     this.closeJson();
     const names = new Set();
     for (const t of typesOf(e)) for (const n of (this.loadedKinds.get(t) || new Map()).keys()) names.add(n);
-    this.editor.open({ broker: this.broker, entity: e, mode: 'edit', focus, names: [...names].sort(cmp) });
+    this.editor.open({ broker: this.broker, entity: e, mode, focus, names: [...names].sort(cmp) });
+  }
+
+  //
+  // create - a new entity in the editor; 'start': attributes it begins with (a map point: its location)
+  //
+  create(start = {}) {
+    this.closeJson();
+    const types = this.disc ? this.disc.types.map((t) => t.name) : [...this.loadedKinds.keys()];
+    //
+    // A type's attributes: name, kind, and a loaded entity's value - the JSON type a new one starts with
+    //
+    const typeAttrs = (t) => {
+      const sample = this.loaded.find((e) => typesOf(e).includes(t)) || {};
+      return [...(this.loadedKinds.get(t) || new Map()).entries()]
+        .map(([n, kinds]) => [n, [...kinds][0] || 'Property', sample[n] && !Array.isArray(sample[n]) ? sample[n].value : undefined])
+        .sort((a, b) => cmp(a[0], b[0]));
+    };
+    const names = new Set();
+    for (const m of this.loadedKinds.values()) for (const n of m.keys()) names.add(n);
+    this.editor.open({ broker: this.broker, entity: { id: '', type: '', ...start }, mode: 'create', names: [...names].sort(cmp), types: types.sort(cmp), typeAttrs });
   }
 
   //
@@ -1265,6 +1310,7 @@ export class Connect {
     if (cur) for (const k of Object.keys(cur)) if (!(k in e) && k !== 'id' && k !== 'type') n[k] = { type: 'Property', value: NULL };
     this.applyLive([n]);
     if (this.shownId === id) this.showEntity(id);
+    if (!this.loadedById.has(id) && !this.byId.has(id)) this.toast(`Saved ${id} - not shown: its type is not among the types loaded`);
   }
 
   async deleteEntity(id) {

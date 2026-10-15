@@ -49,6 +49,7 @@ export class Graph {
     this.labelsG = els.labels;
     this.boxesEl = els.boxes;
     this.pctEl = els.pct;
+    this.onBackMenu = () => {};                  // ({x, y}) - right-clicked where there is no box
     this.onSelect = () => {};
     this.onMenu = () => {};
     this.onCollapse = () => {};                 // (id) - an expanded box closed with Esc                     // (id, {x, y}, element) - a box's context menu
@@ -411,11 +412,16 @@ export class Graph {
   }
 
   //
-  // onContext - a right-click on a box: selected, and its menu at the pointer
+  // onContext - a right-click on a box: selected, and its menu at the pointer; on the background, the
+  // background's menu (onBackMenu)
   //
   onContext(e) {
     const box = e.target.closest('[data-entity]');
-    if (!box) return;
+    if (!box) {
+      e.preventDefault();
+      this.onBackMenu({ x: e.clientX, y: e.clientY });
+      return;
+    }
     e.preventDefault();
     const id = box.dataset.entity;
     if (this.sel !== id) this.select(id);

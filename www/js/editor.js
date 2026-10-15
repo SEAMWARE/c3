@@ -207,11 +207,15 @@ export class EntityEditor {
   // root: the panel's element; toast(text); onSaved(id, mode); pick(prompt, done): the next entity clicked
   // in the graph or on the map goes to done(id) (done(null): cancelled)
   //
-  constructor({ root, toast, onSaved, pick }) {
+  // pickPoint(done): the next point clicked on the map goes to done([lon, lat]); pick(null, null) cancels
+  // either
+  //
+  constructor({ root, toast, onSaved, pick, pickPoint }) {
     this.root = root;
     this.toast = toast;
     this.onSaved = onSaved;
     this.pickFn = pick;
+    this.pickPointFn = pickPoint;
     this.isOpen = false;
 
     root.textContent = '';
@@ -252,10 +256,15 @@ export class EntityEditor {
   // open - mode 'edit' or 'replace' (entity: as the broker returned it), or 'create' (entity: a start -
   // {id, type, ...}); focus: an attribute name to open and focus; names: attribute names to offer
   //
-  open({ broker, entity, mode = 'edit', focus = null, names = [] }) {
+  // types: entity types to offer for a create; typeAttrs(type): [[name, kind, a value]] - the attributes
+  // the loaded entities of a type have, offered as a start (a Property with the value's JSON type)
+  //
+  open({ broker, entity, mode = 'edit', focus = null, names = [], types = [], typeAttrs = () => [] }) {
     this.broker = broker;
     this.mode = mode;
     this.names = names;
+    this.types = types;
+    this.typeAttrs = typeAttrs;
     this.orig = clone(entity);
     this.work = {};
     for (const [k, v] of Object.entries(entity)) {
@@ -386,8 +395,41 @@ export class EntityEditor {
     type.value = this.type;
     type.setAttribute('aria-label', 'Entity type');
     type.spellcheck = false;
-    type.oninput = () => { this.type = type.value; this.refresh(); };
-    this.idRow.append(el('span', 'k', 'id'), id, el('span', 'k', 'type'), type);
+    const dl = el('datalist');
+    dl.id = 'ed-types';
+    for (const t of this.types) { const o = el('option'); o.value = t; dl.append(o); }
+    type.setAttribute('list', 'ed-types');
+
+    //
+    // ＋ the attributes of the type: what its loaded entities have, each empty of its kind
+    //
+    const start = button('btn small', '', '', () => {
+      for (const [n, k, sample] of this.typeAttrs(this.type.trim())) {
+        if (n in this.work) continue;
+        const i = fresh(k);
+        if (k === 'Property' && sample !== undefined) i.value = { number: 0, boolean: false, text: '', json: {} }[jsonType(sample)];
+        this.work[n] = [i];
+        this.added.add(n + '#0');
+      }
+      this.render();
+      startShow();
+    });
+    const startShow = () => {
+      const t = this.type.trim();
+      const attrs = this.typeAttrs(t).filter(([n]) => !(n in this.work));
+      start.hidden = attrs.length === 0;
+      start.textContent = `＋ ${t}'s attributes (${attrs.length})`;
+      start.setAttribute('aria-label', `Add the attributes ${t}'s loaded entities have: ${attrs.map(([n]) => n).join(', ')}`);
+      start.title = attrs.map(([n, k]) => `${n} - ${k}`).join('\n');
+    };
+    type.oninput = () => {
+      this.type = type.value;
+      if (!id.value.trim() && /^[A-Za-z][\w-]*$/.test(this.type.trim())) id.placeholder = `urn:ngsi-ld:${this.type.trim()}:1`;
+      startShow();
+      this.refresh();
+    };
+    this.idRow.append(el('span', 'k', 'id'), id, el('span', 'k', 'type'), type, dl, start);
+    startShow();
   }
 
   render() {
@@ -570,9 +612,9 @@ export class EntityEditor {
         lon.classList.add('short');
         lat.classList.add('short');
         cell.append(el('span', 'elab', 'lon'), lon, el('span', 'elab', 'lat'), lat);
-        if (this.pickPoint) {
+        if (this.pickPointFn) {
           cell.append(button('btn small', 'pick on map', 'Click the point on the map', () => {
-            this.pickPoint((ll) => { if (ll) { lon.value = String(ll[0]); lat.value = String(ll[1]); lon.oninput(); lat.oninput(); } });
+            this.pointPick((ll) => { if (ll) { lon.value = String(ll[0]); lat.value = String(ll[1]); lon.oninput(); lat.oninput(); } });
           }));
         }
         return cell;
@@ -786,6 +828,18 @@ export class EntityEditor {
       this.picking = null;
       this.root.classList.remove('picking');
       if (d) d(id);
+    });
+  }
+
+  pointPick(done) {
+    this.picking = done;
+    this.root.classList.add('picking');
+    this.toast('Click the point on the map… (Esc cancels)');
+    this.pickPointFn((ll) => {
+      const d = this.picking;
+      this.picking = null;
+      this.root.classList.remove('picking');
+      if (d) d(ll);
     });
   }
 
