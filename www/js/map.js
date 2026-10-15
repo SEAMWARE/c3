@@ -131,6 +131,8 @@ export class EntityMap {
     this.el = els.container;
     this.onSelect = () => {};                    // (id) - clicked
     this.onMenu = () => {};                      // (id, {x, y}, element)
+    this.onBackMenu = () => {};                  // ([lon, lat], {x, y}) - right-clicked where there is no entity
+    this.onPoint = null;                         // ([lon, lat]) - set: the next click is a point, not a selection
     this.labelZoom = 14.5;                       // entity labels from this zoom (setLabelZoom)
     this.onView = () => {};                      // ({center, zoom, bearing, pitch}) - moved by the user
     this.onOnline = () => {};                    // (ok) - online tiles reached or not
@@ -507,10 +509,22 @@ export class EntityMap {
 
   wireInput() {
     const map = this.map;
-    map.on('click', (e) => this.onSelect(this.hit(e.point)));
+    map.on('click', (e) => {
+      if (this.onPoint) {
+        const done = this.onPoint;
+        this.onPoint = null;
+        done([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]);
+        return;
+      }
+      this.onSelect(this.hit(e.point));
+    });
     map.on('contextmenu', (e) => {
       const id = this.hit(e.point);
-      if (!id) return;
+      if (!id) {
+        e.originalEvent.preventDefault();
+        this.onBackMenu([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)], { x: e.originalEvent.clientX, y: e.originalEvent.clientY });
+        return;
+      }
       e.originalEvent.preventDefault();
       this.onSelect(id);
       this.onMenu(id, { x: e.originalEvent.clientX, y: e.originalEvent.clientY }, map.getCanvas());
