@@ -181,6 +181,7 @@ extern void   oidcRequest(CorHttpConn* connP, const char* path);          // /ap
 //
 extern char*        vcObtain(const char* issuer, const char* access, const char* type, char* errBuf, int errLen);
 extern char*        vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, long long* expiresInP, char* errBuf, int errLen);
+extern char*        vcPresentation(const char* vc, char* errBuf, int errLen);   // the presentation's JWT, malloc'ed
 extern const char*  vcHolderDid(void);
 extern bool         configRunBrokerPut(const char* defJson, char* errBuf, int errLen);  // a broker of Run, added or replaced (by name)
 extern bool         configRunBrokerDelete(const char* name, char* errBuf, int errLen);  // and forgotten

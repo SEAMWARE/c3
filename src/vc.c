@@ -434,11 +434,10 @@ char* vcObtain(const char* issuer, const char* access, const char* type, char* e
 
 // -----------------------------------------------------------------------------
 //
-// vcPresent - the credential presented at the verifier's token endpoint: the access token (malloc'ed), its
-// lifetime in *expiresInP; NULL: errBuf says why. The vp_token is the presentation's JWT, as the connector's
-// get_access_token_oid4vp.sh sends it.
+// vcPresentation - a Verifiable Presentation of the credential, as a JWT signed by the holder (ES256, kid
+// and iss the holder's did:key) - malloc'ed; NULL: errBuf says why
 //
-char* vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, long long* expiresInP, char* errBuf, int errLen)
+char* vcPresentation(const char* vc, char* errBuf, int errLen)
 {
   if (holderEnsure(errBuf, errLen) == false)
     return NULL;
@@ -489,10 +488,33 @@ char* vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, lo
 
   strcat(jwt, ".");
   strcat(jwt, sig);
+  token = jwt;
+  jwt   = NULL;
 
-  //
-  // Exchanged at the verifier
-  //
+ done:
+  strFree(&p);
+  free(hB64);
+  free(pB64);
+  free(jwt);
+  return token;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// vcPresent - the credential presented at the verifier's token endpoint: the access token (malloc'ed), its
+// lifetime in *expiresInP; NULL: errBuf says why. The vp_token is the presentation's JWT, as the connector's
+// get_access_token_oid4vp.sh sends it.
+//
+char* vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, long long* expiresInP, char* errBuf, int errLen)
+{
+  char* jwt   = vcPresentation(vc, errBuf, errLen);
+  char* token = NULL;
+
+  if (jwt == NULL)
+    return NULL;
+
   Str      form = { NULL, 0, 0 };
   CorAlloc alloc;
   char     buf[8192];
@@ -518,11 +540,6 @@ char* vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, lo
     snprintf(errBuf, errLen, "the verifier's answer holds no access_token");
 
   corAllocBufferReset(&alloc, false);
-
- done:
-  strFree(&p);
-  free(hB64);
-  free(pB64);
   free(jwt);
   return token;
 }
