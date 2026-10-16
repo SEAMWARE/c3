@@ -961,6 +961,29 @@ bool configBrokerLogin(char* body, char* errBuf, int errLen)
     corTreeChildAdd(loginP, corTreeString(&doc.alloc, "issuer", issuer));
     corTreeChildAdd(loginP, corTreeString(&doc.alloc, "clientId", clientId));
     corTreeChildAdd(loginP, corTreeString(&doc.alloc, "scope", ((scope != NULL) && (scope[0] != 0)) ? scope : "openid"));
+
+    //
+    // "fdsc": a Verifiable Credential login - the credential type, the verifier, its scope
+    //
+    CorNode* fdscP = corTreeLookup(bodyP, "fdsc");
+    if ((fdscP != NULL) && (fdscP->type == CorObject))
+    {
+      const char* verifier;
+      const char* credType;
+      const char* vpScope;
+
+      if ((stringMember(fdscP, "verifier", true, 1023, &verifier, errBuf, errLen) == false) ||
+          (stringMember(fdscP, "credentialType", true, 127, &credType, errBuf, errLen) == false) ||
+          (stringMember(fdscP, "scope", false, 127, &vpScope, errBuf, errLen) == false))
+        goto done;
+
+      CorNode* vcP = corTreeObject(&doc.alloc, "fdsc");
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "verifier", verifier));
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "credentialType", credType));
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "scope", ((vpScope != NULL) && (vpScope[0] != 0)) ? vpScope : "default"));
+      corTreeChildAdd(loginP, vcP);
+    }
+
     corTreeChildAddOrReplace(brokerP, "login", loginP);
   }
 

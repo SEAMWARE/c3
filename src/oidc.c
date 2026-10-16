@@ -70,6 +70,16 @@ typedef struct Login
   long long  accessExp;                          // when the access token expires
   long long  refreshExp;                         // when the refresh token does (0: not said)
   char       error[256];                         // why the last refresh failed ("": it did not)
+  //
+  // A Verifiable Credential login (vc.c): the login above is the consumer's (its refresh token renews the
+  // credential); the access token is the verifier's, for the presented credential
+  //
+  bool       vcLogin;
+  char       credType[128];                      // Keycloak's credential_configuration_id
+  char       verifierToken[1024];                // the verifier's token endpoint
+  char       vpScope[128];
+  char*      vc;                                 // the credential (a JWT), malloc'ed
+  long long  vcExp;                              // its exp (0: none said)
 } Login;
 
 typedef struct Pending
@@ -82,6 +92,10 @@ typedef struct Pending
   char       tokenEndpoint[1024];
   char       redirect[600];
   time_t     at;
+  bool       vcLogin;
+  char       credType[128];
+  char       verifierToken[1024];
+  char       vpScope[128];
 } Pending;
 
 static Login            logins[LOGINS_MAX];
@@ -277,9 +291,12 @@ static long long numberMember(CorNode* objectP, const char* name)
 // tokenUser - who an access token names (preferred_username, else sub) - read, not verified: the broker
 // verifies it, c3 only shows it
 //
-static void tokenUser(const char* token, char* out, int outLen)
+static void tokenRead(const char* token, char* out, int outLen, long long* expP)
 {
-  snprintf(out, outLen, "%s", "");
+  if (out != NULL)
+    snprintf(out, outLen, "%s", "");
+  if (expP != NULL)
+    *expP = 0;
 
   const char* dot1 = strchr(token, '.');
   const char* dot2 = (dot1 != NULL) ? strchr(dot1 + 1, '.') : NULL;
@@ -326,14 +343,23 @@ static void tokenUser(const char* token, char* out, int outLen)
 
     if (who == NULL)
       who = member(claimsP, "sub");
-    if (who != NULL)
+    if ((who != NULL) && (out != NULL))
       snprintf(out, outLen, "%s", who);
+    if (expP != NULL)
+      *expP = numberMember(claimsP, "exp");
 
     corAllocBufferReset(&alloc, false);
   }
 
   free(b64);
   free(text);
+}
+
+
+
+static void tokenUser(const char* token, char* out, int outLen)
+{
+  tokenRead(token, out, outLen, NULL);
 }
 
 
@@ -362,6 +388,7 @@ static void loginDrop(Login* lP)
 {
   free(lP->access);
   free(lP->refresh);
+  free(lP->vc);
   *lP = logins[--loginN];                        // the last one in its place
   memset(&logins[loginN], 0, sizeof(Login));
 }
@@ -495,6 +522,132 @@ static void refreshOne(const char* url)
 
 // -----------------------------------------------------------------------------
 //
+// refreshVc - a credential login renewed: the credential presented again while it holds; once it expires (or
+// within REFRESH_BEFORE of it), the consumer's login refreshed and a new credential obtained first
+//
+static void refreshVc(const char* url)
+{
+  char      verifierToken[1024], vpScope[128], issuer[512], clientId[256], tokenEndpoint[1024], credType[128];
+  char*     vc      = NULL;
+  char*     refresh = NULL;
+  long long vcExp   = 0;
+  long long now     = time(NULL);
+
+  pthread_mutex_lock(&oidcLock);
+  Login* lP = loginFind(url);
+  if (lP != NULL)
+  {
+    snprintf(verifierToken, sizeof(verifierToken), "%s", lP->verifierToken);
+    snprintf(vpScope, sizeof(vpScope), "%s", lP->vpScope);
+    snprintf(issuer, sizeof(issuer), "%s", lP->issuer);
+    snprintf(clientId, sizeof(clientId), "%s", lP->clientId);
+    snprintf(tokenEndpoint, sizeof(tokenEndpoint), "%s", lP->tokenEndpoint);
+    snprintf(credType, sizeof(credType), "%s", lP->credType);
+    vc      = (lP->vc != NULL) ? strdup(lP->vc) : NULL;
+    refresh = (lP->refresh != NULL) ? strdup(lP->refresh) : NULL;
+    vcExp   = lP->vcExp;
+  }
+  pthread_mutex_unlock(&oidcLock);
+
+  if (lP == NULL)
+    return;
+
+  char  err[512] = "";
+  char* newVc    = NULL;
+  char* newRefresh = NULL;
+  bool  over     = false;
+
+  if ((vc == NULL) || ((vcExp != 0) && (vcExp - now <= REFRESH_BEFORE)))
+  {
+    //
+    // A new credential: the consumer's login refreshed, its access token for the issuance
+    //
+    if (refresh == NULL)
+      over = true;
+    else
+    {
+      Str form = { NULL, 0, 0 };
+      strAdd(&form, "grant_type=refresh_token&client_id=");
+      urlEncode(&form, clientId);
+      strAdd(&form, "&refresh_token=");
+      urlEncode(&form, refresh);
+
+      CorAlloc alloc;
+      char     buf[8192];
+      int      status = 0;
+
+      corAllocBufferInit(&alloc, buf, sizeof(buf), 1024 * 1024, NULL, "c3 vc refresh");
+      CorNode*    answerP = httpJson(tokenEndpoint, form.s, &alloc, &status, err, sizeof(err));
+      const char* access  = member(answerP, "access_token");
+      const char* rt      = member(answerP, "refresh_token");
+      strFree(&form);
+
+      if ((status == 200) && (access != NULL))
+      {
+        newVc = vcObtain(issuer, access, credType, err, sizeof(err));
+        if (rt != NULL)
+          newRefresh = strdup(rt);
+      }
+      else if ((status == 400) || (status == 401))
+        over = true;
+
+      corAllocBufferReset(&alloc, false);
+    }
+  }
+
+  long long expiresIn = 0;
+  char*     access    = (over == false) ? vcPresent(verifierToken, (newVc != NULL) ? newVc : vc, vpScope, &expiresIn, err, sizeof(err)) : NULL;
+
+  pthread_mutex_lock(&oidcLock);
+  lP = loginFind(url);
+
+  if (lP != NULL)
+  {
+    if (access != NULL)
+    {
+      free(lP->access);
+      lP->access    = access;
+      lP->accessExp = time(NULL) + ((expiresIn > 0) ? expiresIn : 300);
+      lP->error[0]  = 0;
+      access        = NULL;
+
+      if (newVc != NULL)
+      {
+        free(lP->vc);
+        lP->vc = newVc;
+        tokenRead(newVc, NULL, 0, &lP->vcExp);
+        newVc = NULL;
+      }
+
+      if (newRefresh != NULL)
+      {
+        free(lP->refresh);
+        lP->refresh = newRefresh;
+        newRefresh  = NULL;
+      }
+    }
+    else if ((over == true) || (time(NULL) >= lP->accessExp))
+    {
+      printf("c3: the credential login to %s is over%s%s\n", url, (err[0] != 0) ? ": " : "", err);
+      fflush(stdout);
+      loginDrop(lP);
+    }
+    else
+      snprintf(lP->error, sizeof(lP->error), "renewal failed (%s) - tried again", (err[0] != 0) ? err : "the verifier's answer");
+  }
+
+  pthread_mutex_unlock(&oidcLock);
+  free(access);
+  free(newVc);
+  free(newRefresh);
+  free(vc);
+  free(refresh);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // refreshLoop - every 5 s: the access tokens that expire within REFRESH_BEFORE refreshed; a login whose access
 // token expired and that cannot be refreshed is over
 //
@@ -507,6 +660,7 @@ static void* refreshLoop(void* arg)
     sleep(5);
 
     char      due[LOGINS_MAX][512];
+    bool      dueVc[LOGINS_MAX];
     int       n   = 0;
     long long now = time(NULL);
 
@@ -517,8 +671,9 @@ static void* refreshLoop(void* arg)
 
       if (lP->accessExp - now > REFRESH_BEFORE)
         ++ix;
-      else if ((lP->refresh != NULL) && ((lP->refreshExp == 0) || (now < lP->refreshExp)))
+      else if ((lP->vcLogin == true) || ((lP->refresh != NULL) && ((lP->refreshExp == 0) || (now < lP->refreshExp))))
       {
+        dueVc[n] = lP->vcLogin;
         snprintf(due[n++], sizeof(due[0]), "%s", lP->url);
         ++ix;
       }
@@ -530,7 +685,12 @@ static void* refreshLoop(void* arg)
     pthread_mutex_unlock(&oidcLock);
 
     for (int ix = 0; ix < n; ix++)
-      refreshOne(due[ix]);
+    {
+      if (dueVc[ix] == true)
+        refreshVc(due[ix]);
+      else
+        refreshOne(due[ix]);
+    }
   }
 
   return NULL;
@@ -573,6 +733,10 @@ typedef struct OidcJob
   char          host[256];                       // the Host the page came to c3 by - the redirect URI's
   char          code[2048];
   char          state[64];
+  bool          vcLogin;                         // a credential login: the fields below
+  char          credType[128];
+  char          verifierDiscovery[1024];
+  char          vpScope[128];
 } OidcJob;
 
 static bool jobStart(OidcJob* jobP, void* (*fn)(void*))
@@ -636,6 +800,27 @@ static void* startThread(void* arg)
     Pending p;
     memset(&p, 0, sizeof(p));
 
+    //
+    // A credential login: the verifier's token endpoint, from its discovery document - before the user logs in
+    //
+    if (jobP->vcLogin == true)
+    {
+      int         vstatus = 0;
+      CorNode*    vdocP   = httpJson(jobP->verifierDiscovery, NULL, &alloc, &vstatus, err, sizeof(err));
+      const char* vtoken  = member(vdocP, "token_endpoint");
+
+      if ((vdocP == NULL) || (vstatus != 200) || (vtoken == NULL))
+      {
+        serveError(connP, 502, "The verifier did not answer", (err[0] != 0) ? err : "its discovery document has no token_endpoint");
+        goto vcDone;
+      }
+
+      p.vcLogin = true;
+      snprintf(p.credType, sizeof(p.credType), "%s", jobP->credType);
+      snprintf(p.verifierToken, sizeof(p.verifierToken), "%s", vtoken);
+      snprintf(p.vpScope, sizeof(p.vpScope), "%s", jobP->vpScope);
+    }
+
     unsigned char digest[32];
     unsigned int  dlen = 0;
     char          challenge[64];
@@ -693,6 +878,7 @@ static void* startThread(void* arg)
     }
   }
 
+ vcDone:
   corAllocBufferReset(&alloc, false);
   free(jobP);
   corHttpResume(connP);
@@ -789,6 +975,32 @@ static void* callbackThread(void* arg)
 
   char msg[1200];
 
+  //
+  // A credential login: the consumer's access token gets the credential, the credential the verifier's token
+  // - the network outside the lock
+  //
+  char*     vc        = NULL;
+  char*     vpAccess  = NULL;
+  long long expiresIn = 0;
+
+  if ((p.vcLogin == true) && (status == 200) && (member(answerP, "access_token") != NULL))
+  {
+    vc = vcObtain(p.issuer, member(answerP, "access_token"), p.credType, err, sizeof(err));
+    if (vc != NULL)
+      vpAccess = vcPresent(p.verifierToken, vc, p.vpScope, &expiresIn, err, sizeof(err));
+
+    if (vpAccess == NULL)
+    {
+      snprintf(msg, sizeof(msg), "%s: %s", (vc == NULL) ? "No credential from the provider" : "The verifier did not take the credential", (err[0] != 0) ? err : "no answer");
+      pageAnswer(connP, 502, msg, p.url);
+      free(vc);
+      corAllocBufferReset(&alloc, false);
+      free(jobP);
+      corHttpResume(connP);
+      return NULL;
+    }
+  }
+
   if ((status != 200) || (answerP == NULL) || (member(answerP, "access_token") == NULL))
   {
     const char* why = member(answerP, "error_description");
@@ -825,12 +1037,34 @@ static void* callbackThread(void* arg)
       lP->refreshExp = 0;
       tokensTake(lP, answerP);
 
-      snprintf(msg, sizeof(msg), "Logged in to %s%s%s. Back to c3 ...", p.url, (lP->user[0] != 0) ? " as " : "", lP->user);
+      lP->vcLogin = p.vcLogin;
+      if (p.vcLogin == true)
+      {
+        //
+        // The broker's token is the verifier's; the consumer's access token is done with (its refresh token
+        // renews the credential)
+        //
+        snprintf(lP->credType, sizeof(lP->credType), "%s", p.credType);
+        snprintf(lP->verifierToken, sizeof(lP->verifierToken), "%s", p.verifierToken);
+        snprintf(lP->vpScope, sizeof(lP->vpScope), "%s", p.vpScope);
+        free(lP->vc);
+        lP->vc = vc;
+        tokenRead(vc, NULL, 0, &lP->vcExp);
+        vc = NULL;
+        free(lP->access);
+        lP->access    = vpAccess;
+        lP->accessExp = time(NULL) + ((expiresIn > 0) ? expiresIn : 300);
+        vpAccess      = NULL;
+      }
+
+      snprintf(msg, sizeof(msg), "Logged in to %s%s%s%s. Back to c3 ...", p.url, (lP->user[0] != 0) ? " as " : "", lP->user, (lP->vcLogin == true) ? ", with a Verifiable Credential" : "");
       pthread_mutex_unlock(&oidcLock);
       pageAnswer(connP, 200, msg, p.url);
     }
   }
 
+  free(vc);
+  free(vpAccess);
   corAllocBufferReset(&alloc, false);
   free(jobP);
   corHttpResume(connP);
@@ -863,6 +1097,14 @@ static void sessionsList(CorHttpConn* connP)
     strAddJson(&s, lP->clientId);
     strAddf(&s, ", \"expiresAt\": %lld, \"refreshUntil\": %lld, \"refreshes\": %s, \"error\": ", lP->accessExp, lP->refreshExp, (lP->refresh != NULL) ? "true" : "false");
     strAddJson(&s, (lP->error[0] != 0) ? lP->error : NULL);
+    if (lP->vcLogin == true)
+    {
+      strAdd(&s, ", \"credential\": {\"type\": ");
+      strAddJson(&s, lP->credType);
+      strAddf(&s, ", \"expiresAt\": %lld, \"holder\": ", lP->vcExp);
+      strAddJson(&s, vcHolderDid());
+      strAdd(&s, "}");
+    }
     strAdd(&s, "}");
   }
   pthread_mutex_unlock(&oidcLock);
@@ -992,6 +1234,32 @@ void oidcRequest(CorHttpConn* connP, const char* path)
       snprintf(jobP->clientId, sizeof(jobP->clientId), "%s", clientId);
       snprintf(jobP->scope, sizeof(jobP->scope), "%s", ((scope != NULL) && (scope[0] != 0)) ? scope : "openid");
       snprintf(jobP->host, sizeof(jobP->host), "%s", host);
+
+      //
+      // "fdsc": {"credentialType", "verifier", "scope"} - a credential login (the Data Space Connector)
+      //
+      CorNode* fdscP = corTreeLookup(bodyP, "fdsc");
+      if ((fdscP != NULL) && (fdscP->type == CorObject))
+      {
+        const char* credType = member(fdscP, "credentialType");
+        const char* verifier = member(fdscP, "verifier");
+        const char* vpScope  = member(fdscP, "scope");
+
+        if ((credType == NULL) || (credType[0] == 0) || (strlen(credType) >= sizeof(jobP->credType)) ||
+            (httpUrl(verifier) == false) || (strlen(verifier) >= sizeof(jobP->verifierDiscovery)) ||
+            ((vpScope != NULL) && (strlen(vpScope) >= sizeof(jobP->vpScope))))
+        {
+          free(jobP);
+          serveError(connP, 400, "Bad request", "\"fdsc\": {\"credentialType\": the credential's configuration id at the issuer, \"verifier\": the verifier's discovery document (an http(s) URL), \"scope\"}");
+          return;
+        }
+
+        jobP->vcLogin = true;
+        snprintf(jobP->credType, sizeof(jobP->credType), "%s", credType);
+        snprintf(jobP->verifierDiscovery, sizeof(jobP->verifierDiscovery), "%s", verifier);
+        snprintf(jobP->vpScope, sizeof(jobP->vpScope), "%s", ((vpScope != NULL) && (vpScope[0] != 0)) ? vpScope : "default");
+      }
+
       jobStart(jobP, startThread);
     }
     return;

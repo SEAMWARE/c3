@@ -244,6 +244,7 @@ export class Connect {
     $('tp-forget').onclick = () => this.tokenForget();
     $('tp-login').onsubmit = (e) => { e.preventDefault(); this.login(); };
     $('tp-logout').onclick = () => this.logout();
+    $('tp-vc-on').onchange = () => { $('tp-vc').hidden = !$('tp-vc-on').checked; };
     window.addEventListener('message', (e) => {
       if ((e.origin !== location.origin) || !e.data || (e.data.c3 !== 'oidc')) return;
       this.loginDone(e.data.broker, e.data.ok);
@@ -373,6 +374,10 @@ export class Connect {
     const tail = (i) => (i.tail ? ` (…${i.tail}, ${i.length} characters)` : '');
     if (st.login) {
       const who = st.login.user ? ` as ${st.login.user}` : '';
+      if (st.login.credential) {
+        const until = new Date(st.login.credential.expiresAt * 1000).toLocaleString();
+        return `Logged in${who} at ${st.login.issuer}, with the credential ${st.login.credential.type} (until ${until}) - c³ presents it to the verifier, held by ${st.login.credential.holder.slice(0, 20)}…, and renews the token.` + (st.login.error ? ` ${st.login.error}.` : '');
+      }
       const renew = st.login.refreshes ? 'renewed by c³ until the provider ends the session' : 'not renewable - log in again when it expires';
       return `Logged in${who} at ${st.login.issuer} - its token ${renew}.` + (st.login.error ? ` ${st.login.error}.` : '');
     }
@@ -399,6 +404,14 @@ export class Connect {
         $('tp-issuer').value = kept.issuer || '';
         $('tp-client').value = kept.clientId || '';
         $('tp-scope').value = kept.scope || '';
+        const md = (this.security && this.security.url === this.tokenUrl) ? this.security.md : {};
+        const live = (st && st.login && st.login.credential) ? { credentialType: st.login.credential.type } : null;
+        const vc = kept.fdsc || live || (md.coraine_auth === 'fdsc' ? { verifier: md.fdsc_discovery || '' } : null);
+        $('tp-vc-on').checked = !!vc;
+        $('tp-vc').hidden = !vc;
+        $('tp-verifier').value = (vc && vc.verifier) || '';
+        $('tp-cred').value = (vc && vc.credentialType) || '';
+        $('tp-vpscope').value = (vc && vc.scope) || '';
         this.loginFieldsFor = this.tokenUrl;
       }
     }
@@ -471,6 +484,11 @@ export class Connect {
       for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
     } else if (md.coraine_auth === 'fdsc') {
       card.insertBefore(el('p', null, `It takes the Data Space Connector's tokens - from the verifier ${issuer || '(not named)'}, for a Verifiable Credential.`), actions);
+      const login = el('button', 'btn primary', 'Log in with a credential…');
+      login.type = 'button';
+      login.onclick = () => this.tokenOpen('The broker takes the verifier\'s tokens: log in at the consumer\'s Keycloak, c³ gets the credential and presents it.');
+      actions.prepend(login);
+      for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
     }
   }
 
@@ -484,8 +502,15 @@ export class Connect {
     const scope = $('tp-scope').value.trim() || 'openid';
     if (!/^https?:\/\//.test(issuer)) { $('tp-state').textContent = 'The issuer: the provider\'s URL, e.g. https://keycloak.example.org/realms/city'; $('tp-issuer').focus(); return; }
     if (!clientId) { $('tp-state').textContent = 'The client id: the provider\'s client c³ logs in as - a public one'; $('tp-client').focus(); return; }
-    const w = window.open('', 'c3-login', 'popup,width=520,height=720');
     const login = { issuer, clientId, scope };
+    if ($('tp-vc-on').checked) {
+      const verifier = $('tp-verifier').value.trim();
+      const credentialType = $('tp-cred').value.trim();
+      if (!/^https?:\/\//.test(verifier)) { $('tp-state').textContent = 'The verifier: its discovery document, e.g. https://verifier.example.org/services/data-service/.well-known/openid-configuration'; $('tp-verifier').focus(); return; }
+      if (!credentialType) { $('tp-state').textContent = 'The credential: its type at the issuer (credential_configuration_id), e.g. user-credential'; $('tp-cred').focus(); return; }
+      login.fdsc = { verifier, credentialType, scope: $('tp-vpscope').value.trim() || 'default' };
+    }
+    const w = window.open('', 'c3-login', 'popup,width=520,height=720');
     try {
       await api.brokerLoginSet(this.tokenUrl, login).catch(() => {});    // kept for next time - a broker not in the list yet keeps none
       const r = await api.oidcStart(this.tokenUrl, login);

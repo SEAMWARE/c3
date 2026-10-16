@@ -173,6 +173,15 @@ extern void   credsRequest(CorHttpConn* connP, const char* path);         // /ap
 extern void   oidcInit(void);                                             // after proxyInit: the refresh thread
 extern char*  oidcToken(const char* broker, char* userOut, int userLen);  // malloc'ed, or NULL - never waits
 extern void   oidcRequest(CorHttpConn* connP, const char* path);          // /api/oidc/...
+
+
+
+//
+// vc.c - a Verifiable Credential login (the Data Space Connector): the credential, its presentation
+//
+extern char*        vcObtain(const char* issuer, const char* access, const char* type, char* errBuf, int errLen);
+extern char*        vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, long long* expiresInP, char* errBuf, int errLen);
+extern const char*  vcHolderDid(void);
 extern bool         configRunBrokerPut(const char* defJson, char* errBuf, int errLen);  // a broker of Run, added or replaced (by name)
 extern bool         configRunBrokerDelete(const char* name, char* errBuf, int errLen);  // and forgotten
 

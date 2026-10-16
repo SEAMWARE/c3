@@ -204,6 +204,14 @@ markers are coloured by), the downloaded map areas, and the last page:
     redirect URI. The authorization code flow with PKCE (S256). The tokens stay in c³'s backend, in memory -
     never in the page, never on disk: after a restart, log in again. c³ renews the access token before it
     expires, until the provider ends the session; then the login is over. **Log out** forgets the tokens.
+  - a **credential login** - the Data Space Connector (coraine's `fdsc.so`, or the connector itself) takes
+    the tokens of its verifier (VCVerifier), for a presented Verifiable Credential: **With a Verifiable
+    Credential** in the login, the verifier's discovery document, the credential type (Keycloak's
+    `credential_configuration_id`) and the verifier's scope - filled in from the broker's metadata where it
+    says. The login is at the consumer's Keycloak; c³ then gets the credential there (OID4VCI, Keycloak's
+    pre-authorized offer), presents it signed by a holder key of its own (P-256, `did:key`, in memory - as
+    the connector's DID Helper makes one), and sends the verifier's access token. Renewed: presented again
+    before the token expires; a new credential (the consumer's login refreshed) before the credential does.
   - its own, typed in **Token**: kept in memory, and with **Remember it on this machine** in
     `secrets.json` beside `c3.json` (mode 600 - a file others can read is not used);
   - `--token-file <file>`: the default for every broker, read again whenever the file changes - so a

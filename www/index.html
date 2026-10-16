@@ -313,6 +313,15 @@
             <input class="tp-field" id="tp-client" placeholder="client id - c3" aria-label="Client id" autocomplete="off" spellcheck="false">
             <input class="tp-field" id="tp-scope" placeholder="scope - openid" aria-label="Scope" autocomplete="off" spellcheck="false">
           </div>
+          <label class="tp-remember"><input type="checkbox" id="tp-vc-on"> With a Verifiable Credential</label>
+          <div class="tp-hint muted">The Data Space Connector: the provider above is the consumer's Keycloak; c³ gets the credential there and presents it to the verifier.</div>
+          <div class="tp-vc" id="tp-vc" hidden>
+            <input class="tp-field" id="tp-verifier" placeholder="verifier - https://verifier.example.org/services/data-service/.well-known/openid-configuration" aria-label="The verifier's discovery document" autocomplete="off" spellcheck="false">
+            <div class="tp-row">
+              <input class="tp-field" id="tp-cred" placeholder="credential - user-credential" aria-label="Credential type" autocomplete="off" spellcheck="false">
+              <input class="tp-field" id="tp-vpscope" placeholder="scope - default" aria-label="Verifier scope" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
           <div class="actions">
             <button class="btn primary" type="submit" id="tp-login-btn">Log in</button>
             <button class="btn" type="button" id="tp-logout">Log out</button>
