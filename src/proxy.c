@@ -34,6 +34,7 @@
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corRest/corRestClient.h"               // corRestClient*
+#include "corRest/corRestClientProxy.h"          // corRestClientProxyFromEnv
 
 #include "c3.h"
 
@@ -75,6 +76,18 @@ void proxyInit(void)
 {
   corRestClientInit(8, 30, "c3/" C3_VERSION);
   corRestClientTlsInit();                        // the multi engine does not initialise TLS by itself: https brokers
+
+  //
+  // The proxies of the environment - https_proxy, http_proxy, no_proxy - for every request c3 sends: to a
+  // broker, to an OpenID provider, to a verifier
+  //
+  char err[300];
+
+  if (corRestClientProxyFromEnv(err, sizeof(err)) == false)
+  {
+    printf("c3: %s - no proxy is used\n", err);
+    fflush(stdout);
+  }
 }
 
 

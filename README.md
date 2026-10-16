@@ -90,6 +90,11 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz` | the coraine source tarball Compile builds from (passed on as `--source`) |
 | `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Connect, below) - read again whenever it changes |
 
+Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the proxies of the
+environment: `https_proxy`, `http_proxy`, `no_proxy` (or their upper-case names). A broker on this machine
+wants `no_proxy=127.0.0.1,localhost`. A certificate of a private CA (a local data space's): `SSL_CERT_FILE`, a
+bundle with it.
+
 Every option can also be given in the environment: `C3_` and the option's name, upper case, `-` as `_`
 (`C3_CORAINE_BUILD`, `C3_SOURCE`).
 
@@ -212,6 +217,9 @@ markers are coloured by), the downloaded map areas, and the last page:
     pre-authorized offer), presents it signed by a holder key of its own (P-256, `did:key`, in memory - as
     the connector's DID Helper makes one), and sends the verifier's access token. Renewed: presented again
     before the token expires; a new credential (the consumer's login refreshed) before the credential does.
+    The consumer's Keycloak client c³ logs in as: public, the redirect URI above, and OID4VCI enabled for it
+    (`oid4vci.enabled`, "OpenID for Verifiable Credentials" in its Advanced settings) - without it Keycloak
+    answers "Client not enabled for OID4VCI".
   - its own, typed in **Token**: kept in memory, and with **Remember it on this machine** in
     `secrets.json` beside `c3.json` (mode 600 - a file others can read is not used);
   - `--token-file <file>`: the default for every broker, read again whenever the file changes - so a
