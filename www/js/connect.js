@@ -393,7 +393,9 @@ export class Connect {
       $('tp-logout').disabled = !(st && st.login);
       $('tp-redirect').textContent = location.origin + '/api/oidc/callback';
       if (!this.loginFieldsFor || this.loginFieldsFor !== this.tokenUrl) {
-        const kept = (this.brokers.find((b) => b.url === this.tokenUrl) || {}).login || (st && st.login) || {};
+        const said = (this.security && this.security.url === this.tokenUrl && this.security.md.coraine_auth === 'oidc' && Array.isArray(this.security.md.authorization_servers))
+          ? { issuer: this.security.md.authorization_servers[0] } : {};
+        const kept = (this.brokers.find((b) => b.url === this.tokenUrl) || {}).login || (st && st.login) || said;
         $('tp-issuer').value = kept.issuer || '';
         $('tp-client').value = kept.clientId || '';
         $('tp-scope').value = kept.scope || '';
@@ -438,6 +440,38 @@ export class Connect {
     this.tokenClose();
     this.toast('The token is sent to ' + this.tokenUrl + ' from now on');
     this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
+  }
+
+  //
+  // securityOf - what the broker says of its security (RFC 9728, coraine's /.well-known/oauth-protected-resource):
+  // which auth plugin, and where its tokens come from; null when it says nothing
+  //
+  async securityOf(url) {
+    const r = await api.brokerGet(url, '/.well-known/oauth-protected-resource');
+    return (r.ok && r.body && typeof r.body === 'object') ? r.body : null;
+  }
+
+  //
+  // securityShow - on a 401: the broker's own word on how to log in, added to the card once it is known - an
+  // OpenID provider: Log in, its issuer filled in; the Data Space Connector's verifier: what it is
+  //
+  async securityShow(url, children, actions) {
+    const md = await this.securityOf(url);
+    if (!md) return;
+    this.security = { url, md };
+    const issuer = Array.isArray(md.authorization_servers) ? md.authorization_servers[0] : null;
+    const card = actions.parentElement;
+    if (!card) return;
+    if (md.coraine_auth === 'oidc' && issuer) {
+      card.insertBefore(el('p', null, `It takes the tokens of the OpenID provider ${issuer} - log in there.`), actions);
+      const login = el('button', 'btn primary', 'Log in…');
+      login.type = 'button';
+      login.onclick = () => this.tokenOpen(`The broker takes the tokens of ${issuer}.`);
+      actions.prepend(login);
+      for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
+    } else if (md.coraine_auth === 'fdsc') {
+      card.insertBefore(el('p', null, `It takes the Data Space Connector's tokens - from the verifier ${issuer || '(not named)'}, for a Verifiable Credential.`), actions);
+    }
   }
 
   //
@@ -750,6 +784,7 @@ export class Connect {
       tok.type = 'button';
       tok.onclick = () => this.tokenOpen('The broker answered 401.');
       actions.append(tok);
+      this.securityShow(url, children, actions);
     } else if (err.status === 403) {
       children.push(el('p', null, `The broker knows who is asking, and does not allow it - for ${this.tenantText()}.`));
     }

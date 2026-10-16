@@ -195,8 +195,10 @@ markers are coloured by), the downloaded map areas, and the last page:
   button, a **403** says the token was understood and the request not allowed. A delete on a broker c³ sends no token
   to - and that answered without one - asks first: anyone who can reach that broker can delete. A broker's token, in
   this order:
-  - a **login** to the broker's OpenID provider (Keycloak, Auth0, Entra ID, ...) - in **Token**: the
-    provider's issuer, a client id, a scope (kept per broker in `c3.json` as `"login"`; no secret), then
+  - a **login** to the broker's OpenID provider (Keycloak, Auth0, Entra ID, ...) - in **Token**, or
+    **Log in…** on a 401 when the broker says where its tokens come from (coraine's
+    `/.well-known/oauth-protected-resource`, RFC 9728 - the issuer is then filled in): the provider's issuer,
+    a client id, a scope (kept per broker in `c3.json` as `"login"`; no secret), then
     **Log in**. The provider's login page opens in a window of its own, and sends the browser back to
     `http://<c³>/api/oidc/callback` - the provider's client must be a **public** one that allows that
     redirect URI. The authorization code flow with PKCE (S256). The tokens stay in c³'s backend, in memory -

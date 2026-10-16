@@ -9,7 +9,9 @@
 // The page names the broker in the X-C3-Broker header (http://host:port). The page and the API come
 // from the same origin, so the browser has no CORS rule to apply, and the broker needs no --corsOrigin.
 //
-// GET: the NGSI-LD API (/ngsi-ld/...), /version and coraine's /admin/tenants (the tenants Connect offers).
+// GET: the NGSI-LD API (/ngsi-ld/...), /version, coraine's /admin/tenants (the tenants Connect offers) and
+// /.well-known/oauth-protected-resource (RFC 9728: how to get a token the broker takes - Connect reads it on
+// a 401).
 // POST, PATCH, PUT, DELETE: the entities only (/ngsi-ld/v1/entities, /ngsi-ld/v1/entities/...), with the
 // body and its Content-Type - and only from c3's own page: a write must carry an Origin of this machine
 // (a browser always sends one on them; a page of another site cannot set it, nor the X-C3-Broker header
@@ -325,9 +327,10 @@ void proxyRequest(CorHttpConn* connP, const char* path)
 
   if (verb == CorVerbGet)
   {
-    if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0))
+    if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0) &&
+        (strcmp(path, "/.well-known/oauth-protected-resource") != 0))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version and /admin/tenants only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /admin/tenants and /.well-known/oauth-protected-resource only");
       return;
     }
   }
