@@ -18,6 +18,8 @@
 //         "lastUsed": "2026-10-09T17:30:00Z",
 //         "tenant":   "city",                       the tenant Connect works on ("": the default)
 //         "tenants":  ["city", "airport"],          the ones used, most recent first
+//         "login":    { "issuer": "https://keycloak.example.org/realms/city", "clientId": "c3", "scope": "openid" },
+//                                                     how c3 logs in to the broker's OpenID provider (oidc.c)
 //         "connect":  { "types": ["Building", "Floor"], "tenantTypes": { "city": ["Street"] }, "view": "map",
 //                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type" }
 //       }
@@ -886,6 +888,106 @@ bool configBrokerTypes(char* body, char* errBuf, int errLen)
   else
     corTreeChildAddOrReplace(connectP, "types", listP);
   ok = commit(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configBrokerLogin - PUT /api/brokers/login {"url", "issuer", "clientId", "scope"}: how c3 logs in to the
+// broker's OpenID provider, kept as the broker's "login" (no secret: a public client) - issuer null: no
+// login, the member removed. The broker must be in the list already.
+//
+bool configBrokerLogin(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* url;
+  const char* issuer;
+  const char* clientId;
+  const char* scope;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if (bodyP == NULL)
+    goto done;
+
+  if (stringMember(bodyP, "url", true, 2048, &url, errBuf, errLen) == false)
+    goto done;
+  if (stringMember(bodyP, "issuer", false, 511, &issuer, errBuf, errLen) == false)
+    goto done;
+  if (stringMember(bodyP, "clientId", false, 255, &clientId, errBuf, errLen) == false)
+    goto done;
+  if (stringMember(bodyP, "scope", false, 255, &scope, errBuf, errLen) == false)
+    goto done;
+
+  if ((issuer != NULL) && (strncmp(issuer, "http://", 7) != 0) && (strncmp(issuer, "https://", 8) != 0))
+  {
+    snprintf(errBuf, errLen, "\"issuer\": an http(s) URL - the provider's issuer");
+    goto done;
+  }
+
+  if ((issuer != NULL) && ((clientId == NULL) || (clientId[0] == 0)))
+  {
+    snprintf(errBuf, errLen, "\"clientId\": the provider's client c3 logs in as");
+    goto done;
+  }
+
+  CorNode* brokersP = corTreeLookup(doc.treeP, "brokers");
+  CorNode* brokerP  = brokerFind(brokersP, url);
+
+  if (brokerP == NULL)
+  {
+    snprintf(errBuf, errLen, "no broker %s in the configuration", url);
+    goto done;
+  }
+
+  if (issuer == NULL)
+  {
+    CorNode* loginP = corTreeLookup(brokerP, "login");
+    if (loginP != NULL)
+      corTreeChildRemove(brokerP, loginP);
+  }
+  else
+  {
+    CorNode* loginP = corTreeObject(&doc.alloc, "login");
+
+    corTreeChildAdd(loginP, corTreeString(&doc.alloc, "issuer", issuer));
+    corTreeChildAdd(loginP, corTreeString(&doc.alloc, "clientId", clientId));
+    corTreeChildAdd(loginP, corTreeString(&doc.alloc, "scope", ((scope != NULL) && (scope[0] != 0)) ? scope : "openid"));
+
+    //
+    // "fdsc": a Verifiable Credential login - the credential type, the verifier, its scope
+    //
+    CorNode* fdscP = corTreeLookup(bodyP, "fdsc");
+    if ((fdscP != NULL) && (fdscP->type == CorObject))
+    {
+      const char* verifier;
+      const char* credType;
+      const char* vpScope;
+
+      if ((stringMember(fdscP, "verifier", true, 1023, &verifier, errBuf, errLen) == false) ||
+          (stringMember(fdscP, "credentialType", true, 127, &credType, errBuf, errLen) == false) ||
+          (stringMember(fdscP, "scope", false, 127, &vpScope, errBuf, errLen) == false))
+        goto done;
+
+      CorNode* vcP = corTreeObject(&doc.alloc, "fdsc");
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "verifier", verifier));
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "credentialType", credType));
+      corTreeChildAdd(vcP, corTreeString(&doc.alloc, "scope", ((vpScope != NULL) && (vpScope[0] != 0)) ? vpScope : "default"));
+      corTreeChildAdd(loginP, vcP);
+    }
+
+    corTreeChildAddOrReplace(brokerP, "login", loginP);
+  }
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
 
  done:
   docRelease(&doc);

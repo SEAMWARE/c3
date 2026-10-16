@@ -508,8 +508,12 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configBrokerTypes);
   else if ((strcmp(path, "/api/brokers/connect") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configBrokerConnect);
+  else if ((strcmp(path, "/api/brokers/login") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configBrokerLogin);
   else if ((strcmp(path, "/api/brokers/token") == 0) || (strcmp(path, "/api/brokers/tokens") == 0))
     credsRequest(connP, path);
+  else if (strncmp(path, "/api/oidc/", 10) == 0)
+    oidcRequest(connP, path);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configUiSet);
   else

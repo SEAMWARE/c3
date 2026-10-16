@@ -240,6 +240,26 @@ header.top { position: relative; }
   background: var(--bg-deep); font-family: var(--mono); font-size: 13px; color: var(--text-2);
 }
 .tokenpop .tp-remember { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.tokenpop .tp-sub { margin: 12px 0 6px; font-weight: 600; }
+.tokenpop .tp-login { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.tokenpop .tp-row { display: flex; gap: 8px; margin: 8px 0; }
+.tokenpop .tp-field {
+  width: 100%; box-sizing: border-box; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg-deep); font-family: var(--mono); font-size: 13px; color: var(--text-2);
+}
+.tokenpop .tp-row .tp-field { flex: 1; min-width: 0; }
+.tokenpop .tp-vc { margin: 0 0 8px; }
+.tokenpop .tp-hint { margin: -4px 0 8px 22px; font-size: 12px; }
+.askpop {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45); padding: 16px;
+}
+.askpop .askbox {
+  width: min(440px, 100%); padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); font-size: 14px;
+}
+.askpop .askbox p { margin: 0 0 14px; color: var(--text-2); }
+.askpop .actions { display: flex; gap: 8px; justify-content: flex-end; }
 .tokenpop .actions { display: flex; gap: 8px; }
 .tokenpop .tp-note { margin: 10px 0 0; color: var(--muted); }
 .tokenpop .tp-note code { font-family: var(--mono); font-size: 12px; }

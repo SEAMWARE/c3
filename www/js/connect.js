@@ -242,6 +242,13 @@ export class Connect {
     $('tp-close').onclick = () => this.tokenClose();
     $('tp-form').onsubmit = (e) => { e.preventDefault(); this.tokenSet(); };
     $('tp-forget').onclick = () => this.tokenForget();
+    $('tp-login').onsubmit = (e) => { e.preventDefault(); this.login(); };
+    $('tp-logout').onclick = () => this.logout();
+    $('tp-vc-on').onchange = () => { $('tp-vc').hidden = !$('tp-vc-on').checked; };
+    window.addEventListener('message', (e) => {
+      if ((e.origin !== location.origin) || !e.data || (e.data.c3 !== 'oidc')) return;
+      this.loginDone(e.data.broker, e.data.ok);
+    });
     $('tokenpop').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.tokenClose(); }
     });
@@ -353,17 +360,27 @@ export class Connect {
   //
   // The access token: the backend keeps it; the page shows where it comes from and its last characters
   //
-  async tokenState() {
-    let t;
-    try { t = await api.brokerTokens(); } catch (e) { return null; }
-    const url = this.tokenUrl || this.broker;
+  async tokenState(broker) {
+    let t, s;
+    try { [t, s] = await Promise.all([api.brokerTokens(), api.oidcSessions()]); } catch (e) { return null; }
+    const url = broker || this.tokenUrl || this.broker;
     const own = url && t.brokers ? t.brokers[url] : null;
-    return { own, def: t.default, tokenFile: t.tokenFile };
+    const login = url && s ? s[url] : null;
+    return { own, def: t.default, tokenFile: t.tokenFile, login };
   }
 
   tokenText(st) {
     if (!st) return 'c³ could not say.';
     const tail = (i) => (i.tail ? ` (…${i.tail}, ${i.length} characters)` : '');
+    if (st.login) {
+      const who = st.login.user ? ` as ${st.login.user}` : '';
+      if (st.login.credential) {
+        const until = new Date(st.login.credential.expiresAt * 1000).toLocaleString();
+        return `Logged in${who} at ${st.login.issuer}, with the credential ${st.login.credential.type} (until ${until}) - c³ presents it to the verifier, held by ${st.login.credential.holder.slice(0, 20)}…, and renews the token.` + (st.login.error ? ` ${st.login.error}.` : '');
+      }
+      const renew = st.login.refreshes ? 'renewed by c³ until the provider ends the session' : 'not renewable - log in again when it expires';
+      return `Logged in${who} at ${st.login.issuer} - its token ${renew}.` + (st.login.error ? ` ${st.login.error}.` : '');
+    }
     if (st.own) return st.own.source === 'remembered' ? `Its own token, remembered on this machine${tail(st.own)}.` : `Its own token, for as long as c³ runs${tail(st.own)}.`;
     if (st.def) return st.def.source === 'file' ? `c³'s default, from ${st.tokenFile}${tail(st.def)} - read again when the file changes.` : `c³'s default, from $C3_TOKEN${tail(st.def)}.`;
     return st.tokenFile ? `None - ${st.tokenFile} holds no token. Requests go without one.` : 'None - requests go without one.';
@@ -371,13 +388,32 @@ export class Connect {
 
   async tokenShow() {
     const st = await this.tokenState();
-    const set = !!(st && (st.own || st.def));
+    const set = !!(st && (st.login || st.own || st.def));
     $('token-btn').classList.toggle('set', set);
     $('token-btn').title = set ? 'An access token is sent to this broker' : 'No access token is sent to this broker';
     if (!$('tokenpop').hidden) {
       $('tp-state').textContent = this.tokenText(st);
       $('tp-forget').disabled = !(st && st.own);
       $('tp-remember').checked = !!(st && st.own && st.own.source === 'remembered');
+      $('tp-logout').disabled = !(st && st.login);
+      $('tp-redirect').textContent = location.origin + '/api/oidc/callback';
+      if (!this.loginFieldsFor || this.loginFieldsFor !== this.tokenUrl) {
+        const said = (this.security && this.security.url === this.tokenUrl && this.security.md.coraine_auth === 'oidc' && Array.isArray(this.security.md.authorization_servers))
+          ? { issuer: this.security.md.authorization_servers[0] } : {};
+        const kept = (this.brokers.find((b) => b.url === this.tokenUrl) || {}).login || (st && st.login) || said;
+        $('tp-issuer').value = kept.issuer || '';
+        $('tp-client').value = kept.clientId || '';
+        $('tp-scope').value = kept.scope || '';
+        const md = (this.security && this.security.url === this.tokenUrl) ? this.security.md : {};
+        const live = (st && st.login && st.login.credential) ? { credentialType: st.login.credential.type } : null;
+        const vc = kept.fdsc || live || (md.coraine_auth === 'fdsc' ? { verifier: md.fdsc_discovery || '' } : null);
+        $('tp-vc-on').checked = !!vc;
+        $('tp-vc').hidden = !vc;
+        $('tp-verifier').value = (vc && vc.verifier) || '';
+        $('tp-cred').value = (vc && vc.credentialType) || '';
+        $('tp-vpscope').value = (vc && vc.scope) || '';
+        this.loginFieldsFor = this.tokenUrl;
+      }
     }
     return st;
   }
@@ -417,6 +453,133 @@ export class Connect {
     this.tokenClose();
     this.toast('The token is sent to ' + this.tokenUrl + ' from now on');
     this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
+  }
+
+  //
+  // securityOf - what the broker says of its security (RFC 9728, coraine's /.well-known/oauth-protected-resource):
+  // which auth plugin, and where its tokens come from; null when it says nothing
+  //
+  async securityOf(url) {
+    const r = await api.brokerGet(url, '/.well-known/oauth-protected-resource');
+    return (r.ok && r.body && typeof r.body === 'object') ? r.body : null;
+  }
+
+  //
+  // securityShow - on a 401: the broker's own word on how to log in, added to the card once it is known - an
+  // OpenID provider: Log in, its issuer filled in; the Data Space Connector's verifier: what it is
+  //
+  async securityShow(url, children, actions) {
+    const md = await this.securityOf(url);
+    if (!md) return;
+    this.security = { url, md };
+    const issuer = Array.isArray(md.authorization_servers) ? md.authorization_servers[0] : null;
+    const card = actions.parentElement;
+    if (!card) return;
+    if (md.coraine_auth === 'oidc' && issuer) {
+      card.insertBefore(el('p', null, `It takes the tokens of the OpenID provider ${issuer} - log in there.`), actions);
+      const login = el('button', 'btn primary', 'Log in…');
+      login.type = 'button';
+      login.onclick = () => this.tokenOpen(`The broker takes the tokens of ${issuer}.`);
+      actions.prepend(login);
+      for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
+    } else if (md.coraine_auth === 'fdsc') {
+      card.insertBefore(el('p', null, `It takes the Data Space Connector's tokens - from the verifier ${issuer || '(not named)'}, for a Verifiable Credential.`), actions);
+      const login = el('button', 'btn primary', 'Log in with a credential…');
+      login.type = 'button';
+      login.onclick = () => this.tokenOpen('The broker takes the verifier\'s tokens: log in at the consumer\'s Keycloak, c³ gets the credential and presents it.');
+      actions.prepend(login);
+      for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
+    }
+  }
+
+  //
+  // login - the provider's login page in a window of its own (opened at the click: a popup blocker lets that
+  // one through), c3's callback tells this page when it is back (loginDone)
+  //
+  async login() {
+    const issuer = $('tp-issuer').value.trim().replace(/\/+$/, '');
+    const clientId = $('tp-client').value.trim();
+    const scope = $('tp-scope').value.trim() || 'openid';
+    if (!/^https?:\/\//.test(issuer)) { $('tp-state').textContent = 'The issuer: the provider\'s URL, e.g. https://keycloak.example.org/realms/city'; $('tp-issuer').focus(); return; }
+    if (!clientId) { $('tp-state').textContent = 'The client id: the provider\'s client c³ logs in as - a public one'; $('tp-client').focus(); return; }
+    const login = { issuer, clientId, scope };
+    if ($('tp-vc-on').checked) {
+      const verifier = $('tp-verifier').value.trim();
+      const credentialType = $('tp-cred').value.trim();
+      if (!/^https?:\/\//.test(verifier)) { $('tp-state').textContent = 'The verifier: its discovery document, e.g. https://verifier.example.org/services/data-service/.well-known/openid-configuration'; $('tp-verifier').focus(); return; }
+      if (!credentialType) { $('tp-state').textContent = 'The credential: its type at the issuer (credential_configuration_id), e.g. user-credential'; $('tp-cred').focus(); return; }
+      login.fdsc = { verifier, credentialType, scope: $('tp-vpscope').value.trim() || 'default' };
+    }
+    const w = window.open('', 'c3-login', 'popup,width=520,height=720');
+    try {
+      await api.brokerLoginSet(this.tokenUrl, login).catch(() => {});    // kept for next time - a broker not in the list yet keeps none
+      const r = await api.oidcStart(this.tokenUrl, login);
+      if (w) w.location = r.authorize; else location.href = r.authorize;
+      $('tp-state').textContent = 'Log in in the provider\'s window - this one hears when it is done.';
+    } catch (e) {
+      if (w) w.close();
+      $('tp-state').textContent = 'Not begun: ' + e.message;
+    }
+  }
+
+  async loginDone(broker, ok) {
+    if (!ok) { this.tokenShow(); return; }
+    const st = await this.tokenShow();
+    if (st && st.login) this.toast(`Logged in${st.login.user ? ' as ' + st.login.user : ''} - its token goes to ${broker} from now on`);
+    this.tokenClose();
+    this.connect(broker, broker === this.broker ? this.tenant : undefined);
+  }
+
+  async logout() {
+    try {
+      await api.oidcLogout(this.tokenUrl);
+    } catch (e) {
+      $('tp-state').textContent = 'Not logged out: ' + e.message;
+      return;
+    }
+    await this.tokenShow();
+    this.toast('Logged out - c³ forgot the tokens (the provider\'s session ends on its own)');
+  }
+
+  //
+  // ask - a question in a box of its own, answered by a button: true for the first
+  //
+  ask(text, yes, no = 'Cancel') {
+    return new Promise((resolve) => {
+      const pop = document.createElement('div');
+      pop.className = 'askpop';
+      pop.setAttribute('role', 'alertdialog');
+      pop.setAttribute('aria-modal', 'true');
+      const box = document.createElement('div');
+      box.className = 'askbox';
+      const p = document.createElement('p');
+      p.textContent = text;
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const done = (v) => { pop.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+      const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+      const bNo = document.createElement('button');
+      bNo.className = 'btn'; bNo.type = 'button'; bNo.textContent = no; bNo.onclick = () => done(false);
+      const bYes = document.createElement('button');
+      bYes.className = 'btn primary'; bYes.type = 'button'; bYes.textContent = yes; bYes.onclick = () => done(true);
+      actions.append(bNo, bYes);
+      box.append(p, actions);
+      pop.append(box);
+      pop.addEventListener('pointerdown', (e) => { if (e.target === pop) done(false); });
+      document.addEventListener('keydown', key, true);
+      document.body.append(pop);
+      bNo.focus();
+    });
+  }
+
+  //
+  // openWrite - a delete on a broker c³ sends no credentials to: it answered without any, so anyone who can
+  // reach it can do this too - said, and asked, first
+  //
+  async openWrite(what) {
+    const st = await this.tokenState(this.broker);
+    if (!st || st.login || st.own || st.def) return true;
+    return this.ask(`${this.broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete ${what}?`, 'Delete');
   }
 
   async tokenForget() {
@@ -646,6 +809,7 @@ export class Connect {
       tok.type = 'button';
       tok.onclick = () => this.tokenOpen('The broker answered 401.');
       actions.append(tok);
+      this.securityShow(url, children, actions);
     } else if (err.status === 403) {
       children.push(el('p', null, `The broker knows who is asking, and does not allow it - for ${this.tenantText()}.`));
     }
@@ -1314,6 +1478,7 @@ export class Connect {
   }
 
   async deleteEntity(id) {
+    if (!(await this.openWrite(id))) return;
     const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
     if (!r.ok) {
       this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
@@ -1333,6 +1498,7 @@ export class Connect {
     const several = e && Array.isArray(e[name]) && e[name].length > 1;
     const what = ds ? `${name} (${ds})` : (several ? `${name} - the default instance` : name);
     const del = async (query) => {
+      if (!(await this.openWrite(what))) return;
       const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '/attrs/' + encodeURIComponent(name) + query);
       if (!r.ok) {
         this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);

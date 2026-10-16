@@ -148,6 +148,7 @@ extern bool         configBrokerForget(char* body, char* errBuf, int errLen);  /
 extern bool         configUiSet(char* body, char* errBuf, int errLen);         // PUT /api/ui
 extern bool         configBrokerTypes(char* body, char* errBuf, int errLen);   // PUT /api/brokers/types
 extern bool         configBrokerConnect(char* body, char* errBuf, int errLen); // PUT /api/brokers/connect
+extern bool         configBrokerLogin(char* body, char* errBuf, int errLen);   // PUT /api/brokers/login
 extern bool         configMapsSync(const MapsArea* disk, int n, const MapsArea* added, char* errBuf, int errLen);
 extern char*        configMapsAreasText(CorAlloc* allocP);                   // "maps": {"areas": [...]}, rendered
 extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
@@ -163,6 +164,25 @@ extern bool         configCompilePresetDelete(char* body, char* errBuf, int errL
 extern void   credsInit(const char* tokenFile);                           // after configPathResolve
 extern char*  credsToken(const char* broker, const char** sourceP);       // malloc'ed, or NULL
 extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s)
+
+
+
+//
+// oidc.c - logging in to a broker's OpenID provider: the access token credsToken sends
+//
+extern void   oidcInit(void);                                             // after proxyInit: the refresh thread
+extern char*  oidcToken(const char* broker, char* userOut, int userLen);  // malloc'ed, or NULL - never waits
+extern void   oidcRequest(CorHttpConn* connP, const char* path);          // /api/oidc/...
+
+
+
+//
+// vc.c - a Verifiable Credential login (the Data Space Connector): the credential, its presentation
+//
+extern char*        vcObtain(const char* issuer, const char* access, const char* type, char* errBuf, int errLen);
+extern char*        vcPresent(const char* tokenEndpoint, const char* vc, const char* scope, long long* expiresInP, char* errBuf, int errLen);
+extern char*        vcPresentation(const char* vc, char* errBuf, int errLen);   // the presentation's JWT, malloc'ed
+extern const char*  vcHolderDid(void);
 extern bool         configRunBrokerPut(const char* defJson, char* errBuf, int errLen);  // a broker of Run, added or replaced (by name)
 extern bool         configRunBrokerDelete(const char* name, char* errBuf, int errLen);  // and forgotten
 

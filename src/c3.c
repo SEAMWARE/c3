@@ -235,6 +235,7 @@ int main(int argC, char* argV[])
   signal(SIGPIPE, SIG_IGN);
 
   proxyInit();
+  oidcInit();                                    // after proxyInit: corRest's client, TLS
 
   char url[128];
   snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);

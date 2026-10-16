@@ -90,6 +90,11 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz` | the coraine source tarball Compile builds from (passed on as `--source`) |
 | `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Connect, below) - read again whenever it changes |
 
+Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the proxies of the
+environment: `https_proxy`, `http_proxy`, `no_proxy` (or their upper-case names). A broker on this machine
+wants `no_proxy=127.0.0.1,localhost`. A certificate of a private CA (a local data space's): `SSL_CERT_FILE`, a
+bundle with it.
+
 Every option can also be given in the environment: `C3_` and the option's name, upper case, `-` as `_`
 (`C3_CORAINE_BUILD`, `C3_SOURCE`).
 
@@ -192,8 +197,29 @@ markers are coloured by), the downloaded map areas, and the last page:
   request to the broker carries `Authorization: Bearer <token>` - through the proxy, the live values'
   subscription over HTTP, and each message over the broker's WebSocket (in its `metadata`, as coraine
   reads it). The broker decides what it allows: a **401** shows the broker's reason with a **Token…**
-  button, a **403** says the token was understood and the request not allowed. A broker's token, in
+  button, a **403** says the token was understood and the request not allowed. A delete on a broker c³ sends no token
+  to - and that answered without one - asks first: anyone who can reach that broker can delete. A broker's token, in
   this order:
+  - a **login** to the broker's OpenID provider (Keycloak, Auth0, Entra ID, ...) - in **Token**, or
+    **Log in…** on a 401 when the broker says where its tokens come from (coraine's
+    `/.well-known/oauth-protected-resource`, RFC 9728 - the issuer is then filled in): the provider's issuer,
+    a client id, a scope (kept per broker in `c3.json` as `"login"`; no secret), then
+    **Log in**. The provider's login page opens in a window of its own, and sends the browser back to
+    `http://<c³>/api/oidc/callback` - the provider's client must be a **public** one that allows that
+    redirect URI. The authorization code flow with PKCE (S256). The tokens stay in c³'s backend, in memory -
+    never in the page, never on disk: after a restart, log in again. c³ renews the access token before it
+    expires, until the provider ends the session; then the login is over. **Log out** forgets the tokens.
+  - a **credential login** - the Data Space Connector (coraine's `fdsc.so`, or the connector itself) takes
+    the tokens of its verifier (VCVerifier), for a presented Verifiable Credential: **With a Verifiable
+    Credential** in the login, the verifier's discovery document, the credential type (Keycloak's
+    `credential_configuration_id`) and the verifier's scope - filled in from the broker's metadata where it
+    says. The login is at the consumer's Keycloak; c³ then gets the credential there (OID4VCI, Keycloak's
+    pre-authorized offer), presents it signed by a holder key of its own (P-256, `did:key`, in memory - as
+    the connector's DID Helper makes one), and sends the verifier's access token. Renewed: presented again
+    before the token expires; a new credential (the consumer's login refreshed) before the credential does.
+    The consumer's Keycloak client c³ logs in as: public, the redirect URI above, and OID4VCI enabled for it
+    (`oid4vci.enabled`, "OpenID for Verifiable Credentials" in its Advanced settings) - without it Keycloak
+    answers "Client not enabled for OID4VCI".
   - its own, typed in **Token**: kept in memory, and with **Remember it on this machine** in
     `secrets.json` beside `c3.json` (mode 600 - a file others can read is not used);
   - `--token-file <file>`: the default for every broker, read again whenever the file changes - so a

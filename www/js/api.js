@@ -44,6 +44,15 @@ export const brokerTokenSet    = (url, token, remember) => call('PUT', '/api/bro
 export const brokerTokenForget = (url) => call('DELETE', '/api/brokers/token', { url });
 
 //
+// Logging in to a broker's OpenID provider (oidc.c): how - kept in c3.json - and the sessions, whose tokens
+// stay in the backend
+//
+export const brokerLoginSet = (url, login) => call('PUT', '/api/brokers/login', { url, ...login });
+export const oidcStart      = (url, login) => call('POST', '/api/oidc/start', { url, ...login });
+export const oidcSessions   = () => call('GET', '/api/oidc/sessions');
+export const oidcLogout     = (url) => call('DELETE', '/api/oidc/session', { url });
+
+//
 // The tenant each broker is worked on in - every request to it through the proxy carries it
 //
 const tenants = new Map();

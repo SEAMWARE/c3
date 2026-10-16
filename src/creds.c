@@ -12,6 +12,7 @@
 //
 // A broker's token, in this order:
 //
+//   0. a login to its OpenID provider (oidc.c) - the access token of it, kept fresh
 //   1. its own - typed in Connect: kept in memory, and with "remember" in secrets.json beside the
 //      configuration (mode 0600), so it is there at the next start
 //   2. --token-file <file>: the default for every broker - read again whenever the file changes, so a
@@ -342,7 +343,14 @@ void credsInit(const char* tokenFileArg)
 char* credsToken(const char* broker, const char** sourceP)
 {
   const char* source = NULL;
-  char*       token  = NULL;
+  char*       token  = (broker != NULL) ? oidcToken(broker, NULL, 0) : NULL;
+
+  if (token != NULL)
+  {
+    if (sourceP != NULL)
+      *sourceP = "login";
+    return token;
+  }
 
   pthread_mutex_lock(&credsLock);
 
