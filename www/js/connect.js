@@ -242,6 +242,12 @@ export class Connect {
     $('tp-close').onclick = () => this.tokenClose();
     $('tp-form').onsubmit = (e) => { e.preventDefault(); this.tokenSet(); };
     $('tp-forget').onclick = () => this.tokenForget();
+    $('tp-login').onsubmit = (e) => { e.preventDefault(); this.login(); };
+    $('tp-logout').onclick = () => this.logout();
+    window.addEventListener('message', (e) => {
+      if ((e.origin !== location.origin) || !e.data || (e.data.c3 !== 'oidc')) return;
+      this.loginDone(e.data.broker, e.data.ok);
+    });
     $('tokenpop').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.tokenClose(); }
     });
@@ -353,17 +359,23 @@ export class Connect {
   //
   // The access token: the backend keeps it; the page shows where it comes from and its last characters
   //
-  async tokenState() {
-    let t;
-    try { t = await api.brokerTokens(); } catch (e) { return null; }
-    const url = this.tokenUrl || this.broker;
+  async tokenState(broker) {
+    let t, s;
+    try { [t, s] = await Promise.all([api.brokerTokens(), api.oidcSessions()]); } catch (e) { return null; }
+    const url = broker || this.tokenUrl || this.broker;
     const own = url && t.brokers ? t.brokers[url] : null;
-    return { own, def: t.default, tokenFile: t.tokenFile };
+    const login = url && s ? s[url] : null;
+    return { own, def: t.default, tokenFile: t.tokenFile, login };
   }
 
   tokenText(st) {
     if (!st) return 'c³ could not say.';
     const tail = (i) => (i.tail ? ` (…${i.tail}, ${i.length} characters)` : '');
+    if (st.login) {
+      const who = st.login.user ? ` as ${st.login.user}` : '';
+      const renew = st.login.refreshes ? 'renewed by c³ until the provider ends the session' : 'not renewable - log in again when it expires';
+      return `Logged in${who} at ${st.login.issuer} - its token ${renew}.` + (st.login.error ? ` ${st.login.error}.` : '');
+    }
     if (st.own) return st.own.source === 'remembered' ? `Its own token, remembered on this machine${tail(st.own)}.` : `Its own token, for as long as c³ runs${tail(st.own)}.`;
     if (st.def) return st.def.source === 'file' ? `c³'s default, from ${st.tokenFile}${tail(st.def)} - read again when the file changes.` : `c³'s default, from $C3_TOKEN${tail(st.def)}.`;
     return st.tokenFile ? `None - ${st.tokenFile} holds no token. Requests go without one.` : 'None - requests go without one.';
@@ -371,13 +383,22 @@ export class Connect {
 
   async tokenShow() {
     const st = await this.tokenState();
-    const set = !!(st && (st.own || st.def));
+    const set = !!(st && (st.login || st.own || st.def));
     $('token-btn').classList.toggle('set', set);
     $('token-btn').title = set ? 'An access token is sent to this broker' : 'No access token is sent to this broker';
     if (!$('tokenpop').hidden) {
       $('tp-state').textContent = this.tokenText(st);
       $('tp-forget').disabled = !(st && st.own);
       $('tp-remember').checked = !!(st && st.own && st.own.source === 'remembered');
+      $('tp-logout').disabled = !(st && st.login);
+      $('tp-redirect').textContent = location.origin + '/api/oidc/callback';
+      if (!this.loginFieldsFor || this.loginFieldsFor !== this.tokenUrl) {
+        const kept = (this.brokers.find((b) => b.url === this.tokenUrl) || {}).login || (st && st.login) || {};
+        $('tp-issuer').value = kept.issuer || '';
+        $('tp-client').value = kept.clientId || '';
+        $('tp-scope').value = kept.scope || '';
+        this.loginFieldsFor = this.tokenUrl;
+      }
     }
     return st;
   }
@@ -417,6 +438,89 @@ export class Connect {
     this.tokenClose();
     this.toast('The token is sent to ' + this.tokenUrl + ' from now on');
     this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
+  }
+
+  //
+  // login - the provider's login page in a window of its own (opened at the click: a popup blocker lets that
+  // one through), c3's callback tells this page when it is back (loginDone)
+  //
+  async login() {
+    const issuer = $('tp-issuer').value.trim().replace(/\/+$/, '');
+    const clientId = $('tp-client').value.trim();
+    const scope = $('tp-scope').value.trim() || 'openid';
+    if (!/^https?:\/\//.test(issuer)) { $('tp-state').textContent = 'The issuer: the provider\'s URL, e.g. https://keycloak.example.org/realms/city'; $('tp-issuer').focus(); return; }
+    if (!clientId) { $('tp-state').textContent = 'The client id: the provider\'s client c³ logs in as - a public one'; $('tp-client').focus(); return; }
+    const w = window.open('', 'c3-login', 'popup,width=520,height=720');
+    const login = { issuer, clientId, scope };
+    try {
+      await api.brokerLoginSet(this.tokenUrl, login).catch(() => {});    // kept for next time - a broker not in the list yet keeps none
+      const r = await api.oidcStart(this.tokenUrl, login);
+      if (w) w.location = r.authorize; else location.href = r.authorize;
+      $('tp-state').textContent = 'Log in in the provider\'s window - this one hears when it is done.';
+    } catch (e) {
+      if (w) w.close();
+      $('tp-state').textContent = 'Not begun: ' + e.message;
+    }
+  }
+
+  async loginDone(broker, ok) {
+    if (!ok) { this.tokenShow(); return; }
+    const st = await this.tokenShow();
+    if (st && st.login) this.toast(`Logged in${st.login.user ? ' as ' + st.login.user : ''} - its token goes to ${broker} from now on`);
+    this.tokenClose();
+    this.connect(broker, broker === this.broker ? this.tenant : undefined);
+  }
+
+  async logout() {
+    try {
+      await api.oidcLogout(this.tokenUrl);
+    } catch (e) {
+      $('tp-state').textContent = 'Not logged out: ' + e.message;
+      return;
+    }
+    await this.tokenShow();
+    this.toast('Logged out - c³ forgot the tokens (the provider\'s session ends on its own)');
+  }
+
+  //
+  // ask - a question in a box of its own, answered by a button: true for the first
+  //
+  ask(text, yes, no = 'Cancel') {
+    return new Promise((resolve) => {
+      const pop = document.createElement('div');
+      pop.className = 'askpop';
+      pop.setAttribute('role', 'alertdialog');
+      pop.setAttribute('aria-modal', 'true');
+      const box = document.createElement('div');
+      box.className = 'askbox';
+      const p = document.createElement('p');
+      p.textContent = text;
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const done = (v) => { pop.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+      const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+      const bNo = document.createElement('button');
+      bNo.className = 'btn'; bNo.type = 'button'; bNo.textContent = no; bNo.onclick = () => done(false);
+      const bYes = document.createElement('button');
+      bYes.className = 'btn primary'; bYes.type = 'button'; bYes.textContent = yes; bYes.onclick = () => done(true);
+      actions.append(bNo, bYes);
+      box.append(p, actions);
+      pop.append(box);
+      pop.addEventListener('pointerdown', (e) => { if (e.target === pop) done(false); });
+      document.addEventListener('keydown', key, true);
+      document.body.append(pop);
+      bNo.focus();
+    });
+  }
+
+  //
+  // openWrite - a delete on a broker c³ sends no credentials to: it answered without any, so anyone who can
+  // reach it can do this too - said, and asked, first
+  //
+  async openWrite(what) {
+    const st = await this.tokenState(this.broker);
+    if (!st || st.login || st.own || st.def) return true;
+    return this.ask(`${this.broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete ${what}?`, 'Delete');
   }
 
   async tokenForget() {
@@ -1314,6 +1418,7 @@ export class Connect {
   }
 
   async deleteEntity(id) {
+    if (!(await this.openWrite(id))) return;
     const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
     if (!r.ok) {
       this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
@@ -1333,6 +1438,7 @@ export class Connect {
     const several = e && Array.isArray(e[name]) && e[name].length > 1;
     const what = ds ? `${name} (${ds})` : (several ? `${name} - the default instance` : name);
     const del = async (query) => {
+      if (!(await this.openWrite(what))) return;
       const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '/attrs/' + encodeURIComponent(name) + query);
       if (!r.ok) {
         this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);

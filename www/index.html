@@ -306,6 +306,19 @@
       <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token" hidden>
         <div class="tp-head"><span>Access token for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
         <p class="tp-state" id="tp-state"></p>
+        <form class="tp-login" id="tp-login">
+          <div class="tp-sub">Log in to its OpenID provider <span class="muted">(Keycloak, ...)</span></div>
+          <input class="tp-field" id="tp-issuer" placeholder="issuer - https://keycloak.example.org/realms/city" aria-label="Issuer" autocomplete="off" spellcheck="false">
+          <div class="tp-row">
+            <input class="tp-field" id="tp-client" placeholder="client id - c3" aria-label="Client id" autocomplete="off" spellcheck="false">
+            <input class="tp-field" id="tp-scope" placeholder="scope - openid" aria-label="Scope" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="tp-login-btn">Log in</button>
+            <button class="btn" type="button" id="tp-logout">Log out</button>
+          </div>
+        </form>
+        <div class="tp-sub">Or a token of its own</div>
         <form id="tp-form">
           <input type="password" id="tp-token" placeholder="the token - a JWT, or Bearer &lt;JWT&gt;" aria-label="Access token" autocomplete="off" spellcheck="false">
           <label class="tp-remember"><input type="checkbox" id="tp-remember"> Remember it on this machine <span class="muted">(secrets.json beside c3.json, mode 600)</span></label>
@@ -314,7 +327,7 @@
             <button class="btn" type="button" id="tp-forget">Forget</button>
           </div>
         </form>
-        <p class="tp-note">Sent as <code>Authorization: Bearer</code> with every request to this broker - reads, live values, writes. The broker decides what it allows. Without one of its own, a broker gets c³'s default: <code>--token-file</code>, else <code>$C3_TOKEN</code>.</p>
+        <p class="tp-note">Sent as <code>Authorization: Bearer</code> with every request to this broker - reads, live values, writes. The broker decides what it allows. A login comes first, and its token is renewed by c³ until the provider ends the session; the provider's client must be a public one that allows <code id="tp-redirect">http://&lt;c³&gt;/api/oidc/callback</code> as a redirect URI. Without a login or a token of its own, a broker gets c³'s default: <code>--token-file</code>, else <code>$C3_TOKEN</code>.</p>
       </div>
     </div>
 

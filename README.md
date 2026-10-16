@@ -192,8 +192,16 @@ markers are coloured by), the downloaded map areas, and the last page:
   request to the broker carries `Authorization: Bearer <token>` - through the proxy, the live values'
   subscription over HTTP, and each message over the broker's WebSocket (in its `metadata`, as coraine
   reads it). The broker decides what it allows: a **401** shows the broker's reason with a **Token…**
-  button, a **403** says the token was understood and the request not allowed. A broker's token, in
+  button, a **403** says the token was understood and the request not allowed. A delete on a broker c³ sends no token
+  to - and that answered without one - asks first: anyone who can reach that broker can delete. A broker's token, in
   this order:
+  - a **login** to the broker's OpenID provider (Keycloak, Auth0, Entra ID, ...) - in **Token**: the
+    provider's issuer, a client id, a scope (kept per broker in `c3.json` as `"login"`; no secret), then
+    **Log in**. The provider's login page opens in a window of its own, and sends the browser back to
+    `http://<c³>/api/oidc/callback` - the provider's client must be a **public** one that allows that
+    redirect URI. The authorization code flow with PKCE (S256). The tokens stay in c³'s backend, in memory -
+    never in the page, never on disk: after a restart, log in again. c³ renews the access token before it
+    expires, until the provider ends the session; then the login is over. **Log out** forgets the tokens.
   - its own, typed in **Token**: kept in memory, and with **Remember it on this machine** in
     `secrets.json` beside `c3.json` (mode 600 - a file others can read is not used);
   - `--token-file <file>`: the default for every broker, read again whenever the file changes - so a
