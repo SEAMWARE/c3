@@ -337,6 +337,7 @@ export class Run {
         this.renderEngine();
         this.renderStartButton();
         this.renderBrowse();
+        this.configShow(false);
         this.levelsShow(false);
       }
     } catch (e) {
@@ -579,6 +580,91 @@ export class Run {
   // when opened and when a broker is selected (reload) - not on every state poll, which would redraw it under
   // a click
   //
+  //
+  // configShow - the Configuration panel of the selected broker: shown as Levels is, read when opened
+  //
+  configShow(reload = true) {
+    const d = $('rn-config');
+    const url = this.levelsBroker();
+    d.hidden = !url;
+    if (!url) { d.open = false; return; }
+    if (!this.configWired) {
+      this.configWired = true;
+      d.addEventListener('toggle', () => { if (d.open) this.configLoad(); });
+    }
+    if (d.open && reload) this.configLoad();
+  }
+
+  //
+  // configLoad - GET /build (what the broker is built with) and /admin/config (the options it runs with)
+  //
+  async configLoad() {
+    const url = this.levelsBroker();
+    if (!url) return;
+    const [b, c] = await Promise.all([api.brokerGet(url, '/build'), api.brokerGet(url, '/admin/config')]);
+    const body = $('rn-config-body');
+    body.replaceChildren();
+    const why = (r) => (r.body && (r.body.detail || r.body.title)) || 'HTTP ' + r.status;
+
+    if (b.ok && b.body) {
+      const bd = b.body.build || {};
+      body.append(el('div', 'rn-lvnote', [b.body.version, bd.type, bd.httpServer && 'HTTP server ' + bd.httpServer,
+        bd.gitSha && 'git ' + String(bd.gitSha).slice(0, 8), bd.builtAt && 'built ' + bd.builtAt].filter(Boolean).join(' - ')));
+      const feats = el('div', 'rn-cfgfeat');
+      for (const [k, v] of Object.entries(b.body.features || {})) {
+        const s = el('span', v ? 'on' : 'off', k);
+        s.title = v ? 'compiled in' : 'compiled out - only another build brings it';
+        feats.append(s);
+      }
+      body.append(feats);
+      const loaded = (b.body.plugins && b.body.plugins.loaded) || {};
+      const names = Object.entries(loaded).flatMap(([kind, v]) => (Array.isArray(v) ? v : [v]).filter(Boolean)
+        .map((p) => kind + ' ' + (p.alias || p.name || '')));
+      if (names.length) body.append(el('div', 'rn-lvnote', 'Plugins loaded: ' + names.join(', ')));
+    } else {
+      body.append(el('div', 'rn-lvnote warn', 'GET /build: ' + why(b)));
+    }
+
+    if (!c.ok || !c.body) {
+      body.append(el('div', 'rn-lvnote warn', 'GET /admin/config: ' + why(c) + (c.status === 404 ? ' - a coraine older than /admin/config' : '')));
+      $('rn-config-sum').textContent = 'Configuration and build';
+      return;
+    }
+    const opts = c.body.options || [];
+    const set = opts.filter((o) => o.from !== 'default');
+    const tab = el('table', 'rn-cfgtab');
+    const head = el('tr');
+    for (const h of ['option', 'value', 'from', 'default']) head.append(el('th', '', h));
+    tab.append(head);
+    let section = null;
+    for (const o of opts) {
+      const sec = o.section || 'coraine';
+      if (sec !== section) {
+        section = sec;
+        const tr = el('tr', 'sec');
+        const td = el('td', '', sec.replace(/:$/, ''));
+        td.colSpan = 4;
+        tr.append(td);
+        tab.append(tr);
+      }
+      const tr = el('tr', o.from !== 'default' ? 'set' : '');
+      const show = (v) => (v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+      const n = el('td', 'n', o.name);
+      n.title = (o.description || '') + (o.env ? '\nenvironment: ' + o.env : '') + (o.short ? '\nshort: ' + o.short : '');
+      const v = el('td', 'v', show(o.value));
+      if (o.secret) v.title = 'a secret - never shown';
+      const resolved = o.from === 'default' && !o.secret && show(o.value) !== show(o.default);   // 0 = "the broker decides"
+      const fromText = resolved ? 'default, resolved by the broker'
+        : { default: '', env: 'environment', longOption: 'command line', shortOption: 'command line', configFile: 'config file' }[o.from] || o.from;
+      tr.append(n, v, el('td', '', fromText), el('td', 'd', show(o.default)));
+      tab.append(tr);
+    }
+    const wrap = el('div', 'rn-cfgwrap');
+    wrap.append(tab);
+    body.append(el('div', 'rn-lvnote', 'Read-only: ' + opts.length + ' options, ' + set.length + ' not at their default (bold). Hover an option for what it does.'), wrap);
+    $('rn-config-sum').textContent = 'Configuration and build - ' + set.length + ' option' + (set.length === 1 ? '' : 's') + ' set';
+  }
+
   levelsShow(reload = true) {
     const d = $('rn-levels');
     const url = this.levelsBroker();
@@ -684,6 +770,7 @@ export class Run {
   select(kind, name) {
     this.sel = { kind, name };
     if (this.state) this.renderLists();
+    this.configShow();
     this.levelsShow();
     $('rn-log-name').textContent = name;
     const base = '/api/run/' + (kind === 'broker' ? 'brokers' : 'services') + '/' + encodeURIComponent(name) + '/log';

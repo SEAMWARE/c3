@@ -134,3 +134,16 @@
 .rn-lv .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rn-lvnote { font-size: 12px; color: var(--muted); margin: 4px 0; }
 .rn-lvnote.warn { color: var(--warn); }
+
+/* Configuration and build of a running broker (/admin/config, /build) */
+.rn-cfgfeat { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.rn-cfgfeat span { font-size: 11px; font-family: var(--mono, monospace); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); }
+.rn-cfgfeat span.on { color: var(--ok, inherit); }
+.rn-cfgfeat span.off { color: var(--muted); text-decoration: line-through; }
+.rn-cfgtab { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rn-cfgtab td, .rn-cfgtab th { padding: 2px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.rn-cfgtab th { color: var(--muted); font-weight: normal; }
+.rn-cfgtab td.n, .rn-cfgtab td.v, .rn-cfgtab td.d { font-family: var(--mono, monospace); overflow-wrap: anywhere; }
+.rn-cfgtab tr.set td.v { font-weight: bold; }
+.rn-cfgtab tr.sec td { color: var(--muted); padding-top: 8px; }
+.rn-cfgwrap { overflow-x: auto; }
