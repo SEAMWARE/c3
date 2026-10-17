@@ -284,6 +284,13 @@
               <div class="rn-stack">
                 <input class="cp-input" id="rn-ou-url" placeholder="opc.tcp://host:4840 - the server (empty: no OPC UA)" spellcheck="false" autocomplete="off" aria-label="OPC UA server URL">
                 <textarea class="cp-input rn-lines" id="rn-ou-roots" rows="2" placeholder="model roots - an Object's NodeId a line (ns=2;s=Press17): each one's model becomes entities" spellcheck="false" aria-label="Model roots"></textarea>
+                <div class="rn-ouchans" id="rn-ou-chans" aria-label="Channels"></div>
+                <div class="rn-row rn-oubtns">
+                  <button type="button" class="btn" id="rn-ou-addch">+ Channel</button>
+                  <button type="button" class="btn" id="rn-ou-browse">Browse the server</button>
+                </div>
+                <span class="cp-note" id="rn-ou-browsewhy"></span>
+                <div class="rn-outree" id="rn-ou-tree" hidden aria-label="The OPC UA server's nodes"></div>
                 <div class="rn-row">
                   <select class="rn-select" id="rn-ou-mode" aria-label="Security mode">
                     <option value="None">no security (None)</option>
@@ -309,7 +316,7 @@
                 </div>
               </div>
             </details>
-            <span class="cp-note">the opcua bridge (native brokers): a Variable a value, an Object a model of entities. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
+            <span class="cp-note">the opcua bridge (native brokers): a Variable a value (a Channel), an Object a model of entities (a model root). Browse a running broker's server to pick them. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
           </div>
 
           <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>

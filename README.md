@@ -581,6 +581,15 @@ pulled at the start, its progress in the broker's log. Images are named by their
   The password is sent once, on Start: c³ keeps it in `<run>/<name>/opcua.password` (mode 600) and names
   that file in `bridges.json`; it is never in `c3.json` or the API, which says only `passwordSet`. Empty
   keeps the one c³ has.
+  **Channels** - a Variable each, its value one attribute of an entity: the NodeId, the entity's id and
+  type, the attribute (the bridge's `topics` in `bridges.json`).
+  **Browse the server** - for a running broker with the admin API (its **Options**): the server's nodes as
+  the broker's bridge sees them, one level at a time (`GET /admin/bridges/opcua/inventory`, coraine with
+  bridge ABI 14). A Variable shows its value, DataType, unit and whether it can be written, and **+ Channel**
+  adds it - named as an AssetChannel on its Object would name it (the Object's `typeName` and name, the
+  attribute its path from the Object), so that both write the same entity; every name stays editable. An
+  Object's **+ model root** adds it to the model roots. What is picked takes effect when the broker is
+  stopped and started again.
 - **More options** - anything else, as typed (quotes keep words together).
 - What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
   without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
@@ -717,7 +726,7 @@ The backend's API, used by the pages:
 | `PUT /api/brokers/token` | `{"url", "token", "remember"}`: the broker's token (`Bearer ` in front is taken off); RFC 6750's characters only, 16 KB at most |
 | `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version` and coraine's `/admin/tenants` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, coraine's `/admin/tenants` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 | `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities only (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`), with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
