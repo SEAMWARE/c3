@@ -27,6 +27,32 @@ function button(label, cls, onClick) {
   return b;
 }
 
+//
+// parseLevels - "1-2,5,200-210" as a Set of numbers; rangesOf - a list of numbers back as "1-2,5,200-210"
+//
+function parseLevels(s) {
+  const out = new Set();
+  for (const part of String(s).split(',')) {
+    const m = /^\s*(\d+)\s*(?:-\s*(\d+))?\s*$/.exec(part);
+    if (!m) continue;
+    const a = Number(m[1]), b = m[2] !== undefined ? Number(m[2]) : a;
+    for (let l = a; l <= b && l - a < 1000; l++) out.add(l);
+  }
+  return out;
+}
+
+function rangesOf(levels) {
+  const v = [...new Set(levels)].sort((x, y) => x - y);
+  const out = [];
+  for (let i = 0; i < v.length; i++) {
+    let j = i;
+    while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++;
+    out.push(j > i ? v[i] + '-' + v[j] : String(v[i]));
+    i = j;
+  }
+  return out.join(',');
+}
+
 const mib = (b) => (b / (1024 * 1024)).toFixed(0) + ' MiB';
 const ago = (s) => (s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : s >= 60 ? Math.floor(s / 60) + ' min' : s + ' s');
 
@@ -311,6 +337,7 @@ export class Run {
         this.renderEngine();
         this.renderStartButton();
         this.renderBrowse();
+        this.levelsShow(false);
       }
     } catch (e) {
       $('rn-brokers').replaceChildren(el('span', 'rn-empty', 'The backend does not answer: ' + e.message));
@@ -536,11 +563,128 @@ export class Run {
     $('rn-form').scrollIntoView({ block: 'start' });
   }
 
+  // ------------------------------------------------------------------ log and trace levels
+
+  //
+  // levelsBroker - the selected broker, when it runs with the admin API: its URL; null otherwise
+  //
+  levelsBroker() {
+    const s = this.sel;
+    const k = s && s.kind === 'broker' ? this.kept(s.name) : null;
+    return k && k.state === 'running' && k.def.admin ? 'http://localhost:' + k.def.port : null;
+  }
+
+  //
+  // levelsShow - the Levels panel for the selected broker: shown for a running one with the admin API, read
+  // when opened and when a broker is selected (reload) - not on every state poll, which would redraw it under
+  // a click
+  //
+  levelsShow(reload = true) {
+    const d = $('rn-levels');
+    const url = this.levelsBroker();
+    d.hidden = !url;
+    if (!url) { d.open = false; return; }
+    if (!this.levelsWired) {
+      this.levelsWired = true;
+      d.addEventListener('toggle', () => { if (d.open) this.levelsLoad(); });
+    }
+    if (d.open && reload) this.levelsLoad();
+  }
+
+  async levelsLoad() {
+    const url = this.levelsBroker();
+    if (!url) return;
+    if (!this.traceLevels) {
+      try { this.traceLevels = await (await fetch('data/traceLevels.json')).json(); } catch (e) { this.traceLevels = []; }
+    }
+    const r = await api.brokerGet(url, '/admin/log');
+    this.levelsRender(url, r);
+  }
+
+  //
+  // levelsRender - verbose, debug and info, and a tick box per trace level by library, its tooltip what it
+  // traces; a change is PUT at once (the whole set: PUT replaces), and the broker's answer shown
+  //
+  levelsRender(url, r) {
+    const body = $('rn-levels-body');
+    body.replaceChildren();
+    if (!r.ok || !r.body) {
+      body.append(el('div', 'rn-lvnote warn', 'GET /admin/log: ' + ((r.body && (r.body.detail || r.body.title)) || 'HTTP ' + r.status)));
+      return;
+    }
+    const cur = r.body;
+    const on = parseLevels(cur.traceLevels || '');
+    const known = new Set(this.traceLevels.map((t) => t.level));
+    const traces = cur.traces;                               // coraine with "traces": compiled in or not
+
+    const apply = async () => {
+      const q = new URLSearchParams();
+      for (const f of ['verbose', 'debug', 'info']) q.set(f, body.querySelector('[data-flag="' + f + '"]').checked ? 'on' : 'off');
+      const set = [...body.querySelectorAll('[data-level]')].filter((c) => c.checked).map((c) => Number(c.dataset.level));
+      for (const l of on) if (!known.has(l)) set.push(l);                         // levels c3 does not know stay
+      q.set('traceLevels', rangesOf(set));
+      const w = await api.brokerWrite(url, 'PUT', '/admin/log?' + q.toString());
+      this.levelsRender(url, w.ok ? w : r);
+      if (!w.ok) $('rn-levels-body').prepend(el('div', 'rn-lvnote warn', 'PUT /admin/log: ' + ((w.body && (w.body.detail || w.body.title)) || 'HTTP ' + w.status)));
+    };
+
+    const flags = el('div', 'rn-lvflags');
+    for (const [f, label, why] of [['verbose', 'verbose', 'the -v lines: what the broker does, request by request'],
+                                   ['debug', 'debug', 'debug lines'], ['info', 'info', 'info lines']]) {
+      const l = el('label', 'rn-check');
+      const c = el('input');
+      c.type = 'checkbox';
+      c.checked = !!cur[f];
+      c.dataset.flag = f;
+      c.addEventListener('change', apply);
+      l.title = why;
+      l.append(c, document.createTextNode(' ' + label));
+      flags.append(l);
+    }
+    body.append(flags);
+
+    if (traces === false) body.append(el('div', 'rn-lvnote warn', 'A release build: traces are compiled out - trace levels are kept and trace nothing. A debug build (Compile, mode Debug) traces.'));
+    else if (traces === undefined) body.append(el('div', 'rn-lvnote', 'This broker does not say whether it has traces compiled in - only debug builds do.'));
+
+    const libs = [];
+    for (const t of this.traceLevels) {
+      let g = libs.find((x) => x.name === t.library);
+      if (!g) libs.push(g = { name: t.library, levels: [] });
+      g.levels.push(t);
+    }
+    for (const g of libs) {
+      const fs = el('fieldset', 'rn-lvlib');
+      fs.append(el('legend', '', g.name + ' ' + g.levels[0].level + '-' + g.levels[g.levels.length - 1].level));
+      const grid = el('div', 'rn-lvgrid');
+      for (const t of g.levels) {
+        const l = el('label', 'rn-lv');
+        const c = el('input');
+        c.type = 'checkbox';
+        c.checked = on.has(t.level);
+        c.disabled = traces === false;
+        c.dataset.level = t.level;
+        c.addEventListener('change', apply);
+        l.title = t.level + ' ' + t.name + ': ' + t.traces;
+        l.append(c, el('span', 'n', String(t.level)), el('span', 't', t.traces));
+        grid.append(l);
+      }
+      fs.append(grid);
+      body.append(fs);
+    }
+
+    const other = [...on].filter((l) => !known.has(l));
+    if (other.length) body.append(el('div', 'rn-lvnote', 'Also set, levels c3 has no name for: ' + rangesOf(other)));
+    const n = on.size;
+    $('rn-levels-sum').textContent = 'Log and trace levels - ' + ['verbose', 'debug', 'info'].filter((f) => cur[f]).concat(n ? [n + ' trace level' + (n === 1 ? '' : 's')] : []).join(', ')
+      .replace(/^$/, 'nothing extra');
+  }
+
   // ------------------------------------------------------------------ the log
 
   select(kind, name) {
     this.sel = { kind, name };
     if (this.state) this.renderLists();
+    this.levelsShow();
     $('rn-log-name').textContent = name;
     const base = '/api/run/' + (kind === 'broker' ? 'brokers' : 'services') + '/' + encodeURIComponent(name) + '/log';
     const a = $('rn-log-file');

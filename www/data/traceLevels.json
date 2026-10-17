@@ -1,0 +1,446 @@
+[
+ {
+  "level": 50,
+  "name": "CorJsonTlParse",
+  "library": "corJson",
+  "traces": "Parsing"
+ },
+ {
+  "level": 51,
+  "name": "CorJsonTlParseValue",
+  "library": "corJson",
+  "traces": "Parsing a VALUE"
+ },
+ {
+  "level": 52,
+  "name": "CorJsonTlParseObject",
+  "library": "corJson",
+  "traces": "Parsing an OBJECT"
+ },
+ {
+  "level": 53,
+  "name": "CorJsonTlParseArray",
+  "library": "corJson",
+  "traces": "Parsing an ARRAY"
+ },
+ {
+  "level": 54,
+  "name": "CorJsonTlAllocBuffer",
+  "library": "corJson",
+  "traces": "KJ Alloc Buffer"
+ },
+ {
+  "level": 55,
+  "name": "CorTreeTlMalloc",
+  "library": "corTree",
+  "traces": "Memory allocation"
+ },
+ {
+  "level": 56,
+  "name": "CorJsonTlAllocBytesLeft",
+  "library": "corJson",
+  "traces": "Bytes left in the alloc buffer"
+ },
+ {
+  "level": 57,
+  "name": "CorJsonTlRender",
+  "library": "corJson",
+  "traces": "Rendering a JSON document"
+ },
+ {
+  "level": 58,
+  "name": "CorJsonTlRenderNode",
+  "library": "corJson",
+  "traces": "Rendering a Node"
+ },
+ {
+  "level": 59,
+  "name": "CorJsonTlRenderArray",
+  "library": "corJson",
+  "traces": "Rendering an Array"
+ },
+ {
+  "level": 60,
+  "name": "CorJsonTlRenderObject",
+  "library": "corJson",
+  "traces": "Rendering an Object"
+ },
+ {
+  "level": 61,
+  "name": "CorJsonTlRenderValue",
+  "library": "corJson",
+  "traces": "Rendering a Value"
+ },
+ {
+  "level": 62,
+  "name": "CorJsonTlShortArray",
+  "library": "corJson",
+  "traces": "Short arrays"
+ },
+ {
+  "level": 63,
+  "name": "CorJsonTlNewline",
+  "library": "corJson",
+  "traces": "Newlines"
+ },
+ {
+  "level": 64,
+  "name": "CorTreeTlBuilder",
+  "library": "corTree",
+  "traces": "Building a tree"
+ },
+ {
+  "level": 65,
+  "name": "CorTreeTlFree",
+  "library": "corTree",
+  "traces": "Freeing nodes"
+ },
+ {
+  "level": 66,
+  "name": "CorTreeTlLookup",
+  "library": "corTree",
+  "traces": "Lookups"
+ },
+ {
+  "level": 100,
+  "name": "CortEvent",
+  "library": "corRest",
+  "traces": "Connection events"
+ },
+ {
+  "level": 101,
+  "name": "CortParse",
+  "library": "corRest",
+  "traces": "HTTP parsing"
+ },
+ {
+  "level": 102,
+  "name": "CortService",
+  "library": "corRest",
+  "traces": "Service lookup/matching"
+ },
+ {
+  "level": 103,
+  "name": "CortRequest",
+  "library": "corRest",
+  "traces": "Request processing"
+ },
+ {
+  "level": 104,
+  "name": "CortResponse",
+  "library": "corRest",
+  "traces": "Response building"
+ },
+ {
+  "level": 105,
+  "name": "CortPool",
+  "library": "corRest",
+  "traces": "Connection pool"
+ },
+ {
+  "level": 107,
+  "name": "CortRead",
+  "library": "corRest",
+  "traces": "Read operations"
+ },
+ {
+  "level": 108,
+  "name": "CortWrite",
+  "library": "corRest",
+  "traces": "Write operations"
+ },
+ {
+  "level": 109,
+  "name": "CortJson",
+  "library": "corRest",
+  "traces": "JSON operations"
+ },
+ {
+  "level": 110,
+  "name": "CortClientUrl",
+  "library": "corRest",
+  "traces": "URL parsing"
+ },
+ {
+  "level": 111,
+  "name": "CortClientConn",
+  "library": "corRest",
+  "traces": "Client connection management"
+ },
+ {
+  "level": 112,
+  "name": "CortClientPool",
+  "library": "corRest",
+  "traces": "Client connection pool"
+ },
+ {
+  "level": 113,
+  "name": "CortClientSend",
+  "library": "corRest",
+  "traces": "Client request sending"
+ },
+ {
+  "level": 114,
+  "name": "CortClientRecv",
+  "library": "corRest",
+  "traces": "Client response receiving"
+ },
+ {
+  "level": 115,
+  "name": "CortClientTls",
+  "library": "corRest",
+  "traces": "Client TLS operations"
+ },
+ {
+  "level": 116,
+  "name": "CortClientMulti",
+  "library": "corRest",
+  "traces": "Client concurrent requests"
+ },
+ {
+  "level": 150,
+  "name": "CorLdTInit",
+  "library": "corJsonld",
+  "traces": "Init"
+ },
+ {
+  "level": 151,
+  "name": "CorLdTContextParse",
+  "library": "corJsonld",
+  "traces": "Context parse"
+ },
+ {
+  "level": 152,
+  "name": "CorLdTExpand",
+  "library": "corJsonld",
+  "traces": "Expand"
+ },
+ {
+  "level": 153,
+  "name": "CorLdTCompact",
+  "library": "corJsonld",
+  "traces": "Compact"
+ },
+ {
+  "level": 154,
+  "name": "CorLdTCache",
+  "library": "corJsonld",
+  "traces": "Cache"
+ },
+ {
+  "level": 155,
+  "name": "CorLdTDownload",
+  "library": "corJsonld",
+  "traces": "Download"
+ },
+ {
+  "level": 156,
+  "name": "CorLdTPrefix",
+  "library": "corJsonld",
+  "traces": "Prefix"
+ },
+ {
+  "level": 200,
+  "name": "LdTInit",
+  "library": "corNgsild",
+  "traces": "Library initialization"
+ },
+ {
+  "level": 201,
+  "name": "LdTTypes",
+  "library": "corNgsild",
+  "traces": "Type conversions"
+ },
+ {
+  "level": 202,
+  "name": "LdTDetect",
+  "library": "corNgsild",
+  "traces": "Attribute type detection"
+ },
+ {
+  "level": 203,
+  "name": "LdTCheckEnt",
+  "library": "corNgsild",
+  "traces": "Entity validation"
+ },
+ {
+  "level": 204,
+  "name": "LdTCheckAttr",
+  "library": "corNgsild",
+  "traces": "Attribute validation"
+ },
+ {
+  "level": 205,
+  "name": "LdTCheckSub",
+  "library": "corNgsild",
+  "traces": "Subscription validation"
+ },
+ {
+  "level": 206,
+  "name": "LdTCheckReg",
+  "library": "corNgsild",
+  "traces": "Registration validation"
+ },
+ {
+  "level": 207,
+  "name": "LdTCheckGeo",
+  "library": "corNgsild",
+  "traces": "GeoJSON validation"
+ },
+ {
+  "level": 208,
+  "name": "LdTCheckDt",
+  "library": "corNgsild",
+  "traces": "DateTime validation"
+ },
+ {
+  "level": 209,
+  "name": "LdTCheckUri",
+  "library": "corNgsild",
+  "traces": "URI validation"
+ },
+ {
+  "level": 210,
+  "name": "LdTRender",
+  "library": "corNgsild",
+  "traces": "Format conversion"
+ },
+ {
+  "level": 220,
+  "name": "LdTFwdReq",
+  "library": "corNgsild",
+  "traces": "Forwarded request — request line (verb + URL path)"
+ },
+ {
+  "level": 221,
+  "name": "LdTFwdReqParam",
+  "library": "corNgsild",
+  "traces": "Forwarded request — URL params (one line per param)"
+ },
+ {
+  "level": 222,
+  "name": "LdTFwdReqHeader",
+  "library": "corNgsild",
+  "traces": "Forwarded request — HTTP request headers (one per line)"
+ },
+ {
+  "level": 223,
+  "name": "LdTFwdReqBody",
+  "library": "corNgsild",
+  "traces": "Forwarded request — request body"
+ },
+ {
+  "level": 224,
+  "name": "LdTFwdRes",
+  "library": "corNgsild",
+  "traces": "Forwarded request — response line (status)"
+ },
+ {
+  "level": 225,
+  "name": "LdTFwdResHeader",
+  "library": "corNgsild",
+  "traces": "Forwarded request — HTTP response headers (one per line)"
+ },
+ {
+  "level": 226,
+  "name": "LdTFwdResBody",
+  "library": "corNgsild",
+  "traces": "Forwarded request — response body"
+ },
+ {
+  "level": 227,
+  "name": "LdTRegMatch",
+  "library": "corNgsild",
+  "traces": "Registration matching — why a registration did or did not match"
+ },
+ {
+  "level": 230,
+  "name": "LdTNotifReq",
+  "library": "corNgsild",
+  "traces": "Notification — request line (verb + URL)"
+ },
+ {
+  "level": 231,
+  "name": "LdTNotifReqParam",
+  "library": "corNgsild",
+  "traces": "Notification — URL params (one line per param)"
+ },
+ {
+  "level": 232,
+  "name": "LdTNotifHeader",
+  "library": "corNgsild",
+  "traces": "Notification — HTTP headers (one per line)"
+ },
+ {
+  "level": 233,
+  "name": "LdTNotifBody",
+  "library": "corNgsild",
+  "traces": "Notification — body"
+ },
+ {
+  "level": 234,
+  "name": "LdTNotifRes",
+  "library": "corNgsild",
+  "traces": "Notification — response line (status)"
+ },
+ {
+  "level": 235,
+  "name": "LdTCsrNotify",
+  "library": "corNgsild",
+  "traces": "CSR-subscription notification — why one was or was not sent."
+ },
+ {
+  "level": 240,
+  "name": "LdTExpiry",
+  "library": "corNgsild",
+  "traces": "Transient Entity — lazily removed after a read found it expired"
+ },
+ {
+  "level": 300,
+  "name": "CorAllocTraceInit",
+  "library": "corAlloc",
+  "traces": "Init"
+ },
+ {
+  "level": 301,
+  "name": "CorAllocTraceNewBuffer",
+  "library": "corAlloc",
+  "traces": "New buffer"
+ },
+ {
+  "level": 302,
+  "name": "CorAllocTraceAllocBytesLeft",
+  "library": "corAlloc",
+  "traces": "Alloc bytes left"
+ },
+ {
+  "level": 303,
+  "name": "CorAllocTraceAlloc",
+  "library": "corAlloc",
+  "traces": "Alloc"
+ },
+ {
+  "level": 400,
+  "name": "CtDistOpRequest",
+  "library": "coraine",
+  "traces": "Outbound distributed-operation request URL"
+ },
+ {
+  "level": 401,
+  "name": "CtHa",
+  "library": "coraine",
+  "traces": "Cache sync with the other broker instances"
+ },
+ {
+  "level": 402,
+  "name": "CtBridge",
+  "library": "coraine",
+  "traces": "Bridge plugins: transports to non-NGSI-LD peers"
+ },
+ {
+  "level": 403,
+  "name": "CtService",
+  "library": "coraine",
+  "traces": "Service Execution: registrations, executions, executors"
+ }
+]
