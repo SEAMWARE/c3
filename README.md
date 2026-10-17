@@ -643,6 +643,13 @@ starts its log (the run before is `broker.log.1`). Without `Accept: text/event-s
 taken). A native broker writes its log itself; a container's is filled by `docker logs -f`; c³'s own lines
 start with `c3: `.
 
+**Configuration and build** - above the log of a running broker with the admin API, read-only: what it is
+built with (`GET /build` - version, debug or release, HTTP server, commit; each feature compiled in or out;
+the plugins loaded) and every option it runs with (`GET /admin/config`, coraine with `ADMIN_CONFIG`) -
+value, where it came from (command line, environment, default; "resolved by the broker" when a default of 0
+means the broker chooses), the default, and on hover what it does, its environment variable and short form;
+a plugin's options under its section. A secret (`--dbPwd`, `--dbURI`, `--troePwd`) comes masked from the broker.
+
 **Log and trace levels** - above the log of a running broker with the admin API: verbose, debug and info,
 and a tick box per trace level, grouped by library, its tooltip what it traces - set live through coraine's
 `/admin/log` (a change PUTs the whole set; a level c³ has no name for, set elsewhere, is kept). The levels
@@ -733,7 +740,7 @@ The backend's API, used by the pages:
 | `PUT /api/brokers/token` | `{"url", "token", "remember"}`: the broker's token (`Bearer ` in front is taken off); RFC 6750's characters only, 16 KB at most |
 | `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, coraine's `/admin/tenants`, `/admin/log` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 | `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
