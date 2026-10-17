@@ -79,6 +79,27 @@ export class Run {
     $('rn-grace').addEventListener('input', () => { this.f.grace = parseInt($('rn-grace').value, 10) || 0; this.changed(false); });
     $('rn-bconf').addEventListener('input', () => { this.f.bridgeConfig = $('rn-bconf').value.trim(); this.changed(false); });
     $('rn-args').addEventListener('input', () => { this.f.args = $('rn-args').value; this.changed(false); });
+
+    //
+    // OPC UA - the opcua bridge's server, in the bridge configuration c3 writes
+    //
+    const ou = (id, key, ev, get) => $(id).addEventListener(ev, () => { this.f.opcua[key] = get($(id)); this.renderOpcua(); this.changed(false); });
+    ou('rn-ou-url',      'url',            'input',  (e) => e.value.trim());
+    ou('rn-ou-roots',    'roots',          'input',  (e) => e.value);
+    ou('rn-ou-mode',     'mode',           'change', (e) => e.value);
+    ou('rn-ou-policy',   'policy',         'change', (e) => e.value);
+    ou('rn-ou-cert',     'certificate',    'input',  (e) => e.value.trim());
+    ou('rn-ou-key',      'privateKey',     'input',  (e) => e.value.trim());
+    ou('rn-ou-appuri',   'applicationUri', 'input',  (e) => e.value.trim());
+    ou('rn-ou-trust',    'trustList',      'input',  (e) => e.value);
+    ou('rn-ou-trustany', 'trustAny',       'change', (e) => e.checked);
+    ou('rn-ou-user',     'username',       'input',  (e) => e.value.trim());
+    $('rn-ou-pw').addEventListener('input', () => { this.f.opcua.password = $('rn-ou-pw').value; this.renderOpcua(); });
+  }
+
+  opcuaDefaults() {
+    return { url: '', roots: '', mode: 'None', policy: '', certificate: '', privateKey: '', applicationUri: '',
+             trustList: '', trustAny: false, username: '', password: '', passwordSet: false };
   }
 
   defaults() {
@@ -86,6 +107,7 @@ export class Run {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
       store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
       ws: true, admin: true, verbose: true, bridges: [], bridgeConfig: '', ckan: [], args: '',
+      opcua: this.opcuaDefaults(),
     };
   }
 
@@ -344,7 +366,17 @@ export class Run {
       store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
       ws: (d.transports || []).includes('ws'), admin: d.admin, verbose: d.verbose, bridges: [...(d.bridges || [])],
       bridgeConfig: d.bridgeConfig || '', ckan: [...(d.ckan || [])], args: d.args || '',
+      opcua: this.opcuaDefaults(),
     };
+    if (d.opcua) {
+      const o = d.opcua, sec = o.security || {}, u = o.user || {};
+      Object.assign(this.f.opcua, {
+        url: o.url || '', roots: (o.roots || []).join('\n'), mode: sec.mode || 'None', policy: sec.policy || '',
+        certificate: sec.certificate || '', privateKey: sec.privateKey || '', applicationUri: sec.applicationUri || '',
+        trustList: (sec.trustList || []).join('\n'), trustAny: !!sec.trustAny, username: u.username || '',
+        passwordSet: !!u.passwordSet,
+      });
+    }
     this.nameTouched = true;
     this.editing = d.name;
     this.portsChosen = true;
@@ -622,6 +654,7 @@ export class Run {
     }) : [el('span', 'cp-note', 'this broker has no bridge plugins')]));
     if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
     this.renderCkan(cont);
+    this.renderOpcua();
     if ($('rn-args').value !== f.args) $('rn-args').value = f.args;
 
     this.renderName();
@@ -660,7 +693,30 @@ export class Run {
       f.ckan.map((id) => (sets.find((d) => d.id === id) || { label: id }).label.replace(/^.* - /, '')).join(', ') : 'none');
   }
 
-  def() {
+  //
+  // renderOpcua - the OPC UA server's fields, and the line that sums them up
+  //
+  renderOpcua() {
+    const o = this.f.opcua;
+    const cont = this.f.where === 'container';             // the image has no opcua bridge
+    const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
+    set('rn-ou-url', o.url); set('rn-ou-roots', o.roots); set('rn-ou-mode', o.mode); set('rn-ou-policy', o.policy);
+    set('rn-ou-cert', o.certificate); set('rn-ou-key', o.privateKey); set('rn-ou-appuri', o.applicationUri);
+    set('rn-ou-trust', o.trustList); set('rn-ou-user', o.username);
+    $('rn-ou-trustany').checked = o.trustAny;
+    if (!o.password) $('rn-ou-pw').value = '';
+    $('rn-ou-pw').placeholder = o.passwordSet ? 'password - kept by c3; empty keeps it' : 'password';
+    const secure = o.mode !== 'None';
+    $('rn-ou-secure').hidden = !secure;
+    $('rn-ou-policy').disabled = !secure;
+    for (const id of ['rn-ou-url', 'rn-ou-roots', 'rn-ou-mode', 'rn-ou-user', 'rn-ou-pw']) $(id).disabled = cont;
+    const roots = o.roots.split('\n').map((x) => x.trim()).filter(Boolean).length;
+    $('rn-opcua-sum').textContent = cont ? 'a native broker only: the image has no opcua bridge'
+      : (!o.url ? 'none' : o.url + ' - ' + (secure ? o.mode + ' ' + (o.policy || 'Basic256Sha256') : 'no security')
+        + (o.username ? ', user ' + o.username : ', anonymous') + ', ' + roots + ' model' + (roots === 1 ? '' : 's'));
+  }
+
+  def(withSecret = false) {
     const f = this.f;
     const d = {
       name: f.name, set: f.set, from: f.from, where: f.where, store: f.store, dbDir: f.store === 'corDB' && f.dbDir,
@@ -670,6 +726,20 @@ export class Run {
     };
     if (f.bridgeConfig) d.bridgeConfig = f.bridgeConfig;
     if (f.ckan.length) d.ckan = f.ckan;
+    if (f.opcua.url) {
+      const o = f.opcua;
+      const lines = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
+      d.opcua = { url: o.url, roots: lines(o.roots), security: { mode: o.mode } };
+      if (o.mode !== 'None') {
+        Object.assign(d.opcua.security, { certificate: o.certificate, privateKey: o.privateKey,
+          applicationUri: o.applicationUri, trustList: lines(o.trustList), trustAny: o.trustAny });
+        if (o.policy) d.opcua.security.policy = o.policy;
+      }
+      if (o.username) {
+        d.opcua.user = { username: o.username };
+        if (withSecret && o.password) d.opcua.user.password = o.password;      // on Start only - never in the command preview
+      }
+    }
     if (f.from === 'build') d.build = f.build;
     if (f.from === 'image') d.image = f.tag.includes('/') ? f.tag : this.repo() + ':' + f.tag;
     return d;
@@ -730,7 +800,8 @@ export class Run {
   }
 
   async start() {
-    const d = this.def();
+    const d = this.def(true);
+    this.f.opcua.password = '';                       // sent once: c3 keeps it, the page does not
     $('rn-start').disabled = true;
     try {
       const b = await api.runStart(d);

@@ -186,6 +186,20 @@ typedef struct Def
   char  bridges[128];                            // comma-separated
   char  bridgeConfig[1024];                      // a file; "": the one c3 writes for mqtt and ckan
   char  ckan[512];                               // CKAN datasets (ids in www/data/ckan.json), comma-separated
+  struct                                         // the OPC UA bridge's server - the bridge configuration c3 writes
+  {
+    char  url[512];                              // opc.tcp://host:port; "": no OPC UA
+    char  roots[2048];                           // the Objects whose models are AssetChannels - NodeIds, one a line
+    char  mode[16];                              // None, Sign, SignAndEncrypt; "": None
+    char  policy[32];                            // Basic256Sha256 ...; "": the bridge's default
+    char  certificate[1024];                     // the client's certificate, a file
+    char  privateKey[1024];                      // its key, a file
+    char  applicationUri[256];                   // the URI the certificate names
+    char  trustList[4096];                       // the server certificates trusted - files, one a line
+    bool  trustAny;
+    char  username[128];                         // "": anonymous
+    char  password[256];                         // WRITE-ONLY: as a request gave it, kept in <broker dir>/opcua.password (0600) and wiped
+  } opcua;
   bool  verbose;                                 // -v
   char  args[2048];                              // more options, as typed
   int   grace;
@@ -819,7 +833,146 @@ static bool memberList(CorNode* oP, const char* name, const char** allowed, char
   return true;
 }
 
-static const char* bridgeNames[] = { "ckan", "dds", "loopback", "modbus", "mqtt", NULL };
+static const char* bridgeNames[] = { "ckan", "dds", "loopback", "modbus", "mqtt", "opcua", NULL };
+
+
+
+// -----------------------------------------------------------------------------
+//
+// memberLines - an array of strings as one, a line each (a file path, a NodeId may hold a comma)
+//
+static bool memberLines(CorNode* oP, const char* name, char* out, int outLen, char* err, int errLen)
+{
+  CorNode* nP = corTreeLookup(oP, name);
+  int      len = 0;
+
+  out[0] = 0;
+
+  if ((nP == NULL) || (nP->type == CorNull))
+    return true;
+
+  if (nP->type != CorArray)
+  {
+    snprintf(err, errLen, "\"%s\" is a list of strings", name);
+    return false;
+  }
+
+  for (CorNode* iP = nP->value.head; iP != NULL; iP = iP->next)
+  {
+    if ((iP->type != CorString) || (strchr(iP->value.s, '\n') != NULL))
+    {
+      snprintf(err, errLen, "\"%s\" is a list of strings, each one line", name);
+      return false;
+    }
+
+    if (iP->value.s[0] == 0)
+      continue;
+
+    int n = snprintf(&out[len], outLen - len, "%s%s", (len > 0) ? "\n" : "", iP->value.s);
+
+    if (n >= outLen - len)
+    {
+      snprintf(err, errLen, "\"%s\" is longer than %d characters", name, outLen - 1);
+      return false;
+    }
+
+    len += n;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaParse - "opcua": { "url", "roots": [...], "security": { "mode", "policy", "certificate", "privateKey",
+// "applicationUri", "trustList": [...], "trustAny" }, "user": { "username", "password" } } - the bridge's own
+// "server" shape (corOpcuaBridge's README), and the model roots
+//
+static bool opcuaParse(CorNode* opP, Def* dP, char* err, int errLen)
+{
+  if ((opP == NULL) || (opP->type == CorNull))
+    return true;
+
+  if (opP->type != CorObject)
+  {
+    snprintf(err, errLen, "\"opcua\" is an object");
+    return false;
+  }
+
+  CorNode* secP  = corTreeLookup(opP, "security");
+  CorNode* userP = corTreeLookup(opP, "user");
+
+  if (((secP != NULL) && (secP->type != CorObject) && (secP->type != CorNull)) || ((userP != NULL) && (userP->type != CorObject) && (userP->type != CorNull)))
+  {
+    snprintf(err, errLen, "\"opcua.security\" and \"opcua.user\" are objects");
+    return false;
+  }
+
+  if (!memberString(opP, "url", dP->opcua.url, sizeof(dP->opcua.url), err, errLen) ||
+      !memberLines(opP,  "roots", dP->opcua.roots, sizeof(dP->opcua.roots), err, errLen))
+    return false;
+
+  if ((secP != NULL) && (secP->type == CorObject) &&
+      (!memberString(secP, "mode",           dP->opcua.mode,           sizeof(dP->opcua.mode),           err, errLen) ||
+       !memberString(secP, "policy",         dP->opcua.policy,         sizeof(dP->opcua.policy),         err, errLen) ||
+       !memberString(secP, "certificate",    dP->opcua.certificate,    sizeof(dP->opcua.certificate),    err, errLen) ||
+       !memberString(secP, "privateKey",     dP->opcua.privateKey,     sizeof(dP->opcua.privateKey),     err, errLen) ||
+       !memberString(secP, "applicationUri", dP->opcua.applicationUri, sizeof(dP->opcua.applicationUri), err, errLen) ||
+       !memberLines(secP,  "trustList",      dP->opcua.trustList,      sizeof(dP->opcua.trustList),      err, errLen) ||
+       !memberBool(secP,   "trustAny",       &dP->opcua.trustAny,      err, errLen)))
+    return false;
+
+  if ((userP != NULL) && (userP->type == CorObject) &&
+      (!memberString(userP, "username", dP->opcua.username, sizeof(dP->opcua.username), err, errLen) ||
+       !memberString(userP, "password", dP->opcua.password, sizeof(dP->opcua.password), err, errLen)))
+    return false;
+
+  if ((dP->opcua.url[0] != 0) && (strncmp(dP->opcua.url, "opc.tcp://", 10) != 0))
+  {
+    snprintf(err, errLen, "\"opcua.url\" is opc.tcp://<host>:<port>");
+    return false;
+  }
+
+  const char* m = dP->opcua.mode;
+
+  if ((m[0] != 0) && (strcmp(m, "None") != 0) && (strcmp(m, "Sign") != 0) && (strcmp(m, "SignAndEncrypt") != 0))
+  {
+    snprintf(err, errLen, "\"opcua.security.mode\" is None, Sign or SignAndEncrypt");
+    return false;
+  }
+
+  const char* p = dP->opcua.policy;
+
+  if ((p[0] != 0) && (strcmp(p, "Basic256Sha256") != 0) && (strcmp(p, "Aes128_Sha256_RsaOaep") != 0) && (strcmp(p, "Aes256_Sha256_RsaPss") != 0))
+  {
+    snprintf(err, errLen, "\"opcua.security.policy\" is Basic256Sha256, Aes128_Sha256_RsaOaep or Aes256_Sha256_RsaPss");
+    return false;
+  }
+
+  bool secure = (m[0] != 0) && (strcmp(m, "None") != 0);
+
+  if (secure && ((dP->opcua.certificate[0] == 0) || (dP->opcua.privateKey[0] == 0) || (dP->opcua.applicationUri[0] == 0)))
+  {
+    snprintf(err, errLen, "OPC UA security %s needs the client's certificate, its private key and the application URI the certificate names", m);
+    return false;
+  }
+
+  if (secure && (dP->opcua.trustList[0] == 0) && (dP->opcua.trustAny == false))
+  {
+    snprintf(err, errLen, "OPC UA security %s needs the server certificates to trust - or \"trust any\", which cannot tell the server meant from one that pretends to be it", m);
+    return false;
+  }
+
+  if ((dP->opcua.password[0] != 0) && (dP->opcua.username[0] == 0))
+  {
+    snprintf(err, errLen, "an OPC UA password needs its username");
+    return false;
+  }
+
+  return true;
+}
 
 static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 {
@@ -869,8 +1022,32 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberInt(oP,    "healthPort",   &dP->healthPort,  0, 65535, err, errLen) ||
       !memberInt(oP,    "grace",        &dP->grace,       1, 600, err, errLen) ||
       !memberList(oP,   "bridges",      bridgeNames,      dP->bridges, sizeof(dP->bridges), err, errLen) ||
-      !memberList(oP,   "ckan",         NULL,             dP->ckan,    sizeof(dP->ckan),    err, errLen))
+      !memberList(oP,   "ckan",         NULL,             dP->ckan,    sizeof(dP->ckan),    err, errLen) ||
+      !opcuaParse(corTreeLookup(oP, "opcua"), dP, err, errLen))
     return false;
+
+  //
+  // An OPC UA server is the opcua bridge's, in the bridge configuration c3 writes - and the bridge without
+  // one has nothing to connect to
+  //
+  if (dP->opcua.url[0] != 0)
+  {
+    if (dP->bridgeConfig[0] != 0)
+    {
+      snprintf(err, errLen, "the OPC UA server goes in the bridge configuration c3 writes - not with a bridge configuration file of one's own");
+      return false;
+    }
+    if (!listHas(dP->bridges, "opcua"))
+    {
+      int len = strlen(dP->bridges);
+      snprintf(&dP->bridges[len], sizeof(dP->bridges) - len, "%sopcua", (len > 0) ? "," : "");
+    }
+  }
+  else if (listHas(dP->bridges, "opcua") && (dP->bridgeConfig[0] == 0))
+  {
+    snprintf(err, errLen, "the opcua bridge needs an OPC UA server (its URL) - or a bridge configuration file of one's own");
+    return false;
+  }
 
   //
   // CKAN datasets are Channels of the ckan bridge, in the bridge configuration c3 writes
@@ -979,6 +1156,45 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// linesJson - a string of lines as a JSON array of strings
+//
+static void linesJson(Str* sP, const char* lines)
+{
+  char        copy[4096];
+  char*       save  = NULL;
+  bool        first = true;
+
+  snprintf(copy, sizeof(copy), "%s", lines);
+  strAdd(sP, "[");
+  for (char* t = strtok_r(copy, "\n", &save); t != NULL; t = strtok_r(NULL, "\n", &save))
+  {
+    strAdd(sP, first ? "" : ", ");
+    strAddJson(sP, t);
+    first = false;
+  }
+  strAdd(sP, "]");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaPasswordPath - where c3 keeps a broker's OPC UA password: its directory, 0600
+//
+static void brokerDir(const char* name, char* out, int outLen);
+
+static void opcuaPasswordPath(const char* name, char* out, int outLen)
+{
+  char dir[2300];
+
+  brokerDir(name, dir, sizeof(dir));
+  snprintf(out, outLen, "%s/opcua.password", dir);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // defRender - a broker's options as JSON (c3.json and the API)
 //
 static void defRender(const Def* dP, Str* sP)
@@ -1025,6 +1241,28 @@ static void defRender(const Def* dP, Str* sP)
     }
   }
   strAdd(sP, "]");
+  if (dP->opcua.url[0] != 0)
+  {
+    //
+    // The OPC UA server - never the password: the API says whether c3 keeps one
+    //
+    char        pwPath[2400];
+    struct stat st;
+
+    opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
+
+    strAdd(sP, ", \"opcua\": {\"url\": ");       strAddJson(sP, dP->opcua.url);
+    strAdd(sP, ", \"roots\": ");                 linesJson(sP, dP->opcua.roots);
+    strAdd(sP, ", \"security\": {\"mode\": ");   strAddJson(sP, (dP->opcua.mode[0] != 0) ? dP->opcua.mode : "None");
+    strAdd(sP, ", \"policy\": ");                strAddJson(sP, (dP->opcua.policy[0] != 0) ? dP->opcua.policy : NULL);
+    strAdd(sP, ", \"certificate\": ");           strAddJson(sP, (dP->opcua.certificate[0] != 0) ? dP->opcua.certificate : NULL);
+    strAdd(sP, ", \"privateKey\": ");            strAddJson(sP, (dP->opcua.privateKey[0] != 0) ? dP->opcua.privateKey : NULL);
+    strAdd(sP, ", \"applicationUri\": ");        strAddJson(sP, (dP->opcua.applicationUri[0] != 0) ? dP->opcua.applicationUri : NULL);
+    strAdd(sP, ", \"trustList\": ");             linesJson(sP, dP->opcua.trustList);
+    strAddf(sP, ", \"trustAny\": %s}", dP->opcua.trustAny ? "true" : "false");
+    strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
+    strAddf(sP, ", \"passwordSet\": %s}}", ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0)) ? "true" : "false");
+  }
   strAddf(sP, ", \"admin\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->verbose ? "true" : "false");
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
   strAddf(sP, ", \"grace\": %d", dP->grace);
@@ -1086,12 +1324,12 @@ static void brokerContainer(const char* name, char* out, int outLen) { snprintf(
 
 // -----------------------------------------------------------------------------
 //
-// bridgesConfigOwn - c3 writes the broker's bridge configuration: a bridge that needs one (mqtt, dds) or
+// bridgesConfigOwn - c3 writes the broker's bridge configuration: a bridge that needs one (mqtt, dds, opcua) or
 // CKAN datasets, and no file of the user's
 //
 static bool bridgesConfigOwn(const Def* dP)
 {
-  return (hasBridge(dP, "mqtt") || hasBridge(dP, "dds") || (dP->ckan[0] != 0)) && (dP->bridgeConfig[0] == 0);
+  return (hasBridge(dP, "mqtt") || hasBridge(dP, "dds") || (dP->ckan[0] != 0) || (dP->opcua.url[0] != 0)) && (dP->bridgeConfig[0] == 0);
 }
 
 
@@ -1119,6 +1357,12 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
   if (container && (dP->ckan[0] != 0))
   {
     snprintf(err, errLen, "CKAN datasets need a native broker: the image has no ckan bridge");
+    return false;
+  }
+
+  if (container && hasBridge(dP, "opcua"))
+  {
+    snprintf(err, errLen, "the OPC UA bridge needs a native broker: the image has no opcua bridge");
     return false;
   }
 
@@ -1982,10 +2226,66 @@ static bool ckanMember(const Def* dP, Str* sP, char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// opcuaMember - the opcua bridge's member of the bridge configuration: its "server" - the URL, the
+// SecureChannel, the user (the password as the file c3 keeps it in) - and an AssetChannel per model root
+//
+static void opcuaMember(const Def* dP, Str* sP)
+{
+  strAdd(sP, "\"opcua\": {\"server\": {\"url\": ");
+  strAddJson(sP, dP->opcua.url);
+
+  if ((dP->opcua.mode[0] != 0) && (strcmp(dP->opcua.mode, "None") != 0))
+  {
+    strAdd(sP, ", \"security\": {\"mode\": ");      strAddJson(sP, dP->opcua.mode);
+    if (dP->opcua.policy[0] != 0)
+    {
+      strAdd(sP, ", \"policy\": ");                 strAddJson(sP, dP->opcua.policy);
+    }
+    strAdd(sP, ", \"certificate\": ");              strAddJson(sP, dP->opcua.certificate);
+    strAdd(sP, ", \"privateKey\": ");               strAddJson(sP, dP->opcua.privateKey);
+    strAdd(sP, ", \"applicationUri\": ");           strAddJson(sP, dP->opcua.applicationUri);
+    strAdd(sP, ", \"trustList\": ");                linesJson(sP, dP->opcua.trustList);
+    if (dP->opcua.trustAny)
+      strAdd(sP, ", \"trustAny\": true");
+    strAdd(sP, "}");
+  }
+
+  if (dP->opcua.username[0] != 0)
+  {
+    char pwPath[2400];
+
+    opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
+    strAdd(sP, ", \"user\": {\"username\": ");      strAddJson(sP, dP->opcua.username);
+    strAdd(sP, ", \"passwordFile\": ");             strAddJson(sP, pwPath);
+    strAdd(sP, "}");
+  }
+
+  strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"assetChannels\": {");
+
+  char  copy[2048];
+  char* save  = NULL;
+  bool  first = true;
+
+  snprintf(copy, sizeof(copy), "%s", dP->opcua.roots);
+  for (char* t = strtok_r(copy, "\n", &save); t != NULL; t = strtok_r(NULL, "\n", &save))
+  {
+    strAdd(sP, first ? "" : ", ");
+    strAddJson(sP, t);
+    strAdd(sP, ": {\"entities\": \"natural\"}");
+    first = false;
+  }
+
+  strAdd(sP, "}}}");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // bridgesConfigWrite - the bridge configuration c3 writes: the MQTT bridge for the set's Mosquitto (no
 // Channels, the server only - notifications to mqtt:// work), the DDS bridge as coraine's etc/dds-default.json
-// has it (domain 0, no topics - the types it discovers kept in the broker's directory, natively), and the CKAN
-// datasets of the broker
+// has it (domain 0, no topics - the types it discovers kept in the broker's directory, natively), the CKAN
+// datasets of the broker, and its OPC UA server (opcuaMember)
 //
 static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
 {
@@ -2028,6 +2328,23 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
       strFree(&s);
       return false;
     }
+  }
+  if (dP->opcua.url[0] != 0)
+  {
+    char        pwPath[2400];
+    struct stat st;
+
+    opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
+
+    if ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) != 0))
+    {
+      snprintf(err, errLen, "the OPC UA user '%s' has no password: give it once, c3 keeps it", dP->opcua.username);
+      strFree(&s);
+      return false;
+    }
+
+    strAdd(&s, (s.len > 1) ? ", " : "");
+    opcuaMember(dP, &s);
   }
   strAdd(&s, "}\n");
 
@@ -3345,6 +3662,43 @@ static void logRotate(const char* path)
 
 // -----------------------------------------------------------------------------
 //
+// opcuaPasswordKeep - a password the request gave: into <broker dir>/opcua.password (0600), and wiped from the
+// Def - c3.json and the API never hold it. None given: the file c3 keeps stays (empty keeps it). false: answered
+//
+static bool opcuaPasswordKeep(CorHttpConn* connP, Def* dP)
+{
+  if (dP->opcua.password[0] == 0)
+    return true;
+
+  char dir[2300];
+  char path[2400];
+
+  brokerDir(dP->name, dir, sizeof(dir));
+  dirsMake(dir);
+  opcuaPasswordPath(dP->name, path, sizeof(path));
+
+  int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  int  n  = strlen(dP->opcua.password);
+  bool ok = (fd != -1) && (fchmod(fd, 0600) == 0) && (write(fd, dP->opcua.password, n) == n) && (write(fd, "\n", 1) == 1);
+
+  if (fd != -1)
+    close(fd);
+
+  memset(dP->opcua.password, 0, sizeof(dP->opcua.password));
+
+  if (ok == false)
+  {
+    serveError(connP, 500, "Internal error", "the OPC UA password cannot be kept");
+    return false;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // brokerStart - a broker kept (and replaced, when 'newDef') and started: 202 with it
 //
 static void brokerStart(CorHttpConn* connP, const Def* dP)
@@ -3910,7 +4264,10 @@ void runRequest(CorHttpConn* connP, const char* path)
     if (!post)
       serveError(connP, 405, "Method not allowed", path);
     else if (bodyDef(connP, &d))
-      brokerStart(connP, &d);
+    {
+      if (opcuaPasswordKeep(connP, &d) == true)    // the password into its file, out of the Def
+        brokerStart(connP, &d);
+    }
     return;
   }
 

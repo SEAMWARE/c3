@@ -95,3 +95,7 @@
 .rn-drop > summary { cursor: pointer; font-size: 14px; min-height: 24px; }
 .rn-drop[open] > summary { margin-bottom: 6px; }
 .rn-checks.rn-col { flex-direction: column; gap: 2px; }
+.rn-stack { display: flex; flex-direction: column; gap: 6px; }
+.rn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.rn-row > * { flex: 1 1 160px; min-width: 0; }
+.rn-lines { font-family: var(--mono, monospace); resize: vertical; }

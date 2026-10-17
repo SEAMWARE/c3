@@ -572,7 +572,15 @@ pulled at the start, its progress in the broker's log. Images are named by their
 - **Port** and **health port** (`--healthPort`; empty: none), **grace** - the seconds from SIGTERM to SIGKILL.
 - **Plugins** - the WebSocket transport (`--transports ws`), the admin API (`--apiPlugins admin`), `-v`.
 - **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
-  configuration file; with mqtt and no file, c³ writes `<run>/<name>/bridges.json` naming the set's Mosquitto.
+  configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
+  the DDS defaults for dds, the CKAN datasets ticked, the OPC UA server.
+- **OPC UA** (native brokers - the image has no opcua bridge) - the server's URL, the model roots (an
+  Object's NodeId a line: each one an AssetChannel, its model a graph of entities), the security mode and
+  policy, the client's certificate, key and application URI, the server certificates to trust (or "trust
+  any", which says what it means), a username and password. Filling in the URL ticks the opcua bridge.
+  The password is sent once, on Start: c³ keeps it in `<run>/<name>/opcua.password` (mode 600) and names
+  that file in `bridges.json`; it is never in `c3.json` or the API, which says only `passwordSet`. Empty
+  keeps the one c³ has.
 - **More options** - anything else, as typed (quotes keep words together).
 - What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
   without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
@@ -637,7 +645,8 @@ touches nothing else.
 <name>/broker.log     its output and c3's lines about it; broker.log.1 the run before
 <name>/state.json     a native broker that runs: {pid, procStart, started} - and broker.pid, the pid alone
 <name>/data/          --dbDir of a native corDB
-<name>/bridges.json   the MQTT bridge's configuration c3 writes
+<name>/bridges.json   the bridge configuration c3 writes (mqtt, dds, ckan, opcua)
+<name>/opcua.password the OPC UA user's password, mode 600 - never in c3.json
 services/<container>.log
 ```
 

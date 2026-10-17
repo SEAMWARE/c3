@@ -277,6 +277,41 @@
             <span class="cp-note">open-data datasets read through the ckan bridge when the broker starts - one entity per row (www/data/ckan.json)</span>
           </div>
 
+          <div class="cp-field">
+            <span class="cp-label">OPC UA</span>
+            <details class="rn-drop" id="rn-opcua-drop">
+              <summary id="rn-opcua-sum">none</summary>
+              <div class="rn-stack">
+                <input class="cp-input" id="rn-ou-url" placeholder="opc.tcp://host:4840 - the server (empty: no OPC UA)" spellcheck="false" autocomplete="off" aria-label="OPC UA server URL">
+                <textarea class="cp-input rn-lines" id="rn-ou-roots" rows="2" placeholder="model roots - an Object's NodeId a line (ns=2;s=Press17): each one's model becomes entities" spellcheck="false" aria-label="Model roots"></textarea>
+                <div class="rn-row">
+                  <select class="rn-select" id="rn-ou-mode" aria-label="Security mode">
+                    <option value="None">no security (None)</option>
+                    <option value="Sign">Sign</option>
+                    <option value="SignAndEncrypt">SignAndEncrypt</option>
+                  </select>
+                  <select class="rn-select" id="rn-ou-policy" aria-label="Security policy">
+                    <option value="">Basic256Sha256</option>
+                    <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+                    <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+                  </select>
+                </div>
+                <div class="rn-stack" id="rn-ou-secure">
+                  <input class="cp-input" id="rn-ou-cert" placeholder="the client's certificate - a file (DER or PEM)" spellcheck="false" autocomplete="off" aria-label="Client certificate">
+                  <input class="cp-input" id="rn-ou-key" placeholder="its private key - a file" spellcheck="false" autocomplete="off" aria-label="Private key">
+                  <input class="cp-input" id="rn-ou-appuri" placeholder="the application URI the certificate names (urn:...)" spellcheck="false" autocomplete="off" aria-label="Application URI">
+                  <textarea class="cp-input rn-lines" id="rn-ou-trust" rows="2" placeholder="the server certificates to trust - a file a line" spellcheck="false" aria-label="Trusted server certificates"></textarea>
+                  <label class="rn-check"><input type="checkbox" id="rn-ou-trustany"> trust any server certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
+                </div>
+                <div class="rn-row">
+                  <input class="cp-input" id="rn-ou-user" placeholder="username (empty: anonymous)" spellcheck="false" autocomplete="off" aria-label="OPC UA username">
+                  <input class="cp-input" id="rn-ou-pw" type="password" placeholder="password" autocomplete="new-password" aria-label="OPC UA password">
+                </div>
+              </div>
+            </details>
+            <span class="cp-note">the opcua bridge (native brokers): a Variable a value, an Object a model of entities. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
+          </div>
+
           <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
 
           <div class="rn-svcneed" id="rn-need"></div>
