@@ -26,7 +26,8 @@
 //   <name>/state.json     a native broker that runs: its pid and the process's start time - c3 attaches to it
 //                         again after a restart when that process still runs
 //   <name>/data/          corDB's --dbDir (a native broker)
-//   <name>/bridges.json   the bridge configuration c3 writes: the MQTT set's, the CKAN datasets
+//   <name>/bridges.json   the bridge configuration c3 writes: the MQTT set's, DDS's defaults, the CKAN datasets
+//   <name>/dds-types/     the DDS types the dds bridge discovered (a native broker)
 //   services/<container>.log
 //
 // A native broker is started in a session of its own (setsid), its stdout and stderr appended to its log
@@ -1085,6 +1086,18 @@ static void brokerContainer(const char* name, char* out, int outLen) { snprintf(
 
 // -----------------------------------------------------------------------------
 //
+// bridgesConfigOwn - c3 writes the broker's bridge configuration: a bridge that needs one (mqtt, dds) or
+// CKAN datasets, and no file of the user's
+//
+static bool bridgesConfigOwn(const Def* dP)
+{
+  return (hasBridge(dP, "mqtt") || hasBridge(dP, "dds") || (dP->ckan[0] != 0)) && (dP->bridgeConfig[0] == 0);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // argvMake - the broker's command: the program (natively) or the engine's `run` (in a container), then
 // coraine's options from the form. 'ports' are the services' host ports (natively they are reached on
 // 127.0.0.1, from a container by their names on the network c3). false with why.
@@ -1100,7 +1113,7 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
 
   if (hasBridge(dP, "mqtt") || (dP->bridgeConfig[0] != 0))
     snprintf(bridgeFile, sizeof(bridgeFile), "%s", (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : "");
-  if ((hasBridge(dP, "mqtt") || (dP->ckan[0] != 0)) && (dP->bridgeConfig[0] == 0))
+  if (bridgesConfigOwn(dP) == true)
     snprintf(bridgeFile, sizeof(bridgeFile), "%s/bridges.json", dir);
 
   if (container && (dP->ckan[0] != 0))
@@ -1970,7 +1983,9 @@ static bool ckanMember(const Def* dP, Str* sP, char* err, int errLen)
 // -----------------------------------------------------------------------------
 //
 // bridgesConfigWrite - the bridge configuration c3 writes: the MQTT bridge for the set's Mosquitto (no
-// Channels, the server only - notifications to mqtt:// work), and the CKAN datasets of the broker
+// Channels, the server only - notifications to mqtt:// work), the DDS bridge as coraine's etc/dds-default.json
+// has it (domain 0, no topics - the types it discovers kept in the broker's directory, natively), and the CKAN
+// datasets of the broker
 //
 static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
 {
@@ -1990,6 +2005,20 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
       strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://%s:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", svc, kinds[KIND_MOSQUITTO].port, dP->name);
     else
       strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://127.0.0.1:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", port, dP->name);
+  }
+  if (hasBridge(dP, "dds"))
+  {
+    strAdd(&s, (s.len > 1) ? ", " : "");
+    strAdd(&s, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": 0}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": {}");
+    if (strcmp(dP->where, "container") != 0)
+    {
+      strAdd(&s, ", \"typesDirectory\": ");
+      char types[2400];
+      snprintf(types, sizeof(types), "%s/dds-types", dir);
+      dirsMake(types);                             // the bridge writes in it, it makes none
+      strAddJson(&s, types);
+    }
+    strAdd(&s, "}}");
   }
   if (dP->ckan[0] != 0)
   {
@@ -2078,7 +2107,7 @@ static void* startThread(void* vP)
     }
   }
 
-  if ((hasBridge(&d, "mqtt") || (d.ckan[0] != 0)) && (d.bridgeConfig[0] == 0) && (bridgesConfigWrite(&d, ports[KIND_MOSQUITTO], err, sizeof(err)) == false))
+  if ((bridgesConfigOwn(&d) == true) && (bridgesConfigWrite(&d, ports[KIND_MOSQUITTO], err, sizeof(err)) == false))
   {
     startFail(bP, err);
     svcRelease(bP);
