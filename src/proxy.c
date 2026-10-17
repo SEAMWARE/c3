@@ -10,7 +10,8 @@
 // from the same origin, so the browser has no CORS rule to apply, and the broker needs no --corsOrigin.
 //
 // GET: the NGSI-LD API (/ngsi-ld/...), /version, coraine's /admin/tenants (the tenants Connect offers),
-// coraine's /admin/bridges/<bridge>/inventory (what a bridge's source offers - Operate's OPC UA browser) and
+// coraine's /admin/bridges/<bridge>/inventory (what a bridge's source offers - Operate's OPC UA browser),
+// coraine's /admin/log (the log and trace levels - Operate's Levels; PUT sets them, from c3's own page) and
 // /.well-known/oauth-protected-resource (RFC 9728: how to get a token the broker takes - Connect reads it on
 // a 401).
 // POST, PATCH, PUT, DELETE: the entities only (/ngsi-ld/v1/entities, /ngsi-ld/v1/entities/...), with the
@@ -368,17 +369,18 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   if (verb == CorVerbGet)
   {
     if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0) &&
-        (strcmp(path, "/.well-known/oauth-protected-resource") != 0) && (inventoryPath(path) == false))
+        (strcmp(path, "/.well-known/oauth-protected-resource") != 0) && (inventoryPath(path) == false) && (strcmp(path, "/admin/log") != 0))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /admin/tenants, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /admin/tenants, /admin/log, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
       return;
     }
   }
   else
   {
-    if ((strcmp(path, "/ngsi-ld/v1/entities") != 0) && (strncmp(path, "/ngsi-ld/v1/entities/", 21) != 0))
+    if ((strcmp(path, "/ngsi-ld/v1/entities") != 0) && (strncmp(path, "/ngsi-ld/v1/entities/", 21) != 0) &&
+        ((verb != CorVerbPut) || (strcmp(path, "/admin/log") != 0)))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards writes for the entities only (/ngsi-ld/v1/entities...)");
+      serveError(connP, 403, "Forbidden", "the proxy forwards writes for the entities (/ngsi-ld/v1/entities...) and PUT /admin/log only");
       return;
     }
 
