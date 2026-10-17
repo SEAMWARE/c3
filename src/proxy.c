@@ -9,7 +9,8 @@
 // The page names the broker in the X-C3-Broker header (http://host:port). The page and the API come
 // from the same origin, so the browser has no CORS rule to apply, and the broker needs no --corsOrigin.
 //
-// GET: the NGSI-LD API (/ngsi-ld/...), /version, coraine's /admin/tenants (the tenants Connect offers) and
+// GET: the NGSI-LD API (/ngsi-ld/...), /version, coraine's /admin/tenants (the tenants Connect offers),
+// coraine's /admin/bridges/<bridge>/inventory (what a bridge's source offers - Operate's OPC UA browser) and
 // /.well-known/oauth-protected-resource (RFC 9728: how to get a token the broker takes - Connect reads it on
 // a 401).
 // POST, PATCH, PUT, DELETE: the entities only (/ngsi-ld/v1/entities, /ngsi-ld/v1/entities/...), with the
@@ -47,6 +48,32 @@
 #define PROXY_TIMEOUT_MS      15000              // the whole request, connect included
 #define PROXY_MAX_RESPONSE    (64 * 1024 * 1024) // a body larger than this is refused (502)
 #define PROXY_URL_MAX         8192
+
+
+
+// -----------------------------------------------------------------------------
+//
+// inventoryPath - /admin/bridges/<bridge>/inventory: one path segment between, a bridge's name
+//
+static bool inventoryPath(const char* path)
+{
+  const char* prefix = "/admin/bridges/";
+  const char* suffix = "/inventory";
+  int         plen   = strlen(prefix);
+  int         slen   = strlen(suffix);
+  int         len    = strlen(path);
+
+  if ((len <= plen + slen) || (strncmp(path, prefix, plen) != 0) || (strcmp(&path[len - slen], suffix) != 0))
+    return false;
+
+  for (const char* cP = &path[plen]; cP < &path[len - slen]; cP++)
+  {
+    if (*cP == '/')
+      return false;
+  }
+
+  return true;
+}
 
 
 
@@ -341,9 +368,9 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   if (verb == CorVerbGet)
   {
     if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0) &&
-        (strcmp(path, "/.well-known/oauth-protected-resource") != 0))
+        (strcmp(path, "/.well-known/oauth-protected-resource") != 0) && (inventoryPath(path) == false))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /admin/tenants and /.well-known/oauth-protected-resource only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /admin/tenants, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
       return;
     }
   }

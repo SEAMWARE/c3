@@ -95,11 +95,160 @@ export class Run {
     ou('rn-ou-trustany', 'trustAny',       'change', (e) => e.checked);
     ou('rn-ou-user',     'username',       'input',  (e) => e.value.trim());
     $('rn-ou-pw').addEventListener('input', () => { this.f.opcua.password = $('rn-ou-pw').value; this.renderOpcua(); });
+    $('rn-ou-addch').addEventListener('click', () => this.channelAdd({ node: '', entityId: '', entityType: '', attribute: '' }));
+    $('rn-ou-browse').addEventListener('click', () => this.browseToggle());
+  }
+
+  //
+  // channelAdd - a Channel to the form: a Variable's value one attribute of an entity
+  //
+  channelAdd(ch) {
+    const o = this.f.opcua;
+    if (ch.node && o.channels.some((c) => c.node === ch.node)) return;       // a Variable is one Channel
+    o.channels.push(ch);
+    this.renderOpcua();
+    this.changed(false);
+  }
+
+  //
+  // renderChannels - the Channels, each one editable: the NodeId, the entity's id and type, the attribute
+  //
+  renderChannels() {
+    const box = $('rn-ou-chans');
+    const o = this.f.opcua;
+    const cont = this.f.where === 'container';
+    box.replaceChildren();
+    o.channels.forEach((c, ix) => {
+      const card = el('div', 'rn-ouch');
+      for (const [key, label, ph] of [['node', 'Variable (NodeId)', 'ns=2;s=Tank1.Level'], ['entityId', 'entity id', 'urn:ngsi-ld:Tank:T1'],
+                                      ['entityType', 'entity type', 'Tank'], ['attribute', 'attribute', 'level']]) {
+        const f = el('label', 'rn-ouf rn-ouf-' + key);
+        const inp = el('input', 'cp-input');
+        inp.value = c[key];
+        inp.placeholder = ph;
+        inp.spellcheck = false;
+        inp.disabled = cont;
+        inp.addEventListener('input', () => { c[key] = inp.value.trim(); this.renderOpcuaSum(); this.changed(false); });
+        f.append(el('span', '', label), inp);
+        card.append(f);
+      }
+      const del = button('×', 'rn-oudel', () => { o.channels.splice(ix, 1); this.renderOpcua(); this.changed(false); });
+      del.title = 'remove this Channel';
+      del.setAttribute('aria-label', 'remove Channel ' + (ix + 1));
+      del.disabled = cont;
+      card.append(del);
+      box.append(card);
+    });
+  }
+
+  //
+  // browseBroker - the running broker the form is, with the opcua bridge: its URL; null and why not
+  //
+  browseBroker() {
+    const k = this.kept(this.f.name);
+    if (this.f.where === 'container') return { url: null, why: '' };
+    if (!this.f.opcua.url) return { url: null, why: 'Browsing asks a running broker: give the server, start the broker, then browse.' };
+    if (!k || k.state !== 'running') return { url: null, why: 'Browsing asks the running broker\'s bridge: start ' + (this.f.name || 'the broker') + ', then browse - and stop and start it again for what you pick.' };
+    if (!k.def.admin) return { url: null, why: 'Browsing needs the admin API in the broker (Plugins).' };
+    return { url: 'http://localhost:' + k.def.port, why: 'The server as ' + k.name + '\'s bridge sees it. What you pick takes effect when the broker is started again.' };
+  }
+
+  async browseToggle() {
+    const tree = $('rn-ou-tree');
+    if (!tree.hidden) { tree.hidden = true; $('rn-ou-browse').textContent = 'Browse the server'; return; }
+    const b = this.browseBroker();
+    if (!b.url) return;
+    tree.hidden = false;
+    $('rn-ou-browse').textContent = 'Close the browser';
+    tree.replaceChildren(el('div', 'cp-note', 'asking the server ...'));
+    const top = await this.inventory(b.url, null);
+    tree.replaceChildren();
+    if (top.error) { tree.append(el('div', 'cp-note err', top.error)); return; }
+    tree.append(this.browseNode(b.url, top.node, [], true));
+  }
+
+  //
+  // inventory - GET /admin/bridges/opcua/inventory, one level below 'from' (null: the Objects folder)
+  //
+  async inventory(broker, from) {
+    const q = from ? '?from=' + encodeURIComponent(from) + '&depth=1' : '?depth=1';
+    const r = await api.brokerGet(broker, '/admin/bridges/opcua/inventory' + q);
+    if (r.ok && r.body) return { node: r.body };
+    const why = (r.body && (r.body.detail || r.body.title)) || ('HTTP ' + r.status);
+    return { error: r.status === 404 && !from ? 'the broker has no opcua bridge loaded - ' + why : why };
+  }
+
+  //
+  // browseNode - a node of the server, and what it contains: an Object can be a model root, a Variable a
+  // Channel; a node with more below it opens on a click (asked for then, one level at a time)
+  //
+  browseNode(broker, n, path, top = false) {
+    const box = el('div', 'rn-ounode' + (top ? ' top' : ''));
+    const row = el('div', 'rn-ourow');
+    const kids = el('div', '');
+    const more = n.hasChildren || (n.children && n.children.length);
+    const tog = el('button', 'rn-outog', more ? (n.children ? '▾' : '▸') : '');
+    tog.type = 'button';
+    tog.disabled = !more;
+    row.append(tog, el('span', 'rn-oukind', n.node), el('b', '', n.name || n.id), el('span', 'rn-ouid', n.id || ''));
+    const here = [...path, n];
+    if (n.node === 'variable') {
+      const info = [n.dataType, n.writable ? 'writable' : 'read-only', n.unit].filter(Boolean).join(', ');
+      row.append(el('span', 'rn-ouval', JSON.stringify(n.value)), el('span', 'rn-oukind', info));
+      const added = this.f.opcua.channels.some((c) => c.node === n.id);
+      const b = button(added ? 'a Channel' : '+ Channel', '', () => { this.channelAdd(this.channelFor(here)); b.textContent = 'a Channel'; b.disabled = true; });
+      b.disabled = added || !n.id;
+      row.append(b);
+    } else if (n.node === 'object' && n.id && n.id !== 'i=85') {
+      const roots = () => this.f.opcua.roots.split('\n').map((x) => x.trim()).filter(Boolean);
+      const b = button(roots().includes(n.id) ? 'a model root' : '+ model root', '', () => {
+        if (!roots().includes(n.id)) this.f.opcua.roots = [...roots(), n.id].join('\n');
+        b.textContent = 'a model root'; b.disabled = true;
+        this.renderOpcua(); this.changed(false);
+      });
+      b.disabled = roots().includes(n.id);
+      b.title = 'the Object and everything in it as entities (an AssetChannel)';
+      row.append(b);
+    }
+    if (n.children) for (const c of n.children) kids.append(this.browseNode(broker, c, here));
+    let open = !!n.children;
+    tog.addEventListener('click', async () => {
+      if (open) { kids.hidden = !kids.hidden; tog.textContent = kids.hidden ? '▸' : '▾'; return; }
+      tog.textContent = '…';
+      const r = await this.inventory(broker, n.id);
+      if (r.error) { kids.replaceChildren(el('div', 'cp-note err', r.error)); tog.textContent = '▸'; return; }
+      kids.replaceChildren(...(r.node.children || []).map((c) => this.browseNode(broker, c, here)));
+      open = true;
+      tog.textContent = '▾';
+    });
+    box.append(row, kids);
+    return box;
+  }
+
+  //
+  // channelFor - a Variable's Channel, named as an AssetChannel on its Object names it (coraine's
+  // asset-channels.md), so that both write the same entity: the nearest Object above the Variable, its type the
+  // Object's typeName (else "Object"), its id urn:ngsi-ld:<type>:<name> - a byte outside [A-Za-z0-9._-] as
+  // %XX; the attribute the names from the Object down, the first one lower-case, only [A-Za-z0-9_] kept
+  //
+  channelFor(path) {
+    const v = path[path.length - 1];
+    let ix = path.length - 2;
+    while (ix >= 0 && path[ix].node !== 'object') ix--;
+    const obj = ix >= 0 && path[ix].id !== 'i=85' ? path[ix] : null;
+    const clean = (t) => String(t || '').replace(/[^A-Za-z0-9_]/g, '');
+    const pct = (t) => [...new TextEncoder().encode(String(t))].map((b) => (/[A-Za-z0-9._-]/.test(String.fromCharCode(b)) && b < 128
+      ? String.fromCharCode(b) : '%' + b.toString(16).toUpperCase().padStart(2, '0'))).join('');
+    const type = obj ? (clean(obj.typeName) || 'Object') : 'Object';
+    const idPart = (obj ? obj.name : v.name) || 'object';
+    const names = path.slice(obj ? ix + 1 : path.length - 1).map((p) => clean(p.name)).filter(Boolean);
+    const attribute = names.map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('') || 'value';
+    return { node: v.id, entityId: 'urn:ngsi-ld:' + type + ':' + pct(idPart), entityType: type, attribute };
   }
 
   opcuaDefaults() {
     return { url: '', roots: '', mode: 'None', policy: '', certificate: '', privateKey: '', applicationUri: '',
-             trustList: '', trustAny: false, username: '', password: '', passwordSet: false };
+             trustList: '', trustAny: false, username: '', password: '', passwordSet: false, channels: [] };
   }
 
   defaults() {
@@ -161,6 +310,7 @@ export class Run {
         this.renderLists();
         this.renderEngine();
         this.renderStartButton();
+        this.renderBrowse();
       }
     } catch (e) {
       $('rn-brokers').replaceChildren(el('span', 'rn-empty', 'The backend does not answer: ' + e.message));
@@ -254,6 +404,7 @@ export class Run {
     if (runs) {
       acts.append(button('Stop', '', () => this.stop(b)));
       acts.append(button('Explore', '', () => this.onConnect(b.url)));
+      acts.append(button('Options', '', () => this.edit(b)));          // to see them - and browse its OPC UA server
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
       const st = button('Start', 'primary', () => this.startKept(b));
       st.disabled = b.busy;
@@ -372,6 +523,7 @@ export class Run {
       const o = d.opcua, sec = o.security || {}, u = o.user || {};
       Object.assign(this.f.opcua, {
         url: o.url || '', roots: (o.roots || []).join('\n'), mode: sec.mode || 'None', policy: sec.policy || '',
+        channels: (o.channels || []).map((c) => ({ node: c.node || '', entityId: c.entityId || '', entityType: c.entityType || '', attribute: c.attribute || '' })),
         certificate: sec.certificate || '', privateKey: sec.privateKey || '', applicationUri: sec.applicationUri || '',
         trustList: (sec.trustList || []).join('\n'), trustAny: !!sec.trustAny, username: u.username || '',
         passwordSet: !!u.passwordSet,
@@ -709,11 +861,29 @@ export class Run {
     const secure = o.mode !== 'None';
     $('rn-ou-secure').hidden = !secure;
     $('rn-ou-policy').disabled = !secure;
-    for (const id of ['rn-ou-url', 'rn-ou-roots', 'rn-ou-mode', 'rn-ou-user', 'rn-ou-pw']) $(id).disabled = cont;
+    for (const id of ['rn-ou-url', 'rn-ou-roots', 'rn-ou-mode', 'rn-ou-user', 'rn-ou-pw', 'rn-ou-addch']) $(id).disabled = cont;
+    this.renderChannels();
+    this.renderBrowse();
+    this.renderOpcuaSum();
+  }
+
+  // renderBrowse - the browse button: on for a running broker of the form's, with the bridge and the admin API
+  renderBrowse() {
+    const b = this.browseBroker();
+    $('rn-ou-browse').disabled = !b.url && $('rn-ou-tree').hidden;
+    $('rn-ou-browsewhy').textContent = b.why;
+  }
+
+  renderOpcuaSum() {
+    const o = this.f.opcua;
+    const cont = this.f.where === 'container';
+    const secure = o.mode !== 'None';
     const roots = o.roots.split('\n').map((x) => x.trim()).filter(Boolean).length;
+    const chans = o.channels.length;
     $('rn-opcua-sum').textContent = cont ? 'a native broker only: the image has no opcua bridge'
       : (!o.url ? 'none' : o.url + ' - ' + (secure ? o.mode + ' ' + (o.policy || 'Basic256Sha256') : 'no security')
-        + (o.username ? ', user ' + o.username : ', anonymous') + ', ' + roots + ' model' + (roots === 1 ? '' : 's'));
+        + (o.username ? ', user ' + o.username : ', anonymous') + ', ' + roots + ' model' + (roots === 1 ? '' : 's')
+        + ', ' + chans + ' Channel' + (chans === 1 ? '' : 's'));
   }
 
   def(withSecret = false) {
@@ -730,6 +900,8 @@ export class Run {
       const o = f.opcua;
       const lines = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
       d.opcua = { url: o.url, roots: lines(o.roots), security: { mode: o.mode } };
+      const chans = o.channels.filter((c) => c.node || c.entityId || c.entityType || c.attribute);
+      if (chans.length) d.opcua.channels = chans.map((c) => ({ node: c.node, entityId: c.entityId, entityType: c.entityType, attribute: c.attribute }));
       if (o.mode !== 'None') {
         Object.assign(d.opcua.security, { certificate: o.certificate, privateKey: o.privateKey,
           applicationUri: o.applicationUri, trustList: lines(o.trustList), trustAny: o.trustAny });

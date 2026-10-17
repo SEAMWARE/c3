@@ -99,3 +99,25 @@
 .rn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .rn-row > * { flex: 1 1 160px; min-width: 0; }
 .rn-lines { font-family: var(--mono, monospace); resize: vertical; }
+
+/* OPC UA: the Channels, and the server's nodes to pick them from */
+.rn-ouchans { display: flex; flex-direction: column; gap: 6px; }
+.rn-ouch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 4px 6px; align-items: end;
+           border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.rn-ouf { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rn-ouf > span { font-size: 11px; color: var(--muted); }
+.rn-ouf .cp-input { font-family: var(--mono, monospace); font-size: 12px; min-width: 0; }
+.rn-ouf-node { grid-column: 1 / 3; grid-row: 1; }
+.rn-oudel { grid-column: 3; grid-row: 1; }
+.rn-ouf-entityId { grid-column: 1 / 4; }
+.rn-ouf-entityType { grid-column: 1; }
+.rn-ouf-attribute { grid-column: 2 / 4; }
+.rn-outree { border: 1px solid var(--line); border-radius: 6px; padding: 6px; max-height: 420px; overflow: auto; font-size: 13px; }
+.rn-ounode { padding-left: 14px; }
+.rn-ounode.top { padding-left: 0; }
+.rn-ourow { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; padding: 2px 0; }
+.rn-outog { width: 16px; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+.rn-oukind { font-size: 11px; color: var(--muted); min-width: 52px; }
+.rn-ouid { font-family: var(--mono, monospace); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.rn-ouval { font-family: var(--mono, monospace); font-size: 12px; }
+.rn-ourow .btn { padding: 1px 8px; font-size: 12px; }

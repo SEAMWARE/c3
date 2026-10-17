@@ -190,6 +190,7 @@ typedef struct Def
   {
     char  url[512];                              // opc.tcp://host:port; "": no OPC UA
     char  roots[2048];                           // the Objects whose models are AssetChannels - NodeIds, one a line
+    char  channels[16384];                       // the Variables that are Channels - a line each: NodeId, entityId, entityType, attribute, tab-separated
     char  mode[16];                              // None, Sign, SignAndEncrypt; "": None
     char  policy[32];                            // Basic256Sha256 ...; "": the bridge's default
     char  certificate[1024];                     // the client's certificate, a file
@@ -886,6 +887,123 @@ static bool memberLines(CorNode* oP, const char* name, char* out, int outLen, ch
 
 // -----------------------------------------------------------------------------
 //
+// channelsJson - the channels' lines as JSON: the Def's list of { node, entityId, entityType, attribute }, or
+// (topics true) the bridge configuration's "topics": { "<node>": { "entityId", "entityType", "attribute" } }
+//
+static void channelsJson(Str* sP, const char* channels, bool topics)
+{
+  char  copy[16384];
+  char* save  = NULL;
+  bool  first = true;
+
+  snprintf(copy, sizeof(copy), "%s", channels);
+  strAdd(sP, topics ? "{" : "[");
+
+  for (char* line = strtok_r(copy, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+  {
+    char* f[4];
+    char* fsave = NULL;
+    int   n     = 0;
+
+    for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (n < 4); t = strtok_r(NULL, "\t", &fsave))
+      f[n++] = t;
+
+    if (n != 4)
+      continue;
+
+    strAdd(sP, first ? "" : ", ");
+    if (topics)
+    {
+      strAddJson(sP, f[0]);
+      strAdd(sP, ": {\"entityId\": ");
+    }
+    else
+    {
+      strAdd(sP, "{\"node\": ");      strAddJson(sP, f[0]);
+      strAdd(sP, ", \"entityId\": ");
+    }
+    strAddJson(sP, f[1]);
+    strAdd(sP, ", \"entityType\": ");  strAddJson(sP, f[2]);
+    strAdd(sP, ", \"attribute\": ");   strAddJson(sP, f[3]);
+    strAdd(sP, "}");
+    first = false;
+  }
+
+  strAdd(sP, topics ? "}" : "]");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// channelsParse - "channels": [ { "node", "entityId", "entityType", "attribute" } ] - a Variable each, its
+// value one attribute of an entity: into lines of the four, tab-separated
+//
+static bool channelsParse(CorNode* oP, char* out, int outLen, char* err, int errLen)
+{
+  CorNode* nP  = corTreeLookup(oP, "channels");
+  int      len = 0;
+
+  out[0] = 0;
+
+  if ((nP == NULL) || (nP->type == CorNull))
+    return true;
+
+  if (nP->type != CorArray)
+  {
+    snprintf(err, errLen, "\"opcua.channels\" is a list of { \"node\", \"entityId\", \"entityType\", \"attribute\" }");
+    return false;
+  }
+
+  static const char* names[] = { "node", "entityId", "entityType", "attribute" };
+
+  for (CorNode* iP = nP->value.head; iP != NULL; iP = iP->next)
+  {
+    const char* v[4];
+
+    if (iP->type != CorObject)
+    {
+      snprintf(err, errLen, "\"opcua.channels\" is a list of { \"node\", \"entityId\", \"entityType\", \"attribute\" }");
+      return false;
+    }
+
+    for (int ix = 0; ix < 4; ix++)
+    {
+      CorNode* mP = corTreeLookup(iP, names[ix]);
+
+      if ((mP == NULL) || (mP->type != CorString) || (mP->value.s[0] == 0) || (strpbrk(mP->value.s, "\t\n") != NULL))
+      {
+        snprintf(err, errLen, "each of \"opcua.channels\" has \"%s\": a string of one line, not empty", names[ix]);
+        return false;
+      }
+
+      v[ix] = mP->value.s;
+    }
+
+    if (strchr(v[1], ':') == NULL)
+    {
+      snprintf(err, errLen, "the channel of %s: its entityId is a URI (urn:ngsi-ld:%s:...)", v[0], v[2]);
+      return false;
+    }
+
+    int n = snprintf(&out[len], outLen - len, "%s%s\t%s\t%s\t%s", (len > 0) ? "\n" : "", v[0], v[1], v[2], v[3]);
+
+    if (n >= outLen - len)
+    {
+      snprintf(err, errLen, "\"opcua.channels\" is longer than %d characters", outLen - 1);
+      return false;
+    }
+
+    len += n;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // opcuaParse - "opcua": { "url", "roots": [...], "security": { "mode", "policy", "certificate", "privateKey",
 // "applicationUri", "trustList": [...], "trustAny" }, "user": { "username", "password" } } - the bridge's own
 // "server" shape (corOpcuaBridge's README), and the model roots
@@ -911,7 +1029,8 @@ static bool opcuaParse(CorNode* opP, Def* dP, char* err, int errLen)
   }
 
   if (!memberString(opP, "url", dP->opcua.url, sizeof(dP->opcua.url), err, errLen) ||
-      !memberLines(opP,  "roots", dP->opcua.roots, sizeof(dP->opcua.roots), err, errLen))
+      !memberLines(opP,  "roots", dP->opcua.roots, sizeof(dP->opcua.roots), err, errLen) ||
+      !channelsParse(opP, dP->opcua.channels, sizeof(dP->opcua.channels), err, errLen))
     return false;
 
   if ((secP != NULL) && (secP->type == CorObject) &&
@@ -1253,6 +1372,7 @@ static void defRender(const Def* dP, Str* sP)
 
     strAdd(sP, ", \"opcua\": {\"url\": ");       strAddJson(sP, dP->opcua.url);
     strAdd(sP, ", \"roots\": ");                 linesJson(sP, dP->opcua.roots);
+    strAdd(sP, ", \"channels\": ");              channelsJson(sP, dP->opcua.channels, false);
     strAdd(sP, ", \"security\": {\"mode\": ");   strAddJson(sP, (dP->opcua.mode[0] != 0) ? dP->opcua.mode : "None");
     strAdd(sP, ", \"policy\": ");                strAddJson(sP, (dP->opcua.policy[0] != 0) ? dP->opcua.policy : NULL);
     strAdd(sP, ", \"certificate\": ");           strAddJson(sP, (dP->opcua.certificate[0] != 0) ? dP->opcua.certificate : NULL);
@@ -2260,7 +2380,9 @@ static void opcuaMember(const Def* dP, Str* sP)
     strAdd(sP, "}");
   }
 
-  strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"assetChannels\": {");
+  strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"topics\": ");
+  channelsJson(sP, dP->opcua.channels, true);
+  strAdd(sP, ", \"assetChannels\": {");
 
   char  copy[2048];
   char* save  = NULL;
