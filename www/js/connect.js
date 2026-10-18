@@ -2,6 +2,10 @@
 // connect.js - Connect, read-only: what a broker holds (discovery), the types picked as a graph or on a
 // map, and a menu on each entity
 //
+// A name in the broker field instead of a URL is a named demo (GET /api/demos/<name>): its descriptor names
+// the broker, and gives the view, the types to watch and the alert rules - for a broker that has none of
+// its own in the configuration yet.
+//
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -17,6 +21,8 @@ import { EntityMap, geometries, nameOf } from './map.js';
 import { OfflinePanel } from './offline.js';
 import { Live, isNullAttr } from './live.js';
 import { EntityEditor, NULL } from './editor.js';
+import { Alerts } from './alerts.js';
+import { History } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -103,6 +109,15 @@ function withoutNulls(n) {
   return e;
 }
 
+//
+// validRules - alert rules as the backend takes them: an id of [A-Za-z0-9._-], a type; at most 32
+//
+function validRules(rules) {
+  const seen = new Set();
+  return rules.filter((r) => r && typeof r === 'object' && typeof r.id === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(r.id) && !seen.has(r.id) && seen.add(r.id) &&
+    typeof r.type === 'string' && r.type && (r.q === undefined || r.q === null || typeof r.q === 'string')).slice(0, 32);
+}
+
 export class Connect {
   constructor() {
     this.broker = null;
@@ -162,7 +177,36 @@ export class Connect {
     //
     // Live values: one subscription for the types loaded, its notifications applied in batches
     //
-    this.live = new Live({ onBatch: (batch) => this.applyLive(batch), onStatus: (st) => this.liveStatus(st) });
+    this.live = new Live({
+      onBatch: (batch) => this.applyLive(batch),
+      onStatus: (st) => this.liveStatus(st),
+      onAlert: (rule, entities) => this.alerts.notified(rule, entities),
+      onAlerts: (m) => this.alerts.installed(m),
+    });
+
+    //
+    // Alerts: a rule's notification is an alarm - a toast, the alarm list, the entity ringed on the map
+    //
+    this.demo = null;                            // the named demo connected to: {name, url, broker, view, watch, alerts}
+    this.alerts = new Alerts({
+      live: this.live,
+      entity: (id) => this.loadedById.get(id),
+      onJump: (id) => this.follow(id),
+      onChange: () => this.emap.setAlarms(this.alerts.mapAlarms()),
+    });
+
+    //
+    // History: the selected entity's numeric Properties, the last minutes
+    //
+    this.history = new History();
+    this.history.onLoaded = () => { if (this.graph.sel && this.graph.sel === this.history.id) this.refreshPanel(); };
+
+    this.relMode = 'all';
+    $('rel-mode').onchange = () => {
+      this.relMode = $('rel-mode').value;
+      this.emap.setRelationships(this.relMode);
+      if (this.broker) api.brokerConnect(this.broker, { relationships: this.relMode }).catch(() => {});
+    };
 
     //
     // The entity editor - Save sends one request; a target can be picked in the graph or on the map
@@ -607,12 +651,20 @@ export class Connect {
   // 'tenant': the tenant to work in ('': the default one); not given, the one this broker was worked on in
   // last time
   //
-  async connect(input, tenant) {
+  async connect(input, tenant, { demo = null } = {}) {
     let url = String(input || '').trim();
     if (!url) { $('broker-url').focus(); return; }
+
+    //
+    // A bare name: a named demo, if the backend knows one by that name - else a host name (localhost)
+    //
+    if (!demo && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(url) && await this.connectDemo(url)) return;
+
     if (!/^https?:\/\//.test(url)) url = 'http://' + url;
     url = url.replace(/\/+$/, '');
     $('broker-url').value = url;
+    if (!demo && this.demo && this.demo.broker === url) demo = this.demo;              // Reload, Retry
+    this.demo = demo;
 
     const stored = this.brokers.find((x) => x.url === url);
     if (tenant === undefined) tenant = url === this.broker ? this.tenant : (stored && typeof stored.tenant === 'string' ? stored.tenant : '');
@@ -630,7 +682,7 @@ export class Connect {
     $('modebar').hidden = true;
     this.closeJson();
     closeMenu(false);
-    $('chip').textContent = tenant ? `${url} · ${tenant}` : url;
+    $('chip').textContent = (demo ? demo.name + ' · ' : '') + (tenant ? `${url} · ${tenant}` : url);
     $('reload-btn').disabled = false;
     $('notice').hidden = true;
     $('counts').textContent = '';
@@ -669,9 +721,27 @@ export class Connect {
       if (Array.isArray(types)) saved = types.map(String);
       this.tenantsOffer(url, b);
       this.mapView = c.map && Array.isArray(c.map.center) ? c.map : null;
-      this.pendingView = this.mapView;
       this.colourBy = typeof c.colourBy === 'string' ? c.colourBy : 'type';
-      if (c.view === 'map' || c.view === 'graph') this.setView(c.view, false);
+      this.relMode = c.relationships === 'selected' ? 'selected' : 'all';
+      let view = c.view;
+      let rules = Array.isArray(c.alerts) ? c.alerts : null;
+
+      //
+      // A demo's descriptor: what this broker has not been given in c³ yet
+      //
+      if (demo) {
+        const v = demo.view && typeof demo.view === 'object' ? demo.view : {};
+        if (!this.mapView && Array.isArray(v.center) && v.center.length === 2) this.mapView = { center: v.center, zoom: Number.isFinite(v.zoom) ? v.zoom : 12 };
+        if (!c.relationships && (v.relationships === 'selected' || v.relationships === 'all')) this.relMode = v.relationships;
+        if (view !== 'map' && view !== 'graph') view = v.mode;
+        if (saved === undefined && Array.isArray(demo.watch)) saved = demo.watch.filter((t) => typeof t === 'string');
+        if (!rules && Array.isArray(demo.alerts)) rules = demo.alerts;
+      }
+      this.pendingView = this.mapView;
+      if (view === 'map' || view === 'graph') this.setView(view, false);
+      $('rel-mode').value = this.relMode;
+      this.emap.setRelationships(this.relMode);
+      this.alerts.setBroker(url, tenant, validRules(rules || []));
     } catch (e) {
       console.warn('c3: the configuration was not saved:', e.message);
     }
@@ -719,6 +789,39 @@ export class Connect {
   }
 
   //
+  // connectDemo - a named demo: its descriptor from the backend, then its broker connected to as it says;
+  // false when there is no demo of that name (the name is a host, then)
+  //
+  async connectDemo(name) {
+    const ticket = ++this.loading;
+    this.setState('busy', 'Demo');
+    this.progressCard('Demo ' + name, '', 'Asking for its descriptor…').set('Asking for its descriptor…', null);
+    let d;
+    try {
+      d = await api.demo(name);
+    } catch (e) {
+      if (ticket !== this.loading) return true;
+      if (e.status === 404) return false;
+      this.live.unwatch();
+      this.liveStatus(null);
+      this.setState('bad', 'Demo not running');
+      const retry = el('button', 'btn primary', 'Retry');
+      retry.type = 'button';
+      retry.onclick = () => this.connect(name);
+      const actions = el('div', 'actions');
+      actions.append(retry);
+      this.overlay({ cls: 'bad', children: [el('h3', null, `${name} is not running`), el('p', null, e.message), actions] });
+      return true;
+    }
+    if (ticket !== this.loading) return true;
+    const desc = d.descriptor;
+    const broker = desc.broker.replace(/\/+$/, '');
+    const demo = { name: d.name, url: d.url, title: typeof desc.name === 'string' ? desc.name : d.name, broker, view: desc.view, watch: desc.watch, alerts: desc.alerts };
+    this.connect(broker, typeof desc.tenant === 'string' ? desc.tenant : '', { demo });
+    return true;
+  }
+
+  //
   // load - the entities of 'types' (null: all of them), drawn; 'save' keeps the choice in the configuration
   //
   async load(types, save, ticket = ++this.loading) {
@@ -749,6 +852,7 @@ export class Connect {
     if (!this.disc) setTypeColors(this.loaded.flatMap((e) => typesOf(e)));
     this.summarise();
     this.draw(this.loaded);
+    this.alerts.scan(this.loaded);
     this.renderDiscovery();
     this.setState('ok', 'Connected');
 
@@ -802,7 +906,8 @@ export class Connect {
       el('p', 'mono', url),
       el('p', null, [err.title, err.detail].filter(Boolean).join(' - ') || String(err.message || err)),
     ];
-    if (err.reached === false) children.push(el('p', null, 'Is it running, and is the URL right? c³ reaches the broker from the machine c³ runs on.'));
+    if (err.reached === false && this.demo && this.demo.broker === url) children.push(el('p', null, `It is the broker of the demo ${this.demo.name} - start it there (Start broker + populate), then Retry.`));
+    else if (err.reached === false) children.push(el('p', null, 'Is it running, and is the URL right? c³ reaches the broker from the machine c³ runs on.'));
     if (err.status === 401) {
       children.push(el('p', null, 'The broker wants an access token - or did not accept the one c³ sent.'));
       const tok = el('button', 'btn', 'Token…');
@@ -970,7 +1075,7 @@ export class Connect {
       // A neighbourhood: its boxes' values only - what was created or deleted shows on Back
       //
       for (const id of changed) if (this.byId.has(id)) this.graph.update(id, boxAttrs(this.byId.get(id)));
-      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e));
+      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e), { live: true });
       this.emap.flash([...changed].filter((id) => this.byId.has(id)));
     } else if (structural || rels) {
       this.redrawLive(structural);
@@ -981,12 +1086,22 @@ export class Connect {
       if (this.loaded.length) this.overlay(null);
     } else {
       for (const id of changed) this.graph.update(id, boxAttrs(this.byId.get(id)));
-      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e));
+      this.emap.set(this.entities, this.edges, (e) => this.mapColor(e), { live: true });
       this.emap.flash([...changed]);
     }
 
+    this.alerts.changedEntities([...[...changed].map((id) => this.loadedById.get(id)).filter(Boolean), ...batch.filter((n) => n.deletedAt)]);
+
     const sel = this.graph.sel;
-    if (sel && changed.has(sel)) {
+    if (sel && changed.has(sel)) this.refreshPanel();
+  }
+
+  //
+  // refreshPanel - the Entity panel drawn again for the selected entity, its scroll and open JSON kept
+  //
+  refreshPanel() {
+    const sel = this.graph.sel;
+    if (sel) {
       const panel = $('entity-body');
       const top = panel.parentElement ? panel.parentElement.scrollTop : 0;
       const raw = panel.querySelector('details.raw');
@@ -1011,7 +1126,7 @@ export class Connect {
     const nodes = sorted.map((e) => this.nodeOf(e));
     const positions = layout(nodes.map((n) => ({ id: n.id, type: n.types[0] })), edges);
     this.graph.patch(nodes, edges, relayout ? positions : null, positions);
-    this.emap.set(sorted, edges, (e) => this.mapColor(e));
+    this.emap.set(sorted, edges, (e) => this.mapColor(e), { live: true });
     this.renderMapChrome();
   }
 
@@ -1819,6 +1934,9 @@ export class Connect {
       }
       body.append(row);
     }
+
+    this.history.select(this.broker, e);
+    body.append(this.history.render(e));
 
     const raw = el('details', 'raw');
     raw.append(el('summary', null, 'JSON'), el('pre', null, JSON.stringify(e, null, 2)));

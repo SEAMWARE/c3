@@ -342,7 +342,7 @@
     <div class="panel connbar">
       <span class="state" id="state"><span class="dot"></span><span class="label" id="state-label">Not connected</span></span>
       <form class="connform" id="connform">
-        <input id="broker-url" list="broker-list" placeholder="http://localhost:1026" aria-label="Broker URL" autocomplete="off" spellcheck="false">
+        <input id="broker-url" list="broker-list" placeholder="http://localhost:1026 - or a demo's name" aria-label="Broker URL, or the name of a demo" title="The broker's URL (http://host:port, or host:port) - or the name of a demo, e.g. CDMAD" autocomplete="off" spellcheck="false">
         <datalist id="broker-list"></datalist>
         <input class="tenant" id="tenant" list="tenant-list" placeholder="default tenant" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant (NGSILD-Tenant) everything in Connect is read from - empty: the default tenant" autocomplete="off" spellcheck="false">
         <datalist id="tenant-list"></datalist>
@@ -352,6 +352,23 @@
       </form>
       <span class="counts" id="counts"></span>
       <span class="live" id="live" hidden><span class="dot"></span><span class="label" id="live-label"></span></span>
+      <button class="btn alarmbtn" type="button" id="alarm-btn" title="Alarms" aria-haspopup="dialog" aria-expanded="false" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v4.2L4.3 16.5h15.4L18 13.2V9a6 6 0 0 0-6-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.6 19a2.5 2.5 0 0 0 4.8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Alarms<span class="badge" id="alarm-badge" hidden></span></button>
+      <div class="tokenpop alarmpop" id="alarmpop" role="dialog" aria-label="Alarms" hidden>
+        <div class="tp-head"><span>Alarms</span><span class="al-actions"><button class="btn small" type="button" id="al-ackall">Ack all</button><button class="btn small" type="button" id="al-rules-btn">Rules…</button><button class="iconbtn" type="button" id="al-close" aria-label="Close">✕</button></span></div>
+        <div class="al-list" id="al-list"></div>
+        <div class="al-rules" id="al-rules" hidden>
+          <div class="tp-sub">Alert rules of this broker <span class="muted">- each one a subscription c³ makes over the broker's WebSocket</span></div>
+          <div id="al-rule-list"></div>
+          <form class="al-form" id="al-form">
+            <input id="al-title" placeholder="title - e.g. Streetlight out" aria-label="Title" maxlength="200" spellcheck="false">
+            <input id="al-type" placeholder="entity type - e.g. Streetlight" aria-label="Entity type" maxlength="500" spellcheck="false">
+            <input id="al-q" placeholder='q - e.g. status=="broken"' aria-label="q" maxlength="1024" spellcheck="false">
+            <select id="al-sev" aria-label="Severity"><option value="critical">critical</option><option value="warning" selected>warning</option><option value="info">info</option></select>
+            <button class="btn primary small" type="submit">Add rule</button>
+          </form>
+          <p class="al-err" id="al-err" aria-live="polite"></p>
+        </div>
+      </div>
       <span class="notice" id="notice" hidden></span>
       <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token" hidden>
         <div class="tp-head"><span>Access token for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
@@ -434,6 +451,7 @@
         </div>
         <div class="zoombar" id="mapbar" hidden>
           <label class="colourby">colour by <select id="colour-by" aria-label="Colour the markers by"></select></label>
+          <label class="colourby" title="The Relationships drawn: every one, or only the selected entity's">relationships <select id="rel-mode" aria-label="Relationships drawn"><option value="all">all</option><option value="selected">selected</option></select></label>
           <label class="colourby" title="The zoom from which the entities have labels - as many as fit">labels from <input type="range" id="label-zoom" min="10" max="18" step="0.5" value="14.5" aria-label="Labels from zoom"><span id="label-zoom-v">14.5</span></label>
           <button type="button" class="fit" id="map-download" title="Download the area in view, for offline use">Download this area</button>
           <button type="button" id="map-out" aria-label="Zoom out">−</button>
@@ -472,6 +490,7 @@
         </div>
         <div class="editor" id="editor" role="dialog" aria-label="Edit the entity" hidden></div>
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+        <div class="alarm-toasts" id="alarm-toasts" role="alert" aria-live="assertive"></div>
         <div class="overlay" id="overlay" hidden><div class="card" id="overlay-card"></div></div>
       </section>
 
