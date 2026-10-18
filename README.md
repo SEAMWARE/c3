@@ -356,7 +356,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   quality station (`AirQuality...`), a weather station (`Weather...`), a traffic sensor (`Traffic...`), a
   person (`Person`, `Driver`); any other type a dot. The entity's state colours it over its type's
   colour: a `status` that says broken (`broken`, `faulty`, `outOfOrder`, ...) or `congested` `true` red, an
-  `airQualityLevel` on its scale (`good` green to `veryPoor` red), a `powerState` `on` warm yellow.
+  `airQualityLevel` on its scale (`good` green to `veryPoor` red), a `powerState` `on` warm yellow, `off` dim grey.
 - **Movement**: a Point that a live change moves glides to its new place over the time between its last
   two changes (0.2 - 5 s; 1 s the first time), instead of jumping; its Relationships' lines follow. Not
   with `prefers-reduced-motion`. The entities that moved in the last 20 s are drawn from a source of

@@ -6,8 +6,8 @@
 //
 // The kind comes from the type's name (the last part of an expanded IRI), by the rules below - the Smart
 // Data Models' names and the obvious others; a type no rule knows stays a dot. The state colours a marker
-// over its type's colour: a status that says it is broken red, a powerState "on" warm yellow, an
-// airQualityLevel on its scale.
+// over its type's colour: a status that says it is broken red, a powerState "on" warm yellow and "off"
+// dim grey, an airQualityLevel on its scale.
 //
 // The images are drawn here, on a canvas, the first time the map draws one: one per (glyph, colour), named
 // c3i-<glyph>-<colour>.
@@ -28,6 +28,7 @@ const AIR = { good: '#6FDCA0', moderate: '#F2B84B', poor: '#F59E6B', unhealthy: 
 
 export const RED = '#FF5A6E';
 export const WARM = '#FFD36B';
+export const DIM = '#5A616E';
 
 const typeName = (t) => {
   const m = String(t).match(/[#/]([^#/]+)$/);
@@ -59,6 +60,7 @@ export function stateColor(e) {
   if (valueOf(e.congested) === true) return RED;
   const power = valueOf(e.powerState);
   if (typeof power === 'string' && power.toLowerCase() === 'on') return WARM;
+  if (typeof power === 'string' && power.toLowerCase() === 'off') return DIM;
   return null;
 }
 
