@@ -137,10 +137,17 @@ markers are coloured by), the downloaded map areas, and the last page:
         "tenantTypes": { "city": ["Street"] },
         "view": "map",
         "colourBy": "inDistrict",
-        "map": { "center": [-71.135, 42.3836], "zoom": 13.3 }
+        "relationships": "selected",
+        "map": { "center": [-71.135, 42.3836], "zoom": 13.3 },
+        "alerts": [
+          { "id": "station-empty", "title": "Station empty", "severity": "warning", "type": "BikeStation", "q": "availableBikes==0" }
+        ]
       }
     }
   ],
+  "demos": {
+    "harbour": { "url": "http://127.0.0.1:7995/c3.json", "hint": "start it with make demo" }
+  },
   "maps": {
     "areas": [
       { "id": "area-20261009-191900", "name": "Boston", "bbox": [-71.19, 42.3, -70.99, 42.4],
@@ -172,7 +179,11 @@ markers are coloured by), the downloaded map areas, and the last page:
   for.
 - `connect.view` (`graph` or `map`), `connect.colourBy` (`type`, or a Relationship's name) and
   `connect.map` (`center` `[lon, lat]`, `zoom`, `bearing`, `pitch`): kept as they change - the map's view
-  when the map is moved by hand.
+  when the map is moved by hand. `connect.relationships`: `all` or `selected` (the map's **relationships**).
+- `connect.alerts`: the broker's alert rules (Alerts, below) - `id` (letters, digits, `-`, `_`, `.`; at
+  most 64), `title`, `severity` (`critical`, `warning`, `info`), `type`, `q`; at most 32.
+- `demos`: named demos (Named demos, below) - a name and its descriptor's `url`, with a `hint` for when it
+  does not answer (or just the URL as a string). `CDMAD` is built in.
 - `maps.areas`: the areas downloaded, one `.pmtiles` file each in the data directory. The directory is
   the truth: a finished download is added, an area whose file is gone is dropped, a file with no entry
   is added under its id (its bounds and levels read from the file's header).
@@ -338,6 +349,20 @@ markers are coloured by), the downloaded map areas, and the last page:
 - **Colour by**: `type`, or any Relationship of the loaded entities (`inDistrict →`): each target gets its
   colour, and the entities pointing at it and the target itself are drawn in it, with a legend. Kept per
   broker.
+- **relationships**: `all` draws every Relationship; `selected` only the selected entity's (a route with
+  dozens of stops). Kept per broker.
+- **Icons**: a Point of a kind c³ knows by its type's name is an icon instead of a dot - a bus (`Bus`,
+  `Tram`, a vehicle), a stop (`BusStop`, `...Stop`), a streetlight (`Streetlight`, `Streetlamp`), an air
+  quality station (`AirQuality...`), a weather station (`Weather...`), a traffic sensor (`Traffic...`), a
+  person (`Person`, `Driver`); any other type a dot. The entity's state colours it over its type's
+  colour: a `status` that says broken (`broken`, `faulty`, `outOfOrder`, ...) or `congested` `true` red, an
+  `airQualityLevel` on its scale (`good` green to `veryPoor` red), a `powerState` `on` warm yellow.
+- **Movement**: a Point that a live change moves glides to its new place over the time between its last
+  two changes (0.2 - 5 s; 1 s the first time), instead of jumping; its Relationships' lines follow. Not
+  with `prefers-reduced-motion`. The entities that moved in the last 20 s are drawn from a source of
+  their own, set again every frame; the others' source is set again only when what it draws changed.
+  Measured with 30 buses moving among 1 464 other features (Chrome, the map's own render included): 2.4 ms
+  a frame (median), 4.0 ms (95th percentile).
 - The first time a broker's entities are drawn, the map takes the view kept for it, else fits them.
 
 **The base map.** MapLibre GL JS, styled dark in c³'s colours (land `#111419`, sea `#0B1620`, roads in
@@ -451,6 +476,64 @@ deleted (`CHURN=0` leaves that out). Ctrl-C deletes it if it is there.
 
 Not yet: a rectangle drawn on the map as a `georel=within` query, saved views, tenants, Configure,
 Docs, Operate.
+
+### Named demos
+
+A name in the broker field instead of a URL - **`CDMAD`**, Connect - is a demo: c³ asks the backend for
+it (`GET /api/demos/<name>`), the backend looks the name up in the configuration's `demos` (any case;
+`CDMAD`, [c3-demo-madrid](https://github.com/SEAMWARE/c3-demo-madrid), is built in as
+`http://127.0.0.1:7990/c3.json`) and fetches the demo's descriptor from it:
+
+```json
+{
+  "name": "Madrid",
+  "broker": "http://127.0.0.1:9026",
+  "tenant": null,
+  "view": { "mode": "map", "center": [-3.693, 40.43], "zoom": 12.6, "relationships": "selected" },
+  "watch": ["Bus", "BusStop", "Streetlight"],
+  "alerts": [ { "id": "streetlight-out", "title": "Streetlight out", "severity": "critical", "type": "Streetlight", "q": "status==\"broken\"" } ]
+}
+```
+
+Connect then connects to `broker` (in `tenant`). What the broker has not been given in c³ yet comes from
+the descriptor: the view (`mode`, `center`, `zoom`, `relationships`), the types loaded (`watch`), the
+alert rules (`alerts`); what is changed in c³ is kept for the broker as for any other, and wins the next
+time. A demo that does not answer is said so: *CDMAD is not running at http://127.0.0.1:7990 - start it,
+then Start broker + populate*; its broker not answering: *start it there (Start broker + populate)*. A
+name the backend does not know is a host name (`localhost` is `http://localhost`).
+
+### Alerts
+
+**Alarms** (next to **Live**) holds the broker's alert rules and the alarms they raise.
+
+- **A rule**: a title, a severity (`critical`, `warning`, `info`), an entity type and a `q`. Each rule is a
+  subscription of its own that the backend makes on the broker, with the live values' (the same
+  endpoint: the broker's WebSocket, or `/api/notify/<session>`; named `c3-live:<port>`; deleted with
+  them). A rule the broker refuses (a `q` it does not take) says why under **Rules…**.
+- **An alarm**: a rule's notification raises one for each entity in it - a toast (a click shows the
+  entity), a row in the list, and the entity ringed on the map in the severity's colour, pulsing until
+  acknowledged (**Ack**). The bell's count is the alarms not acknowledged. An alarm already raised is not
+  raised again while it lasts. The loaded entities that already match a rule are alarms from the
+  start, without a toast.
+- **Cleared** when the live values show the entity no longer matching - c³ evaluates the simple forms of
+  `q` itself: terms joined by `;`, each `<attribute><op><value>` with `==`, `!=`, `>`, `<`, `>=`, `<=` and a
+  `"string"`, a number, `true` or `false`. An alarm of a rule with any other `q` clears by hand
+  (**Clear**); one whose entity is deleted clears.
+- **Rules…**: added and removed per broker, kept in the configuration (`connect.alerts`).
+
+On the page's WebSocket: `{"op": "alerts", "broker", "tenant", "rules": [{"id", "type", "q"}]}` sets the
+rules; the backend answers `{"op": "alerts", "broker", "installed": [{"rule", "subscription"}], "failed":
+[{"rule", "detail"}]}` and sends each notification as `{"op": "alert", "broker", "rule", "message"}`.
+
+### History
+
+The attribute panel's **History**: each numeric Property of the selected entity over the last 10 minutes,
+as a sparkline (a step line - a value holds until the next) with its range and count. Read once on
+select - `GET /ngsi-ld/v1/temporal/entities/{id}?timerel=after&timeAt=<10 minutes ago>&attrs=...&timeproperty=modifiedAt&options=sysAttrs`
+(every change, with an `observedAt` or not; a value's time is its `observedAt` if it has one) - then grown
+from the live values. A broker without the temporal API, or whose TRoE plugin does not read history
+(coraine's `--troe ramDB` answers 422), shows the live values from the moment the entity was selected,
+and says so. coraine with `--troe corDB` answers it.
 
 ## Compile
 
@@ -678,9 +761,9 @@ data, also its directory and its volume.
 
 ## How it is built
 
-**Backend - C, on coraine's own libraries.** One binary, `c3`, from eleven files in [src/](src/) - `maps.c`
+**Backend - C, on coraine's own libraries.** One binary, `c3`, from the files in [src/](src/) - `maps.c`
 is the map's downloaded areas (the planet read by Range, the extract, the fonts, the job and its API),
-`live.c` the live values (the page's sessions, their subscriptions, the notifications) and `ws.c`
+`live.c` the live values (the page's sessions, their subscriptions and the alert rules', the notifications), `demo.c` the named demos' descriptors, and `ws.c`
 WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page - and
 `compile.c` Compile (the capabilities, the feature list, the builds and their processes, the live log),
 `run.c` Run (brokers and services, their processes and containers, status, logs) and `util.c` what those two
@@ -764,9 +847,12 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/layout.js` | the layout |
 | `js/graph.js` | boxes, arrows, zoom, pan, drag, selection, filters, a box expanded in place |
 | `js/menu.js` | the context menu, mouse and keyboard |
-| `js/connect.js` | the Connect page: discovery panel, picks, an entity's menu, neighbourhood, linked entities, graph or map, colour by |
-| `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads, selection, click and menu, the changed entities ringed |
-| `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), reconnecting |
+| `js/connect.js` | the Connect page: discovery panel, picks, an entity's menu, neighbourhood, linked entities, graph or map, colour by, named demos |
+| `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads (all, or the selected entity's), selection, click and menu, the changed entities ringed, movers gliding, alarms ringed |
+| `js/icons.js` | the icons per type, the state colours, drawn on a canvas |
+| `js/alerts.js` | alert rules and alarms: the toasts, the list, `q` evaluated for clearing, the rules kept per broker |
+| `js/history.js` | the attribute panel's History: the temporal API, sparklines, the live values appended |
+| `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), the alert rules and their notifications, reconnecting |
 | `js/basemap.js` | the base map: c³'s dark style for OpenFreeMap's tiles, the downloaded areas' Protomaps layers, the tile and glyph protocols |
 | `js/offline.js` | "Download this area": the estimate, the download's progress, the list of areas |
 
