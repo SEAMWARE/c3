@@ -10,6 +10,11 @@
 // notifies the backend. Either way the notifications arrive here, as {"op": "notify", "broker",
 // "message": {"body": <Notification>}}.
 //
+// Alert rules - setAlerts(broker, tenant, rules) - are subscriptions of their own, made by the backend on
+// the same broker; their notifications arrive as {"op": "alert", "broker", "rule", "message"}, handed to
+// onAlert at once (not batched), and {"op": "alerts", "installed", "failed"} to onAlerts. A new socket to
+// the backend (a new session) is sent the rules again.
+//
 // Nothing is drawn per notification: the entities that changed are gathered - several notifications of
 // one entity merged into one change - and handed to onBatch every INTERVAL ms at most.
 //
@@ -34,10 +39,13 @@ function merge(a, b) {
 }
 
 export class Live {
-  constructor({ onBatch, onStatus }) {
+  constructor({ onBatch, onStatus, onAlert = () => {}, onAlerts = () => {} }) {
     this.onBatch = onBatch;                      // ([entity]) - each the entity as notified; deletedAt set when deleted
     this.onStatus = onStatus;                    // ({mode, broker, subscription, types, why, detail})
+    this.onAlert = onAlert;                      // (rule, [entity]) - an alert rule's notification
+    this.onAlerts = onAlerts;                    // ({broker, installed: [{rule, subscription}], failed: [{rule, detail}]})
     this.want = null;                            // {broker, types}
+    this.rules = null;                           // {broker, tenant, rules: [{id, type, q}]}
     this.ws = null;
     this.ready = false;
     this.pending = new Map();
@@ -81,6 +89,7 @@ export class Live {
         this.ready = true;
         this.retry = 1000;
         this.send();
+        this.sendAlerts();
       } else if (m.op === 'status') {
         if (!this.want || m.broker !== this.want.broker) return;
         //
@@ -98,6 +107,12 @@ export class Live {
         if (!Array.isArray(data)) return;
         for (const d of data) if (d && typeof d.id === 'string') this.pending.set(d.id, merge(this.pending.get(d.id), d));
         if (!this.timer) this.timer = setTimeout(() => this.flush(), INTERVAL);
+      } else if (m.op === 'alert') {
+        if (!this.want || m.broker !== this.want.broker) return;
+        const data = m.message && m.message.body && m.message.body.data;
+        if (Array.isArray(data) && typeof m.rule === 'string') this.onAlert(m.rule, data.filter((d) => d && typeof d.id === 'string'));
+      } else if (m.op === 'alerts') {
+        if (this.rules && m.broker === this.rules.broker) this.onAlerts(m);
       } else if (m.op === 'lost') {
         //
         // The broker closed its WebSocket (stopped, restarted): watch again in a while
@@ -140,6 +155,21 @@ export class Live {
     clearTimeout(this.lostTimer);
     this.pending.clear();
     this.send();
+  }
+
+  //
+  // setAlerts - the alert rules for 'broker' ([] none); the backend installs them while it is watched
+  //
+  setAlerts(broker, tenant, rules) {
+    const r = { broker, tenant: tenant || '', rules: rules.map((x) => ({ id: x.id, type: x.type, q: x.q || null })) };
+    if (this.rules && JSON.stringify(this.rules) === JSON.stringify(r)) return;
+    this.rules = r;
+    this.sendAlerts();
+  }
+
+  sendAlerts() {
+    if (!this.ready || !this.ws || !this.rules) return;
+    this.ws.send(JSON.stringify({ op: 'alerts', ...this.rules }));
   }
 
   unwatch() {
