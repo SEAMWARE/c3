@@ -11,7 +11,7 @@
 //   POST   /api/brokers         {"url", "name"}: a broker connected to - first in the list, lastUsed now
 //   DELETE /api/brokers         {"url"}: forget a broker
 //   PUT    /api/brokers/types   {"url", "types"}: the entity types Connect loads from a broker
-//   PUT    /api/brokers/connect {"url", "view", "map", "colourBy"}: Connect's view of a broker
+//   PUT    /api/brokers/connect {"url", "view", "map", "colourBy", "relationships", "alerts"}: Connect's view of a broker
 //   GET    /api/brokers/tokens  which brokers have an access token, from where - never the token (creds.c)
 //   PUT    /api/brokers/token   {"url", "token", "remember"}; DELETE {"url"} (creds.c)
 //   PUT    /api/ui              {"lastPage"}
@@ -19,6 +19,7 @@
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
 //   GET    /api/live            the page's WebSocket: live values (live.c)
 //   POST   /api/notify/<id>     a broker's notification for a session's HTTP subscription (live.c)
+//   GET    /api/demos/<name>    a named demo's descriptor - a name in the broker field (demo.c)
 //   GET    /api/capabilities    what this machine can do (compile.c)
 //   ...    /api/compile/...     Compile: the feature list (compile.c); the choice and the presets (config.c)
 //   ...    /api/builds...       Compile: the builds - start, follow, cancel, delete (compile.c)
@@ -483,6 +484,8 @@ void serveRequest(CorHttpConn* connP)
     liveUpgrade(connP);
   else if (strncmp(path, "/api/notify/", 12) == 0)
     liveNotify(connP, &path[12]);
+  else if (strncmp(path, "/api/demos/", 11) == 0)
+    demoRequest(connP, &path[11]);
   else if ((strcmp(path, "/api/maps") == 0) || (strncmp(path, "/api/maps/", 10) == 0))
     mapsRequest(connP, path);
   else if ((strcmp(path, "/api/compile/choice") == 0) && (strcmp(method, "PUT") == 0))

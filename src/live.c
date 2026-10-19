@@ -32,6 +32,14 @@
 // died (named "c3-live:<port>", notifying this port) is deleted when the backend starts (the brokers of
 // the configuration) and before the first subscription on a broker.
 //
+// Alerts: the page also sends its alert rules - {"op": "alerts", "broker", "tenant", "rules": [{"id", "type",
+// "q"}]} - and the backend makes each one a subscription of its own (the type, the q, the same endpoint as
+// the watch), on that broker while it is watched. A notification of one of them goes to the page as
+// {"op": "alert", "broker", "rule", "message"} - not as a "notify": the change itself comes with the watch's
+// subscription. The answer to the op is {"op": "alerts", "broker", "installed": [{"rule", "subscription"}],
+// "failed": [{"rule", "detail"}]}, again after a watch that started over. The rules are deleted with the
+// watch; kept, and installed again, when the same broker is watched again.
+//
 // Threads: one per page (reads its socket, runs its watch/unwatch - each may wait for the broker), one
 // per broker WebSocket (reads it: responses, notifications). Writes to a socket from any thread, under
 // its write lock.
@@ -66,6 +74,7 @@
 #define LIVE_PAGE_MAX        (1024 * 1024)       // a message from the page
 #define LIVE_BROKER_MAX      (64 * 1024 * 1024)  // a message from the broker
 #define LIVE_TYPES_MAX       1000
+#define LIVE_RULES_MAX       32                  // alert rules per page
 #define LIVE_NAME            "c3-live"           // the subscriptions' name starts with it: c3-live:<port>
 
 
@@ -82,6 +91,20 @@ typedef enum LiveMode
 } LiveMode;
 
 static const char* modeName[] = { "off", "ws", "http" };
+
+
+
+// -----------------------------------------------------------------------------
+//
+// LiveRule - an alert rule of the page, and its subscription
+//
+typedef struct LiveRule
+{
+  char              id[65];
+  char*             type;                        // malloc
+  char*             q;                           // malloc, NULL: none
+  char              subId[512];                  // "": not installed
+} LiveRule;
 
 
 
@@ -107,6 +130,14 @@ typedef struct Live
   LiveMode          mode;
   char              subId[512];
   char              why[600];                    // why not the WebSocket, when (b)
+
+  //
+  // The alert rules, for 'rulesBroker' in 'rulesTenant'
+  //
+  LiveRule          rules[LIVE_RULES_MAX];
+  int               nRules;
+  char              rulesBroker[512];
+  char              rulesTenant[256];
 
   //
   // (a) the broker's WebSocket
@@ -510,6 +541,51 @@ static void notifyForward(Live* s, const char* brokerE, const char* pre, const c
 
 // -----------------------------------------------------------------------------
 //
+// alertForward - an alert rule's notification: {"op": "alert", "broker", "rule", "message": <message>}
+//
+static void alertForward(Live* s, const char* brokerE, const char* rule, const char* pre, const char* message, const char* post)
+{
+  int   size = strlen(message) + strlen(brokerE) + strlen(rule) + strlen(pre) + strlen(post) + 80;
+  char* out  = malloc(size);
+
+  if (out == NULL)
+    return;
+
+  snprintf(out, size, "{\"op\": \"alert\", \"broker\": \"%s\", \"rule\": \"%s\", \"message\": %s%s%s}", brokerE, rule, pre, message, post);
+  pageSend(s, out);
+  free(out);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ruleOf - the alert rule a notification is for (its subscriptionId), copied to 'out'; false: none -
+// the watch's own. Under the session's lock.
+//
+static bool ruleOf(Live* s, CorNode* bodyP, char* out, int outLen)
+{
+  const char* subId = stringOf(bodyP, "subscriptionId");
+
+  if (subId == NULL)
+    return false;
+
+  for (int ix = 0; ix < s->nRules; ix++)
+  {
+    if ((s->rules[ix].subId[0] != 0) && (strcmp(s->rules[ix].subId, subId) == 0))
+    {
+      snprintf(out, outLen, "%s", s->rules[ix].id);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // bwsReader - the broker's WebSocket: the connection's name, the responses, the notifications
 //
 static void* bwsReader(void* vP)
@@ -559,11 +635,17 @@ static void* bwsReader(void* vP)
     }
     else if ((treeP != NULL) && (corTreeLookup(treeP, "body") != NULL))
     {
+      char rule[65];
+
       pthread_mutex_lock(&s->lock);
       char* brokerE = (s->brokerE != NULL) ? strdup(s->brokerE) : strdup("");
+      bool  alert   = ruleOf(s, corTreeLookup(treeP, "body"), rule, sizeof(rule));
       pthread_mutex_unlock(&s->lock);
 
-      notifyForward(s, brokerE, "", data, "");
+      if (alert)
+        alertForward(s, brokerE, rule, "", data, "");
+      else
+        notifyForward(s, brokerE, "", data, "");
       free(brokerE);
     }
 
@@ -849,20 +931,13 @@ static void idFromLocation(const char* loc, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// subCreate - the subscription, by the session's way; its id in 'idOut', or false with the broker's
+// subPost - a subscription ('body'), by the session's way; its id in 'idOut', or false with the broker's
 // answer in 'detail'
 //
-static bool subCreate(Live* s, char** types, int nTypes, char* idOut, int idLen, char* detail, int detailLen)
+static bool subPost(Live* s, const char* body, char* idOut, int idLen, char* detail, int detailLen)
 {
-  char* body = subBody(s, types, nTypes);
   char  loc[512];
   int   status;
-
-  if (body == NULL)
-  {
-    snprintf(detail, detailLen, "out of memory");
-    return false;
-  }
 
   if (s->mode == LiveWs)
   {
@@ -889,8 +964,6 @@ static bool subCreate(Live* s, char** types, int nTypes, char* idOut, int idLen,
     free(a.body);
   }
 
-  free(body);
-
   if ((status != 201) || (loc[0] == 0))
   {
     if (status == 201)
@@ -906,18 +979,37 @@ static bool subCreate(Live* s, char** types, int nTypes, char* idOut, int idLen,
 
 // -----------------------------------------------------------------------------
 //
-// subDelete - the session's subscription deleted (a 404 counts: it is gone)
+// subCreate - the watch's subscription
 //
-static void subDelete(Live* s)
+static bool subCreate(Live* s, char** types, int nTypes, char* idOut, int idLen, char* detail, int detailLen)
 {
-  if (s->subId[0] == 0)
-    return;
+  char* body = subBody(s, types, nTypes);
 
+  if (body == NULL)
+  {
+    snprintf(detail, detailLen, "out of memory");
+    return false;
+  }
+
+  bool ok = subPost(s, body, idOut, idLen, detail, detailLen);
+  free(body);
+
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// subDeleteId - a subscription of the session deleted (a 404 counts: it is gone)
+//
+static void subDeleteId(Live* s, const char* subId)
+{
   char path[700];
   int  status;
   char detail[600] = "";
 
-  snprintf(path, sizeof(path), "/ngsi-ld/v1/subscriptions/%s", s->subId);
+  snprintf(path, sizeof(path), "/ngsi-ld/v1/subscriptions/%s", subId);
 
   if ((s->mode == LiveWs) && s->bwsOpen && (s->bwsClosed == false))
   {
@@ -945,9 +1037,172 @@ static void subDelete(Live* s)
     printf("c3 live: %s - DELETE %s answered %d %s\n", s->broker, path, status, detail);
     fflush(stdout);
   }
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// subDelete - the watch's subscription deleted
+//
+static void subDelete(Live* s)
+{
+  if (s->subId[0] == 0)
+    return;
+
+  subDeleteId(s, s->subId);
 
   pthread_mutex_lock(&s->lock);
   s->subId[0] = 0;
+  pthread_mutex_unlock(&s->lock);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// alertBody - an alert rule's subscription: its type, its q, normalized, the watch's endpoint
+//
+static char* alertBody(Live* s, LiveRule* rP)
+{
+  char* typeE = jsonEscapeDup(rP->type);
+  char* qE    = (rP->q != NULL) ? jsonEscapeDup(rP->q) : NULL;
+  int   size  = 1024 + strlen(typeE) + ((qE != NULL) ? strlen(qE) : 0) + strlen(s->connection) + strlen(notifyPrefix) + strlen(s->id);
+  char* out   = malloc(size);
+
+  if (out != NULL)
+  {
+    char endpoint[512];
+    if (s->mode == LiveWs)
+      snprintf(endpoint, sizeof(endpoint), "%s", s->connection);
+    else
+      snprintf(endpoint, sizeof(endpoint), "%s%s", notifyPrefix, s->id);
+
+    snprintf(out, size, "{\"type\": \"Subscription\", \"subscriptionName\": \"%s\", "
+             "\"description\": \"c3 Connect - alert rule %s; deleted when c3 disconnects\", \"entities\": [{\"type\": \"%s\"}], %s%s%s"
+             "\"notification\": {\"format\": \"normalized\", \"endpoint\": {\"uri\": \"%s\", \"accept\": \"application/json\"}}}",
+             subName, rP->id, typeE, (qE != NULL) ? "\"q\": \"" : "", (qE != NULL) ? qE : "", (qE != NULL) ? "\", " : "", endpoint);
+  }
+
+  free(typeE);
+  free(qE);
+  return out;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// alertsRemove - the rules' subscriptions deleted (the rules kept)
+//
+static void alertsRemove(Live* s)
+{
+  for (int ix = 0; ix < s->nRules; ix++)
+  {
+    if (s->rules[ix].subId[0] == 0)
+      continue;
+
+    if (s->mode != LiveOff)
+      subDeleteId(s, s->rules[ix].subId);
+
+    pthread_mutex_lock(&s->lock);
+    s->rules[ix].subId[0] = 0;
+    pthread_mutex_unlock(&s->lock);
+  }
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// alertsInstall - a subscription per rule, when their broker is the one watched; the page is told
+// {"op": "alerts", "broker", "installed", "failed"}
+//
+static void alertsInstall(Live* s)
+{
+  if ((s->mode == LiveOff) || (s->nRules == 0) || (strcmp(s->rulesBroker, s->broker) != 0) || (strcmp(s->rulesTenant, s->tenant) != 0))
+    return;
+
+  int   size = 256 + strlen(s->brokerE) + s->nRules * 1400;
+  char* out  = malloc(size);
+  char* fail = malloc(size);
+  int   o    = 0;
+  int   f    = 0;
+
+  if ((out == NULL) || (fail == NULL))
+  {
+    free(out);
+    free(fail);
+    return;
+  }
+
+  out[0]  = 0;
+  fail[0] = 0;
+
+  for (int ix = 0; ix < s->nRules; ix++)
+  {
+    LiveRule* rP = &s->rules[ix];
+    char      newId[512];
+    char      detail[800];
+    char*     body = alertBody(s, rP);
+    bool      ok   = (body != NULL) && subPost(s, body, newId, sizeof(newId), detail, sizeof(detail));
+
+    free(body);
+
+    if (ok)
+    {
+      pthread_mutex_lock(&s->lock);
+      snprintf(rP->subId, sizeof(rP->subId), "%s", newId);
+      pthread_mutex_unlock(&s->lock);
+
+      char* idE = jsonEscapeDup(newId);
+      o += snprintf(&out[o], size - o, "%s{\"rule\": \"%s\", \"subscription\": \"%s\"}", (o > 0) ? ", " : "", rP->id, idE);
+      free(idE);
+    }
+    else
+    {
+      char* detailE = jsonEscapeDup((body != NULL) ? detail : "out of memory");
+      f += snprintf(&fail[f], size - f, "%s{\"rule\": \"%s\", \"detail\": \"%s\"}", (f > 0) ? ", " : "", rP->id, detailE);
+      free(detailE);
+      printf("c3 live: %s - alert rule %s: %s\n", s->broker, rP->id, detail);
+      fflush(stdout);
+    }
+  }
+
+  int nFailed = 0;
+  for (int ix = 0; ix < s->nRules; ix++)
+    nFailed += (s->rules[ix].subId[0] == 0) ? 1 : 0;
+  printf("c3 live: %s - alert rules: %d installed, %d failed\n", s->broker, s->nRules - nFailed, nFailed);
+  fflush(stdout);
+
+  int   msgSize = 2 * size + 128;
+  char* msg     = malloc(msgSize);
+  if (msg != NULL)
+  {
+    snprintf(msg, msgSize, "{\"op\": \"alerts\", \"broker\": \"%s\", \"installed\": [%s], \"failed\": [%s]}", s->brokerE, out, fail);
+    pageSend(s, msg);
+    free(msg);
+  }
+
+  free(out);
+  free(fail);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// rulesFree - the rules forgotten (their subscriptions deleted first)
+//
+static void rulesFree(Live* s)
+{
+  pthread_mutex_lock(&s->lock);
+  for (int ix = 0; ix < s->nRules; ix++)
+  {
+    free(s->rules[ix].type);
+    free(s->rules[ix].q);
+  }
+  s->nRules = 0;
   pthread_mutex_unlock(&s->lock);
 }
 
@@ -962,6 +1217,7 @@ static void unwatch(Live* s)
   if (s->mode == LiveOff)
     return;
 
+  alertsRemove(s);
   subDelete(s);
   bwsClose(s);
 
@@ -1008,6 +1264,8 @@ static void watch(Live* s, const char* broker, const char* tenant, char** types,
   free(s->typesJson);
   s->typesJson = typesJson;
   pthread_mutex_unlock(&s->lock);
+
+  bool fresh = (s->mode == LiveOff);
 
   if (s->mode == LiveOff)
   {
@@ -1062,13 +1320,100 @@ static void watch(Live* s, const char* broker, const char* tenant, char** types,
   fflush(stdout);
 
   statusSend(s, NULL);
+
+  if (fresh)
+    alertsInstall(s);
 }
 
 
 
 // -----------------------------------------------------------------------------
 //
-// pageMessage - {"op": "watch", "broker", "tenant", "types"} or {"op": "unwatch"}
+// ruleIdValid - an alert rule's id: 1-64 of [A-Za-z0-9._-] (it goes into JSON unescaped)
+//
+static bool ruleIdValid(const char* id)
+{
+  int n = 0;
+
+  for (; *id != 0; ++id, ++n)
+  {
+    char c = *id;
+    if (((c < 'a') || (c > 'z')) && ((c < 'A') || (c > 'Z')) && ((c < '0') || (c > '9')) && (c != '.') && (c != '_') && (c != '-'))
+      return false;
+  }
+
+  return (n > 0) && (n <= 64);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// alertsSet - {"op": "alerts", "broker", "tenant", "rules"}: the old rules' subscriptions deleted, the new
+// ones installed (now, when their broker is watched; else when it is)
+//
+static bool alertsSet(Live* s, CorNode* treeP)
+{
+  const char* broker = stringOf(treeP, "broker");
+  const char* tenant = stringOf(treeP, "tenant");
+  CorNode*    rulesP = corTreeLookup(treeP, "rules");
+
+  if ((broker == NULL) || (strlen(broker) >= 500) || ((strncmp(broker, "http://", 7) != 0) && (strncmp(broker, "https://", 8) != 0)) ||
+      (rulesP == NULL) || (rulesP->type != CorArray) || ((tenant != NULL) && (tenant[0] != 0) && (tenantValid(tenant) == false)))
+    return false;
+
+  int n = 0;
+  for (CorNode* rP = rulesP->value.head; rP != NULL; rP = rP->next, ++n)
+  {
+    const char* id   = stringOf(rP, "id");
+    const char* type = stringOf(rP, "type");
+    CorNode*    qP   = (rP->type == CorObject) ? corTreeLookup(rP, "q") : NULL;
+
+    if ((n == LIVE_RULES_MAX) || (id == NULL) || (ruleIdValid(id) == false) || (type == NULL) || (type[0] == 0) || (strlen(type) > 500) ||
+        ((qP != NULL) && (qP->type != CorNull) && ((qP->type != CorString) || (strlen(qP->value.s) > 1024))))
+      return false;
+  }
+
+  alertsRemove(s);
+  rulesFree(s);
+
+  pthread_mutex_lock(&s->lock);
+  snprintf(s->rulesBroker, sizeof(s->rulesBroker), "%s", broker);
+  snprintf(s->rulesTenant, sizeof(s->rulesTenant), "%s", (tenant != NULL) ? tenant : "");
+  for (CorNode* rP = rulesP->value.head; rP != NULL; rP = rP->next)
+  {
+    LiveRule*   lrP = &s->rules[s->nRules++];
+    CorNode*    qP  = corTreeLookup(rP, "q");
+
+    snprintf(lrP->id, sizeof(lrP->id), "%s", stringOf(rP, "id"));
+    lrP->type     = strdup(stringOf(rP, "type"));
+    lrP->q        = ((qP != NULL) && (qP->type == CorString) && (qP->value.s[0] != 0)) ? strdup(qP->value.s) : NULL;
+    lrP->subId[0] = 0;
+  }
+  pthread_mutex_unlock(&s->lock);
+
+  if ((s->mode != LiveOff) && (strcmp(s->broker, broker) == 0) && (strcmp(s->tenant, s->rulesTenant) == 0))
+  {
+    if (s->nRules > 0)
+      alertsInstall(s);
+    else
+    {
+      char* bE  = jsonEscapeDup(broker);
+      char  msg[1200];
+      snprintf(msg, sizeof(msg), "{\"op\": \"alerts\", \"broker\": \"%s\", \"installed\": [], \"failed\": []}", bE);
+      pageSend(s, msg);
+      free(bE);
+    }
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// pageMessage - {"op": "watch", "broker", "tenant", "types"}, {"op": "unwatch"} or {"op": "alerts", "broker", "tenant", "rules"}
 //
 static void pageMessage(Live* s, const char* text)
 {
@@ -1116,6 +1461,11 @@ static void pageMessage(Live* s, const char* text)
     unwatch(s);
     statusSend(s, NULL);
   }
+  else if (strcmp(op, "alerts") == 0)
+  {
+    if (alertsSet(s, treeP) == false)
+      pageSend(s, "{\"op\": \"error\", \"detail\": \"alerts: {\\\"broker\\\": \\\"http://host:port\\\", \\\"tenant\\\": \\\"optional\\\", \\\"rules\\\": [up to 32 {\\\"id\\\", \\\"type\\\", \\\"q\\\"}]}\"}");
+  }
 
   parsedRelease(&p);
 }
@@ -1147,6 +1497,7 @@ static void* pageThread(void* vP)
   }
 
   unwatch(s);
+  rulesFree(s);
 
   pthread_mutex_lock(&livesLock);
   for (Live** pP = &lives; *pP != NULL; pP = &(*pP)->next)
@@ -1308,14 +1659,23 @@ void liveNotify(CorHttpConn* connP, const char* session)
     if (strcmp(s->id, session) != 0)
       continue;
 
+    Parsed   p;
+    CorNode* treeP = parse(&p, body);
+    char     rule[65];
+
     pthread_mutex_lock(&s->lock);
     char*    brokerE = (s->brokerE != NULL) ? strdup(s->brokerE) : NULL;
     LiveMode mode    = s->mode;
+    bool     alert   = ruleOf(s, treeP, rule, sizeof(rule));
     pthread_mutex_unlock(&s->lock);
+    parsedRelease(&p);
 
     if ((mode == LiveHttp) && (brokerE != NULL))
     {
-      notifyForward(s, brokerE, "{\"body\": ", body, "}");
+      if (alert)
+        alertForward(s, brokerE, rule, "{\"body\": ", body, "}");
+      else
+        notifyForward(s, brokerE, "{\"body\": ", body, "}");
       found = true;
     }
     free(brokerE);

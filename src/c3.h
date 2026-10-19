@@ -149,6 +149,7 @@ extern bool         configUiSet(char* body, char* errBuf, int errLen);         /
 extern bool         configBrokerTypes(char* body, char* errBuf, int errLen);   // PUT /api/brokers/types
 extern bool         configBrokerConnect(char* body, char* errBuf, int errLen); // PUT /api/brokers/connect
 extern bool         configBrokerLogin(char* body, char* errBuf, int errLen);   // PUT /api/brokers/login
+extern bool         configDemo(const char* name, char* urlOut, int urlLen, char* hintOut, int hintLen);  // a demo's descriptor URL
 extern bool         configMapsSync(const MapsArea* disk, int n, const MapsArea* added, char* errBuf, int errLen);
 extern char*        configMapsAreasText(CorAlloc* allocP);                   // "maps": {"areas": [...]}, rendered
 extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
@@ -275,6 +276,7 @@ extern bool  urlSplit(const char* url, char* host, int hostLen, char* port, int 
 extern void  liveInit(void);                                     // before the server starts: old subscriptions swept
 extern void  liveUpgrade(CorHttpConn* connP);                    // GET /api/live - the page's WebSocket
 extern void  liveNotify(CorHttpConn* connP, const char* session); // POST /api/notify/<session> - a broker's notification
+extern void  demoRequest(CorHttpConn* connP, const char* name);  // GET /api/demos/<name> - a named demo's descriptor
 extern void  liveShutdown(void);                                 // the backend stops: every subscription deleted
 
 

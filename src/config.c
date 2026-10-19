@@ -21,9 +21,13 @@
 //         "login":    { "issuer": "https://keycloak.example.org/realms/city", "clientId": "c3", "scope": "openid" },
 //                                                     how c3 logs in to the broker's OpenID provider (oidc.c)
 //         "connect":  { "types": ["Building", "Floor"], "tenantTypes": { "city": ["Street"] }, "view": "map",
-//                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type" }
+//                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type",
+//                       "relationships": "selected",
+//                       "alerts": [ { "id": "lamp-out", "title": "Streetlight out", "severity": "critical",
+//                                     "type": "Streetlight", "q": "status==\"broken\"" } ] }
 //       }
 //     ],
+//     "demos":   { "CDMAD": { "url": "http://127.0.0.1:7990/c3.json", "hint": "start it, then Start broker + populate" } },
 //     "maps":    { "areas": [ { "id": "area-20261009-190012", "name": "Boston", "bbox": [w, s, e, n],
 //                               "maxzoom": 15, "bytes": 31457280, "created": "...", "build": "20261009" } ] },
 //     "ui":      { "lastPage": "connect" }
@@ -43,6 +47,7 @@
 #include <stdio.h>                               // snprintf, fprintf
 #include <stdlib.h>                              // malloc, free, getenv
 #include <string.h>                              // strlen, strcmp, strncmp, strerror
+#include <strings.h>                             // strcasecmp
 #include <sys/stat.h>                            // mkdir, stat
 #include <time.h>                                // time, gmtime_r, strftime
 #include <unistd.h>                              // write, close, fsync, read
@@ -80,6 +85,7 @@ static int    cfgBrokerCount = 0;
 #define CONFIG_BROKERS_MAX  50
 #define CONFIG_TYPES_MAX    1000
 #define CONFIG_TENANTS_MAX  20
+#define CONFIG_ALERTS_MAX   32
 
 static const char* configDefault = "{\"version\": 1, \"brokers\": [], \"ui\": {\"lastPage\": \"connect\"}}";
 
@@ -1017,6 +1023,102 @@ static bool numberOf(CorNode* nodeP, double* vP)
 
 // -----------------------------------------------------------------------------
 //
+// alertsCheck - a broker's alert rules, checked and copied into the document; NULL with why not
+//
+//   [ { "id": "lamp-out", "title": "Streetlight out", "severity": "critical", "type": "Streetlight", "q": "status==\"broken\"" } ]
+//
+// "id" names the rule (letters, digits, '-', '_', '.'; unique), "type" the entity type, "q" an NGSI-LD
+// query (optional - without one, every change of an entity of the type is an alert), "severity" critical,
+// warning or info (default warning), "title" what the alarm says (default the id).
+//
+static CorNode* alertsCheck(Doc* docP, CorNode* alertsP, char* errBuf, int errLen)
+{
+  if (alertsP->type != CorArray)
+  {
+    snprintf(errBuf, errLen, "\"alerts\" is an array of rules");
+    return NULL;
+  }
+
+  CorNode* outP = corTreeArray(&docP->alloc, "alerts");
+  int      n    = 0;
+
+  for (CorNode* rP = alertsP->value.head; rP != NULL; rP = rP->next)
+  {
+    const char* id;
+    const char* title;
+    const char* severity;
+    const char* type;
+    const char* q;
+
+    if (rP->type != CorObject)
+    {
+      snprintf(errBuf, errLen, "\"alerts\": each rule is an object");
+      return NULL;
+    }
+    if (++n > CONFIG_ALERTS_MAX)
+    {
+      snprintf(errBuf, errLen, "\"alerts\": at most %d rules", CONFIG_ALERTS_MAX);
+      return NULL;
+    }
+
+    if ((stringMember(rP, "id", true, 64, &id, errBuf, errLen) == false) ||
+        (stringMember(rP, "title", false, 200, &title, errBuf, errLen) == false) ||
+        (stringMember(rP, "severity", false, 16, &severity, errBuf, errLen) == false) ||
+        (stringMember(rP, "type", true, 500, &type, errBuf, errLen) == false) ||
+        (stringMember(rP, "q", false, 1024, &q, errBuf, errLen) == false))
+      return NULL;
+
+    if (id[0] == 0)
+    {
+      snprintf(errBuf, errLen, "\"alerts\": a rule's \"id\" is empty");
+      return NULL;
+    }
+    for (const char* c = id; *c != 0; ++c)
+    {
+      if (((*c < 'a') || (*c > 'z')) && ((*c < 'A') || (*c > 'Z')) && ((*c < '0') || (*c > '9')) && (*c != '-') && (*c != '_') && (*c != '.'))
+      {
+        snprintf(errBuf, errLen, "\"alerts\": the rule id '%s' - letters, digits, '-', '_' and '.' only", id);
+        return NULL;
+      }
+    }
+    for (CorNode* oP = outP->value.head; oP != NULL; oP = oP->next)
+    {
+      CorNode* oidP = corTreeLookup(oP, "id");
+      if ((oidP != NULL) && (strcmp(oidP->value.s, id) == 0))
+      {
+        snprintf(errBuf, errLen, "\"alerts\": two rules named '%s'", id);
+        return NULL;
+      }
+    }
+
+    if (type[0] == 0)
+    {
+      snprintf(errBuf, errLen, "\"alerts\": the rule '%s' has no \"type\"", id);
+      return NULL;
+    }
+    if ((severity != NULL) && (strcmp(severity, "critical") != 0) && (strcmp(severity, "warning") != 0) && (strcmp(severity, "info") != 0))
+    {
+      snprintf(errBuf, errLen, "\"alerts\": the rule '%s' - \"severity\" is critical, warning or info", id);
+      return NULL;
+    }
+
+    CorNode* ruleP = corTreeObject(&docP->alloc, NULL);
+    corTreeChildAdd(ruleP, corTreeString(&docP->alloc, "id", id));
+    corTreeChildAdd(ruleP, corTreeString(&docP->alloc, "title", ((title != NULL) && (title[0] != 0)) ? title : id));
+    corTreeChildAdd(ruleP, corTreeString(&docP->alloc, "severity", (severity != NULL) ? severity : "warning"));
+    corTreeChildAdd(ruleP, corTreeString(&docP->alloc, "type", type));
+    if ((q != NULL) && (q[0] != 0))
+      corTreeChildAdd(ruleP, corTreeString(&docP->alloc, "q", q));
+    corTreeChildAdd(outP, ruleP);
+  }
+
+  return outP;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy", "tenant"}
 //
 // Connect's view of a broker, kept in its "connect" object beside "types":
@@ -1026,6 +1128,9 @@ static bool numberOf(CorNode* nodeP, double* vP)
 //   "colourBy": "type", or the name of a Relationship: the map's markers coloured by its target
 //   "tenant":   the tenant Connect works on ("": the default one) - kept in the broker itself, beside
 //               "tenants": the ones used before, most recent first, CONFIG_TENANTS_MAX of them
+//   "relationships": "all" or "selected" - the Relationships the map draws: every one, or the selected
+//               entity's only
+//   "alerts":   the alert rules of the broker (alertsCheck), the whole list
 //
 // Each member is optional; the ones given replace the stored ones, the others stay.
 //
@@ -1050,6 +1155,24 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     goto done;
   if (stringMember(bodyP, "colourBy", false, 2048, &colourBy, errBuf, errLen) == false)
     goto done;
+
+  const char* relationships;
+  if (stringMember(bodyP, "relationships", false, 16, &relationships, errBuf, errLen) == false)
+    goto done;
+  if ((relationships != NULL) && (strcmp(relationships, "all") != 0) && (strcmp(relationships, "selected") != 0))
+  {
+    snprintf(errBuf, errLen, "\"relationships\" is \"all\" or \"selected\"");
+    goto done;
+  }
+
+  CorNode* alertsP = corTreeLookup(bodyP, "alerts");
+  CorNode* newAlertsP = NULL;
+  if (alertsP != NULL)
+  {
+    newAlertsP = alertsCheck(&doc, alertsP, errBuf, errLen);
+    if (newAlertsP == NULL)
+      goto done;
+  }
 
   const char* tenant;
   if (stringMember(bodyP, "tenant", false, 255, &tenant, errBuf, errLen) == false)
@@ -1118,6 +1241,10 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     corTreeChildAddOrReplace(connectP, "colourBy", corTreeString(&doc.alloc, "colourBy", colourBy));
   if (newMapP != NULL)
     corTreeChildAddOrReplace(connectP, "map", newMapP);
+  if (relationships != NULL)
+    corTreeChildAddOrReplace(connectP, "relationships", corTreeString(&doc.alloc, "relationships", relationships));
+  if (newAlertsP != NULL)
+    corTreeChildAddOrReplace(connectP, "alerts", newAlertsP);
 
   if (tenant != NULL)
   {
@@ -1723,4 +1850,65 @@ bool configRunBrokerDelete(const char* name, char* errBuf, int errLen)
  done:
   docRelease(&doc);
   return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configDemo - the descriptor URL of the demo 'name' (case-insensitive), and what to do when it does not
+// answer: the configuration's "demos" first, then the ones built in. False: no such demo.
+//
+//   "demos": { "<name>": { "url": "http://...", "hint": "..." } }      or      { "<name>": "http://..." }
+//
+static const struct { const char* name; const char* url; const char* hint; } demosBuiltIn[] =
+{
+  { "CDMAD", "http://127.0.0.1:7990/c3.json", "start it, then Start broker + populate" }      // c3-demo-madrid
+};
+
+bool configDemo(const char* name, char* urlOut, int urlLen, char* hintOut, int hintLen)
+{
+  Doc  doc;
+  bool found = false;
+
+  urlOut[0]  = 0;
+  hintOut[0] = 0;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* demosP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "demos") : NULL;
+  if ((demosP != NULL) && (demosP->type == CorObject))
+  {
+    for (CorNode* dP = demosP->value.head; dP != NULL; dP = dP->next)
+    {
+      if ((dP->name == NULL) || (strcasecmp(dP->name, name) != 0))
+        continue;
+
+      CorNode* urlP  = (dP->type == CorObject) ? corTreeLookup(dP, "url")  : dP;
+      CorNode* hintP = (dP->type == CorObject) ? corTreeLookup(dP, "hint") : NULL;
+
+      if ((urlP != NULL) && (urlP->type == CorString))
+      {
+        snprintf(urlOut, urlLen, "%s", urlP->value.s);
+        if ((hintP != NULL) && (hintP->type == CorString))
+          snprintf(hintOut, hintLen, "%s", hintP->value.s);
+        found = true;
+      }
+      break;
+    }
+  }
+  docRelease(&doc);
+
+  for (unsigned int ix = 0; (found == false) && (ix < sizeof(demosBuiltIn) / sizeof(demosBuiltIn[0])); ix++)
+  {
+    if (strcasecmp(demosBuiltIn[ix].name, name) == 0)
+    {
+      snprintf(urlOut, urlLen, "%s", demosBuiltIn[ix].url);
+      snprintf(hintOut, hintLen, "%s", demosBuiltIn[ix].hint);
+      found = true;
+    }
+  }
+
+  return found;
 }
