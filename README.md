@@ -163,7 +163,7 @@ markers are coloured by), the downloaded map areas, and the last page:
     "brokers": [
       { "name": "mt", "from": "installed", "build": null, "image": null, "where": "native", "set": "mongoc-timescale",
         "store": "mongoc", "dbDir": false, "history": "timescale", "port": 1592, "healthPort": 1593,
-        "transports": ["ws"], "bridges": [], "bridgeConfig": null, "admin": true, "verbose": true, "args": "",
+        "transports": ["ws"], "bridges": [], "bridgeConfig": null, "admin": true, "distributed": true, "verbose": true, "args": "",
         "grace": 30, "lastStarted": "2026-10-10T08:00:00Z" }
     ]
   },
@@ -660,7 +660,9 @@ pulled at the start, its progress in the broker's log. Images are named by their
   container the volume `c3-broker-<name>` at `/data`.
 - **History** `--troe` none, corDB or timescale.
 - **Port** and **health port** (`--healthPort`; empty: none), **grace** - the seconds from SIGTERM to SIGKILL.
-- **Plugins** - the WebSocket transport (`--transports ws`), the admin API (`--apiPlugins admin`), `-v`.
+- **Switches** - the WebSocket transport (`--transports ws`), the admin API (`--apiPlugins admin`),
+  distributed operations (`--distributed`: queries and updates forwarded to the Context Sources registered -
+  on by default; off and greyed for a broker built without REGISTRATIONS), `-v`.
 - **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
   configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
   the DDS defaults for dds, the CKAN datasets ticked, the OPC UA server.
