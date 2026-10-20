@@ -2,6 +2,9 @@
 #
 # ckan-ingest.py - one CKAN DataStore resource into an NGSI-LD broker, one entity per record
 #
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
 # ckan-ingest.py <ckan-base-url> <resource-id> <entity-type> <id-field> <lat-field> <lon-field> [broker-url]
 #
 # Every other field becomes a Property (numbers as numbers), the coordinates a GeoProperty 'location'.

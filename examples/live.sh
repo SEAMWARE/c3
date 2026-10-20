@@ -2,6 +2,9 @@
 #
 # live.sh - the factory's robots at work, for c³ Connect's live values
 #
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
 # Usage: examples/live.sh [broker-url] [seconds-per-step] [steps]
 #
 #   broker-url         default http://localhost:1026 - run examples/factory.sh on it first

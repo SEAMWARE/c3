@@ -2,6 +2,9 @@
 #
 # ckan-bikes.sh - real open data for c³: a city's bike-share stations, read from a CKAN portal
 #
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
 # Usage: examples/ckan-bikes.sh [broker-url] [limit]
 #
 #   broker-url   default http://localhost:1026
