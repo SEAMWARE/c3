@@ -222,6 +222,8 @@ header.top { position: relative; }
 }
 .connform input:focus { border-color: var(--accent-2); outline: none; }
 .connform input.tenant { flex: 0 1 170px; }
+.connform .localbox { display: flex; align-items: center; gap: 6px; flex: none; font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: pointer; }
+.connform .localbox input { flex: none; min-height: 0; width: 15px; height: 15px; margin: 0; accent-color: var(--accent-2); }
 
 .connbar { position: relative; }
 .tokenbtn { display: inline-flex; align-items: center; gap: 7px; }

@@ -11,7 +11,7 @@
 //
 import * as api from './api.js';
 import {
-  loadEntities, discover, entityGet, entitiesQuery, relationshipNames, linked, typeParam,
+  loadEntities, discover, setLocal, entityGet, entitiesQuery, relationshipNames, linked, typeParam,
   edgesOf, typesOf, attributes, kindOf, relationshipTargets, valueText, shortId, boxAttrs, ENTITY_CAP,
 } from './ngsild.js';
 import { layout } from './layout.js';
@@ -78,9 +78,10 @@ function el(tag, cls, text) {
   return e;
 }
 
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
+function plural(n, word, words = word + 's') {
+  return `${n} ${n === 1 ? word : words}`;
 }
+const entityCount = (n) => plural(n, 'entity', 'entities');
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -122,6 +123,7 @@ export class Connect {
   constructor() {
     this.broker = null;
     this.tenant = '';                            // the tenant everything is read from ('': the default one)
+    this.local = false;                          // the broker's own entities only (local=true) - the user's choice, per broker
     this.brokers = [];                           // the configuration's brokers
     this.disc = null;                            // discover()'s answer, null when the broker has none
     this.picks = [];                             // the types ticked, sorted
@@ -270,6 +272,7 @@ export class Connect {
     $('zoom-fit').onclick = () => this.graph.fit();
     $('connform').onsubmit = (e) => { e.preventDefault(); this.connect($('broker-url').value, $('tenant').value); };
     $('reload-btn').onclick = () => this.broker && this.connect(this.broker, this.tenant);
+    $('local-only').onchange = () => { if (this.broker) this.connect($('broker-url').value, $('tenant').value, { local: $('local-only').checked }); };
     $('tenant').onchange = () => { if (this.broker && $('tenant').value.trim() !== this.tenant) this.connect($('broker-url').value, $('tenant').value); };
     $('broker-url').onchange = () => {
       //
@@ -277,6 +280,7 @@ export class Connect {
       //
       const b = this.brokers.find((x) => x.url === $('broker-url').value.trim().replace(/\/+$/, ''));
       $('tenant').value = b && typeof b.tenant === 'string' ? b.tenant : '';
+      $('local-only').checked = !!(b && b.connect && b.connect.local === true);
     };
 
     //
@@ -649,9 +653,10 @@ export class Connect {
   // connect - what the broker holds, then the entities of the types picked
   //
   // 'tenant': the tenant to work in ('': the default one); not given, the one this broker was worked on in
-  // last time
+  // last time. 'local': the broker's own entities only (local=true); not given, as last time - off for a
+  // broker never connected to
   //
-  async connect(input, tenant, { demo = null } = {}) {
+  async connect(input, tenant, { demo = null, local } = {}) {
     let url = String(input || '').trim();
     if (!url) { $('broker-url').focus(); return; }
 
@@ -670,6 +675,8 @@ export class Connect {
     if (tenant === undefined) tenant = url === this.broker ? this.tenant : (stored && typeof stored.tenant === 'string' ? stored.tenant : '');
     tenant = String(tenant).trim();
     $('tenant').value = tenant;
+    if (local === undefined) local = url === this.broker ? this.local : !!(stored && stored.connect && stored.connect.local === true);
+    $('local-only').checked = local;
 
     const ticket = ++this.loading;
     if (url !== this.broker) this.tokenClose();
@@ -678,6 +685,8 @@ export class Connect {
     this.tokenUrl = url;
     this.tenant = tenant;
     api.setTenant(url, tenant);
+    this.local = local;
+    setLocal(url, local);
     this.mode = null;
     $('modebar').hidden = true;
     this.closeJson();
@@ -712,8 +721,9 @@ export class Connect {
     try {
       let config = await api.brokerTouch(url);
       const was = (config.brokers || []).find((x) => x.url === url);
-      if (!was || (was.tenant || '') !== tenant || (tenant && !(Array.isArray(was.tenants) && was.tenants[0] === tenant)))
-        config = await api.brokerConnect(url, { tenant });
+      if (!was || (was.tenant || '') !== tenant || (tenant && !(Array.isArray(was.tenants) && was.tenants[0] === tenant)) ||
+          ((was.connect && was.connect.local === true) !== local))
+        config = await api.brokerConnect(url, { tenant, local });
       this.setBrokers(config.brokers);
       const b = (config.brokers || []).find((x) => x.url === url);
       const c = (b && b.connect) || {};
@@ -780,10 +790,10 @@ export class Connect {
     this.liveWatch();
     this.renderDiscovery();
     this.setState('ok', 'Connected');
-    $('counts').textContent = `${plural(disc.types.length, 'type')} · ${disc.total} entities`;
+    $('counts').textContent = `${plural(disc.types.length, 'type')} · ${entityCount(disc.total)}`;
     const why = saved !== undefined
       ? 'No types are picked for this broker.'
-      : `${url} holds ${disc.total} entities of ${plural(disc.types.length, 'type')} - more than c³ loads without asking (${SMALL_BROKER}).`;
+      : `${url} holds ${entityCount(disc.total)} of ${plural(disc.types.length, 'type')} - more than c³ loads without asking (${SMALL_BROKER}).`;
     if (disc.types.length === 0) this.empty('No entities', `${url} answered, and has no entities (in ${this.tenantText()}).`);
     else this.overlay({ children: [el('h3', null, 'Choose what to see'), el('p', null, why), el('p', null, 'Tick the types on the left and press Load. The choice is kept for this broker.')] });
   }
@@ -837,7 +847,7 @@ export class Connect {
       result = await loadEntities(url, (n, total) => {
         if (ticket !== this.loading) return;
         const of = total !== null ? Math.min(total, ENTITY_CAP) : null;
-        card.set(of ? `${n} of ${of} entities` : `${n} entities`, of ? n / Math.max(of, 1) : null);
+        card.set(of ? `${n} of ${of} entities` : entityCount(n), of ? n / Math.max(of, 1) : null);
       }, types, this.idPattern ? '&idPattern=' + encodeURIComponent(this.idPattern) : '');
     } catch (err) {
       if (ticket !== this.loading) return;
@@ -858,7 +868,7 @@ export class Connect {
 
     const edges = this.graph.edges.length;
     const of = types && this.disc ? ` of ${plural(types.length, 'type')}` : '';
-    $('counts').textContent = `${result.entities.length} entities${of} · ${plural(edges, 'relationship')}`;
+    $('counts').textContent = `${entityCount(result.entities.length)}${of} · ${plural(edges, 'relationship')}`;
     if (result.truncated) {
       $('notice').hidden = false;
       $('notice').textContent = `showing the first ${result.entities.length} of ${result.total} - c³ loads at most ${ENTITY_CAP}`;
@@ -1082,7 +1092,7 @@ export class Connect {
       for (const id of changed) if (this.graph.nodes.has(id)) this.graph.update(id, boxAttrs(this.byId.get(id)));
       this.emap.flash([...changed]);
       this.renderDiscovery();
-      $('counts').textContent = `${this.loaded.length} entities${this.loadedPicks && this.disc ? ` of ${plural(this.loadedPicks.length, 'type')}` : ''} · ${plural(this.graph.edges.length, 'relationship')}`;
+      $('counts').textContent = `${entityCount(this.loaded.length)}${this.loadedPicks && this.disc ? ` of ${plural(this.loadedPicks.length, 'type')}` : ''} · ${plural(this.graph.edges.length, 'relationship')}`;
       if (this.loaded.length) this.overlay(null);
     } else {
       for (const id of changed) this.graph.update(id, boxAttrs(this.byId.get(id)));
@@ -1291,7 +1301,7 @@ export class Connect {
     rows.sort((a, b) => cmp(typeLabel(a.name), typeLabel(b.name)) || cmp(a.name, b.name));
 
     $('disc-sum').textContent = !this.broker ? '' : disc
-      ? `${plural(disc.types.length, 'type')} · ${disc.total} entities`
+      ? `${plural(disc.types.length, 'type')} · ${entityCount(disc.total)}`
       : (this.loadedPicks === null ? 'no discovery - every entity loaded' : '');
     $('typeall').hidden = !disc || disc.types.length < 2;
 
@@ -1826,7 +1836,7 @@ export class Connect {
       const more = inTotal !== null && inTotal > HOOD_IN_MAX ? ` (the first ${HOOD_IN_MAX} of ${inTotal})` : '';
       $('mode-text').textContent = `Neighbourhood of ${types} ${shortId(center)} · ${outFound} out · ${incoming.size} in${more}${inNote}${missing.length && outFound < outIds.length ? ` · ${outIds.length - outFound} target${outIds.length - outFound === 1 ? '' : 's'} not found` : ''}`;
       $('modebar').hidden = false;
-      $('counts').textContent = `${have.size} entities · ${plural(this.graph.edges.length, 'relationship')}`;
+      $('counts').textContent = `${entityCount(have.size)} · ${plural(this.graph.edges.length, 'relationship')}`;
       this.graph.select(id);
       const n = this.graph.nodes.get(id);
       if (n) n.el.focus({ preventScroll: true });
@@ -1849,7 +1859,7 @@ export class Connect {
     this.draw(this.loaded);
     this.renderDiscovery();
     const edges = this.graph.edges.length;
-    $('counts').textContent = `${this.loaded.length} entities · ${plural(edges, 'relationship')}`;
+    $('counts').textContent = `${entityCount(this.loaded.length)} · ${plural(edges, 'relationship')}`;
     if (this.byId.has(id)) this.graph.select(id);
     if (!this.loaded.length) this.empty('Nothing loaded', 'Tick the types to see on the left and press Load.');
   }

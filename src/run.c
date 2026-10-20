@@ -676,6 +676,42 @@ static char* buildVersion(const char* build)
 
 // -----------------------------------------------------------------------------
 //
+// buildExecutable - the broker's file name in a build's install/bin, from its record ("executable",
+// coraine-build --name): coraine for a record without one (made before it was there) or no record
+//
+static void buildExecutable(const char* build, char* out, int outLen)
+{
+  char path[2300];
+
+  snprintf(out, outLen, "coraine");
+  buildDirOf(build, path, sizeof(path) - 8);
+  strncat(path, ".json", sizeof(path) - strlen(path) - 1);
+
+  char* text = fileText(path);
+  if (text == NULL)
+    return;
+
+  CorAlloc alloc;
+  char     buf[8 * 1024];
+  CorJson  json;
+
+  corAllocBufferInit(&alloc, buf, sizeof(buf), 64 * 1024, NULL, "run build");
+  corJsonCreate(&json, &alloc);
+
+  CorNode* recP = corJsonParse(&json, text);
+  CorNode* eP   = (recP != NULL) ? corTreeLookup(recP, "executable") : NULL;
+
+  if ((eP != NULL) && (eP->type == CorString) && (eP->value.s[0] != 0) && (strchr(eP->value.s, '/') == NULL))
+    snprintf(out, outLen, "%s", eP->value.s);
+
+  corAllocBufferReset(&alloc, false);
+  free(text);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // defDefaults - a new broker: corDB alone, natively, on 1026 with the health port on 1027
 //
 static void defDefaults(Def* dP)
@@ -1530,9 +1566,12 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     char bdir[2300];
     char env[2400];
 
+    char exe[65];
+
     buildDirOf(dP->build, bdir, sizeof(bdir));
+    buildExecutable(dP->build, exe, sizeof(exe));
     snprintf(env, sizeof(env), "%s/install/env", bdir);
-    snprintf(path, sizeof(path), "%s/install/bin/coraine", bdir);
+    snprintf(path, sizeof(path), "%s/install/bin/%s", bdir, exe);
 
     if (access(path, X_OK) != 0)
     {

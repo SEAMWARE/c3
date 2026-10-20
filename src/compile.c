@@ -9,7 +9,7 @@
 //   GET    /api/capabilities           what this machine can do: Compile needs coraine-build and its source
 //   GET    /api/compile/features       coraine-build --list-features --json: every switch, its default, its
 //                                      description, what it requires (cached per source tarball)
-//   POST   /api/builds/command         {name?, mode, httpServer?, features, workload?}: the command a build would run,
+//   POST   /api/builds/command         {name?, executable?, mode, httpServer?, features, bridges?, workload?}: the command a build would run,
 //                                      without running it
 //   POST   /api/builds                 the same body: start the build (202; 409 while one runs)
 //   GET    /api/builds                 the builds kept, newest first
@@ -247,6 +247,7 @@ typedef struct Phase
 typedef struct Build
 {
   char            name[65];
+  char            executable[65];                // the broker's: install/bin/<executable> (coraine-build --name)
   char            mode[16];
   char            httpServer[16];                // mhd, builtin
   char            workload[2048];
@@ -269,7 +270,7 @@ typedef struct Build
   int64_t         logEnd;                        // the log's bytes up to the end of its last complete line
   int64_t         installBytes;
   int64_t         binaryBytes;
-  char*           brokerVersion;                 // install/bin/coraine --version
+  char*           brokerVersion;                 // install/bin/<executable> --version
 
   pid_t           pid;                           // coraine-build - and its process group
   int             pipeFd;
@@ -340,6 +341,7 @@ static void buildRender(Build* bP, Str* sP)
   char t[32];
 
   strAdd(sP, "{\"name\": ");          strAddJson(sP, bP->name);
+  strAdd(sP, ", \"executable\": ");   strAddJson(sP, bP->executable);
   strAdd(sP, ", \"state\": ");        strAddJson(sP, bP->state);
   strAdd(sP, ", \"mode\": ");         strAddJson(sP, bP->mode);
   strAdd(sP, ", \"httpServer\": ");   strAddJson(sP, bP->httpServer);
@@ -551,7 +553,7 @@ static void buildFinish(Build* bP, int status)
   char  binary[2400];
 
   snprintf(install, sizeof(install), "%s/install", bP->dir);
-  snprintf(binary, sizeof(binary), "%s/install/bin/coraine", bP->dir);
+  snprintf(binary, sizeof(binary), "%s/install/bin/%s", bP->dir, bP->executable);
 
   //
   // Measured outside the mutex: --version starts the broker
@@ -768,6 +770,7 @@ static bool buildExists(const char* name)
 typedef struct Plan
 {
   char   name[65];
+  char   executable[65];                         // coraine-build --name; coraine: its default, left out
   char   mode[16];
   char   httpServer[16];                         // mhd (coraine-build's default), builtin
   char   workload[2048];
@@ -975,6 +978,21 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   snprintf(pP->dir, sizeof(pP->dir), "%s/%s", buildsDir, pP->name);
 
   //
+  // executable - the broker's file name in install/bin (coraine-build --name); coraine when not given
+  //
+  CorNode* exeP = corTreeLookup(bodyP, "executable");
+  snprintf(pP->executable, sizeof(pP->executable), "coraine");
+  if ((exeP != NULL) && (exeP->type == CorString) && (exeP->value.s[0] != 0))
+  {
+    if ((nameValid(exeP->value.s) == false) || (strcmp(exeP->value.s, "coraine-import") == 0))
+    {
+      snprintf(errBuf, errLen, "the executable's name is 1 to 64 of A-Z a-z 0-9 . _ -, starting with a letter or a digit - and not coraine-import");
+      return false;
+    }
+    snprintf(pP->executable, sizeof(pP->executable), "%s", exeP->value.s);
+  }
+
+  //
   // The command
   //
   char modeArg[24];
@@ -999,6 +1017,11 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     pP->argv[pP->argc++] = strdup("--bridges");
     pP->argv[pP->argc++] = strdup(pP->bridges);
   }
+  if (strcmp(pP->executable, "coraine") != 0)
+  {
+    pP->argv[pP->argc++] = strdup("--name");
+    pP->argv[pP->argc++] = strdup(pP->executable);
+  }
   if (cP->sourceGiven)
   {
     pP->argv[pP->argc++] = strdup("--source");
@@ -1020,6 +1043,7 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
 static void planRender(Plan* pP, Str* sP)
 {
   strAdd(sP, "{\"name\": ");     strAddJson(sP, pP->name);
+  strAdd(sP, ", \"executable\": "); strAddJson(sP, pP->executable);
   strAdd(sP, ", \"mode\": ");    strAddJson(sP, pP->mode);
   strAdd(sP, ", \"httpServer\": "); strAddJson(sP, pP->httpServer);
   strAdd(sP, ", \"features\": "); strAdd(sP, pP->features.s);
@@ -1096,6 +1120,7 @@ static void buildStart(CorHttpConn* connP)
   Build* bP = (Build*) calloc(1, sizeof(Build));
 
   snprintf(bP->name, sizeof(bP->name), "%s", plan.name);
+  snprintf(bP->executable, sizeof(bP->executable), "%s", plan.executable);
   snprintf(bP->mode, sizeof(bP->mode), "%s", plan.mode);
   snprintf(bP->httpServer, sizeof(bP->httpServer), "%s", plan.httpServer);
   snprintf(bP->workload, sizeof(bP->workload), "%s", plan.workload);

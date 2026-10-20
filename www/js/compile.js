@@ -294,6 +294,7 @@ export class Compile {
     $('cp-cancel').addEventListener('click', () => this.cancel());
     $('cp-run-close').addEventListener('click', () => this.closeRun());
     $('cp-name').addEventListener('input', () => this.commandSoon());
+    $('cp-exe').addEventListener('input', () => this.commandSoon());
     $('cp-workload-path').addEventListener('input', () => { this.choice.workload = $('cp-workload-path').value.trim(); this.changed(); });
     $('cp-preset-save').addEventListener('click', () => this.presetSave());
     $('cp-preset-load').addEventListener('click', () => this.presetLoad());
@@ -743,6 +744,8 @@ export class Compile {
     if (this.choice.httpServer !== 'mhd') b.httpServer = this.choice.httpServer;
     const name = $('cp-name').value.trim();
     if (name) b.name = name;
+    const exe = $('cp-exe').value.trim();
+    if (exe && exe !== 'coraine') b.executable = exe;
     if (this.choice.mode === 'tune') b.workload = this.choice.workload;
     return b;
   }
@@ -1030,7 +1033,7 @@ export class Compile {
     runIt.title = 'Run: this build in the form, natively';
     runIt.addEventListener('click', () => window.dispatchEvent(new CustomEvent('c3:run', { detail: { build: b.name } })));
     const ri = el('span', 'cp-chips');
-    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; coraine -fg --database corDB'));
+    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; ' + (b.executable || 'coraine') + ' -fg --database corDB'));
     if (b.state === 'succeeded') row('', ri);
 
     dl.hidden = false;
