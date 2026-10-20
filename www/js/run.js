@@ -74,6 +74,7 @@ function featuresOf(version) {
 const PLUGINS = [
   ['ws',      'WebSocket transport', 'TRANSPORTS', '--transports ws'],
   ['admin',   'admin API',           'ADMIN_API',  '--apiPlugins admin'],
+  ['distributed', 'distributed operations', 'REGISTRATIONS', '--distributed'],
   ['verbose', 'verbose log',         null,         '-v'],
 ];
 
@@ -177,7 +178,7 @@ export class Run {
     if (this.f.where === 'container') return { url: null, why: '' };
     if (!this.f.opcua.url) return { url: null, why: 'Browsing asks a running broker: give the server, start the broker, then browse.' };
     if (!k || k.state !== 'running') return { url: null, why: 'Browsing asks the running broker\'s bridge: start ' + (this.f.name || 'the broker') + ', then browse - and stop and start it again for what you pick.' };
-    if (!k.def.admin) return { url: null, why: 'Browsing needs the admin API in the broker (Plugins).' };
+    if (!k.def.admin) return { url: null, why: 'Browsing needs the admin API in the broker (Switches).' };
     return { url: 'http://localhost:' + k.def.port, why: 'The server as ' + k.name + '\'s bridge sees it. What you pick takes effect when the broker is started again.' };
   }
 
@@ -283,7 +284,7 @@ export class Run {
     return {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
       store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
-      ws: true, admin: true, verbose: true, bridges: [], bridgeConfig: '', ckan: [], args: '',
+      ws: true, admin: true, distributed: true, verbose: true, bridges: [], bridgeConfig: '', ckan: [], args: '',
       opcua: this.opcuaDefaults(),
     };
   }
@@ -548,7 +549,7 @@ export class Run {
     this.f = {
       name: d.name, set: d.set, from: d.from, build: d.build || '', tag, where: d.where,
       store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
-      ws: (d.transports || []).includes('ws'), admin: d.admin, verbose: d.verbose, bridges: [...(d.bridges || [])],
+      ws: (d.transports || []).includes('ws'), admin: d.admin, distributed: d.distributed !== false, verbose: d.verbose, bridges: [...(d.bridges || [])],
       bridgeConfig: d.bridgeConfig || '', ckan: [...(d.ckan || [])], args: d.args || '',
       opcua: this.opcuaDefaults(),
     };
@@ -1039,7 +1040,7 @@ export class Run {
     else $('rn-hport').placeholder = 'none';
 
     //
-    // Plugins: what the broker has compiled in
+    // Switches: what the broker has compiled in
     //
     $('rn-plugins').replaceChildren(...PLUGINS.map(([key, label, feature, flag]) => {
       const off = feature && !this.has(feature);
@@ -1162,7 +1163,7 @@ export class Run {
     const d = {
       name: f.name, set: f.set, from: f.from, where: f.where, store: f.store, dbDir: f.store === 'corDB' && f.dbDir,
       history: f.history, port: f.port, healthPort: f.healthPort || 0, grace: f.grace || 30,
-      transports: f.ws ? ['ws'] : [], admin: !!f.admin, verbose: !!f.verbose, bridges: f.bridges,
+      transports: f.ws ? ['ws'] : [], admin: !!f.admin, distributed: !!f.distributed, verbose: !!f.verbose, bridges: f.bridges,
       args: f.args,
     };
     if (f.bridgeConfig) d.bridgeConfig = f.bridgeConfig;

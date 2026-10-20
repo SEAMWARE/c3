@@ -183,6 +183,7 @@ typedef struct Def
   int   healthPort;                              // 0: none
   bool  ws;                                      // --transports ws
   bool  admin;                                   // --apiPlugins admin
+  bool  distributed;                             // --distributed: forwards to the Context Sources registered
   char  bridges[128];                            // comma-separated
   char  bridgeConfig[1024];                      // a file; "": the one c3 writes for mqtt and ckan
   char  ckan[512];                               // CKAN datasets (ids in www/data/ckan.json), comma-separated
@@ -726,8 +727,9 @@ static void defDefaults(Def* dP)
   dP->port       = 1026;
   dP->healthPort = 1027;
   dP->ws         = true;
-  dP->admin      = true;
-  dP->verbose    = true;
+  dP->admin       = true;
+  dP->distributed = true;
+  dP->verbose     = true;
   dP->grace      = GRACE_DEFAULT;
 }
 
@@ -1172,6 +1174,7 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberString(oP, "lastStarted",  dP->lastStarted,  sizeof(dP->lastStarted),  err, errLen) ||
       !memberBool(oP,   "dbDir",        &dP->dbDir,       err, errLen) ||
       !memberBool(oP,   "admin",        &dP->admin,       err, errLen) ||
+      !memberBool(oP,   "distributed",  &dP->distributed, err, errLen) ||
       !memberBool(oP,   "verbose",      &dP->verbose,     err, errLen) ||
       !memberInt(oP,    "port",         &dP->port,        1, 65535, err, errLen) ||
       !memberInt(oP,    "healthPort",   &dP->healthPort,  0, 65535, err, errLen) ||
@@ -1419,7 +1422,7 @@ static void defRender(const Def* dP, Str* sP)
     strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
     strAddf(sP, ", \"passwordSet\": %s}}", ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0)) ? "true" : "false");
   }
-  strAddf(sP, ", \"admin\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->verbose ? "true" : "false");
+  strAddf(sP, ", \"admin\": %s, \"distributed\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->distributed ? "true" : "false", dP->verbose ? "true" : "false");
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
   strAddf(sP, ", \"grace\": %d", dP->grace);
   strAdd(sP, ", \"lastStarted\": ");  strAddJson(sP, (dP->lastStarted[0] != 0) ? dP->lastStarted : NULL);
@@ -1641,6 +1644,8 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
   {
     argAdd(aP, "--apiPlugins"); argAdd(aP, "admin");
   }
+  if (dP->distributed)
+    argAdd(aP, "--distributed");
   if (dP->ws)
   {
     argAdd(aP, "--transports"); argAdd(aP, "ws");
@@ -3717,6 +3722,7 @@ static bool sourceCheck(const Def* dP, char* err, int errLen)
     { dP->healthPort > 0,               "HEALTH",     "a health port"          },
     { dP->ws,                           "TRANSPORTS", "the WebSocket transport" },
     { dP->admin,                        "ADMIN_API",  "the admin API"          },
+    { dP->distributed,                  "REGISTRATIONS", "distributed operations (Context Source Registrations)" },
   };
 
   for (unsigned int ix = 0; ix < sizeof(checks) / sizeof(checks[0]); ix++)
