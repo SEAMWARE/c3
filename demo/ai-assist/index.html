@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>c³ AI Assist</title>
+<style>
+  :root { --bg: #0d0f14; --panel: #161a22; --line: #2a3040; --text: #e6e8ee; --dim: #9aa3b5; --accent: #d63b7a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 4px 0 12px; }
+  .stage { position: relative; background: #000; border-radius: 10px; overflow: hidden; }
+  video { display: block; width: 100%; height: auto; }
+  .hold { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 18px;
+          background: rgba(13,15,20,.88); border: 1px solid var(--line); border-radius: 999px; font-weight: 600;
+          white-space: nowrap; cursor: pointer; }
+  .hold[hidden] { display: none; }
+  .hold kbd { font: inherit; color: var(--accent); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 10px; color: var(--dim); }
+  .bar label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  ol { margin: 12px 0 0; padding-left: 22px; }
+  ol button { all: unset; cursor: pointer; color: var(--text); }
+  ol button:hover, ol button:focus-visible { color: var(--accent); text-decoration: underline; }
+  ol .t { color: var(--dim); font-variant-numeric: tabular-nums; margin-right: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>c³ AI Assist - asking a broker in your own words</h1>
+  <div class="stage">
+    <video id="v" src="c3-ai-assist.mp4" controls playsinline preload="auto"></video>
+    <div class="hold" id="hold" hidden>Paused to read - press <kbd>any key</kbd> or click to continue</div>
+  </div>
+  <div class="bar">
+    <label><input type="checkbox" id="auto" checked> Auto-pause after each prompt and each answer</label>
+  </div>
+  <ol id="chapters"></ol>
+</main>
+<script>
+  const MARKS = [{"t": 2.5, "kind": "start", "text": "Explore: a factory floor, its robots at work"}, {"t": 7.79, "kind": "prompt", "text": "Show only the robots and their docks."}, {"t": 20.82, "kind": "answer", "text": "Show only the robots and their docks."}, {"t": 28.58, "kind": "fit", "text": "Fit, and closer"}, {"t": 32.65, "kind": "prompt", "text": "Which robots have a battery below 40 %? Highlight them."}, {"t": 49.29, "kind": "answer", "text": "Which robots have a battery below 40 %? Highlight them."}, {"t": 51.95, "kind": "prompt", "text": "Paint the robots blue."}, {"t": 62.58, "kind": "answer", "text": "Paint the robots blue."}, {"t": 66.79, "kind": "undo", "text": "Undo, by hand"}, {"t": 69.4, "kind": "prompt", "text": "Undo everything else."}, {"t": 83.65, "kind": "answer", "text": "Undo everything else."}];
+  const v = document.getElementById('v');
+  const hold = document.getElementById('hold');
+  const auto = document.getElementById('auto');
+  const stops = MARKS.filter((m) => m.kind === 'prompt' || m.kind === 'answer' || m.kind === 'undo');
+  let next = 0;                                   // the first stop not passed yet
+
+  const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const sync = () => { next = stops.findIndex((m) => m.t > v.currentTime + 0.05); if (next < 0) next = stops.length; };
+
+  v.addEventListener('timeupdate', () => {
+    if (!auto.checked || next >= stops.length || v.paused) return;
+    if (v.currentTime >= stops[next].t) { v.pause(); hold.hidden = false; next++; }
+  });
+  v.addEventListener('seeked', () => { hold.hidden = true; sync(); });
+  v.addEventListener('play', () => { hold.hidden = true; });
+
+  const go = () => { if (!hold.hidden) { hold.hidden = true; v.play(); } };
+  document.addEventListener('keydown', (e) => {
+    if (hold.hidden || e.target === auto) return;
+    e.preventDefault(); go();
+  });
+  hold.addEventListener('click', go);
+
+  const ol = document.getElementById('chapters');
+  for (const m of MARKS.filter((x) => x.kind === 'prompt')) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="t">${fmt(m.t)}</span>`;
+    b.append(m.text);
+    b.onclick = () => { v.currentTime = Math.max(0, m.t - 6); v.play(); };
+    li.append(b); ol.append(li);
+  }
+</script>
+</body>
+</html>
