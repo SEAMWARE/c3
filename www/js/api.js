@@ -110,6 +110,25 @@ export async function brokerGet(broker, pathAndQuery) {
 }
 
 //
+// brokerText - brokerGet for an answer that is not JSON (/admin/metrics, Prometheus text): { ok, status,
+// text, reached }
+//
+export async function brokerText(broker, pathAndQuery) {
+  let response;
+  try {
+    const headers = { 'X-C3-Broker': broker };
+    if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
+    response = await fetch('/api/proxy' + pathAndQuery, { headers });
+  } catch (e) {
+    return { ok: false, status: 0, text: '', reached: false };
+  }
+  const text = await response.text();
+  let reached = true;
+  if (!response.ok) { try { reached = JSON.parse(text).broker !== false; } catch { /* the broker's own error */ } }
+  return { ok: response.ok, status: response.status, text, reached };
+}
+
+//
 // Run: brokers started here and the services they use (run.c)
 //
 const runName = (name) => encodeURIComponent(name);
