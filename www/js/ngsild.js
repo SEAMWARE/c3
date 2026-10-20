@@ -10,6 +10,25 @@ export const PAGE_SIZE = 100;
 export const ENTITY_CAP = 2000;
 
 //
+// The brokers read for their own entities only (local=true) - the user's choice, per broker; by default
+// a broker is read as it answers, with its Context Sources
+//
+const locals = new Set();
+export function setLocal(broker, on) {
+  if (on) locals.add(broker); else locals.delete(broker);
+}
+
+//
+// get - brokerGet, with local=true when the broker is read for its own entities - and without it if
+// the broker refuses it (400)
+//
+async function get(broker, pathAndQuery) {
+  if (!locals.has(broker)) return brokerGet(broker, pathAndQuery);
+  const r = await brokerGet(broker, pathAndQuery + (pathAndQuery.includes('?') ? '&' : '?') + 'local=true');
+  return r.status === 400 ? brokerGet(broker, pathAndQuery) : r;
+}
+
+//
 // nextLink - the URL of rel="next" in a Link header, or null
 //
 // The broker's next link is a path (/ngsi-ld/v1/entities?...) or an absolute URL; the path is what the
@@ -81,12 +100,14 @@ export function typeParam(types) {
 //
 // loadEntities - the broker's entities, page by page, up to ENTITY_CAP
 //
-// types null: every entity - GET /ngsi-ld/v1/entities?local=true&limit=..&count=true, following
-// rel="next". A broker that does not take local=true as the whole query (400) is asked for its types
-// (GET /ngsi-ld/v1/types) and then queried with type=<all of them>.
+// types null: every entity. Read for its own entities (setLocal): GET /ngsi-ld/v1/entities?local=true&
+// limit=..&count=true, following rel="next". Otherwise - or when the broker does not take local=true as
+// the whole query (400) - the broker is asked for its types (GET /ngsi-ld/v1/types) and then queried with
+// type=<all of them>: a query naming no type is too wide without local=true. A broker without /types:
+// the local=true query, the only one that names no type.
 //
 // types an array: the entities of those types only - one query, type=A,B,..., or one query per type
-// when the list is too long for a URL; local=true unless the broker refuses it (400).
+// when the list is too long for a URL.
 //
 // filter: more of the query, e.g. '&idPattern=...' (encoded).
 //
@@ -96,17 +117,23 @@ export function typeParam(types) {
 export async function loadEntities(broker, onProgress, types = null, filter = '') {
   if (types !== null) return loadTypes(broker, onProgress, types, filter);
 
-  let first = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true${filter}`;
-  let r = await brokerGet(broker, first);
-
-  if (r.status === 400) {
-    const t = await brokerGet(broker, '/ngsi-ld/v1/types');
-    if (!t.ok) throw problem(r);
-    const list = (t.body && (t.body.typeList || (Array.isArray(t.body) ? t.body.map((x) => x.typeName || x.id) : null))) || [];
-    if (list.length === 0) return { entities: [], total: 0, truncated: false };
-    return loadTypes(broker, onProgress, list, filter);
+  const whole = `/ngsi-ld/v1/entities?local=true&limit=${PAGE_SIZE}&count=true${filter}`;
+  if (locals.has(broker)) {
+    const r = await brokerGet(broker, whole);
+    if (r.status !== 400) return wholeLoad(broker, r, onProgress);
   }
 
+  const t = await get(broker, '/ngsi-ld/v1/types');
+  if (!t.ok) {
+    if (locals.has(broker)) throw problem(t);
+    return wholeLoad(broker, await brokerGet(broker, whole), onProgress);   // no /types: the query naming no type, local
+  }
+  const list = (t.body && (t.body.typeList || (Array.isArray(t.body) ? t.body.map((x) => x.typeName || x.id) : null))) || [];
+  if (list.length === 0) return { entities: [], total: 0, truncated: false };
+  return loadTypes(broker, onProgress, list, filter);
+}
+
+async function wholeLoad(broker, r, onProgress) {
   const seen = new Map();
   const { total, more } = await pages(broker, r, seen, onProgress);
   const truncated = seen.size >= ENTITY_CAP && (more || (total !== null && total > seen.size));
@@ -126,8 +153,7 @@ async function loadTypes(broker, onProgress, types, filter = '') {
   for (const g of groups) {
     if (seen.size >= ENTITY_CAP) { more = true; known = false; break; }
     const q = `/ngsi-ld/v1/entities?type=${g}&limit=${PAGE_SIZE}&count=true${filter}`;
-    let r = await brokerGet(broker, q + '&local=true');
-    if (r.status === 400) r = await brokerGet(broker, q);
+    const r = await get(broker, q);
     const before = seen.size;
     const page = await pages(broker, r, seen, onProgress, known ? total : 0);
     if (page.total === null) { known = false; total += seen.size - before; }
@@ -156,7 +182,7 @@ async function loadTypes(broker, onProgress, types, filter = '') {
 // broker, or one too old). Throws { reached, status, ... } when the broker cannot be reached.
 //
 export async function discover(broker, onProgress) {
-  let r = await brokerGet(broker, '/ngsi-ld/v1/types?details=true');
+  let r = await get(broker, '/ngsi-ld/v1/types?details=true');
   if (!r.reached) throw problem(r);
 
   const notes = [];
@@ -168,7 +194,7 @@ export async function discover(broker, onProgress) {
       attrs: (t.attributeNames || []).map((a) => ({ name: String(a), kinds: [] })),
     }));
   } else {
-    r = await brokerGet(broker, '/ngsi-ld/v1/types');
+    r = await get(broker, '/ngsi-ld/v1/types');
     if (!r.reached) throw problem(r);
     if (!r.ok) return null;
     const names = (r.body && (r.body.typeList || (Array.isArray(r.body) ? r.body.map((x) => x.typeName || x.id) : null))) || [];
@@ -186,7 +212,7 @@ export async function discover(broker, onProgress) {
   let done = 0;
   let fallback = 0;
   const one = async (t) => {
-    const info = await brokerGet(broker, '/ngsi-ld/v1/types/' + encodeURIComponent(t.name));
+    const info = await get(broker, '/ngsi-ld/v1/types/' + encodeURIComponent(t.name));
     if (info.ok && info.body && typeof info.body.entityCount === 'number') {
       t.count = info.body.entityCount;
       if (Array.isArray(info.body.attributeDetails)) {
@@ -198,8 +224,7 @@ export async function discover(broker, onProgress) {
     } else {
       ++fallback;
       const q = `/ngsi-ld/v1/entities?type=${typeParam([t.name])}&limit=0&count=true`;
-      let c = await brokerGet(broker, q + '&local=true');
-      if (c.status === 400) c = await brokerGet(broker, q);
+      const c = await get(broker, q);
       const n = c.ok ? c.headers.get('NGSILD-Results-Count') : null;
       t.count = n === null ? null : parseInt(n, 10);
     }
@@ -216,7 +241,7 @@ export async function discover(broker, onProgress) {
   for (const t of types) t.attrs.sort((a, b) => cmp(a.name, b.name));
 
   const attributes = new Map();
-  const a = await brokerGet(broker, '/ngsi-ld/v1/attributes?details=true');
+  const a = await get(broker, '/ngsi-ld/v1/attributes?details=true');
   if (a.ok && Array.isArray(a.body)) {
     for (const x of a.body) {
       if (!x || !(x.attributeName || x.id)) continue;
@@ -258,8 +283,7 @@ export async function entityGet(broker, id, query = '') {
 //
 export async function entitiesQuery(broker, query, max) {
   const q = `/ngsi-ld/v1/entities?${query}&limit=${PAGE_SIZE}&count=true`;
-  let r = await brokerGet(broker, q + '&local=true');
-  if (r.status === 400) r = await brokerGet(broker, q);
+  const r = await get(broker, q);
   const seen = new Map();
   const { total } = await pages(broker, r, seen, null);
   const entities = [...seen.values()].slice(0, max);

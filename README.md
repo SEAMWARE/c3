@@ -204,6 +204,9 @@ markers are coloured by), the downloaded map areas, and the last page:
   discovery, the entities, the live values; empty, the default tenant. It is kept per broker, and offered
   again with the ones used before and, from coraine with its admin plugin, `GET /admin/tenants`. Another
   tenant is a new connection: its own types, its own picks.
+- **Local only.** The tick beside the tenant: off (the default), the broker is read as it answers - with
+  the entities of its Context Source Registrations. On, every query carries `local=true`: the broker's
+  own entities only, its types and attributes the same. Kept per broker (`"local"` in its `connect`).
 - **The access token.** **Token** beside **Connect** - its dot is green when a token is sent. Every
   request to the broker carries `Authorization: Bearer <token>` - through the proxy, the live values'
   subscription over HTTP, and each message over the broker's WebSocket (in its `metadata`, as coraine
@@ -246,7 +249,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   - `GET /ngsi-ld/v1/types/{type}` per type, six at a time - its entity count (`entityCount`) and its
     attributes with their kinds (`attributeDetails[].attributeTypes`: Property, Relationship,
     GeoProperty, ...); a broker that does not answer it is asked for
-    `GET /entities?type=T&limit=0&count=true&local=true` (the count only);
+    `GET /entities?type=T&limit=0&count=true` (the count only);
   - `GET /ngsi-ld/v1/attributes?details=true` - the types each attribute is used in (`typeNames`).
 
   The panel on the left lists the types, sorted, with their counts; **▸** opens a type's attributes,
@@ -255,8 +258,8 @@ markers are coloured by), the downloaded map areas, and the last page:
   the entity a Relationship points to, so these come from the loaded entities, and the panel says so
   until some are loaded. A broker with no `/types` at all is loaded whole, as in milestone 1.
 - **Choosing what to see.** Each type has a tick: **Load** loads the types ticked - one query,
-  `GET /entities?type=A,B&local=true&limit=100&count=true` (without `local=true` if the broker refuses
-  it), one per type when the list is longer than 2000 characters - every `rel="next"` page, up to
+  `GET /entities?type=A,B&limit=100&count=true` (with **Local only**, `local=true` too - without it if
+  the broker refuses it), one per type when the list is longer than 2000 characters - every `rel="next"` page, up to
   **2000 entities** in all; past that, a notice says how many there are. The choice is kept in
   `c3.json` under the broker. On a first connect a broker of **300 entities or fewer** is loaded whole;
   a larger one shows its types and waits for the pick. Clicking a type shows or hides its entities.
@@ -286,8 +289,8 @@ markers are coloured by), the downloaded map areas, and the last page:
     Relationship, `entityList` of a ListRelationship). A Relationship not embedded says why: deeper
     than the level asked for, or not embedded by the broker. × or Esc closes it.
   - **Neighbourhood** - only this entity and the entities one Relationship away, out or in: its targets
-    (the loaded ones, the others by `GET /entities?id=a,b,...&local=true`) and the entities pointing at
-    it (the loaded ones, and the broker's: `q=<r1>=="<id>"|<r2>=="<id>"|...&local=true` over every
+    (the loaded ones, the others by `GET /entities?id=a,b,...`) and the entities pointing at
+    it (the loaded ones, and the broker's: `q=<r1>=="<id>"|<r2>=="<id>"|...` over every
     Relationship name of the discovery, the first 300). Laid out on its own; **Back to the picked
     types** returns to them.
   - **Follow** › one item per Relationship target: selects and centres it, or opens its neighbourhood
@@ -553,8 +556,12 @@ is the command shown, run by the backend, the same build as on the command line.
 - **Optimisation** - Release, Profile-guided (`--pgo`), Tuned for a workload (`--tune <file>`, the
   workload by its absolute path on this machine), Debug. The training modes are greyed when the tools
   are missing.
-- **Target, HTTP server** - shown greyed: `coraine-build` builds a binary for the host, with its default
-  HTTP server.
+- **Target** - shown greyed: `coraine-build` builds a binary for the host.
+- **HTTP server** - libmicrohttpd (the default) or coraine's own (`--http-server builtin`; not with the
+  training modes).
+- **Executable** - the broker's file name in `install/bin` (`--name`, default `coraine`): a broker built
+  for one role named after it, a `cor-agent`. It reads the same `CORAINE_*` environment variables, and
+  Run starts it by that name.
 - **The command** - `POST /api/builds/command` answers the exact `argv` for the choice; the page shows it,
   one option a line. Only the switches that differ from their defaults are passed. **Build** starts that
   command under the name it showed (the name field, else `<mode>-<date>-<time>`).
@@ -564,7 +571,7 @@ is the command shown, run by the backend, the same build as on the command line.
   phase of the last build of that mode that succeeded, with that build's phase times as the weights.
   **Cancel**: SIGTERM to the build's process group, SIGKILL 5 s later.
 - **The result** - the size of `install/` and of the broker, the mode and time, the features as the
-  built broker reports them (`install/bin/coraine --version`, the switches off struck through), its
+  built broker reports them (`install/bin/<executable> --version`, the switches off struck through), its
   `--version`, the directory, the whole log. **Run it** opens Run with that build in the form.
 - **Builds kept** - newest first, with their mode, date, size and the features turned off; a click
   opens one (its log and result); **Delete** (press twice) removes its directory, log and record.
@@ -584,7 +591,7 @@ directory (or one it unpacked into), so nothing of c³'s can be there first. The
 
 ```json
 {
-  "name": "page-edge", "state": "succeeded", "mode": "release",
+  "name": "page-edge", "executable": "coraine", "state": "succeeded", "mode": "release",
   "features": {"REGISTRATIONS": false, "SUBSCRIPTIONS": false, "MONGOC": false},
   "workload": null,
   "command": "/usr/bin/coraine-build --release --features REGISTRATIONS=OFF,SUBSCRIPTIONS=OFF,MONGOC=OFF ~/.local/share/c3/builds/page-edge",
@@ -798,14 +805,14 @@ The backend's API, used by the pages:
 | `POST /api/brokers` `{"url", "name"}` | a broker connected to: first in the list, `lastUsed` now |
 | `DELETE /api/brokers` `{"url"}` | forget a broker |
 | `PUT /api/brokers/types` `{"url", "types"}` | the types Connect loads from a broker, as its `connect.types` (the broker must be in the list) |
-| `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy"}` | Connect's view of a broker: each member given replaces the stored one |
+| `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy", "relationships", "alerts", "tenant", "local"}` | Connect's view of a broker: each member given replaces the stored one |
 | `PUT /api/ui` `{"lastPage"}` | `compile`, `run` or `connect` |
 | `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`), `run` (`coraine`, `coraineWhy`, `containers`, `engine`, `engineVersion`, `containersWhy`, `dir`) |
 | `GET /api/compile/features` | `coraine-build --list-features --json` as `{"coraineBuild", "source", "version", "features": [{"name", "default", "description", "requires"}]}` |
 | `PUT /api/compile/choice` `{"mode", "features", "workload"}` | Compile's choice, kept as `compile.choice` |
 | `PUT /api/compile/presets` `{"name", "mode", "features", "workload"}` | a preset, added or replaced (in its place) in `compile.presets` |
 | `DELETE /api/compile/presets` `{"name"}` | |
-| `POST /api/builds/command` `{"name"?, "mode", "features", "workload"?}` | the build that body would start: `name`, `dir`, `argv`, `command` - nothing run |
+| `POST /api/builds/command` `{"name"?, "executable"?, "mode", "httpServer"?, "features", "bridges"?, "workload"?}` | the build that body would start: `name`, `dir`, `argv`, `command` - nothing run |
 | `POST /api/builds` (the same body) | start it: `202` with the record; `409` while a build runs or when the name is taken; `503` without `coraine-build`; `422` for a training mode without its tools or a tune without its workload |
 | `GET /api/builds` | `{"dir", "builds": [records, newest first]}` |
 | `GET /api/builds/<name>` | a record |

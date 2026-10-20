@@ -144,6 +144,7 @@
             <dt>Source</dt><dd id="cp-sum-source"></dd>
           </dl>
           <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="cp-name" maxlength="64" spellcheck="false" autocomplete="off" placeholder="mode-date-time"></label>
+          <label class="cp-name" title="The broker's file name in install/bin - a broker built for one role named after it (cor-agent). It reads the same CORAINE_* environment variables whatever it is called."><span class="cp-label">Executable</span><input class="cp-input" id="cp-exe" maxlength="64" spellcheck="false" autocomplete="off" placeholder="coraine"></label>
           <pre class="cp-cmd" id="cp-cmd" aria-label="The command"></pre>
           <span class="cp-note">Exactly what runs: c³ builds nothing itself. The result is <span class="mono">install/</span> in the build's directory.</span>
           <button class="btn primary cp-build" type="button" id="cp-build">Build</button>
@@ -350,6 +351,7 @@
         <datalist id="broker-list"></datalist>
         <input class="tenant" id="tenant" list="tenant-list" placeholder="default tenant" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant (NGSILD-Tenant) everything in Connect is read from - empty: the default tenant" autocomplete="off" spellcheck="false">
         <datalist id="tenant-list"></datalist>
+        <label class="localbox" title="Ask for the broker's own entities only (local=true) - not its Context Sources'. Off: what the broker answers, with the entities of its registrations"><input type="checkbox" id="local-only">Local only</label>
         <button class="btn primary" type="submit" id="connect-btn">Connect</button>
         <button class="btn tokenbtn" type="button" id="token-btn" title="The access token sent to this broker" aria-haspopup="dialog" aria-expanded="false"><span class="tdot" id="token-dot"></span>Token</button>
         <button class="btn" type="button" id="reload-btn" title="Load the entities again" disabled>Reload</button>

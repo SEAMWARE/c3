@@ -22,7 +22,7 @@
 //                                                     how c3 logs in to the broker's OpenID provider (oidc.c)
 //         "connect":  { "types": ["Building", "Floor"], "tenantTypes": { "city": ["Street"] }, "view": "map",
 //                       "map": { "center": [-71.06, 42.36], "zoom": 13 }, "colourBy": "type",
-//                       "relationships": "selected",
+//                       "relationships": "selected", "local": false,
 //                       "alerts": [ { "id": "lamp-out", "title": "Streetlight out", "severity": "critical",
 //                                     "type": "Streetlight", "q": "status==\"broken\"" } ] }
 //       }
@@ -1119,7 +1119,7 @@ static CorNode* alertsCheck(Doc* docP, CorNode* alertsP, char* errBuf, int errLe
 
 // -----------------------------------------------------------------------------
 //
-// configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy", "tenant"}
+// configBrokerConnect - PUT /api/brokers/connect {"url", "view", "map", "colourBy", "tenant", "local"}
 //
 // Connect's view of a broker, kept in its "connect" object beside "types":
 //
@@ -1131,6 +1131,8 @@ static CorNode* alertsCheck(Doc* docP, CorNode* alertsP, char* errBuf, int errLe
 //   "relationships": "all" or "selected" - the Relationships the map draws: every one, or the selected
 //               entity's only
 //   "alerts":   the alert rules of the broker (alertsCheck), the whole list
+//   "local":    true: the broker's own entities only - every query with local=true, its Context Sources
+//               not asked; false (the default): what the broker answers, with its Context Sources
 //
 // Each member is optional; the ones given replace the stored ones, the others stay.
 //
@@ -1172,6 +1174,13 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     newAlertsP = alertsCheck(&doc, alertsP, errBuf, errLen);
     if (newAlertsP == NULL)
       goto done;
+  }
+
+  CorNode* localP = corTreeLookup(bodyP, "local");
+  if ((localP != NULL) && (localP->type != CorBoolean))
+  {
+    snprintf(errBuf, errLen, "\"local\" is true or false");
+    goto done;
   }
 
   const char* tenant;
@@ -1245,6 +1254,8 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     corTreeChildAddOrReplace(connectP, "relationships", corTreeString(&doc.alloc, "relationships", relationships));
   if (newAlertsP != NULL)
     corTreeChildAddOrReplace(connectP, "alerts", newAlertsP);
+  if (localP != NULL)
+    corTreeChildAddOrReplace(connectP, "local", corTreeBoolean(&doc.alloc, "local", localP->value.b));
 
   if (tenant != NULL)
   {
