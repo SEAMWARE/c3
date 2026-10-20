@@ -1,2 +1,6 @@
 c3
 obj/
+
+# Drafts and recordings kept beside the code, never published
+doc/ai-assistant-draft.md
+c3-ai-assist-commands-undo.gif
