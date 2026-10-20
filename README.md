@@ -21,6 +21,10 @@ neighbourhood), editing, the entities **on a map** (online, or offline from down
 values** over the broker's WebSocket transport or HTTP notifications. [doc/design.md](doc/design.md) is
 the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
 
+**Demos** - [seamware.github.io/c3-demos](https://seamware.github.io/c3-demos/): AI Assist on video, and the
+factory floor, Boston's bike stations and Madrid to run on your machine
+([SEAMWARE/c3-demos](https://github.com/SEAMWARE/c3-demos)).
+
 ## Try it
 
 What it needs (Debian / Ubuntu): `gcc`, `make`, OpenSSL (`libssl-dev`, for corRest's client)
