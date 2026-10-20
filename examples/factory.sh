@@ -2,6 +2,9 @@
 #
 # factory.sh - a small factory floor as NGSI-LD entities, for c³ Connect to draw
 #
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
 # Usage: examples/factory.sh [broker-url] [sensors]
 #
 #   broker-url   default http://localhost:1026

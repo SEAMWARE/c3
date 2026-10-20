@@ -6,41 +6,42 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | Part | What it does |
 |---|---|
 | **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
-| **Configure** | The mapping tools: DDS topics, services and actions to NGSI-LD entities and attributes (the file the DDS bridge reads), the same for OPC UA, and the column mapping for the CKAN and CSV bridges. |
+| **Configure** *(planned)* | The mapping tools: DDS topics, services and actions to NGSI-LD entities and attributes (the file the DDS bridge reads), the same for OPC UA, and the column mapping for the CKAN and CSV bridges. |
 | **Run** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto. |
 | **Operate** | The brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
-| **Docs** | All of coraine's documentation in one place, much easier to read than Markdown on GitHub: the broker (everything on Read the Docs), every cor-lib, the plugin and bridge contracts, searchable, offline. And help to write a new plugin: a skeleton repository - makefile, template `.c`/`.h` files, a functest - for each kind of plugin. |
+| **Docs** *(planned - today a page linking each repository)* | All of coraine's documentation in one place, much easier to read than Markdown on GitHub: the broker (everything on Read the Docs), every cor-lib, the plugin and bridge contracts, searchable, offline. And help to write a new plugin: a skeleton repository - makefile, template `.c`/`.h` files, a functest - for each kind of plugin. |
 | **Connect** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
 
-Status: **milestone 2b** - the `c3` command, its backend, the configuration file, the splash screen,
-**Connect, read-only**: discovery, the types picked, an entity's menu (linked entities, neighbourhood),
-the entities **on a map**, online or from downloaded areas offline, and **live values** - over the
-broker's WebSocket transport, or HTTP notifications to the backend - and **Compile**: a broker built by
-`coraine-build` with the features chosen, its output followed live, the builds kept - and **Run**: brokers
-started and stopped natively or in a container, with MongoDB, PostgreSQL/TimescaleDB and Mosquitto as
-containers. [doc/design.md](doc/design.md)
-is the plan, [doc/areas.md](doc/areas.md) the milestones, [design/](design/) the screen designs.
+Built today: the `c3` command, its backend and its configuration file; **Compile** - a broker built by
+`coraine-build` with the features, bridges, HTTP server and executable name chosen, its output followed
+live, the builds kept; **Run** and **Operate** - brokers started and stopped natively or in a container,
+with MongoDB, PostgreSQL/TimescaleDB and Mosquitto as containers, their logs, configuration, metrics and
+log levels; **Connect** - discovery, the types picked, tenants, an entity's menu (linked entities,
+neighbourhood), editing, the entities **on a map** (online, or offline from downloaded areas) and **live
+values** over the broker's WebSocket transport or HTTP notifications. [doc/design.md](doc/design.md) is
+the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
 
 ## Try it
 
-The backend builds against the cor-libs as coraine does: sibling checkouts (`../corHttp`, `../corRest`,
-`../corJson`, `../corTree`, `../corArgs`, `../corLog`, `../corAlloc`, `../corBase`), each one built
-(`make` in it). It also needs OpenSSL (`libssl-dev`), for corRest's client, and zlib (`zlib1g-dev`), for
-the map files. One corHttp change and two corRest fixes matter:
+What it needs (Debian / Ubuntu): `gcc`, `make`, OpenSSL (`libssl-dev`, for corRest's client)
+and zlib (`zlib1g-dev`, for the map files); a browser. To connect to a broker: a coraine
+([installation](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md) - `apt install
+coraine` from https://seamware.github.io/apt, or Docker). For **Compile**: the `coraine-dev` package (its
+`coraine-build` and source tarball). For **Run** in containers: Docker or Podman.
 
-- [SEAMWARE/corHttp#13](https://github.com/SEAMWARE/corHttp/pull/13) - file and streamed response bodies:
-  Compile's live log (server-sent events) and files sent from the file. Until it is merged, build against
-  its branch `feat/stream-file` (`COR_LIBS=<dir>` with that checkout as `<dir>/corHttp`). Built against a
-  corHttp without it, c³ still works: `GET /api/capabilities` says `"liveLog": false`, the page reads a
-  build's log by Range once a second, and files are read into memory (a range of 16 MiB at most).
+The backend builds against the cor-libs as coraine does - sibling checkouts, each built with `make` in it
+(`COR_LIBS=<dir>` for checkouts elsewhere):
 
+```sh
+mkdir seamware && cd seamware
+for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest c3; do
+  git clone https://github.com/SEAMWARE/$r
+done
+for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest; do make -C $r; done
+cd c3
+```
 
-- [SEAMWARE/corRest#37](https://github.com/SEAMWARE/corRest/pull/37) - a neighbourhood's query (below) is
-  a long URL, and the multi client's send buffer must count the path; without it, a request whose path
-  and query pass about 450 characters is not sent and the proxy answers 502.
-- [SEAMWARE/corRest#38](https://github.com/SEAMWARE/corRest/pull/38) - over TLS, the multi client must
-  read what OpenSSL has already decrypted; without it, about one HTTPS request in a hundred waits for its
-  timeout, and "Download this area" takes a minute longer each time (it retries, and completes).
+Then:
 
 ```sh
 make                                                   # ./c3
@@ -477,8 +478,7 @@ and back - `location`, `speed` and `batteryLevel` change, the Mission's `progres
 a charger charge; every 16 steps a Mission (`urn:ngsi-ld:Mission:m-live`) is created, 16 steps later
 deleted (`CHURN=0` leaves that out). Ctrl-C deletes it if it is there.
 
-Not yet: a rectangle drawn on the map as a `georel=within` query, saved views, tenants, Configure,
-Docs, Operate.
+Not yet: a rectangle drawn on the map as a `georel=within` query, saved views.
 
 ### Named demos
 
@@ -883,10 +883,13 @@ licences beside them); the coraine mark and the Seamware logo in `www/img/`.
 src/               the backend (C)
 www/               the pages, served by the backend
 www/vendor/        MapLibre GL JS, pmtiles, @protomaps/basemaps - as published, with their licences
+www/data/          data the pages read: the trace levels of the cor stack, the CKAN example's portal
 examples/          factory.sh - sample entities for Connect; live.sh - its robots at work (live values);
                    ckan-bikes.sh - real open data from a CKAN portal
+tools/             traceLevels.py - www/data/traceLevels.json; ckan-ingest.py - a CKAN resource into a broker
 doc/design.md      what c³ is and how it is built
 doc/areas.md       the parts of the work and the milestones
+doc/compile.md     Compile: what it needs from coraine-build and corHttp
 design/            screen designs (Splash, Compile, Configure, Connect)
 ```
 
