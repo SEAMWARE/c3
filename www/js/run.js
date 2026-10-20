@@ -10,6 +10,7 @@
 // server-sent events (GET /api/run/brokers/<name>/log), as Compile follows a build.
 //
 import * as api from './api.js';
+import { Metrics } from './metrics.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -94,6 +95,7 @@ export class Run {
     this.armed = null;                // a button pressed once: 'forget:<name>', 'vol:<volume>'
     this.armTimer = null;
     this.shown = false;
+    this.metrics = new Metrics();
 
     $('rn-start').addEventListener('click', () => this.start());
     $('rn-name').addEventListener('input', () => { this.nameTouched = $('rn-name').value.trim() !== ''; this.f.name = $('rn-name').value.trim(); this.commandSoon(); });
@@ -304,12 +306,14 @@ export class Run {
     clearInterval(this.poll);
     this.poll = setInterval(() => this.load(), 1500);
     if (!this.sel && this.state && this.state.brokers.length) this.select('broker', this.state.brokers[0].name);
+    this.metricsShow();
   }
 
   hide() {
     this.shown = false;
     clearInterval(this.poll);
     this.poll = null;
+    this.metrics.stop();
     this.follow(null);
   }
 
@@ -339,6 +343,7 @@ export class Run {
         this.renderBrowse();
         this.configShow(false);
         this.levelsShow(false);
+        this.metricsShow();
       }
     } catch (e) {
       $('rn-brokers').replaceChildren(el('span', 'rn-empty', 'The backend does not answer: ' + e.message));
@@ -665,6 +670,40 @@ export class Run {
     $('rn-config-sum').textContent = 'Configuration and build - ' + set.length + ' option' + (set.length === 1 ? '' : 's') + ' set';
   }
 
+  // ------------------------------------------------------------------ metrics
+
+  //
+  // metricsShow - the Metrics panel of the selected broker: shown as Levels is; while it is open (and the
+  // page shown), every running broker with the admin API is read every 5 s (metrics.js), so a broker selected
+  // later has its last minutes too
+  //
+  metricsShow() {
+    const d = $('rn-metrics');
+    const url = this.levelsBroker();
+    d.hidden = !url;
+    if (!this.metricsWired) {
+      this.metricsWired = true;
+      d.addEventListener('toggle', () => this.metricsShow());
+    }
+    if (!url || !d.open || !this.shown) {
+      this.metrics.stop();
+      if (!url) $('rn-metrics-sum').textContent = 'Metrics';
+      return;
+    }
+    const urls = () => ((this.state && this.state.brokers) || []).filter((b) => b.state === 'running' && b.def.admin)
+      .map((b) => 'http://localhost:' + b.def.port);
+    this.metrics.start(urls, () => this.metricsRender());
+    this.metricsRender();
+  }
+
+  metricsRender() {
+    const url = this.levelsBroker();
+    if (!url || !$('rn-metrics').open) return;
+    $('rn-metrics-body').replaceChildren(this.metrics.render(url));
+    const sum = this.metrics.summary(url);
+    $('rn-metrics-sum').textContent = 'Metrics' + (sum ? ' - ' + sum : '');
+  }
+
   levelsShow(reload = true) {
     const d = $('rn-levels');
     const url = this.levelsBroker();
@@ -772,6 +811,7 @@ export class Run {
     if (this.state) this.renderLists();
     this.configShow();
     this.levelsShow();
+    this.metricsShow();
     $('rn-log-name').textContent = name;
     const base = '/api/run/' + (kind === 'broker' ? 'brokers' : 'services') + '/' + encodeURIComponent(name) + '/log';
     const a = $('rn-log-file');

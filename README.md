@@ -733,6 +733,16 @@ value, where it came from (command line, environment, default; "resolved by the 
 means the broker chooses), the default, and on hover what it does, its environment variable and short form;
 a plugin's options under its section. A secret (`--dbPwd`, `--dbURI`, `--troePwd`) comes masked from the broker.
 
+**Metrics** - above the log of a running broker with the admin API: its `/admin/metrics` as charts over
+the last 10 minutes, read every 5 s while the panel is open - from every broker running here with the admin
+API, so one selected later has its last minutes too. Requests per second (all, reads, writes), errors (4xx,
+5xx), latency (the mean and the 95th percentile of the requests in each 5 s, from the histogram's buckets),
+notifications per second (sent, to context sources, Server-Sent Events, failed), subscriptions (entity,
+periodic, context source, Server-Sent Events streams) and memory (used, resident, the budget); below them
+the busiest operations over the last minute. A read that fails, or a request count that goes down (the
+broker started again), is a break: no rate across it. A chart whose metrics the broker does not serve says
+so. The summary line carries requests per second, the mean latency and the subscriptions.
+
 **Log and trace levels** - above the log of a running broker with the admin API: verbose, debug and info,
 and a tick box per trace level, grouped by library, its tooltip what it traces - set live through coraine's
 `/admin/log` (a change PUTs the whole set; a level c³ has no name for, set elsewhere, is kept). The levels
@@ -823,7 +833,7 @@ The backend's API, used by the pages:
 | `PUT /api/brokers/token` | `{"url", "token", "remember"}`: the broker's token (`Bearer ` in front is taken off); RFC 6750's characters only, 16 KB at most |
 | `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 | `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
@@ -841,6 +851,7 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `index.html`, `css/c3.css` | the shell and the look (dark only - Seamware magenta `#A72E60` on `#0E1014`) |
 | `css/compile.css`, `js/compile.js` | the Compile page |
 | `css/run.css`, `js/run.js` | the Run page |
+| `js/metrics.js` | Operate's Metrics: `/admin/metrics` parsed, sampled and drawn |
 | `js/main.js` | the splash screen, then the pages (`#compile`, `#run`, `#connect`; the last one shown is `ui.lastPage`) |
 | `js/api.js` | the backend's API |
 | `js/ngsild.js` | discovery, the paged load (all, or the types picked), linked entities, Relationships, values as text |
