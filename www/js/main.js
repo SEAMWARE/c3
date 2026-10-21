@@ -157,6 +157,14 @@ async function main() {
   pageShow(first, compile, run);
   window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run));
 
+  // A link to a section of a page (the Documentation page's guides): scrolled to, the page's hash kept
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-scroll]');
+    if (!a) return;
+    e.preventDefault();
+    document.getElementById(a.dataset.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
   if (boot.last) {
     $('broker-url').value = boot.last.url;
     connect.connect(boot.last.url);
