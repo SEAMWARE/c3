@@ -600,12 +600,15 @@ db.entities.find({ type: "https://uri.etsi.org/ngsi-ld/default-context/Vehicle" 
         created again.</li>
         <li><b>The name must be exact</b> - the expanded name, the fullwidth dots. An index on a field that does
         not exist is created without complaint and used by nothing.</li>
-        <li><b>A comparison in <code>q</code> does not use it.</b> <code>q=speed&gt;80</code>, <code>==</code>,
-        <code>&lt;</code>, <code>!=</code>, <code>~=</code> match <em>any instance</em> of the attribute
-        (NGSI-LD: an instance with a datasetId counts too), and the broker asks that of MongoDB with an
-        expression over every instance - which MongoDB evaluates per document, index or not. A range
-        (<code>q=speed==70..90</code>) or a list of values (<code>q=speed==60,70,80</code>) is a plain
-        condition on the default instance's <code>value</code>, which an index like the one above can serve.</li>
+        <li><b>A comparison in <code>q</code> does not use it.</b> A comparison matches <em>any instance</em>
+        of the attribute (NGSI-LD: an instance with a datasetId counts too). The instances are members of an
+        object keyed by datasetId, so each is at a path of its own - <code>speed.@none.value</code>,
+        <code>speed.ds1.value</code> - and the datasetIds are not known when the query is built. So the broker
+        asks MongoDB with an expression that turns the attribute into a list of its instances
+        (<code>$objectToArray</code>) and tests each - evaluated inside every document, which no index can
+        answer. That is <code>q=speed&gt;80</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>,
+        <code>==</code>, <code>!=</code>, <code>~=</code>, <code>!~=</code>, a range, a list of
+        values: the query reads every entity the rest of it leaves - all of the type.</li>
         <li><b>Every index costs every write</b> that changes its field - one more structure to update.</li>
       </ul>
 
