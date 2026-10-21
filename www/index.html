@@ -537,6 +537,96 @@
           <li><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener"><span class="dname">corTools</span></a><span class="ddesc">test and benchmark tools</span></li>
           <li><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><span class="dname">corLibs</span></a><span class="ddesc">the umbrella that builds every library</span></li>
       </ul>
+      <p class="muted">Guides: <a href="#docs" data-scroll="guide-indexes">Database indexes</a></p>
+    </section>
+
+    <section class="cp-card docs guide" id="guide-indexes" aria-label="Database indexes">
+      <h1>Database indexes</h1>
+      <p>An index lets the database go straight to the documents a query asks for. Without one it reads every
+      document and keeps the ones that match - a cost that grows with the store: fine at a thousand entities,
+      the whole answer time at a million. Asking "which index does this query use, and how many documents did
+      it read for the ones it returned" is the first question when a broker with MongoDB or PostgreSQL behind
+      it is slow.</p>
+
+      <h2>corDB</h2>
+      <p>corDB keeps the entities in the broker's own memory, with its own indexes - the entity id, the
+      entity type, and the default order. There is no database to connect to and nothing to add.</p>
+
+      <h2>MongoDB - what coraine creates itself</h2>
+      <p>The entities are in the collection <code>entities</code> of the broker's database
+      (<code>--dbName</code>; a tenant has a database of its own). For every database, at start-up and when a
+      tenant is first used:</p>
+      <table class="gtable">
+        <tr><th>Index</th><th>Serves</th></tr>
+        <tr><td><code>_id</code></td><td>the entity id - retrieve, update and delete of one entity (MongoDB's own)</td></tr>
+        <tr><td><code>{type, createdAt, _id}</code></td><td>a query by type, in the default order: it reads exactly the page asked for. A page of 20 of a type that is 1&nbsp;% of 100&nbsp;000 entities: 19.7&times; the requests/s of an index on <code>type</code> alone (MongoDB 8.2, 2026-10-08)</td></tr>
+        <tr><td><code>{createdAt, _id}</code></td><td>the default order of a query without a type - otherwise a sort in memory, which MongoDB limits</td></tr>
+        <tr><td><code>2dsphere</code> on each GeoProperty</td><td>geo-queries; created when the broker first sees the GeoProperty</td></tr>
+      </table>
+      <p>The broker also drops an index named <code>type_1</code> at start-up - the index on <code>type</code>
+      alone that older versions created, now a prefix of the second one. Don't give an index of your own that
+      name.</p>
+
+      <h2>MongoDB - how an entity is stored</h2>
+      <p>One document per entity. Each attribute is a top-level field named by its <b>expanded</b> name,
+      with every <code>.</code> written as <code>．</code> (U+FF0E, fullwidth full stop - MongoDB reads a dot
+      in a field name as a path); inside it one member per instance - <code>@none</code> for the default one,
+      the datasetId for the others - and the value in <code>value</code>:</p>
+      <pre>{
+  "_id":  "urn:ngsi-ld:Vehicle:7",
+  "type": "https://uri.etsi.org/ngsi-ld/default-context/Vehicle",
+  "https://uri．etsi．org/ngsi-ld/default-context/speed": {
+    "@none": { "value": 80, "observedAt": ... }
+  },
+  "createdAt": ..., "modifiedAt": ...
+}</pre>
+
+      <h2>MongoDB - does a query use an index?</h2>
+      <p>In <code>mongosh</code>, the query the broker sends for <code>GET /ngsi-ld/v1/entities?type=Vehicle&amp;limit=20</code>:</p>
+      <pre>use cor
+db.entities.find({ type: "https://uri.etsi.org/ngsi-ld/default-context/Vehicle" })
+  .sort({ createdAt: 1, _id: 1 }).limit(20)
+  .explain("executionStats").executionStats</pre>
+      <p><code>totalDocsExamined</code> against <code>nReturned</code>: 20 against 20 is an index doing its
+      job; 100&nbsp;000 against 20 is every entity read for a page. <code>explain()</code> without
+      <code>executionStats</code> names the plan - <code>IXSCAN</code> an index, <code>COLLSCAN</code> every
+      document.</p>
+
+      <h2>MongoDB - adding an index by hand</h2>
+      <pre>db.entities.createIndex({ "https://uri．etsi．org/ngsi-ld/default-context/speed.@none.value": 1 })</pre>
+      <ul>
+        <li><b>It lasts.</b> An index is part of the database on disk: it survives a restart of MongoDB and of
+        the broker. It is not in a tenant created later (a database of its own), nor in a database dropped and
+        created again.</li>
+        <li><b>The name must be exact</b> - the expanded name, the fullwidth dots. An index on a field that does
+        not exist is created without complaint and used by nothing.</li>
+        <li><b>A comparison in <code>q</code> does not use it.</b> A comparison matches <em>any instance</em>
+        of the attribute (NGSI-LD: an instance with a datasetId counts too). The instances are members of an
+        object keyed by datasetId, so each is at a path of its own - <code>speed.@none.value</code>,
+        <code>speed.ds1.value</code> - and the datasetIds are not known when the query is built. So the broker
+        asks MongoDB with an expression that turns the attribute into a list of its instances
+        (<code>$objectToArray</code>) and tests each - evaluated inside every document, which no index can
+        answer. That is <code>q=speed&gt;80</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>,
+        <code>==</code>, <code>!=</code>, <code>~=</code>, <code>!~=</code>, a range, a list of
+        values: the query reads every entity the rest of it leaves - all of the type.</li>
+        <li><b>Every index costs every write</b> that changes its field - one more structure to update.</li>
+      </ul>
+
+      <h2>PostgreSQL / TimescaleDB - the temporal history</h2>
+      <p>With <code>--troe timescale</code> the history is in PostgreSQL - a database per tenant - and the
+      Temporal API reads it. The broker creates the tables and their indexes (the table
+      <code>troe_schema_version</code> records which schema version it has):</p>
+      <table class="gtable">
+        <tr><th>Table</th><th>Indexes</th></tr>
+        <tr><td><code>troe_entities</code><br><span class="muted">one row per entity event</span></td><td>primary key <code>(entity_id, modified_at, op)</code>; <code>(entity_id, modified_at DESC)</code>; GIN on <code>entity_type</code></td></tr>
+        <tr><td><code>troe_attrs</code><br><span class="muted">one row per attribute instance - a hypertable on <code>modified_at</code> when TimescaleDB is there</span></td><td>primary key <code>(instance_id, modified_at)</code>; <code>(entity_id, attr_name, observed_at DESC)</code>; <code>(entity_id, attr_name, modified_at DESC)</code>; <code>(attr_name, observed_at DESC)</code>; GIN on <code>entity_type</code>; GiST on <code>geo</code></td></tr>
+      </table>
+      <p>Whether a query uses one: <code>EXPLAIN (ANALYZE, BUFFERS) SELECT ...</code> in <code>psql</code> -
+      <code>Index Scan</code> or <code>Bitmap Index Scan</code> against <code>Seq Scan</code>, and the rows
+      each step read. An index added by hand lasts, as in MongoDB, and is not in a tenant's database created
+      later. On the hypertable <code>CREATE INDEX CONCURRENTLY</code> is not supported; TimescaleDB's
+      <code>CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)</code> builds it a chunk at a time,
+      without holding the whole table.</p>
     </section>
   </main>
 </div>

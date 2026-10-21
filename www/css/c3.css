@@ -737,3 +737,11 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 12px; }
 .spark .sa { fill: color-mix(in srgb, var(--accent-2) 16%, transparent); stroke: none; }
 .spark .sd { fill: var(--accent-soft); }
 .hrange { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.guide h2 { font-size: 1.05rem; margin: 22px 0 6px; }
+.guide p, .guide li { line-height: 1.55; }
+.guide pre { font-family: var(--mono); background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.guide code { font-family: var(--mono); }
+.gtable { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.gtable th, .gtable td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.gtable td:first-child { white-space: nowrap; }
+@media (max-width: 600px) { .gtable td:first-child { white-space: normal; } }
