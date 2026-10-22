@@ -81,6 +81,15 @@ char* c3CoraineBuild = NULL;
 char* c3Source       = NULL;
 
 #define SOURCE_DEFAULT      "/usr/share/coraine/src/coraine-src.tar.xz"     // coraine-build's own default
+
+//
+// C3_CLONES - the directory of git clones c3 was built against (the makefile's COR_LIBS, made absolute):
+// coraine and the Cor-Libs side by side. Without coraine-dev, Compile builds from them - with the
+// coraine-build of that coraine clone. Empty: a packaged c3, built away from any clones
+//
+#ifndef C3_CLONES
+#define C3_CLONES           ""
+#endif
 #define CANCEL_GRACE_S      5                    // SIGTERM to SIGKILL
 #define LINE_MAX_BYTES      (64 * 1024)          // a "line" longer than this is cut into several
 #define PHASES_MAX          16
@@ -111,7 +120,21 @@ static time_t          versionMtime;             // ... as it was then
 static char            versionCached[128];
 
 //
-// sourceVersion - the version in the tarball's SOURCE file (version=...), cached per tarball
+// sourceIsDir - the source is a directory of clones, not a tarball
+//
+static bool sourceIsDir(const char* source)
+{
+  struct stat st;
+
+  return (stat(source, &st) == 0) && S_ISDIR(st.st_mode);
+}
+
+
+
+//
+// sourceVersion - the version in the tarball's SOURCE file (version=...), cached per tarball; of a
+// directory of clones, what its coraine clone's packaging/deb/version.sh says (not cached: a commit
+// changes it)
 //
 static void sourceVersion(const char* source, char* out, int outLen)
 {
@@ -120,6 +143,20 @@ static void sourceVersion(const char* source, char* out, int outLen)
   out[0] = 0;
   if (stat(source, &st) != 0)
     return;
+
+  if (S_ISDIR(st.st_mode))
+  {
+    char  script[2200];
+    char  text[256];
+
+    snprintf(script, sizeof(script), "%s/coraine/packaging/deb/version.sh", source);
+
+    char* argv[] = { script, NULL };
+
+    if (runCapture(argv, text, sizeof(text), 10) == 0)
+      snprintf(out, outLen, "%.*s", (int) strcspn(text, "\r\n"), text);
+    return;
+  }
 
   pthread_mutex_lock(&capsMutex);
   if ((strcmp(versionOf, source) == 0) && (versionMtime == st.st_mtime))
@@ -169,7 +206,18 @@ static void capsFind(Caps* cP, bool withVersion)
     }
   }
   else if (inPath("coraine-build", cP->coraineBuild, sizeof(cP->coraineBuild)) == false)
-    snprintf(cP->why, sizeof(cP->why), "install coraine-dev to build brokers");
+  {
+    //
+    // No coraine-dev: the coraine clone's own, beside the clones c3 was built against
+    //
+    char cloned[2048];
+
+    snprintf(cloned, sizeof(cloned), "%s/coraine/packaging/deb/coraine-build", C3_CLONES);
+    if ((C3_CLONES[0] != 0) && (access(cloned, X_OK) == 0))
+      snprintf(cP->coraineBuild, sizeof(cP->coraineBuild), "%s", cloned);
+    else
+      snprintf(cP->why, sizeof(cP->why), "install coraine-dev to build brokers - or clone coraine beside the Cor-Libs");
+  }
 
   if (c3Source != NULL)
   {
@@ -178,10 +226,26 @@ static void capsFind(Caps* cP, bool withVersion)
     free(real);
     cP->sourceGiven = true;
   }
+  else if ((stat(SOURCE_DEFAULT, &st) != 0) && (C3_CLONES[0] != 0) && sourceIsDir(C3_CLONES))
+  {
+    //
+    // No coraine-dev: the clones c3 was built against - coraine-build exports them as the packages' tarball
+    //
+    snprintf(cP->source, sizeof(cP->source), "%s", C3_CLONES);
+    cP->sourceGiven = true;
+  }
   else
     snprintf(cP->source, sizeof(cP->source), "%s", SOURCE_DEFAULT);
 
-  if ((cP->why[0] == 0) && ((stat(cP->source, &st) != 0) || !S_ISREG(st.st_mode)))
+  if (sourceIsDir(cP->source))
+  {
+    char clone[2200];
+
+    snprintf(clone, sizeof(clone), "%s/coraine/packaging/deb/source.sh", cP->source);
+    if ((cP->why[0] == 0) && (access(clone, X_OK) != 0))
+      snprintf(cP->why, sizeof(cP->why), "no coraine clone in %s", cP->source);
+  }
+  else if ((cP->why[0] == 0) && ((stat(cP->source, &st) != 0) || !S_ISREG(st.st_mode)))
     snprintf(cP->why, sizeof(cP->why), "no coraine source at %s - %s", cP->source, cP->sourceGiven ? "--source names another" : "reinstall coraine-dev");
 
   cP->available = (cP->why[0] == 0);
@@ -1609,9 +1673,14 @@ static void* featuresThread(void* vP)
     //
     int         docSize = 512 * 1024;
     char*       doc     = (char*) malloc(docSize);
+    char        docPath[2200];
     char*       tarv[]  = { (char*) "tar", (char*) "-xJOf", cP->source, (char*) "--wildcards", (char*) "--no-anchored",
                            (char*) "coraine/doc/building-details.md", NULL };
-    int         dStatus = (doc != NULL) ? runCapture(tarv, doc, docSize, 60) : -1;
+    char*       catv[]  = { (char*) "cat", docPath, NULL };
+
+    snprintf(docPath, sizeof(docPath), "%s/coraine/doc/building-details.md", cP->source);
+
+    int         dStatus = (doc != NULL) ? runCapture(sourceIsDir(cP->source) ? catv : tarv, doc, docSize, 60) : -1;
 
     strAdd(&s, ", \"doc\": ");
     strAddJson(&s, (dStatus == 0) ? doc : NULL);
