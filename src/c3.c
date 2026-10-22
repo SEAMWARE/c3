@@ -60,8 +60,8 @@ static CorArg options[] =
   { "--no-browser", "-nb", CorArgBool,   &noBrowser, CorArgOpt, _vp false, NULL, NULL,      "serve only - print the URL, open no browser" },
   { "--www",        "-w",  CorArgString, &wwwArg,    CorArgOpt, NULL,     NULL,  NULL,      "directory of the pages (default: next to the binary, or ../share/c3/www)" },
   { "--planet",     "-pl", CorArgString, &c3Planet,  CorArgOpt, NULL,     NULL,  NULL,      "the Protomaps planet (.pmtiles URL) map areas are extracted from (default: the newest daily build)" },
-  { "--coraine-build", "-cb", CorArgString, &c3CoraineBuild, CorArgOpt, NULL, NULL, NULL,   "coraine-build, for Compile (default: the one in $PATH - coraine-dev)" },
-  { "--source",     "-src", CorArgString, &c3Source, CorArgOpt, NULL,     NULL,  NULL,      "the coraine source tarball Compile builds from (default: coraine-build's, the one coraine-dev installs)" },
+  { "--coraine-build", "-cb", CorArgString, &c3CoraineBuild, CorArgOpt, NULL, NULL, NULL,   "coraine-build, for Compile (default: the one in $PATH - coraine-dev; else the coraine clone's, beside the cor-libs c3 was built against)" },
+  { "--source",     "-src", CorArgString, &c3Source, CorArgOpt, NULL,     NULL,  NULL,      "the coraine source Compile builds from: a tarball, or a directory of git clones (default: the tarball coraine-dev installs; else the clones c3 was built against)" },
   { "--token-file", "-tf", CorArgString, &tokenFileArg, CorArgOpt, NULL,  NULL,  NULL,      "a file holding the access token sent to brokers that have none of their own - read again when it changes (default: $C3_TOKEN)" },
   CORARGS_END
 };

@@ -251,17 +251,18 @@ The change:
 
 ### Packaging - what c³ can do depends on what is installed
 
-c³ is its own Debian package, **`coraine-c3`**, and comes with coraine: the `coraine` package
-recommends it (`Recommends: coraine-c3`), and `coraine-dev` depends on `coraine`, so both bring it.
-A Recommends, not a Depends: a server or a container image installed with `--no-install-recommends`
-gets the broker without the GUI.
+c³ has no package of its own: it is in the **`coraine`** package (`/usr/bin/c3`, `/usr/share/c3/www`),
+built with the broker from the same source tarball and the same libs. `coraine-dev` depends on
+`coraine`, so both bring it.
 
-Only `coraine-dev` can build a broker (`coraine-build` and the source are in it). So c³ looks at
-what is installed when it starts, and shows each part only as far as it can work:
+A broker is built by `coraine-build` from a source: the tarball `coraine-dev` installs, or - for a
+developer, who clones the repositories instead of installing `coraine-dev` - the directory of git
+clones c³ was built against. So c³ looks at what is there when it starts, and shows each part only as
+far as it can work:
 
 | Needs | Part | Without it |
 |---|---|---|
-| `coraine-dev` (`coraine-build`) | Compile; Run of a broker just built | shown greyed, with "install coraine-dev to build brokers" |
+| `coraine-dev` (`coraine-build`), or the clones c³ was built against | Compile; Run of a broker just built | shown greyed, with "install coraine-dev to build brokers" |
 | `coraine` | Run of the installed broker | - (always there) |
 | `docker` or `podman` | Run in a container; MongoDB, PostgreSQL, Mosquitto | greyed, with what to install |
 | the dds bridge plugin | Configure - DDS discovery from a broker started here | from a running broker or a snapshot file only |
@@ -272,9 +273,8 @@ reports what it found (`GET /api/capabilities`), and checks again when asked, af
 
 ### Versions
 
-c³ has coraine's version number and is released with it: c³ 0.5.0 goes with coraine 0.5.0. The
-`coraine-c3` package depends on `coraine (>= <its version>)`. A patch release of one need not wait for
-the other; the minor version always matches. c³ still checks every broker it connects to - its
+c³ has coraine's version number and is released with it, in the same package: c³ 0.5.0 goes with
+coraine 0.5.0. c³ still checks every broker it connects to - its
 `/version` - and greys what that broker does not have, since it also connects to brokers it did not
 install.
 

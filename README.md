@@ -31,7 +31,8 @@ What it needs (Debian / Ubuntu): `gcc`, `make`, OpenSSL (`libssl-dev`, for corRe
 and zlib (`zlib1g-dev`, for the map files); a browser. To connect to a broker: a coraine
 ([installation](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md) - `apt install
 coraine` from https://seamware.github.io/apt, or Docker). For **Compile**: the `coraine-dev` package (its
-`coraine-build` and source tarball). For **Run** in containers: Docker or Podman.
+`coraine-build` and source tarball) - or, without it, the git clones c³ itself is built against: coraine
+beside the cor-libs. For **Run** in containers: Docker or Podman.
 
 The backend builds against the cor-libs as coraine does - sibling checkouts, each built with `make` in it
 (`COR_LIBS=<dir>` for checkouts elsewhere):
@@ -91,8 +92,8 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--no-browser`, `-nb` | | serve only, and print the URL |
 | `--www`, `-w` | `<binary's dir>/www`, else `<binary's dir>/../share/c3/www` | the pages |
 | `--planet`, `-pl` | the newest daily build at `build.protomaps.com` | the Protomaps planet (`.pmtiles` URL) map areas are extracted from |
-| `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package) | the script Compile runs |
-| `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz` | the coraine source tarball Compile builds from (passed on as `--source`) |
+| `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package); else the coraine clone's, `<clones>/coraine/packaging/deb/coraine-build` | the script Compile runs |
+| `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz`; else `<clones>` | the coraine source Compile builds from (passed on as `--source`): a tarball, or a directory of clones |
 | `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Connect, below) - read again whenever it changes |
 
 Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the proxies of the
@@ -548,7 +549,11 @@ A front-end to `coraine-build` ([doc/compile.md](doc/compile.md)): c³ builds no
 is the command shown, run by the backend, the same build as on the command line.
 
 - **What this machine can do** - `GET /api/capabilities`: `coraine-build` (`--coraine-build`, else
-  `$PATH`) and the source tarball (`--source`, else the one `coraine-dev` installs) must both be there.
+  `$PATH`) and the source (`--source`, else the tarball `coraine-dev` installs) must both be there.
+  Without `coraine-dev`, both come from `<clones>`: the directory of git clones c³ was built against
+  (the makefile's `COR_LIBS`, made absolute - `C3_CLONES`; empty in a package). Its coraine clone's
+  `coraine-build` exports them as the packages' tarball is made: coraine at the commit checked out, each
+  lib at `origin/main` - committed trees only.
   Without them the page is greyed with *Install coraine-dev to build brokers*; the builds kept are still
   listed and can be deleted. Also: whether `--pgo`/`--tune` can train here (`curl`, `wrk`, `python3`),
   whether the mongo-c driver v2 is installed (MONGOC), the host's architecture and distribution. Asked

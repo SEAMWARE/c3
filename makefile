@@ -27,7 +27,13 @@ else
   OPT       = -O2
 endif
 
-CFLAGS      = $(OPT) -Wall -Werror -Wundef -Wno-format-truncation -fstack-protector-all -I$(COR_LIBS) -MMD -MP $(EXTRA_CFLAGS)
+#
+# C3_CLONES: the directory of clones Compile builds from when coraine-dev is not installed - by default
+# the one the cor-libs are taken from here (coraine beside them). A package build sets it empty
+#
+C3_CLONES  ?= $(abspath $(COR_LIBS))
+
+CFLAGS      = $(OPT) -Wall -Werror -Wundef -Wno-format-truncation -fstack-protector-all -I$(COR_LIBS) -DC3_CLONES='"$(C3_CLONES)"' -MMD -MP $(EXTRA_CFLAGS)
 
 SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/creds.c src/oidc.c src/vc.c src/browser.c src/maps.c src/live.c src/demo.c src/ws.c src/util.c src/compile.c src/run.c src/window.c src/repos.c
 OBJDIR      = obj/$(BUILD)
