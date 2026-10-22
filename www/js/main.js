@@ -12,6 +12,8 @@ import { Connect } from './connect.js';
 import { Compile } from './compile.js';
 import { Run } from './run.js';
 import { assistInit } from './assist.js';
+import { windowInit } from './window.js';
+import { docsShow } from './docs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -98,7 +100,7 @@ async function splash() {
 }
 
 //
-// The pages: #compile, #run and #connect, the one shown kept as ui.lastPage
+// The pages: #compile, #run, #connect and #docs (#docs/<guide>: docs.js), the one shown kept as ui.lastPage
 //
 const PAGES = ['compile', 'run', 'connect', 'docs'];
 
@@ -111,6 +113,7 @@ function pageShow(page, compile, run) {
   }
   if (page === 'compile') compile.refresh();
   if (page === 'run') run.refresh(); else run.hide();
+  if (page === 'docs') docsShow(location.hash);
   window.dispatchEvent(new Event('resize'));          // a page shown again measures itself
   api.uiSet({ lastPage: page }).catch(() => {});
 }
@@ -120,6 +123,7 @@ async function main() {
   if (!boot) return;
 
   assistInit();
+  windowInit();
   const connect = new Connect();
   connect.setBrokers(boot.config.brokers);
 
@@ -151,9 +155,9 @@ async function main() {
   $('splash').classList.add('leaving');
   setTimeout(() => $('splash').remove(), 400);
 
-  const fromHash = () => PAGES.find((p) => location.hash === '#' + p);
+  const fromHash = () => PAGES.find((p) => location.hash === '#' + p || location.hash.startsWith('#' + p + '/'));
   const first = fromHash() || (PAGES.includes((boot.config.ui || {}).lastPage) ? boot.config.ui.lastPage : 'connect');
-  if (location.hash !== '#' + first) history.replaceState(null, '', '#' + first);
+  if (fromHash() !== first) history.replaceState(null, '', '#' + first);
   pageShow(first, compile, run);
   window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run));
 

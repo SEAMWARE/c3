@@ -287,4 +287,8 @@ extern void  liveShutdown(void);                                 // the backend 
 //
 extern void  browserOpen(const char* url, bool noBrowser);
 
+// window.c
+extern void  windowPipesSet(int toFd, int fromFd);
+extern void  windowRequest(CorHttpConn* connP, const char* path);
+
 #endif  // C3_C3_H_
