@@ -129,7 +129,7 @@
               <div class="cp-workload" id="cp-workload" hidden>
                 <label class="cp-label" for="cp-workload-path">Workload file (tune)</label>
                 <input class="cp-input" id="cp-workload-path" placeholder="/path/to/workload.json" spellcheck="false" autocomplete="off">
-                <span class="cp-note">The absolute path of a workload file on this machine (doc/extreme-performance.md in the source).</span>
+                <span class="cp-note">The absolute path of a workload file on this machine - <a href="#docs/extreme-performance">Extreme performance</a> describes it.</span>
               </div>
             </section>
           </div>
@@ -513,47 +513,61 @@
     </div>
   </main>
   <main class="page" id="page-docs" hidden>
-    <div class="docs-wrap">
-      <nav class="docs-nav" aria-label="Documentation">
-        <h2>Guides</h2>
-        <a href="#docs/extreme-performance" data-doc="extreme-performance">Extreme performance</a>
-        <a href="#docs/database-indexes" data-doc="database-indexes">Database indexes</a>
-        <h2>Components</h2>
-        <a href="#docs/components" data-doc="components">The repositories</a>
-      </nav>
-      <section class="cp-card docs-body" id="docs-body" aria-live="polite">
-        <article class="guide" id="docs-components" hidden>
-          <h1>The repositories</h1>
-          <p class="muted">c³, the broker, and every library they are built from. Each opens its repository.</p>
-          <ul class="doclist">
-              <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener"><span class="dname">c3</span></a><span class="ddesc">c³ - the coraine Control Center: build, run, connect to and configure coraine brokers</span></li>
-              <li><a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener"><span class="dname">coraine</span></a><span class="ddesc">the NGSI-LD context broker</span></li>
-              <li><a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener"><span class="dname">corBase</span></a><span class="ddesc">basic utilities: strings, time, files, coroutines</span></li>
-              <li><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener"><span class="dname">corLog</span></a><span class="ddesc">logging and trace levels</span></li>
-              <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><span class="dname">corAlloc</span></a><span class="ddesc">request arenas - fast allocation, freed at once</span></li>
-              <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><span class="dname">corArgs</span></a><span class="ddesc">command-line options and environment variables</span></li>
-              <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><span class="dname">corHash</span></a><span class="ddesc">hash tables</span></li>
-              <li><a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener"><span class="dname">corTree</span></a><span class="ddesc">the in-memory tree (CorNode) every JSON document becomes</span></li>
-              <li><a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener"><span class="dname">corJson</span></a><span class="ddesc">the JSON parser and renderer</span></li>
-              <li><a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener"><span class="dname">corJsonld</span></a><span class="ddesc">JSON-LD: @context handling, expansion and compaction</span></li>
-              <li><a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener"><span class="dname">corNgsild</span></a><span class="ddesc">NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations</span></li>
-              <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><span class="dname">corProm</span></a><span class="ddesc">Prometheus metrics</span></li>
-              <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><span class="dname">corPlugin</span></a><span class="ddesc">the plugin loader</span></li>
-              <li><a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener"><span class="dname">corHttp</span></a><span class="ddesc">the built-in HTTP server</span></li>
-              <li><a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener"><span class="dname">corRest</span></a><span class="ddesc">the REST layer: services, requests, the HTTP and cor:// clients</span></li>
-              <li><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><span class="dname">corDB</span></a><span class="ddesc">corDB - the in-process NGSI-LD store, persistent with --dbDir, and its history</span></li>
-              <li><a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener"><span class="dname">corBridge</span></a><span class="ddesc">the Bridge/Channel contract every bridge plugin implements</span></li>
-              <li><a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener"><span class="dname">corMqttBridge</span></a><span class="ddesc">the MQTT bridge</span></li>
-              <li><a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener"><span class="dname">corModbusBridge</span></a><span class="ddesc">the Modbus bridge</span></li>
-              <li><a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener"><span class="dname">corDdsBridge</span></a><span class="ddesc">the DDS / ROS 2 bridge</span></li>
-              <li><a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener"><span class="dname">corTest</span></a><span class="ddesc">the functional test harness</span></li>
-              <li><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener"><span class="dname">corTools</span></a><span class="ddesc">test and benchmark tools</span></li>
-              <li><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><span class="dname">corLibs</span></a><span class="ddesc">the umbrella that builds every library</span></li>
-          </ul>
-        </article>
-        <div id="docs-guide"></div>
-      </section>
-    </div>
+    <section class="cp-card docs" id="docs-index" aria-label="Documentation">
+      <h1>Documentation</h1>
+      <p class="muted">The guides, the broker, c³ and every component they are built from. A guide opens here; a component opens its repository.</p>
+        <h2 class="docgroup">Guides</h2>
+        <ul class="doclist">
+          <li><a href="#docs/extreme-performance"><span class="dname">Extreme performance</span></a><span class="ddesc">indexes on what you query, and a broker trained on your workload - from c³ or the command line</span></li>
+          <li><a href="#docs/database-indexes"><span class="dname">Database indexes</span></a><span class="ddesc">what each store indexes, how to see what a query uses, and what to add</span></li>
+        </ul>
+        <h2 class="docgroup">The broker</h2>
+        <ul class="doclist">
+          <li><a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener"><span class="dname">coraine</span></a><span class="ddesc">the NGSI-LD context broker</span></li>
+        </ul>
+        <h2 class="docgroup">The control center</h2>
+        <ul class="doclist">
+          <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener"><span class="dname">c3</span></a><span class="ddesc">c³ - build, run, explore and configure coraine brokers</span></li>
+        </ul>
+        <h2 class="docgroup">Bridges, protocols and agents</h2>
+        <ul class="doclist" id="docs-g-bridges">
+          <li><a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener"><span class="dname">corBridge</span></a><span class="ddesc">the contract every bridge plugin implements - the seam to non-NGSI-LD transports</span></li>
+          <li><a href="https://github.com/SEAMWARE/corBridgeTemplate" target="_blank" rel="noopener"><span class="dname">corBridgeTemplate</span></a><span class="ddesc">start a new bridge here: the entry points, an example transport, a functest, CI</span></li>
+          <li><a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener"><span class="dname">corMqttBridge</span></a><span class="ddesc">MQTT</span></li>
+          <li><a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener"><span class="dname">corModbusBridge</span></a><span class="ddesc">Modbus</span></li>
+          <li><a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener"><span class="dname">corDdsBridge</span></a><span class="ddesc">DDS / ROS 2: topics, services and actions as entity attributes</span></li>
+          <li><a href="https://github.com/SEAMWARE/corOpcuaBridge" target="_blank" rel="noopener"><span class="dname">corOpcuaBridge</span></a><span class="ddesc">OPC UA: Variables as Channels, Objects as AssetChannels</span></li>
+          <li><a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener"><span class="dname">corCkanBridge</span></a><span class="ddesc">open data from a CKAN portal, ingested as entities</span></li>
+        </ul>
+        <h2 class="docgroup">Libraries</h2>
+        <ul class="doclist">
+          <li><a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener"><span class="dname">corBase</span></a><span class="ddesc">basic utilities: strings, time, files, coroutines</span></li>
+          <li><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener"><span class="dname">corLog</span></a><span class="ddesc">logging and trace levels</span></li>
+          <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><span class="dname">corAlloc</span></a><span class="ddesc">request arenas - fast allocation, freed at once</span></li>
+          <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><span class="dname">corArgs</span></a><span class="ddesc">command-line options and environment variables</span></li>
+          <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><span class="dname">corHash</span></a><span class="ddesc">hash tables</span></li>
+          <li><a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener"><span class="dname">corTree</span></a><span class="ddesc">the in-memory tree (CorNode) every JSON document becomes</span></li>
+          <li><a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener"><span class="dname">corJson</span></a><span class="ddesc">the JSON parser and renderer</span></li>
+          <li><a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener"><span class="dname">corJsonld</span></a><span class="ddesc">JSON-LD: @context handling, expansion and compaction</span></li>
+          <li><a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener"><span class="dname">corNgsild</span></a><span class="ddesc">NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations</span></li>
+          <li><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><span class="dname">corDB</span></a><span class="ddesc">the in-process NGSI-LD store, persistent with --dbDir, and its history</span></li>
+          <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><span class="dname">corProm</span></a><span class="ddesc">Prometheus metrics</span></li>
+          <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><span class="dname">corPlugin</span></a><span class="ddesc">the plugin loader</span></li>
+          <li><a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener"><span class="dname">corHttp</span></a><span class="ddesc">the built-in HTTP server</span></li>
+          <li><a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener"><span class="dname">corRest</span></a><span class="ddesc">the REST layer: services, requests, the HTTP and cor:// clients</span></li>
+        </ul>
+        <h2 class="docgroup">Tools and integrations</h2>
+        <ul class="doclist" id="docs-g-tools">
+          <li><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><span class="dname">corLibs</span></a><span class="ddesc">the umbrella that builds every library</span></li>
+          <li><a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener"><span class="dname">corTest</span></a><span class="ddesc">the functional test harness</span></li>
+          <li><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener"><span class="dname">corTools</span></a><span class="ddesc">test and benchmark tools</span></li>
+          <li><a href="https://github.com/SEAMWARE/corApisixNgsild" target="_blank" rel="noopener"><span class="dname">corApisixNgsild</span></a><span class="ddesc">an APISIX plugin: coraine's NGSI-LD access decision, for any NGSI-LD broker</span></li>
+        </ul>
+    </section>
+    <section class="cp-card docs docs-reader" id="docs-reader" aria-live="polite" hidden>
+      <a class="docs-back" href="#docs">← Documentation</a>
+      <div id="docs-guide"></div>
+    </section>
   </main>
 </div>
 

@@ -183,6 +183,23 @@ its p99 beside its rate:</p>
 <p>Then run the broker with what it says:</p>
 <pre>LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 coraine -fg --database corDB --dbDir /var/lib/coraine --dbLockPrefer writes ...</pre>
 
+<h3>From c³</h3>
+<p>The <a href="#compile">Compile</a> page trains a broker the same way, with <code>coraine-build</code> (the
+<b>coraine-dev</b> package, which installs the source). Under <b>Optimisation</b>:</p>
+<ul>
+  <li><b>Profile-guided</b> - built instrumented, trained on the standard request shapes, rebuilt with the
+  profile: the published image's build, made on this machine.</li>
+  <li><b>Tuned for a workload</b> - trained on <b>your</b> workload file (its absolute path on this machine),
+  and the allocator and the lock policy measured on it.</li>
+</ul>
+<p>Both need <code>curl</code>, <code>wrk</code> and <code>python3</code>. <code>apt-get install coraine-dev</code>
+brings them, with the toolchain and the source; on a build from source, the button is greyed out, with what is
+missing, until they are installed. A trained build uses libmicrohttpd: the built-in HTTP server cannot be
+trained yet. The build's log shows each step live - build, train, install, check.</p>
+<p>A tuned build keeps the settings that won in <code>&lt;build&gt;/install/etc/tune.env</code>
+(<code>CORAINE_*</code> and <code>LD_PRELOAD</code>). <a href="#run">Operate</a> does not apply them yet:
+start the broker with them yourself, as above.</p>
+
 <h3>As a Docker image</h3>
 <pre>cp my-workload.json coraine/tune/
 docker build -f docker/Dockerfile --build-arg WORKLOAD=tune/my-workload.json -t my-coraine .</pre>
@@ -193,7 +210,8 @@ that won (<code>/opt/seamware/etc/tune.env</code>). <code>docker run -e</code> o
 <div class="xp-callout warn">
   <b>Measure on a quiet machine, of the kind the broker runs on.</b> The comparison runs the workload on the
   build machine: a browser, a build or a video call beside it is measured too, and which allocator wins can
-  depend on the CPU. <code>make tune</code> warns when a browser is up.
+  depend on the CPU. <code>make tune</code> warns when a browser is up. c³ itself runs in one: for the
+  numbers you will run on, train from the command line, with the browser closed.
 </div>
 
 <!-- ======================================================================= -->
