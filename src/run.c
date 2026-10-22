@@ -1583,11 +1583,27 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     }
 
     //
-    // Its env (PATH, SEAMWARE_PLUGIN_DIR, its etc) - the same as `. install/env; coraine ...` by hand
+    // Its env (PATH, SEAMWARE_PLUGIN_DIR, its etc) - the same as `. install/env; coraine ...` by hand.
+    // A build tuned for a workload (coraine-build --tune) also has install/etc/tune.env, what the tuning
+    // chose: applied as the image's entry point does (coraine-start) - TUNE_DBLOCKPREFER the default of
+    // --dbLockPrefer (CORAINE_DBLOCKPREFER: the command line's still wins), TUNE_ALLOCATOR preloaded
+    // (LD_PRELOAD); an allocator that is not installed: glibc's, and the broker's log says so
     //
     argAdd(aP, "/bin/sh");
     argAdd(aP, "-c");
-    argAdd(aP, ". \"$0\" && exec \"$@\"");
+    argAdd(aP,
+           ". \"$0\" || exit 1\n"
+           "t=\"${0%/env}/etc/tune.env\"\n"
+           "if [ -f \"$t\" ]; then\n"
+           "  . \"$t\"\n"
+           "  [ -z \"$TUNE_DBLOCKPREFER\" ] || export CORAINE_DBLOCKPREFER=\"$TUNE_DBLOCKPREFER\"\n"
+           "  if [ -n \"$TUNE_ALLOCATOR\" ] && [ \"$TUNE_ALLOCATOR\" != glibc ]; then\n"
+           "    lib=$(PATH=\"$PATH:/sbin:/usr/sbin\" ldconfig -p | awk -v l=\"lib$TUNE_ALLOCATOR.so\" 'index($1, l) == 1 { print $NF; exit }')\n"
+           "    if [ -n \"$lib\" ]; then export LD_PRELOAD=\"$lib\"; else echo \"c3: the allocator '$TUNE_ALLOCATOR' the tuning chose is not installed - glibc's used\" >&2; fi\n"
+           "  fi\n"
+           "  echo \"c3: $t applied - dbLockPrefer ${TUNE_DBLOCKPREFER:-unset}, allocator ${TUNE_ALLOCATOR:-glibc}${LD_PRELOAD:+ ($LD_PRELOAD)}\" >&2\n"
+           "fi\n"
+           "exec \"$@\"");
     argAdd(aP, env);
     argAdd(aP, path);
     argAdd(aP, "-fg");

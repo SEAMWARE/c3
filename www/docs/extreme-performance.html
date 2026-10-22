@@ -197,8 +197,10 @@ brings them, with the toolchain and the source; on a build from source, the butt
 missing, until they are installed. A trained build uses libmicrohttpd: the built-in HTTP server cannot be
 trained yet. The build's log shows each step live - build, train, install, check.</p>
 <p>A tuned build keeps the settings that won in <code>&lt;build&gt;/install/etc/tune.env</code>
-(<code>CORAINE_*</code> and <code>LD_PRELOAD</code>). <a href="#run">Operate</a> does not apply them yet:
-start the broker with them yourself, as above.</p>
+(<code>TUNE_DBLOCKPREFER</code>, <code>TUNE_ALLOCATOR</code>). <a href="#run">Operate</a> applies them when it
+starts that build's broker, as the image does: the lock preference as the default of <code>--dbLockPrefer</code>
+(an option set in Operate still wins), the allocator preloaded. The broker's log names what was applied; an
+allocator that is not installed is left out, and the log says so.</p>
 
 <h3>As a Docker image</h3>
 <pre>cp my-workload.json coraine/tune/
