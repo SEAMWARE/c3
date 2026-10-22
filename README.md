@@ -648,7 +648,7 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 | From | Runs | How |
 |---|---|---|
 | the installed `coraine` (`$PATH`) | natively | `coraine -fg <options>` |
-| a build of Compile's | natively | `/bin/sh -c '. "$0" && exec "$@"' <build>/install/env <build>/install/bin/coraine -fg <options>` - its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand |
+| a build of Compile's | natively | `/bin/sh -c '<script>' <build>/install/env <build>/install/bin/coraine -fg <options>` - the script sources `install/env` (its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand) and, for a tuned build, `install/etc/tune.env` as the image's entry point does: `TUNE_DBLOCKPREFER` as `CORAINE_DBLOCKPREFER` (an option on the command line still wins), `TUNE_ALLOCATOR` preloaded (`LD_PRELOAD`, found with `ldconfig -p`; not installed: glibc's, and the broker's log says so). It writes one line to the broker's log, `c3: <tune.env> applied - ...` |
 | an image (`quay.io/seamware/coraine:<tag>`) | in a container | `docker run -d --name c3-broker-<name> ... <image> <options>` - the image's entry point is `coraine -fg` |
 
 An image of Compile's is greyed (Compile makes no image yet), and so is a build in a container. The tag is
