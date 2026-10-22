@@ -287,6 +287,9 @@ extern void  liveShutdown(void);                                 // the backend 
 //
 extern void  browserOpen(const char* url, bool noBrowser);
 
+// repos.c
+extern void  reposRequest(CorHttpConn* connP, const char* path);
+
 // window.c
 extern void  windowPipesSet(int toFd, int fromFd);
 extern void  windowRequest(CorHttpConn* connP, const char* path);

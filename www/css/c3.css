@@ -138,7 +138,7 @@ h2.section {
 
 /* ------------------------------------------------------------------ shell */
 
-#app { height: 100%; display: flex; flex-direction: column; }   /* the header stays; a page scrolls inside */
+#app { min-height: 100%; display: flex; flex-direction: column; }
 
 header.top {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
@@ -669,26 +669,19 @@ details.raw pre {
 }
 
 /* Documentation: the components */
-/* The Documentation page: the guides listed beside the one shown (docs.js) */
-#page-docs { padding: 0; overflow: auto; }
-.docs-wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; width: 100%; max-width: 1240px; margin: 24px auto; padding: 0 32px; align-items: start; }
-.docs-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; }
-.docs-nav h2 { margin: 14px 0 6px; padding: 0 12px; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
-.docs-nav h2:first-child { margin-top: 0; }
-.docs-nav a { padding: 8px 12px; border-radius: 8px; border-left: 3px solid transparent; color: var(--muted); text-decoration: none; }
-.docs-nav a:hover { background: var(--panel); color: var(--text); }
-.docs-nav a.active { background: var(--panel); border-left-color: var(--accent-2); color: var(--text); font-weight: 600; }
-.docs-body { padding: 32px 40px; }
-.docs-body h1, .guide h1 { font-family: var(--title); font-size: 34px; line-height: 1.15; font-weight: 300; margin: 0 0 10px; }
-@media (max-width: 860px) {
-  .docs-wrap { grid-template-columns: 1fr; padding: 0 16px; }
-  .docs-nav { position: static; flex-direction: row; flex-wrap: wrap; }
-  .docs-nav h2 { display: none; }
-  .docs-body { padding: 20px 16px; }
-}
-.doclist { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
-.doclist li { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: baseline; padding: 10px 12px; border-radius: 8px; background: var(--bg-deep); }
-.doclist .dname { font-family: var(--mono); }
+/* The Documentation page: the list of everything, and a guide (docs.js) */
+#page-docs { overflow: auto; }
+.docs { width: 100%; max-width: 980px; margin: 8px auto 24px; }
+.docs-reader { max-width: 1180px; padding: 24px 40px 40px; }
+.docs h1, .guide h1 { font-family: var(--title); font-size: 34px; line-height: 1.15; font-weight: 300; margin: 0 0 10px; }
+.docgroup { margin: 18px 0 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.doclist .dpriv { margin-left: 8px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; color: var(--warn); vertical-align: 1px; }
+.docs-back { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.docs-back:hover { color: var(--text); }
+@media (max-width: 860px) { .docs-reader { padding: 16px; } }
+.doclist { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.doclist li { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: baseline; padding: 10px 12px; border-radius: 8px; background: var(--bg-deep); }
+.doclist .dname { font-family: var(--mono); white-space: nowrap; }
 .doclist .ddesc { color: var(--text-2); }
 @media (max-width: 600px) { .doclist li { grid-template-columns: 1fr; gap: 2px; } }
 

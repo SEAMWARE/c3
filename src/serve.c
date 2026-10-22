@@ -517,6 +517,8 @@ void serveRequest(CorHttpConn* connP)
     credsRequest(connP, path);
   else if (strncmp(path, "/api/oidc/", 10) == 0)
     oidcRequest(connP, path);
+  else if (strncmp(path, "/api/repos/", 11) == 0)
+    reposRequest(connP, path);
   else if ((strcmp(path, "/api/window") == 0) || (strncmp(path, "/api/window/", 12) == 0))
     windowRequest(connP, path);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
