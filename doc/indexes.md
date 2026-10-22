@@ -9,6 +9,16 @@ has the declarations, the stores (`mongoc`, `corDB`) and the API.
 c³ (Operate, planned) shows a broker's declarations and turns them on and off: `POST /admin/indexes` and
 `DELETE /admin/indexes/{id}`; a declaration of `--dbIndexes` is shown, and is changed by a restart only.
 
+**The indexes are declared at start** (`--dbIndexes`). Turned on or off on a running broker, an index is
+built: on corDB **every** declaration's, in every tenant's store, the store's writes waiting meanwhile, and
+their counters start from 0. 1 000 000 entities, one tenant (coraine's
+[performance](https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md#building-a-declared-index)):
+
+| | corDB | mongoc |
+|---|---|---|
+| on: a second declaration | 0.87 s - both built again | 1.1 - 2.1 s - its own two MongoDB indexes |
+| off | 0.11 s, then 0.5 s at the next query that uses the other | 1 ms |
+
 ## What one gains and costs
 
 Per request, at full load: 100 000 entities, one attribute declared, corDB on disk, MongoDB 8.2 local
@@ -41,5 +51,7 @@ From `GET /admin/indexes`, per tenant it covers:
 | `accesses` | the `q` terms it served (corDB, since it was built), the times a query used it (mongoc, since MongoDB started) |
 | `updates` | corDB: the writes that changed it - an entity with the attribute created or deleted, its values changed |
 
-`accesses` against `updates` is the broker's own workload, next to the table above. The same counters in
-`/admin/metrics` (and so in Operate's charts) are on coraine's short-term roadmap.
+`accesses` against `updates` is the broker's own workload, next to the table above. The same figures are in
+`/admin/metrics` (and so in Operate's charts): `ngsild_index_built`, `_entries`, `_bytes`, `_accesses_total`,
+`_updates_total`, labelled by declaration and tenant (coraine's
+[installation guide](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#in-adminmetrics)).
