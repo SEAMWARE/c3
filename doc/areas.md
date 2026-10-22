@@ -94,6 +94,8 @@ Everything else plugs into it.
 
 - Several brokers at once: their live logs (level and text filters), the log and trace levels
   (`/admin/log`), metrics as charts (`/admin/metrics`), health (`--healthPort`).
+- A broker's declared indexes: listed with their figures, turned on and off (`/admin/indexes`) -
+  [indexes.md](indexes.md), with what an index gains and costs.
 - In coraine and corLog: a log callback in corLog, a ring buffer and a log subscription in coraine,
   carried on the WebSocket transport.
 
