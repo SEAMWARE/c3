@@ -11,7 +11,7 @@ it is slow.</p>
 <h2>corDB</h2>
 <p>corDB keeps the entities in the broker's own memory, with its own indexes - the entity id, the
 entity type, and the default order. There is no database to connect to. An index on an attribute's
-values is <b>declared</b>: <code>--dbValueIndexes speed</code> at start, or <code>POST /admin/indexes</code>
+values is <b>declared</b>: <code>--dbValueIndexes &lt;its IRI&gt;</code> at start, or <code>POST /admin/indexes</code>
 on a running broker - <a href="#docs/extreme-performance">Extreme performance</a> has what it gains and
 costs.</p>
 
@@ -71,7 +71,7 @@ document.</p>
   of it that an index can answer: the term on the default instance (<code>speed.@none.value</code>), or the
   attribute marked as having a datasetId instance (<code>speed.@datasetIds</code>). With an index on each,
   a query reads the entities that match and the marked ones; with one of them, every entity of the type.
-  <b>Declare the attribute instead</b> (<code>--dbValueIndexes speed</code>): the broker creates both,
+  <b>Declare the attribute instead</b> (<code>--dbValueIndexes &lt;its IRI&gt;</code>): the broker creates both,
   in every tenant, a tenant created later included. Served: <code>==</code> (a value, a range, a list),
   <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>~=</code>;
   <code>!=</code> and <code>!~=</code> read every entity of the type.</li>
@@ -92,7 +92,7 @@ Temporal API reads it. The broker creates the tables and the indexes its queries
   <li><b>For SQL sent to PostgreSQL directly</b> - a dashboard, a report: <code>--troeSqlIndexes
   attrObserved,geo,time</code>, on <code>(attr_name, observed_at)</code>, the GeoProperty values (GiST) and
   <code>modified_at</code>. The broker's own queries do not use them.</li>
-  <li><b>For a <code>q</code> on an attribute</b>: <code>--troeValueIndexes speed</code>, two partial indexes
+  <li><b>For a <code>q</code> on an attribute</b>: <code>--troeValueIndexes &lt;its IRI&gt;</code>, two partial indexes
   of its values (<code>v_number</code>, <code>v_text</code>), in every tenant. A temporal query with a
   <code>q</code> term on it then takes its entities from the index.</li>
 </ul>

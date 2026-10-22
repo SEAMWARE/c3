@@ -45,6 +45,5 @@ export async function docsShow(hash) {
 
   box.innerHTML = html;
   box.dataset.guide = guide;
-  $('docs-body').scrollTop = 0;
-  window.scrollTo(0, 0);
+  $('page-docs').scrollTop = 0;
 }
