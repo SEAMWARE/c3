@@ -1,15 +1,15 @@
 # Declared indexes in c³
 
 A broker's store can keep an index on an attribute, so that a `q` on it does not read every entity: a
-**declared index** - by the store plugin's `--dbIndexes` at start, or through the broker's admin API
+**declared index** - by the store plugin's `--dbValueIndexes` at start, or through the broker's admin API
 (`/admin/indexes`) on a running broker. coraine's
 [installation guide](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#declared-indexes)
 has the declarations, the stores (`mongoc`, `corDB`) and the API.
 
 c³ (Operate, planned) shows a broker's declarations and turns them on and off: `POST /admin/indexes` and
-`DELETE /admin/indexes/{id}`; a declaration of `--dbIndexes` is shown, and is changed by a restart only.
+`DELETE /admin/indexes/{id}`; a declaration of `--dbValueIndexes` is shown, and is changed by a restart only.
 
-**The indexes are declared at start** (`--dbIndexes`). Turned on or off on a running broker, an index is
+**The indexes are declared at start** (`--dbValueIndexes`). Turned on or off on a running broker, an index is
 built: on corDB **every** declaration's, in every tenant's store, the store's writes waiting meanwhile, and
 their counters start from 0. 1 000 000 entities, one tenant (coraine's
 [performance](https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md#building-a-declared-index)):
