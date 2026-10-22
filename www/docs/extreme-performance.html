@@ -80,10 +80,14 @@ written. The broker counts both - <code>GET /admin/indexes</code> and <code>/adm
 off a running deployment.</p>
 
 <h3>Declaring them</h3>
-<pre>coraine --dbValueIndexes speed,temperature ...                       <span class="c"># the current state - corDB, MongoDB</span>
-coraine --dbValueIndexes '[{"attribute": "speed", "type": "Vehicle"}]'  <span class="c"># narrowed to a type, or a tenant</span>
-coraine --troe timescale --troeValueIndexes speed ...                 <span class="c"># the history</span></pre>
-<p>Names are expanded with the core @context; an IRI is taken as it is. The terms an index serves: a value of
+<pre>coraine --dbValueIndexes https://example.org/ontology/speed ...       <span class="c"># the current state - corDB, MongoDB</span>
+coraine --dbValueIndexes '[{"attribute": "https://example.org/ontology/speed",
+                           "type": "https://example.org/ontology/Vehicle"}]'   <span class="c"># narrowed to a type, or a tenant</span>
+coraine --troe timescale --troeValueIndexes https://example.org/ontology/speed ...  <span class="c"># the history</span></pre>
+<p><b>The names are expanded</b> - the IRIs your clients' @context gives them. The option has no @context to
+expand a short name with, so <code>speed</code> alone is an error, and the broker does not start (it names the core
+@context's IRI, <code>https://uri.etsi.org/ngsi-ld/default-context/speed</code>, the one to use when the clients
+send no @context). The admin API expands with the request's own @context. The terms an index serves: a value of
 the attribute with <code>==</code>, a range, a list, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>,
 <code>&gt;=</code> (MongoDB also <code>~=</code>). <code>!=</code> matches by a value an entity does not have,
 and reads every entity.</p>
