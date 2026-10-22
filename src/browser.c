@@ -7,7 +7,8 @@
 // Open the application
 //
 // - Chrome or Chromium: an application window of its own (--app=<url>, no tabs, no address bar),
-//   full-screen (--start-fullscreen). With a profile of its own (--user-data-dir under
+//   full-screen (--start-fullscreen), the DevTools protocol on a pipe (--remote-debugging-pipe) for the page's
+//   minimise and close buttons (window.c). With a profile of its own (--user-data-dir under
 //   $XDG_STATE_HOME/c3, else ~/.local/state/c3): a Chrome that is already running would take the
 //   request over and open a normal window, ignoring both flags.
 // - Otherwise the default browser: xdg-open, or open on macOS.
@@ -87,12 +88,27 @@ static bool headless(void)
 //
 // spawn - start a program, detached, its output gone; true if the fork worked
 //
-static bool spawn(const char* prog, char* const argV[])
+// devtools: Chrome's --remote-debugging-pipe - it reads the DevTools protocol on its fd 3 and writes on its
+// fd 4; c3 keeps the other ends (window.c)
+//
+static bool spawn(const char* prog, char* const argV[], bool devtools)
 {
+  int toChrome[2]   = { -1, -1 };
+  int fromChrome[2] = { -1, -1 };
+
+  if (devtools && ((pipe(toChrome) == -1) || (pipe(fromChrome) == -1)))
+  {
+    if (toChrome[0] != -1) { close(toChrome[0]); close(toChrome[1]); }
+    devtools = false;
+  }
+
   pid_t pid = fork();
 
   if (pid == -1)
+  {
+    if (devtools) { close(toChrome[0]); close(toChrome[1]); close(fromChrome[0]); close(fromChrome[1]); }
     return false;
+  }
 
   if (pid == 0)
   {
@@ -113,7 +129,20 @@ static bool spawn(const char* prog, char* const argV[])
       dup2(fd, 2);
     }
 
-    close_range(3, ~0U, 0);                      // c3's listening socket is not the browser's to keep
+    if (devtools)
+    {
+      //
+      // Chrome's ends to 3 and 4 - by way of fds above both, as one of them may be 3 or 4 already
+      //
+      int in  = fcntl(toChrome[0],   F_DUPFD, 10);
+      int out = fcntl(fromChrome[1], F_DUPFD, 10);
+
+      dup2(in,  3);
+      dup2(out, 4);
+      close_range(5, ~0U, 0);                    // c3's listening socket is not the browser's to keep
+    }
+    else
+      close_range(3, ~0U, 0);
 
     execv(prog, argV);
     _exit(127);
@@ -121,6 +150,13 @@ static bool spawn(const char* prog, char* const argV[])
 
   while ((waitpid(pid, NULL, 0) == -1) && (errno == EINTR))
     ;
+
+  if (devtools)
+  {
+    close(toChrome[0]);
+    close(fromChrome[1]);
+    windowPipesSet(toChrome[1], fromChrome[0]);
+  }
 
   return true;
 }
@@ -183,9 +219,9 @@ void browserOpen(const char* url, bool noBrowser)
     snprintf(appArg,     sizeof(appArg),     "--app=%s", url);
     snprintf(profileArg, sizeof(profileArg), "--user-data-dir=%s", profile);
 
-    char* argV[] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", NULL };
+    char* argV[] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", (char*) "--remote-debugging-pipe", NULL };
 
-    if (spawn(prog, argV))
+    if (spawn(prog, argV, true))
     {
       printf("c3: %s - opened in %s\n", url, prog);
       fflush(stdout);
@@ -203,7 +239,7 @@ void browserOpen(const char* url, bool noBrowser)
   {
     char* argV[] = { prog, (char*) url, NULL };
 
-    if (spawn(prog, argV))
+    if (spawn(prog, argV, false))
     {
       printf("c3: %s - opened with %s\n", url, opener);
       fflush(stdout);

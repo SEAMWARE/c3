@@ -1,0 +1,230 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/extreme-performance.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide xp">
+<h1>Extreme performance</h1>
+<p class="lead">The published broker is built to be fast for everybody. A deployment that knows what it does
+can be much faster. Two things decide most of it, and in this order: <b>indexes on the attributes you
+query</b>, and <b>a broker built for your workload</b>.</p>
+
+<div class="xp-hero" role="list" aria-label="A q on an attribute with an index, against without">
+  <div class="xp-stat" role="listitem"><span class="xp-x">×416</span><span class="xp-what">corDB</span><span class="xp-how">1&nbsp;111&nbsp;µs → 2.7&nbsp;µs a request</span></div>
+  <div class="xp-stat" role="listitem"><span class="xp-x">×919</span><span class="xp-what">MongoDB</span><span class="xp-how">167&nbsp;ms → 181&nbsp;µs a request</span></div>
+  <div class="xp-stat" role="listitem"><span class="xp-x">×520</span><span class="xp-what">TimescaleDB history</span><span class="xp-how">626&nbsp;ms → 1.2&nbsp;ms, the query's SQL</span></div>
+</div>
+<p class="muted xp-note">A <code>q</code> on one attribute that 10 of 100&nbsp;000 entities match, a page of 20, with an index on
+the attribute and without.</p>
+
+<nav class="xp-toc" aria-label="On this page">
+  <a href="#docs/extreme-performance" data-scroll="xp-indexes"><span>1</span>Index what you query</a>
+  <a href="#docs/extreme-performance" data-scroll="xp-tune"><span>2</span>A broker built for your workload</a>
+  <a href="#docs/extreme-performance" data-scroll="xp-build"><span>3</span>Building it</a>
+  <a href="#docs/extreme-performance" data-scroll="xp-worth"><span>4</span>What tuning is worth</a>
+</nav>
+
+<!-- ======================================================================= -->
+<h2 id="xp-indexes"><span class="xp-n">1</span>Index the attributes you query</h2>
+<p>Without an index, a <code>q</code> on an attribute reads every entity of the type and keeps the ones that
+match: fine at a thousand entities, the whole answer time at a million. With one, it reads the entities that
+match. An attribute with an index is <b>declared</b> - the broker creates the index in every tenant it covers,
+a tenant created later included.</p>
+
+<figure class="xp-chart" aria-label="Time of a q with 10 matches, without and with an index, log scale">
+  <div class="xp-axis" aria-hidden="true"><span>1&nbsp;µs</span><span>10</span><span>100</span><span>1&nbsp;ms</span><span>10</span><span>100</span><span>1&nbsp;s</span></div>
+  <div class="xp-group">
+    <div class="xp-label">corDB</div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 50.8%"><span>1&nbsp;111&nbsp;µs</span></div>
+      <div class="xp-bar on" style="--w: 7.2%"><span>2.7&nbsp;µs</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">MongoDB</div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 87.0%"><span>167&nbsp;ms</span></div>
+      <div class="xp-bar on" style="--w: 37.6%"><span>181&nbsp;µs</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">History<br><span class="muted">TimescaleDB, SQL</span></div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 96.6%"><span>626&nbsp;ms</span></div>
+      <div class="xp-bar on" style="--w: 51.3%"><span>1.2&nbsp;ms</span></div>
+    </div>
+  </div>
+  <figcaption><span class="xp-key off"></span>without an index <span class="xp-key on"></span>with one - log scale.
+  corDB and MongoDB: what one request takes of the broker at full load (1 / requests per second). History:
+  the time of the SQL that selects the entities of a temporal query.</figcaption>
+</figure>
+
+<h3>What it gains, and what it costs</h3>
+<p>100&nbsp;000 entities, one attribute declared; corDB on disk, MongoDB 8.2 local, PostgreSQL 16 with
+TimescaleDB 2.29 (2.9 million rows of history); the release build, 2026-10-22.</p>
+<div class="xp-scroll">
+<table class="gtable xp-table">
+  <thead><tr><th></th><th>corDB</th><th>MongoDB</th><th>History (TimescaleDB)</th></tr></thead>
+  <tbody>
+  <tr class="gain"><td><code>q</code> on it, 10 matches</td><td>1&nbsp;111&nbsp;µs → 2.7&nbsp;µs <b>×416</b></td><td>167&nbsp;ms → 181&nbsp;µs <b>×919</b></td><td>626 → 1.2&nbsp;ms <b>×520</b></td></tr>
+  <tr class="gain"><td><code>q</code> on it, 1&nbsp;% match</td><td>106 → 6.0&nbsp;µs <b>×17.6</b></td><td>12.3 → 4.5&nbsp;ms <b>×2.8</b></td><td>a page: the same; a count: 618 → 45&nbsp;ms <b>×13.7</b></td></tr>
+  <tr><td><code>q</code> on it, half match</td><td>the same</td><td>the same</td><td>a count: 490 → 357&nbsp;ms</td></tr>
+  <tr class="cost"><td>a write of it (<code>PATCH</code>)</td><td>+2.8&nbsp;µs (-21&nbsp;% at full load)</td><td>+2.5&nbsp;µs (-5&nbsp;%)</td><td>-1.6&nbsp;% history rows/s</td></tr>
+  <tr class="cost"><td>a create with it</td><td>+3.5&nbsp;µs (-48&nbsp;%)</td><td>+0.7&nbsp;µs (-4&nbsp;%)</td><td>-4.3&nbsp;% (a batch of 20)</td></tr>
+  <tr><td>a write of another attribute</td><td>+0.13&nbsp;µs (-1.3&nbsp;%)</td><td>+0.3&nbsp;µs (-0.6&nbsp;%)</td><td>-2.3&nbsp;%, within what runs vary</td></tr>
+  <tr><td>a query without a <code>q</code> on it</td><td>the same</td><td>the same</td><td>the same</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The gain is where a <code>q</code> is <b>selective</b> - few entities match. The cost is on every write of
+the attribute. Which weighs more is the workload's: how often the attribute is queried, how often it is
+written. The broker counts both - <code>GET /admin/indexes</code> and <code>/admin/metrics</code>
+(<code>ngsild_index_accesses_total</code>, <code>ngsild_index_updates_total</code>) - so the answer can be read
+off a running deployment.</p>
+
+<h3>Declaring them</h3>
+<pre>coraine --dbValueIndexes speed,temperature ...                       <span class="c"># the current state - corDB, MongoDB</span>
+coraine --dbValueIndexes '[{"attribute": "speed", "type": "Vehicle"}]'  <span class="c"># narrowed to a type, or a tenant</span>
+coraine --troe timescale --troeValueIndexes speed ...                 <span class="c"># the history</span></pre>
+<p>Names are expanded with the core @context; an IRI is taken as it is. The terms an index serves: a value of
+the attribute with <code>==</code>, a range, a list, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>,
+<code>&gt;=</code> (MongoDB also <code>~=</code>). <code>!=</code> matches by a value an entity does not have,
+and reads every entity.</p>
+
+<div class="xp-callout">
+  <b>Declare them at start.</b> The admin API (<code>POST /admin/indexes</code>, <code>/admin/troeIndexes</code>)
+  changes them on a running broker, and every change builds indexes over the whole store while it runs: at
+  1&nbsp;000&nbsp;000 entities, 0.87&nbsp;s on corDB - <b>every</b> declaration's index built again, the writes
+  waiting - and 1.1-2.1&nbsp;s on MongoDB. Choose them when you deploy.
+</div>
+
+<p>The history also finds an index made by hand in <code>psql</code> - a partial index on
+<code>v_number</code> or <code>v_text</code> of one attribute - and uses it within a minute. The
+<a href="#docs/database-indexes">Database indexes</a> guide has what each store keeps, and how to see what a
+query uses.</p>
+
+<!-- ======================================================================= -->
+<h2 id="xp-tune"><span class="xp-n">2</span>A broker built for your workload</h2>
+<p>The published image is <b>one</b> build, tuned on a general mix of requests. <code>make tune</code> builds
+one for <b>yours</b>: it trains the compiler on a description of the workload, measures the settings that
+depend on it, and builds the result - a binary or an image.</p>
+
+<div class="xp-scroll">
+<table class="gtable">
+  <thead><tr><th></th><th>out of the box</th><th><code>make tune</code></th></tr></thead>
+  <tbody>
+  <tr><td>compiler optimisation</td><td><code>-O2</code>, profile-guided (PGO), trained on every kind of work - none of it in your proportions</td><td>the profile trained on <b>your</b> workload: the hot paths together, the branches the right way round</td></tr>
+  <tr><td>memory allocator</td><td>glibc's <code>malloc</code></td><td>glibc, jemalloc or tcmalloc - measured, the fastest kept (<code>LD_PRELOAD</code>, no rebuild)</td></tr>
+  <tr><td>corDB's store lock</td><td>readers first (<code>--dbLockPrefer reads</code>)</td><td>readers or writers first - measured</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The HTTP server's pool and corDB's durability (<code>--dbSync</code>) are the deployment's, not the
+workload's: they stay options you set. Indexes are the workload's too, and <code>make tune</code> does not
+choose them - section 1.</p>
+
+<h3>The workload file</h3>
+<p>JSON, every member with a default. Make the entity look like yours - how many attributes, how many observed
+or with sub-attributes - and the load like yours:</p>
+<pre>{
+  "store": { "database": "corDB", "persistent": true, "history": "none" },
+
+  "entities": {
+    "count": 10000,
+    "types": [
+      { "type": "Vehicle", "share": 0.8,
+        "attributes": [
+          { "name": "speed",    "type": "Property", "value": 42, "observedAt": true, "subAttributes": 1 },
+          { "name": "location", "type": "GeoProperty" },
+          { "name": "isParked", "type": "Relationship" }
+        ] },
+      { "type": "Parking", "share": 0.2,
+        "attributes": [ { "name": "free", "type": "Property", "value": 10 } ] }
+    ]
+  },
+
+  "subscriptions": [
+    { "count": 100, "select": "perEntity", "watchedAttributes": ["speed"] },
+    { "count": 5,   "select": "byType", "type": "Parking", "q": "free&lt;3" }
+  ],
+
+  "load": {
+    "concurrency": 50,
+    "mix": { "patch": 0.80, "query": 0.10, "retrieve": 0.05, "create": 0.05 },
+    "patch": { "attributes": ["speed"] },
+    "query": { "type": "Vehicle", "q": "speed&gt;50", "limit": 20 }
+  },
+
+  "duration": "30s"
+}</pre>
+<div class="xp-scroll">
+<table class="gtable">
+  <tr><td><code>store</code></td><td><code>database</code>: <code>corDB</code> or <code>mongoc</code>; <code>persistent</code>: corDB on disk; <code>history</code>: <code>none</code>, <code>corDB</code>, <code>timescale</code></td></tr>
+  <tr><td><code>entities</code></td><td><code>count</code> in all, split over the <code>types</code> by <code>share</code>. An attribute: <code>type</code> (<code>Property</code>, <code>GeoProperty</code>, <code>Relationship</code>, <code>LanguageProperty</code>, <code>VocabProperty</code>, <code>ListProperty</code>, <code>JsonProperty</code>), <code>value</code> (a number varies per entity), <code>observedAt</code>, <code>subAttributes</code></td></tr>
+  <tr><td><code>subscriptions</code></td><td>groups of <code>count</code>. <code>select</code> decides the fan-out - how many notifications one write sends: <code>perEntity</code> (one entity each), <code>byType</code> (every entity of <code>type</code>); <code>watchedAttributes</code>, <code>q</code> as in NGSI-LD</td></tr>
+  <tr><td><code>load</code></td><td><code>concurrency</code> (connections), the <code>mix</code> of <code>patch</code>, <code>query</code>, <code>retrieve</code>, <code>create</code>; what a patch updates, what a query asks</td></tr>
+  <tr><td><code>duration</code></td><td>each measured run, after a 5&nbsp;s warm-up</td></tr>
+</table>
+</div>
+
+<!-- ======================================================================= -->
+<h2 id="xp-build"><span class="xp-n">3</span>Building it</h2>
+<p>From a source build: the cor-libs as siblings (<code>corLibs/bootstrap.sh</code> clones and builds them),
+then the broker. <code>make tune</code> also needs <code>wrk</code> and <code>python3</code>,
+<code>corTestClient</code> (from <code>corLibs/bin</code>, it counts the notifications), and the allocators it
+compares: <code>apt-get install libjemalloc2 libtcmalloc-minimal4</code>.</p>
+<pre>cd coraine
+make tune WORKLOAD=my-workload.json     <span class="c"># ~15 min: the instrumented build, the training, the comparison</span>
+make install_pgo                        <span class="c"># the tuned build -> /usr/local/bin, /opt/seamware</span></pre>
+<p>It ends with one line, and writes <code>tune-result.json</code> - the best combination, and every one, each with
+its p99 beside its rate:</p>
+<pre class="xp-out">tune: best --dbLockPrefer writes LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 - 173721 requests/s, +11.1 % against the out-of-the-box settings - tune-result.json</pre>
+<p>Then run the broker with what it says:</p>
+<pre>LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 coraine -fg --database corDB --dbDir /var/lib/coraine --dbLockPrefer writes ...</pre>
+
+<h3>As a Docker image</h3>
+<pre>cp my-workload.json coraine/tune/
+docker build -f docker/Dockerfile --build-arg WORKLOAD=tune/my-workload.json -t my-coraine .</pre>
+<p>The profile is built in, only the allocator that won is installed, and the entry point applies the settings
+that won (<code>/opt/seamware/etc/tune.env</code>). <code>docker run -e</code> overrides them:
+<code>-e CORAINE_DBLOCKPREFER=reads</code>, <code>-e LD_PRELOAD=</code> for glibc's allocator.</p>
+
+<div class="xp-callout warn">
+  <b>Measure on a quiet machine, of the kind the broker runs on.</b> The comparison runs the workload on the
+  build machine: a browser, a build or a video call beside it is measured too, and which allocator wins can
+  depend on the CPU. <code>make tune</code> warns when a browser is up.
+</div>
+
+<!-- ======================================================================= -->
+<h2 id="xp-worth"><span class="xp-n">4</span>What tuning is worth</h2>
+<p>Two workloads, each three ways: <b>out of the box</b> (the published image's build), <b>the tuned profile</b>
+(<code>make tune</code>'s build with the default settings - the profile alone), and <b>tuned</b> (with the settings
+it chose). corDB on disk, release builds, AMD Ryzen 9 8940HX, 2026-10-07; requests/s, the mean of three runs, every
+run within 2&nbsp;% of its mean, no request failed.</p>
+
+<div class="xp-pair">
+  <div class="xp-wl">
+    <h3>A deployment that subscribes</h3>
+    <p class="muted">10&nbsp;000 Vehicles and Parkings, 105 subscriptions, 80&nbsp;% <code>PATCH</code>, 10&nbsp;% queries, 5&nbsp;% retrieves, 5&nbsp;% creates</p>
+    <div class="xp-run"><span>out of the box</span><div class="xp-bar off" style="--w: 68.1%"><span>6&nbsp;239/s</span></div><span class="xp-p">p99 36.8&nbsp;ms</span></div>
+    <div class="xp-run"><span>the tuned profile</span><div class="xp-bar off" style="--w: 69.6%"><span>6&nbsp;383/s +2.3&nbsp;%</span></div><span class="xp-p">p99 37.7&nbsp;ms</span></div>
+    <div class="xp-run best"><span>tuned</span><div class="xp-bar on" style="--w: 100%"><span>9&nbsp;165/s <b>+46.9&nbsp;%</b></span></div><span class="xp-p">p99 <b>17.1&nbsp;ms</b></span></div>
+    <p>Writers first and tcmalloc. Every query reads 8&nbsp;000 Vehicles under the store's read lock; with readers
+    first the <code>PATCH</code>es queue behind them. Writers first lets them in - more throughput, half the tail.</p>
+  </div>
+  <div class="xp-wl">
+    <h3>An ingest</h3>
+    <p class="muted">10&nbsp;000 meters, 70&nbsp;% creates, 30&nbsp;% <code>PATCH</code>, no subscriptions</p>
+    <div class="xp-run"><span>out of the box</span><div class="xp-bar off" style="--w: 88.9%"><span>155&nbsp;001/s</span></div><span class="xp-p">p99 2.9&nbsp;ms</span></div>
+    <div class="xp-run"><span>the tuned profile</span><div class="xp-bar off" style="--w: 88.8%"><span>154&nbsp;789/s -0.1&nbsp;%</span></div><span class="xp-p">p99 3.1&nbsp;ms</span></div>
+    <div class="xp-run best"><span>tuned</span><div class="xp-bar on" style="--w: 100%"><span>174&nbsp;374/s <b>+12.5&nbsp;%</b></span></div><span class="xp-p">p99 6.4&nbsp;ms</span></div>
+    <p>Writers first and tcmalloc: more creates a second, at a longer tail - <code>tune-result.json</code> has every
+    combination's p99 beside its rate, to choose with.</p>
+  </div>
+</div>
+<ul>
+  <li><b>The profile alone adds little</b> on these two (+2.3&nbsp;%, -0.1&nbsp;%): the general training already
+  runs these paths. What a workload changes is the settings.</li>
+  <li><b>Which settings win differs.</b> On the ingest: tcmalloc +11.1&nbsp;%, glibc +7.1&nbsp;%, jemalloc
+  +5.7&nbsp;% with writers first - and jemalloc -6.0&nbsp;% with readers first.</li>
+  <li><b>Next to an index, these are small:</b> +12.5&nbsp;% and +46.9&nbsp;% here, against ×17.6 to ×919 for a
+  selective <code>q</code> on an attribute with an index.</li>
+</ul>
+</article>

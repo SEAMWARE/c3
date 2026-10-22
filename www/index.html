@@ -40,6 +40,10 @@
     <div class="top-right">
       <button class="aibtn" type="button" id="ai-btn" aria-haspopup="dialog" aria-expanded="false" title="AI Assist - coming soon">✦ AI Assist</button>
       <span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware">
+      <div class="winctl" id="win-ctl" hidden>
+        <button type="button" id="win-min" title="Minimise" aria-label="Minimise the window"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.5h10"/></svg></button>
+        <button type="button" id="win-close" class="close" title="Close" aria-label="Close the window"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+      </div>
     </div>
     <div class="aipop" id="ai-pop" role="dialog" aria-labelledby="ai-title" hidden>
       <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">coming soon</span></h2><button class="iconbtn" type="button" id="ai-close" aria-label="Close">✕</button></div>
@@ -509,125 +513,47 @@
     </div>
   </main>
   <main class="page" id="page-docs" hidden>
-    <section class="cp-card docs" aria-label="Documentation">
-      <h1>Documentation</h1>
-      <p class="muted">The components: c³, the broker, and every library they are built from. Each opens its repository; the full documentation, readable here, comes next.</p>
-      <ul class="doclist">
-          <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener"><span class="dname">c3</span></a><span class="ddesc">c³ - the coraine Control Center: build, run, connect to and configure coraine brokers</span></li>
-          <li><a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener"><span class="dname">coraine</span></a><span class="ddesc">the NGSI-LD context broker</span></li>
-          <li><a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener"><span class="dname">corBase</span></a><span class="ddesc">basic utilities: strings, time, files, coroutines</span></li>
-          <li><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener"><span class="dname">corLog</span></a><span class="ddesc">logging and trace levels</span></li>
-          <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><span class="dname">corAlloc</span></a><span class="ddesc">request arenas - fast allocation, freed at once</span></li>
-          <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><span class="dname">corArgs</span></a><span class="ddesc">command-line options and environment variables</span></li>
-          <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><span class="dname">corHash</span></a><span class="ddesc">hash tables</span></li>
-          <li><a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener"><span class="dname">corTree</span></a><span class="ddesc">the in-memory tree (CorNode) every JSON document becomes</span></li>
-          <li><a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener"><span class="dname">corJson</span></a><span class="ddesc">the JSON parser and renderer</span></li>
-          <li><a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener"><span class="dname">corJsonld</span></a><span class="ddesc">JSON-LD: @context handling, expansion and compaction</span></li>
-          <li><a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener"><span class="dname">corNgsild</span></a><span class="ddesc">NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations</span></li>
-          <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><span class="dname">corProm</span></a><span class="ddesc">Prometheus metrics</span></li>
-          <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><span class="dname">corPlugin</span></a><span class="ddesc">the plugin loader</span></li>
-          <li><a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener"><span class="dname">corHttp</span></a><span class="ddesc">the built-in HTTP server</span></li>
-          <li><a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener"><span class="dname">corRest</span></a><span class="ddesc">the REST layer: services, requests, the HTTP and cor:// clients</span></li>
-          <li><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><span class="dname">corDB</span></a><span class="ddesc">corDB - the in-process NGSI-LD store, persistent with --dbDir, and its history</span></li>
-          <li><a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener"><span class="dname">corBridge</span></a><span class="ddesc">the Bridge/Channel contract every bridge plugin implements</span></li>
-          <li><a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener"><span class="dname">corMqttBridge</span></a><span class="ddesc">the MQTT bridge</span></li>
-          <li><a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener"><span class="dname">corModbusBridge</span></a><span class="ddesc">the Modbus bridge</span></li>
-          <li><a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener"><span class="dname">corDdsBridge</span></a><span class="ddesc">the DDS / ROS 2 bridge</span></li>
-          <li><a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener"><span class="dname">corTest</span></a><span class="ddesc">the functional test harness</span></li>
-          <li><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener"><span class="dname">corTools</span></a><span class="ddesc">test and benchmark tools</span></li>
-          <li><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><span class="dname">corLibs</span></a><span class="ddesc">the umbrella that builds every library</span></li>
-      </ul>
-      <p class="muted">Guides: <a href="#docs" data-scroll="guide-indexes">Database indexes</a></p>
-    </section>
-
-    <section class="cp-card docs guide" id="guide-indexes" aria-label="Database indexes">
-      <h1>Database indexes</h1>
-      <p>An index lets the database go straight to the documents a query asks for. Without one it reads every
-      document and keeps the ones that match - a cost that grows with the store: fine at a thousand entities,
-      the whole answer time at a million. Asking "which index does this query use, and how many documents did
-      it read for the ones it returned" is the first question when a broker with MongoDB or PostgreSQL behind
-      it is slow.</p>
-
-      <h2>corDB</h2>
-      <p>corDB keeps the entities in the broker's own memory, with its own indexes - the entity id, the
-      entity type, and the default order. There is no database to connect to and nothing to add.</p>
-
-      <h2>MongoDB - what coraine creates itself</h2>
-      <p>The entities are in the collection <code>entities</code> of the broker's database
-      (<code>--dbName</code>; a tenant has a database of its own). For every database, at start-up and when a
-      tenant is first used:</p>
-      <table class="gtable">
-        <tr><th>Index</th><th>Serves</th></tr>
-        <tr><td><code>_id</code></td><td>the entity id - retrieve, update and delete of one entity (MongoDB's own)</td></tr>
-        <tr><td><code>{type, createdAt, _id}</code></td><td>a query by type, in the default order: it reads exactly the page asked for. A page of 20 of a type that is 1&nbsp;% of 100&nbsp;000 entities: 19.7&times; the requests/s of an index on <code>type</code> alone (MongoDB 8.2, 2026-10-08)</td></tr>
-        <tr><td><code>{createdAt, _id}</code></td><td>the default order of a query without a type - otherwise a sort in memory, which MongoDB limits</td></tr>
-        <tr><td><code>2dsphere</code> on each GeoProperty</td><td>geo-queries; created when the broker first sees the GeoProperty</td></tr>
-      </table>
-      <p>The broker also drops an index named <code>type_1</code> at start-up - the index on <code>type</code>
-      alone that older versions created, now a prefix of the second one. Don't give an index of your own that
-      name.</p>
-
-      <h2>MongoDB - how an entity is stored</h2>
-      <p>One document per entity. Each attribute is a top-level field named by its <b>expanded</b> name,
-      with every <code>.</code> written as <code>．</code> (U+FF0E, fullwidth full stop - MongoDB reads a dot
-      in a field name as a path); inside it one member per instance - <code>@none</code> for the default one,
-      the datasetId for the others - and the value in <code>value</code>:</p>
-      <pre>{
-  "_id":  "urn:ngsi-ld:Vehicle:7",
-  "type": "https://uri.etsi.org/ngsi-ld/default-context/Vehicle",
-  "https://uri．etsi．org/ngsi-ld/default-context/speed": {
-    "@none": { "value": 80, "observedAt": ... }
-  },
-  "createdAt": ..., "modifiedAt": ...
-}</pre>
-
-      <h2>MongoDB - does a query use an index?</h2>
-      <p>In <code>mongosh</code>, the query the broker sends for <code>GET /ngsi-ld/v1/entities?type=Vehicle&amp;limit=20</code>:</p>
-      <pre>use cor
-db.entities.find({ type: "https://uri.etsi.org/ngsi-ld/default-context/Vehicle" })
-  .sort({ createdAt: 1, _id: 1 }).limit(20)
-  .explain("executionStats").executionStats</pre>
-      <p><code>totalDocsExamined</code> against <code>nReturned</code>: 20 against 20 is an index doing its
-      job; 100&nbsp;000 against 20 is every entity read for a page. <code>explain()</code> without
-      <code>executionStats</code> names the plan - <code>IXSCAN</code> an index, <code>COLLSCAN</code> every
-      document.</p>
-
-      <h2>MongoDB - adding an index by hand</h2>
-      <pre>db.entities.createIndex({ "https://uri．etsi．org/ngsi-ld/default-context/speed.@none.value": 1 })</pre>
-      <ul>
-        <li><b>It lasts.</b> An index is part of the database on disk: it survives a restart of MongoDB and of
-        the broker. It is not in a tenant created later (a database of its own), nor in a database dropped and
-        created again.</li>
-        <li><b>The name must be exact</b> - the expanded name, the fullwidth dots. An index on a field that does
-        not exist is created without complaint and used by nothing.</li>
-        <li><b>A comparison in <code>q</code> does not use it.</b> A comparison matches <em>any instance</em>
-        of the attribute (NGSI-LD: an instance with a datasetId counts too). The instances are members of an
-        object keyed by datasetId, so each is at a path of its own - <code>speed.@none.value</code>,
-        <code>speed.ds1.value</code> - and the datasetIds are not known when the query is built. So the broker
-        asks MongoDB with an expression that turns the attribute into a list of its instances
-        (<code>$objectToArray</code>) and tests each - evaluated inside every document, which no index can
-        answer. That is <code>q=speed&gt;80</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>,
-        <code>==</code>, <code>!=</code>, <code>~=</code>, <code>!~=</code>, a range, a list of
-        values: the query reads every entity the rest of it leaves - all of the type.</li>
-        <li><b>Every index costs every write</b> that changes its field - one more structure to update.</li>
-      </ul>
-
-      <h2>PostgreSQL / TimescaleDB - the temporal history</h2>
-      <p>With <code>--troe timescale</code> the history is in PostgreSQL - a database per tenant - and the
-      Temporal API reads it. The broker creates the tables and their indexes (the table
-      <code>troe_schema_version</code> records which schema version it has):</p>
-      <table class="gtable">
-        <tr><th>Table</th><th>Indexes</th></tr>
-        <tr><td><code>troe_entities</code><br><span class="muted">one row per entity event</span></td><td>primary key <code>(entity_id, modified_at, op)</code>; <code>(entity_id, modified_at DESC)</code>; GIN on <code>entity_type</code></td></tr>
-        <tr><td><code>troe_attrs</code><br><span class="muted">one row per attribute instance - a hypertable on <code>modified_at</code> when TimescaleDB is there</span></td><td>primary key <code>(instance_id, modified_at)</code>; <code>(entity_id, attr_name, observed_at DESC)</code>; <code>(entity_id, attr_name, modified_at DESC)</code>; <code>(attr_name, observed_at DESC)</code>; GIN on <code>entity_type</code>; GiST on <code>geo</code></td></tr>
-      </table>
-      <p>Whether a query uses one: <code>EXPLAIN (ANALYZE, BUFFERS) SELECT ...</code> in <code>psql</code> -
-      <code>Index Scan</code> or <code>Bitmap Index Scan</code> against <code>Seq Scan</code>, and the rows
-      each step read. An index added by hand lasts, as in MongoDB, and is not in a tenant's database created
-      later. On the hypertable <code>CREATE INDEX CONCURRENTLY</code> is not supported; TimescaleDB's
-      <code>CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)</code> builds it a chunk at a time,
-      without holding the whole table.</p>
-    </section>
+    <div class="docs-wrap">
+      <nav class="docs-nav" aria-label="Documentation">
+        <h2>Guides</h2>
+        <a href="#docs/extreme-performance" data-doc="extreme-performance">Extreme performance</a>
+        <a href="#docs/database-indexes" data-doc="database-indexes">Database indexes</a>
+        <h2>Components</h2>
+        <a href="#docs/components" data-doc="components">The repositories</a>
+      </nav>
+      <section class="cp-card docs-body" id="docs-body" aria-live="polite">
+        <article class="guide" id="docs-components" hidden>
+          <h1>The repositories</h1>
+          <p class="muted">c³, the broker, and every library they are built from. Each opens its repository.</p>
+          <ul class="doclist">
+              <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener"><span class="dname">c3</span></a><span class="ddesc">c³ - the coraine Control Center: build, run, connect to and configure coraine brokers</span></li>
+              <li><a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener"><span class="dname">coraine</span></a><span class="ddesc">the NGSI-LD context broker</span></li>
+              <li><a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener"><span class="dname">corBase</span></a><span class="ddesc">basic utilities: strings, time, files, coroutines</span></li>
+              <li><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener"><span class="dname">corLog</span></a><span class="ddesc">logging and trace levels</span></li>
+              <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><span class="dname">corAlloc</span></a><span class="ddesc">request arenas - fast allocation, freed at once</span></li>
+              <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><span class="dname">corArgs</span></a><span class="ddesc">command-line options and environment variables</span></li>
+              <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><span class="dname">corHash</span></a><span class="ddesc">hash tables</span></li>
+              <li><a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener"><span class="dname">corTree</span></a><span class="ddesc">the in-memory tree (CorNode) every JSON document becomes</span></li>
+              <li><a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener"><span class="dname">corJson</span></a><span class="ddesc">the JSON parser and renderer</span></li>
+              <li><a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener"><span class="dname">corJsonld</span></a><span class="ddesc">JSON-LD: @context handling, expansion and compaction</span></li>
+              <li><a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener"><span class="dname">corNgsild</span></a><span class="ddesc">NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations</span></li>
+              <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><span class="dname">corProm</span></a><span class="ddesc">Prometheus metrics</span></li>
+              <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><span class="dname">corPlugin</span></a><span class="ddesc">the plugin loader</span></li>
+              <li><a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener"><span class="dname">corHttp</span></a><span class="ddesc">the built-in HTTP server</span></li>
+              <li><a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener"><span class="dname">corRest</span></a><span class="ddesc">the REST layer: services, requests, the HTTP and cor:// clients</span></li>
+              <li><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><span class="dname">corDB</span></a><span class="ddesc">corDB - the in-process NGSI-LD store, persistent with --dbDir, and its history</span></li>
+              <li><a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener"><span class="dname">corBridge</span></a><span class="ddesc">the Bridge/Channel contract every bridge plugin implements</span></li>
+              <li><a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener"><span class="dname">corMqttBridge</span></a><span class="ddesc">the MQTT bridge</span></li>
+              <li><a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener"><span class="dname">corModbusBridge</span></a><span class="ddesc">the Modbus bridge</span></li>
+              <li><a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener"><span class="dname">corDdsBridge</span></a><span class="ddesc">the DDS / ROS 2 bridge</span></li>
+              <li><a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener"><span class="dname">corTest</span></a><span class="ddesc">the functional test harness</span></li>
+              <li><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener"><span class="dname">corTools</span></a><span class="ddesc">test and benchmark tools</span></li>
+              <li><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><span class="dname">corLibs</span></a><span class="ddesc">the umbrella that builds every library</span></li>
+          </ul>
+        </article>
+        <div id="docs-guide"></div>
+      </section>
+    </div>
   </main>
 </div>
 
