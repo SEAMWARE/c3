@@ -9,7 +9,7 @@ query</b>, and <b>a broker built for your workload</b>.</p>
 <div class="xp-hero" role="list" aria-label="A q on an attribute with an index, against without">
   <div class="xp-stat" role="listitem"><span class="xp-x">×416</span><span class="xp-what">corDB</span><span class="xp-how">1&nbsp;111&nbsp;µs → 2.7&nbsp;µs a request</span></div>
   <div class="xp-stat" role="listitem"><span class="xp-x">×919</span><span class="xp-what">MongoDB</span><span class="xp-how">167&nbsp;ms → 181&nbsp;µs a request</span></div>
-  <div class="xp-stat" role="listitem"><span class="xp-x">×520</span><span class="xp-what">TimescaleDB history</span><span class="xp-how">626&nbsp;ms → 1.2&nbsp;ms, the query's SQL</span></div>
+  <div class="xp-stat" role="listitem"><span class="xp-x">×62</span><span class="xp-what">TimescaleDB history</span><span class="xp-how">97.8&nbsp;ms → 1.6&nbsp;ms a request</span></div>
 </div>
 <p class="muted xp-note">A <code>q</code> on one attribute that 10 of 100&nbsp;000 entities match, a page of 20, with an index on
 the attribute and without.</p>
@@ -45,15 +45,15 @@ a tenant created later included.</p>
     </div>
   </div>
   <div class="xp-group">
-    <div class="xp-label">History<br><span class="muted">TimescaleDB, SQL</span></div>
+    <div class="xp-label">History<br><span class="muted">TimescaleDB</span></div>
     <div class="xp-bars">
-      <div class="xp-bar off" style="--w: 96.6%"><span>626&nbsp;ms</span></div>
-      <div class="xp-bar on" style="--w: 51.3%"><span>1.2&nbsp;ms</span></div>
+      <div class="xp-bar off" style="--w: 83.2%"><span>97.8&nbsp;ms</span></div>
+      <div class="xp-bar on" style="--w: 53.3%"><span>1.6&nbsp;ms</span></div>
     </div>
   </div>
   <figcaption><span class="xp-key off"></span>without an index <span class="xp-key on"></span>with one - log scale.
-  corDB and MongoDB: what one request takes of the broker at full load (1 / requests per second). History:
-  the time of the SQL that selects the entities of a temporal query.</figcaption>
+  What one request takes of the broker at full load (1 / requests per second); for the history a temporal
+  query, which also reads the history of the entities on its page.</figcaption>
 </figure>
 
 <h3>What it gains, and what it costs</h3>
@@ -63,9 +63,9 @@ TimescaleDB 2.29 (2.9 million rows of history); the release build, 2026-10-22.</
 <table class="gtable xp-table">
   <thead><tr><th></th><th>corDB</th><th>MongoDB</th><th>History (TimescaleDB)</th></tr></thead>
   <tbody>
-  <tr class="gain"><td><code>q</code> on it, 10 matches</td><td>1&nbsp;111&nbsp;µs → 2.7&nbsp;µs <b>×416</b></td><td>167&nbsp;ms → 181&nbsp;µs <b>×919</b></td><td>626 → 1.2&nbsp;ms <b>×520</b></td></tr>
-  <tr class="gain"><td><code>q</code> on it, 1&nbsp;% match</td><td>106 → 6.0&nbsp;µs <b>×17.6</b></td><td>12.3 → 4.5&nbsp;ms <b>×2.8</b></td><td>a page: the same; a count: 618 → 45&nbsp;ms <b>×13.7</b></td></tr>
-  <tr><td><code>q</code> on it, half match</td><td>the same</td><td>the same</td><td>a count: 490 → 357&nbsp;ms</td></tr>
+  <tr class="gain"><td><code>q</code> on it, 10 matches</td><td>1&nbsp;111&nbsp;µs → 2.7&nbsp;µs <b>×416</b></td><td>167&nbsp;ms → 181&nbsp;µs <b>×919</b></td><td>97.8 → 1.6&nbsp;ms <b>×62</b>; with <code>count=true</code> <b>×120</b></td></tr>
+  <tr class="gain"><td><code>q</code> on it, 1&nbsp;% match</td><td>106 → 6.0&nbsp;µs <b>×17.6</b></td><td>12.3 → 4.5&nbsp;ms <b>×2.8</b></td><td>a page: the same; a count: 100 → 6.2&nbsp;ms <b>×16</b></td></tr>
+  <tr><td><code>q</code> on it, half match</td><td>the same</td><td>the same</td><td>the same</td></tr>
   <tr class="cost"><td>a write of it (<code>PATCH</code>)</td><td>+2.8&nbsp;µs (-21&nbsp;% at full load)</td><td>+2.5&nbsp;µs (-5&nbsp;%)</td><td>-1.6&nbsp;% history rows/s</td></tr>
   <tr class="cost"><td>a create with it</td><td>+3.5&nbsp;µs (-48&nbsp;%)</td><td>+0.7&nbsp;µs (-4&nbsp;%)</td><td>-4.3&nbsp;% (a batch of 20)</td></tr>
   <tr><td>a write of another attribute</td><td>+0.13&nbsp;µs (-1.3&nbsp;%)</td><td>+0.3&nbsp;µs (-0.6&nbsp;%)</td><td>-2.3&nbsp;%, within what runs vary</td></tr>
