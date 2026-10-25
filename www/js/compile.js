@@ -272,7 +272,7 @@ function withHelp(box, section, cls) {
 export class Compile {
   constructor() {
     this.caps = null;             // GET /api/capabilities
-    this.features = [];           // [{name, default, description, group, requires}]
+    this.features = [];           // [{name, default, description, group, requires, requiresAny}]
     this.openGroups = openGroupsLoad();   // the groups shown open
     this.featureError = '';
     this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
@@ -373,10 +373,23 @@ export class Compile {
   }
 
   //
-  // forcedOff - a switch is off whatever is chosen when one it requires is off (CMakeLists.txt)
+  // forcedBy - what keeps a switch off whatever is chosen (CMakeLists.txt): each of its "requires" that does
+  // not hold, and its "requiresAny" - as one entry, an array - when none of them does (one is enough)
   //
   forcedBy(f) {
-    return (f.requires || []).filter((r) => !this.reqMet(r));
+    const forced = (f.requires || []).filter((r) => !this.reqMet(r));
+    const any = f.requiresAny || [];
+    if (any.length > 0 && !any.some((r) => this.reqMet(r))) forced.push(any);
+    return forced;
+  }
+
+  //
+  // needsOf - everything a switch needs, for its card: each of "requires", and "requiresAny" as one entry
+  //
+  needsOf(f) {
+    const needs = (f.requires || []).slice();
+    if ((f.requiresAny || []).length > 0) needs.push(f.requiresAny);
+    return needs;
   }
 
   //
@@ -389,8 +402,21 @@ export class Compile {
     return built[r.slice(0, eq)] === r.slice(eq + 1);
   }
 
+  //
+  // reqLabel - a requirement's name; of a "requiresAny", its switches with "or"
+  //
   reqLabel(r) {
+    if (Array.isArray(r)) return r.map((x) => this.reqLabel(x)).join(' or ');
     return (r.indexOf('=') < 0) ? r : ((SETTINGS[r] && SETTINGS[r].label) || r);
+  }
+
+  //
+  // offLabel - the requirements that do not hold, for "... is off" / "... are off"
+  //
+  offLabel(forced) {
+    const label = forced.map((r) => !Array.isArray(r) ? this.reqLabel(r)
+                                  : (r.length === 2 ? 'both ' + r.join(' and ') : 'all of ' + r.join(', '))).join(' and ');
+    return label + ((forced.length > 1 || Array.isArray(forced[0])) ? ' are' : ' is') + ' off';
   }
 
   //
@@ -398,6 +424,7 @@ export class Compile {
   //
   forcedWhy(f, forced) {
     return forced.map((r) => {
+      if (Array.isArray(r)) return `${f.name} needs ${r.join(' or ')} - one of them is enough, and ${r.length === 2 ? 'both are' : 'all are'} off. To have it, switch one of them on.`;
       const st = SETTINGS[r];
       return st ? `${f.name} needs ${st.label}: ${st.why}. To have it, ${st.give}.`
                 : `${f.name} needs ${r}, which is off. To have it, switch ${r} on.`;
@@ -600,8 +627,8 @@ export class Compile {
       const section = docFeature(this.doc, f.name);
       const size = docSize(section && section.text);
       if (size) txt.append(el('span', 'fsz', (size === 'no effect yet') ? 'compiled out: no effect yet' : (f.default ? 'off: ' : 'on: ') + size));
-      const needs = (f.requires || []).map((r) => this.reqLabel(r));
-      if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + needs.join(' and ') + ' - ' + forced.map((r) => this.reqLabel(r)).join(' and ') + (forced.length > 1 ? ' are' : ' is') + ' off'));
+      const needs = this.needsOf(f).map((r) => this.reqLabel(r));
+      if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + needs.join(' and ') + ' - ' + this.offLabel(forced)));
       else if (needs.length) txt.append(el('span', 'fq', 'Needs ' + needs.join(' and ')));
       txt.append(el('span', 'fdef', 'default ' + (f.default ? 'on' : 'off') + ((this.isOn(f.name) !== !!f.default) ? ' · changed' : '')));
       b.append(el('span', 'cp-fbox'), txt);
