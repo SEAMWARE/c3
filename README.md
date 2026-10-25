@@ -51,7 +51,7 @@ Then:
 ```sh
 make                                                   # ./c3
 
-coraine -fg -db corDB -p 1090 --transports ws &        # a broker, in RAM, on a port of its own, with its WebSocket transport
+coraine -db corDB -p 1090 --transports ws &            # a broker, in RAM, on a port of its own, with its WebSocket transport
 examples/factory.sh http://localhost:1090              # 25 entities with Relationships, locations, areas and routes
 examples/live.sh http://localhost:1090 &               # ... and its robots at work: the values change every 0.5 s
 examples/factory.sh http://localhost:1090 300          # ... and 300 sensors more, to page through
@@ -647,9 +647,9 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 | From | Runs | How |
 |---|---|---|
-| the installed `coraine` (`$PATH`) | natively | `coraine -fg <options>` |
-| a build of Compile's | natively | `/bin/sh -c '<script>' <build>/install/env <build>/install/bin/coraine -fg <options>` - the script sources `install/env` (its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand) and, for a tuned build, `install/etc/tune.env` as the image's entry point does: `TUNE_DBLOCKPREFER` as `CORAINE_DBLOCKPREFER` (an option on the command line still wins), `TUNE_ALLOCATOR` preloaded (`LD_PRELOAD`, found with `ldconfig -p`; not installed: glibc's, and the broker's log says so). It writes one line to the broker's log, `c3: <tune.env> applied - ...` |
-| an image (`quay.io/seamware/coraine:<tag>`) | in a container | `docker run -d --name c3-broker-<name> ... <image> <options>` - the image's entry point is `coraine -fg` |
+| the installed `coraine` (`$PATH`) | natively | `coraine <options>` |
+| a build of Compile's | natively | `/bin/sh -c '<script>' <build>/install/env <build>/install/bin/coraine <options>` - the script sources `install/env` (its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand) and, for a tuned build, `install/etc/tune.env` as the image's entry point does: `TUNE_DBLOCKPREFER` as `CORAINE_DBLOCKPREFER` (an option on the command line still wins), `TUNE_ALLOCATOR` preloaded (`LD_PRELOAD`, found with `ldconfig -p`; not installed: glibc's, and the broker's log says so). It writes one line to the broker's log, `c3: <tune.env> applied - ...` |
+| an image (`quay.io/seamware/coraine:<tag>`) | in a container | `docker run -d --name c3-broker-<name> ... <image> <options>` - the image's entry point is `coraine` (in the foreground, the log on stdout) |
 
 An image of Compile's is greyed (Compile makes no image yet), and so is a build in a container. The tag is
 chosen from the images here and the tags published on quay.io (`GET /api/run/images`, which reads quay.io's

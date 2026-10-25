@@ -56,7 +56,8 @@ interface and has no authentication of its own (<a href="#docs/authorization">Au
 sudo systemctl enable --now coraine
 journalctl -u coraine -f</pre>
 <ul>
-  <li>It runs <code>/usr/bin/coraine -fg</code> as the system user <code>coraine</code>, with the options of
+  <li>It runs <code>/usr/bin/coraine</code> in the foreground (<code>Type=simple</code>, the log on stdout - in the journal)
+  as the system user <code>coraine</code>, with the options of
   <code>/etc/default/coraine</code> as <code>CORAINE_*</code> environment variables
   (<a href="#docs/administration/env">every option has one</a>).</li>
   <li>Out of the box: corDB on disk in <code>/var/lib/coraine/db</code>, no temporal history, port 1026.</li>
@@ -70,7 +71,7 @@ journalctl -u coraine -f</pre>
 <pre>coraine-build --list-features
 coraine-build --features REGISTRATIONS=OFF,SERVICE_EXECUTION=OFF ~/coraine-small
 . ~/coraine-small/install/env
-coraine -fg --database corDB</pre>
+coraine --database corDB</pre>
 <p><code>coraine-build [options] &lt;dir&gt;</code> unpacks the source into <code>&lt;dir&gt;</code> and builds there, as
 any user; nothing is written outside it. The result is in <code>&lt;dir&gt;/install</code> - <code>bin/</code>,
 <code>plugins/</code>, <code>etc/</code> and <code>env</code>, which points <code>PATH</code>, <code>SEAMWARE_PLUGIN_DIR</code>,

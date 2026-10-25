@@ -1060,7 +1060,7 @@ export class Compile {
     runIt.title = 'Run: this build in the form, natively';
     runIt.addEventListener('click', () => window.dispatchEvent(new CustomEvent('c3:run', { detail: { build: b.name } })));
     const ri = el('span', 'cp-chips');
-    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; ' + (b.executable || 'coraine') + ' -fg --database corDB'));
+    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; ' + (b.executable || 'coraine') + ' --database corDB'));
     if (b.state === 'succeeded') row('', ri);
 
     dl.hidden = false;

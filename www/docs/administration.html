@@ -40,7 +40,7 @@ installation's directories:</p>
   <tr><td>--corPort<span class="env">CORAINE_CORPORT</span></td><td>0 (off) - the TCP port of <a href="#docs/cor-protocol">cor://</a>, the binary API</td></tr>
   <tr><td>--sseStreams<span class="env">CORAINE_SSESTREAMS</span></td><td>1000 - event streams open at once; a subscription on a stream past that is 503 (<a href="#docs/sse">SSE</a>)</td></tr>
   <tr><td>--high-availability / -ha<span class="env">CORAINE_HIGH_AVAILABILITY</span></td><td>none - keep the caches in step with the other instances: <code>mongo</code> (change streams; the <code>mongoc</code> store and a replica set) (<a href="#docs/high-availability">High availability</a>)</td></tr>
-  <tr><td>--foreground / -fg<span class="env">CORAINE_FOREGROUND</span></td><td>accepted; the broker runs in the foreground either way</td></tr>
+  <tr><td>--daemon / -bg<span class="env">CORAINE_DAEMON</span></td><td>off (the foreground) - run in the background, detached; needs <code>--logTo file</code> (<a href="#docs/administration" data-scroll="running">Foreground or daemon</a>)</td></tr>
   <tr><td>--version / -V</td><td>print the version, the features compiled in and the HTTP server, and exit</td></tr>
 </table>
 
@@ -99,14 +99,58 @@ installation's directories:</p>
   <tr><td>--verbose / -v<span class="env">CORAINE_VERBOSE</span></td><td>off - say more at start: which memory and response budget is in force, and why</td></tr>
   <tr><td>--debug / -d<span class="env">CORAINE_DEBUG</span></td><td>off - debug messages</td></tr>
   <tr><td>--traceLevels / -t<span class="env">CORAINE_TRACELEVELS</span></td><td>none - trace levels; a release build has traces compiled out and traces nothing</td></tr>
+  <tr><td>--logTo / -logTo<span class="env">CORAINE_LOGTO</span></td><td><code>stdout</code> - where the log goes: <code>stdout</code>, <code>file</code> (<code>&lt;logDir&gt;/coraine.log</code>) or <code>both</code> (the file and stdout)</td></tr>
+  <tr><td>--logDir / -logDir<span class="env">CORAINE_LOGDIR</span></td><td><code>/var/log/coraine</code> - the directory of the log file, with <code>--logTo file</code> or <code>both</code>; it must exist and be writable, else the broker does not start</td></tr>
 </table>
 <p>The DDS bridge's options (<code>--ddsSync</code>, <code>--ddsSyncTimeout</code>, <code>--ddsSyncWaitMax</code>):
 <a href="#docs/dds">DDS</a>. The databases' options: <a href="#docs/installation/databases">Installation</a>.</p>
 
 <!-- ======================================================================= -->
+<h2 id="running">Foreground or daemon, and where the log goes</h2>
+<p>By default the broker runs in the <b>foreground</b> and logs to <b>stdout</b> - what a container runtime
+(<code>docker logs</code>, <code>kubectl logs</code>), systemd (<code>Type=simple</code>, the journal) and a terminal take
+the log from. The package's service runs it that way.</p>
+<table class="g-opts">
+  <tr><th></th><th><code>--logTo stdout</code> (default)</th><th><code>--logTo file</code></th><th><code>--logTo both</code></th></tr>
+  <tr><td>foreground (default)</td><td>the log on stdout</td><td><code>&lt;logDir&gt;/coraine.log</code> only</td><td>each line in the file and on stdout</td></tr>
+  <tr><td>--daemon</td><td><b>refused</b></td><td><code>&lt;logDir&gt;/coraine.log</code></td><td><b>refused</b></td></tr>
+</table>
+<div class="g-callout warn"><p><code>--daemon</code> with <code>--logTo stdout</code> (the default) or <code>both</code> does not start - a daemon's
+stdout is <code>/dev/null</code>. Exit code 1, one line on stderr:
+<code>coraine: --daemon with --logTo stdout: a daemon's stdout is /dev/null - use --logTo file</code>.
+<code>--daemon</code> with <code>-fg</code> is refused as well.</p></div>
+<ul>
+  <li><b>The file</b> is <code>&lt;logDir&gt;/coraine.log</code> - <code>/var/log/coraine/coraine.log</code> by default. The
+  directory is not created; a file that cannot be opened stops the broker at start
+  (<code>Unable to open '...' for writing: ...</code>, exit code 1). A <code>coraine.log</code> of an earlier start is renamed
+  <code>coraine.log.old</code>. Created <code>0664</code> minus the umask.</li>
+  <li><b>Rotation:</b> the broker does not reopen the file (no SIGHUP handler); it writes in append mode, so logrotate's
+  <code>copytruncate</code> rotates it.</li>
+  <li><b><code>--daemon</code></b> (<code>-bg</code>) detaches: <code>fork</code> (the command returns 0 at once), <code>setsid</code>,
+  <code>chdir /</code>, stdin/stdout/stderr on <code>/dev/null</code>. Exit code 0 means detached, not serving: a start-up
+  error after it is in the log file only. A relative path (<code>--dbDir</code>) is relative to <code>/</code> afterwards.
+  There is no pid file - the log names the pid, with or without <code>-v</code>:
+  <code>I: ...: main: --daemon: detached, pid 236587</code>. SIGTERM / SIGINT stop it in order, as in the foreground;
+  SIGHUP is not handled and ends it without that.</li>
+  <li><b>systemd:</b> the package's unit is <code>Type=simple</code> - do not set <code>CORAINE_DAEMON=true</code> there (a
+  broker that detaches is a main process that exited, and systemd stops the service). A unit of your own with
+  <code>--daemon</code> is <code>Type=forking</code>.</li>
+  <li><b>Environment:</b> <code>CORAINE_DAEMON=true</code> (only <code>true</code>, any case, turns a boolean on),
+  <code>CORAINE_LOGTO</code>, <code>CORAINE_LOGDIR</code>.</li>
+</ul>
+<pre>mkdir -p ~/coraine-log ~/coraine-db
+coraine --daemon --logTo file --logDir ~/coraine-log --database corDB --dbDir ~/coraine-db --troe none
+grep -- '--daemon: detached' ~/coraine-log/coraine.log      # the pid
+kill "$(sed -n 's/^.*--daemon: detached, pid //p' ~/coraine-log/coraine.log)"</pre>
+<div class="g-callout"><p><code>-fg</code> / <code>--foreground</code> is <b>deprecated</b>: the foreground is the default, so it does nothing.
+Accepted through 0.7.x with one warning line at start, refused from 0.8.0:
+<code>W: ...: main: -fg: the broker runs in the foreground by default now - the option is refused from 0.8.0</code></p></div>
+
 <h2 id="log">The log</h2>
-<p>The broker logs to its <b>standard output</b> - under systemd, the journal (<code>journalctl -u coraine</code>); in a
-container, <code>docker logs</code>. Errors (<code>E:</code>) and warnings (<code>W:</code>) are always written.</p>
+<p>The broker logs to its <b>standard output</b> by default - under systemd, the journal (<code>journalctl -u coraine</code>); in a
+container, <code>docker logs</code>; with <code>--logTo file</code> or <code>both</code>, <code>&lt;logDir&gt;/coraine.log</code>
+(<a href="#docs/administration" data-scroll="running">above</a>). Errors (<code>E:</code>) and warnings (<code>W:</code>) are always
+written; <code>-v</code> adds the rest.</p>
 <pre><span class="o">E: 000010.339: adminIndexes.c[68]: storeHasIndexes: 501 Not Implemented: the store 'none' has no declared indexes</span></pre>
 <p>On a running broker the log and trace levels change through <code>/admin/log</code> - the way to look into a live
 instance, rather than restarting it with <code>-t</code>. A release broker that crashes writes what it takes to reproduce
