@@ -1562,7 +1562,7 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
       argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/bridges.json:ro", bridgeFile);
     }
     argAdd(aP, dP->image);
-    // The image's entry point is `coraine -fg`
+    // The image's entry point is `coraine` (coraine-start) - in the foreground, logging to stdout: its defaults
   }
   else if (strcmp(dP->from, "build") == 0)
   {
@@ -1605,8 +1605,7 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
            "fi\n"
            "exec \"$@\"");
     argAdd(aP, env);
-    argAdd(aP, path);
-    argAdd(aP, "-fg");
+    argAdd(aP, path);                                   // the foreground and the log on stdout: the broker's defaults
   }
   else
   {
@@ -1616,7 +1615,6 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
       return false;
     }
     argAdd(aP, path);
-    argAdd(aP, "-fg");
   }
 
   argAdd(aP, "--port");        argAddf(aP, "%d", container ? 1026 : dP->port);

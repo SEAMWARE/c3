@@ -181,7 +181,7 @@ make install_pgo                        <span class="c"># the tuned build -> /us
 its p99 beside its rate:</p>
 <pre class="xp-out">tune: best --dbLockPrefer writes LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 - 173721 requests/s, +11.1 % against the out-of-the-box settings - tune-result.json</pre>
 <p>Then run the broker with what it says:</p>
-<pre>LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 coraine -fg --database corDB --dbDir /var/lib/coraine --dbLockPrefer writes ...</pre>
+<pre>LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4 coraine --database corDB --dbDir /var/lib/coraine --dbLockPrefer writes ...</pre>
 
 <h3>From c³</h3>
 <p>The <a href="#compile">Compile</a> page trains a broker the same way, with <code>coraine-build</code> (the

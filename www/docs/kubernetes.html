@@ -13,7 +13,7 @@ a StatefulSet.</p>
 <ul>
   <li><b>Multi-arch</b> - linux/amd64 and linux/arm64 under the same tag; <code>&lt;tag&gt;-amd64</code> and
   <code>&lt;tag&gt;-arm64</code> pin one. The arm64 image is built without the DDS bridge.</li>
-  <li><b>The entry point</b> runs <code>coraine -fg</code> with the container's arguments appended. <code>args:</code>
+  <li><b>The entry point</b> runs <code>coraine</code> - in the foreground, logging to stdout, what <code>kubectl logs</code> shows; no <code>--daemon</code> in a pod - with the container's arguments appended. <code>args:</code>
   in a manifest replaces the default arguments, <code>--database mongoc --troe none --apiPlugins admin</code>.</li>
   <li><b>Every option is also an environment variable</b>: <code>CORAINE_</code> + the long option in upper case -
   <code>--healthPort</code> is <code>CORAINE_HEALTHPORT</code>.</li>
