@@ -1,0 +1,116 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/modbus-bridge.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>The Modbus bridge</h1>
+<p class="lead"><code>modbus.so</code> carries values between the registers of a Modbus TCP device and entity
+attributes: registers polled in, attribute writes sent out. A PLC, an energy meter or a pump controller becomes an
+NGSI-LD entity - queryable, subscribable, with history.</p>
+
+<div class="g-callout">
+<p><b>Built:</b> Modbus TCP; the address in the endpoint and how to read it in <code>channelInfo</code>; change-only
+reporting with a deadband; queued writes; <code>modbusStatus</code> on a device that stops answering.
+<b>Not yet:</b> contiguous registers read in one request, Modbus RTU (serial), a value read on demand through a
+registration, and a way back into the broker for a write's outcome - today it is logged only.</p>
+</div>
+
+<h2 id="modbus">Modbus in short</h2>
+<ul>
+  <li><b>A master polls, a slave answers.</b> Nothing is pushed: a value changes inside the device and nobody knows
+  until someone asks.</li>
+  <li><b>No names, no types.</b> A device exposes four numbered tables. What a register means - "30001-30002 are the
+  grid frequency, a 32-bit float, word order CDAB, in 0.01&nbsp;Hz" - is only in the device's manual.</li>
+  <li><b>Modbus TCP</b> listens on port 502. One TCP gateway often fronts many serial devices, told apart by the
+  <b>unit id</b>.</li>
+  <li><b>Errors</b> are exception responses (illegal function, illegal address, device busy), or silence - a
+  timeout.</li>
+</ul>
+<table class="gtable">
+  <tr><th>Table</th><th>Width</th><th>Access</th><th>Function codes</th></tr>
+  <tr><td><code>coil</code></td><td>1 bit</td><td>read/write</td><td>1 read, 5 write one, 15 write many</td></tr>
+  <tr><td><code>discrete</code> (inputs)</td><td>1 bit</td><td>read only</td><td>2</td></tr>
+  <tr><td><code>holding</code> (registers)</td><td>16 bit</td><td>read/write</td><td>3 read, 6 write one, 16 write many</td></tr>
+  <tr><td><code>input</code> (registers)</td><td>16 bit</td><td>read only</td><td>4</td></tr>
+</table>
+
+<h2 id="mapping">A server, a value, an attribute</h2>
+<p>One <b>bridge</b> is one Modbus server - <code>host:port</code>, a default unit, a poll interval. One
+<b>channel</b> is one value in it, tied to one attribute. The channel's endpoint is the value's <b>address</b>, and
+nothing else:</p>
+<pre>[unit/&lt;n&gt;/]coil|discrete|holding|input/&lt;address&gt;
+
+holding/40001        unit/3/holding/40001        coil/12        input/30010</pre>
+<p>The address is 0-based, or the 1-based <code>1xxxx</code> / <code>3xxxx</code> / <code>4xxxx</code> form of the
+device manuals, recognised by its range. <b>How</b> to read the value is the channel's <code>channelInfo</code> -
+key-value pairs, as NGSI-LD's <code>receiverInfo</code>; changing a scale factor does not make another channel:</p>
+<table class="gtable">
+  <tr><th>Key</th><th>Meaning</th><th>Default</th></tr>
+  <tr><td><code>type</code></td><td><code>bool</code>, <code>int16</code>, <code>uint16</code>, <code>int32</code>, <code>uint32</code>, <code>float32</code>, <code>float64</code></td><td><code>bool</code> for bits, <code>uint16</code> for registers</td></tr>
+  <tr><td><code>order</code></td><td>word and byte order of a multi-register value: <code>ABCD</code>, <code>CDAB</code>, <code>BADC</code>, <code>DCBA</code></td><td><code>ABCD</code></td></tr>
+  <tr><td><code>scale</code>, <code>offset</code></td><td>value = raw &times; scale + offset (inverted on a write)</td><td>1, 0</td></tr>
+  <tr><td><code>poll</code></td><td>the poll period, ms</td><td>the bridge's</td></tr>
+  <tr><td><code>deadband</code></td><td>report only a change larger than this</td><td>0 - any change</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>A mistake is not a default.</b> Keys and values are strings. An unknown key, or a value that does not fit
+(a <code>float32</code> coil), refuses the channel: it shows as <code>dormant</code> in
+<code>GET /ngsi-ld/v1/channels</code>, with the reason.</p>
+</div>
+
+<h2 id="config">Configuration</h2>
+<p>The bridge's member of the <code>--bridgeConfig</code> file; <code>ngsild.topics</code> ties each endpoint to an
+attribute, as for every bridge:</p>
+<pre>{ "modbus": {
+    "server": { "host": "10.0.0.5", "port": 502, "unit": 1, "pollMs": 1000, "timeoutMs": 500 },
+    "ngsild": { "topics": {
+      "holding/0": { "entityId": "urn:Meter:1", "entityType": "Meter", "attribute": "power",
+                     "channelInfo": [ { "key": "type",  "value": "float32" },
+                                      { "key": "order", "value": "CDAB" },
+                                      { "key": "scale", "value": "0.1" } ] },
+      "coil/3":    { "entityId": "urn:Meter:1", "entityType": "Meter", "attribute": "relay" }
+    } } } }</pre>
+<pre>coraine --bridges modbus --bridgeConfig bridges.json</pre>
+<table class="g-opts">
+  <tr><th><code>server</code></th><th>What it is</th></tr>
+  <tr><td>host</td><td>the Modbus server's address</td></tr>
+  <tr><td>port</td><td>default 502</td></tr>
+  <tr><td>unit</td><td>the unit id of an endpoint without <code>unit/&lt;n&gt;/</code> - default 1</td></tr>
+  <tr><td>pollMs</td><td>the poll period of a channel without <code>poll</code> - default 1000</td></tr>
+  <tr><td>timeoutMs</td><td>how long an answer may take - default 500</td></tr>
+</table>
+
+<h2 id="behaviour">How values move</h2>
+<table class="gtable">
+  <tr><td>In - polling</td><td>Modbus pushes nothing, so the plugin polls: one thread per bridge, one request at a
+  time. A value's time is the time its read completed - Modbus has no timestamps.</td></tr>
+  <tr><td>Change only</td><td>A value is reported only when it differs from the last one reported, beyond its
+  <code>deadband</code>. A poll that returns the same 21.5 every second for hours is no write at all - each report
+  is an attribute write, subscription matching, notifications and a history row.</td></tr>
+  <tr><td>Out - writes</td><td>A write of the attribute is encoded (inverse scale, type, order) and queued; the
+  bridge's thread sends it, never the request that changed the attribute - a Modbus write is a network round trip.
+  A coil takes <code>true</code> / <code>false</code>, a register a number; anything else is refused.</td></tr>
+  <tr><td>The device is gone</td><td>On a timeout or an exception the attribute keeps its last value - the last
+  <b>known</b> one - and gets, once, when the state changes:
+  <code>"modbusStatus": { "type": "Property", "value": "timeout" }</code> (or <code>"illegalAddress"</code>, ...).
+  Back to <code>"ok"</code> when a read succeeds again.</td></tr>
+</table>
+
+<h2 id="build">Building the plugin</h2>
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corModbusBridge">corModbusBridge</a>; the
+corLibs umbrella clones and builds it with the rest. It needs nothing beyond libc: Modbus TCP is a socket and a
+seven-byte header, and the client is the plugin's own.</p>
+<pre>make                  <span class="c"># modbus.so, debug (traces compiled in)</span>
+make BUILD=release
+make install          <span class="c"># to /opt/seamware/plugins/bridge (PLUGIN_DIR)</span>
+make contract         <span class="c"># does it still satisfy BridgeDriver.h?</span></pre>
+
+<h2 id="tests">Tests and a demo</h2>
+<p>The functional test is in coraine, <code>bridge_modbus.test</code>, against a Modbus TCP simulator whose registers
+are set and read over HTTP (<code>test/funcTests/tools/ftModbus.py</code>): polling, change-only reporting, writes,
+exceptions and timeouts, deterministic.</p>
+<p>A demo - an OpenPLC water tank on Modbus and an MQTT temperature sensor, one NGSI-LD entity, read and controlled
+over NGSI-LD - is <a href="https://github.com/SEAMWARE/corModbusBridge/blob/main/DEMO.md">DEMO.md</a> in the
+bridge's repository.</p>
+<p class="muted">The full design, with its open questions:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/modbus-bridge.md">doc/modbus-bridge.md</a>. Other bridges:
+<a href="#docs/mqtt-bridge">MQTT</a>, <a href="#docs/dds">DDS and ROS 2</a>.</p>
+</article>

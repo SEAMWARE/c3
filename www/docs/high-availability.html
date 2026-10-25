@@ -1,0 +1,162 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/high-availability.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>High availability</h1>
+<p class="lead">Several coraine instances behind a load balancer, sharing one MongoDB - what it takes, how the
+instances stay in step, and what to check when they disagree.</p>
+
+<h2 id="setup">The setup</h2>
+<p>Three parts, all three needed:</p>
+<ol>
+  <li><b>Two or more coraine instances</b> - pods, containers, hosts.</li>
+  <li><b>A load balancer</b> in front of them. A request may land on any instance; no session affinity is
+  needed.</li>
+  <li><b>MongoDB as a replica set</b>, shared by every instance, through the <code>mongoc</code> plugin.</li>
+</ol>
+<figure class="g-fig">
+<svg viewBox="0 0 760 230" role="img" aria-label="A load balancer spreads requests over three instances; each watches the shared MongoDB replica set with a change stream">
+  <g font-family="sans-serif" font-size="13" fill="currentColor">
+    <rect x="300" y="10" width="160" height="40" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="380" y="35" text-anchor="middle">load balancer</text>
+
+    <rect x="60"  y="90" width="160" height="44" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="140" y="117" text-anchor="middle">coraine 1</text>
+    <rect x="300" y="90" width="160" height="44" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="380" y="117" text-anchor="middle">coraine 2</text>
+    <rect x="540" y="90" width="160" height="44" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="620" y="117" text-anchor="middle">coraine 3</text>
+
+    <rect x="230" y="176" width="300" height="44" rx="8" fill="none" stroke="var(--ok)"/>
+    <text x="380" y="203" text-anchor="middle">MongoDB replica set</text>
+
+    <g stroke="var(--muted)" fill="none" stroke-width="1.5">
+      <path d="M340 50 L150 90"/><path d="M380 50 L380 90"/><path d="M420 50 L610 90"/>
+    </g>
+    <g stroke="var(--ok)" fill="none" stroke-width="1.5" stroke-dasharray="5 4">
+      <path d="M130 134 L270 176"/><path d="M380 134 L380 176"/><path d="M630 134 L490 176"/>
+    </g>
+    <text x="150" y="168" fill="var(--muted)" font-size="11">change stream</text>
+  </g>
+</svg>
+<figcaption>Each instance reads and writes the shared database and is pushed, through its change stream, every
+subscription, registration and @context change. The instances never connect to each other.</figcaption>
+</figure>
+
+<h2 id="why">Why the instances must be kept in step</h2>
+<p>Each instance keeps its subscriptions, registrations and @contexts in RAM, pre-compiled, so that matching an
+update or forwarding a request never costs a database round trip. One created through an instance lands in
+<b>that instance's</b> caches.</p>
+<div class="g-callout warn">
+<p><b>Without <code>--high-availability mongo</code> the failures look intermittent.</b> The other instances never
+learn of the new subscription or registration, and the load balancer spreads the requests: notifications sent by
+some instances and not others, a forwarded request that works on one instance and is a 404 on the next.</p>
+</div>
+<p>With it, every instance watches the shared database with a MongoDB <b>change stream</b> and is pushed each
+change as it is written - no polling, no interval to tune, no peer list, no extra port.</p>
+
+<h2 id="requirements">Requirements</h2>
+<table class="gtable">
+  <tr><td>Database plugin</td><td><code>mongoc</code>. An in-memory store is nobody else's: the broker refuses <code>--high-availability mongo</code> with one</td></tr>
+  <tr><td>MongoDB</td><td>a <b>replica set</b>, 4.0 or later (a change stream over the whole deployment). One node runs the mechanism (<code>mongod --replSet rs0</code>, then <code>rs.initiate()</code> once); real availability needs redundancy in the database too</td></tr>
+  <tr><td>MongoDB privileges</td><td><code>find</code> and <code>changeStream</code> on <b>all</b> databases - <a href="#docs/high-availability/privileges">below</a></td></tr>
+  <tr><td>Temporal history</td><td><code>--troe timescale</code> (one PostgreSQL shared by every instance) or <code>--troe none</code>. A history inside the process (<code>ramDB</code>, <code>corDB</code>) would hold, in each instance, only the writes it served; the broker refuses it with <code>--high-availability mongo</code></td></tr>
+  <tr><td>coraine</td><td>the same version on every instance</td></tr>
+</table>
+<p>The replica set, the credentials and the auth database go in the connection URI:</p>
+<pre>--dbURI "mongodb://&lt;user&gt;:&lt;password&gt;@&lt;host1&gt;,&lt;host2&gt;,&lt;host3&gt;/?replicaSet=rs0&amp;authSource=admin"</pre>
+
+<h3 id="privileges">MongoDB privileges</h3>
+<p>With authentication on, <code>readWrite</code> on coraine's own databases is not enough. Each instance watches
+the <b>whole deployment</b> with one change stream - a tenant is a database of its own, and new tenants appear at
+any time - and MongoDB allows that only to a user with <code>find</code> and <code>changeStream</code> on every
+database. A role with exactly that:</p>
+<pre>use admin
+db.createRole({
+  role:       "coraineHaWatch",
+  privileges: [ { resource: { db: "", collection: "" }, actions: [ "find", "changeStream" ] } ],
+  roles:      []
+})
+db.grantRolesToUser("&lt;the coraine user&gt;", [ { role: "coraineHaWatch", db: "admin" } ])</pre>
+<p class="muted">The built-in <code>readAnyDatabase</code> role covers it too, and grants more than is needed.</p>
+
+<h2 id="enabling">Enabling it</h2>
+<p>Off by default. On <b>every</b> instance, as the option or as its environment variable:</p>
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--high-availability mongo<span class="env">CORAINE_HIGH_AVAILABILITY=mongo</span></td><td>keeps the caches in step through a change stream on the shared MongoDB; short form <code>-ha</code></td></tr>
+</table>
+<p>An instance started with it <b>refuses to start</b> - it does not fall back to running out of step - when the
+database is not a replica set, or the change stream cannot be opened, typically for the
+<a href="#docs/high-availability/privileges">privileges</a>:</p>
+<pre><span class="o">E: ... mongocHaWatchStart: --ha mongo: unable to open the change stream (not authorized on admin to execute command { aggregate: 1, pipeline: [ { $changeStream: { allChangesForCluster: true } } ] ... }). The stream watches the whole deployment ...
+X: ... main: unable to start the HA channel 'mongo'</span></pre>
+<p>On Kubernetes: pods in a crash loop with that message. Grant the role and they start.</p>
+
+<h2 id="how">How it works</h2>
+<ul>
+  <li><b>One change stream per instance</b> covers every tenant, in one thread. It is opened at start-up,
+  <b>before</b> the caches are loaded, and nothing is applied until the load is done - nothing written by another
+  instance in between is missed.</li>
+  <li><b>Each event names the item and the operation</b> - insert, update, delete; the instance reads that one
+  item again and updates its cache. An instance also receives its own changes; applying them again is
+  harmless.</li>
+  <li><b>Adding or removing an instance</b> needs nothing anywhere: a new one loads the caches at start-up and then
+  watches.</li>
+  <li><b>A dropped connection</b> (a brief network loss, a primary failover): the MongoDB driver resumes the stream
+  by itself. If it cannot, the error is logged and the stream reopened 5 seconds later, from that moment - the
+  instance serving meanwhile:
+  <pre><span class="o">E: ... HA: change stream error (...) - restarting the stream in 5 seconds</span></pre></li>
+</ul>
+<div class="g-callout warn">
+<p><b>Changes between the break and the reopen are not applied</b> until the instance restarts.</p>
+</div>
+<div class="g-callout">
+<p><b>Eventual, but pushed.</b> A change reaches the other instances typically milliseconds after it is committed -
+not at once: a client that creates a subscription and at once sends an update through the load balancer may have
+the update handled by an instance that has not applied the subscription yet.</p>
+</div>
+
+<h2 id="history">The temporal history</h2>
+<p>With <code>--troe timescale</code> every instance writes the history of the requests it serves into the one
+shared PostgreSQL, and any instance answers a temporal query with all of it. Nothing of the history is
+synchronised, so nothing is written twice and nothing is lost when an instance goes:</p>
+<ul>
+  <li><b>Schema migrations</b> at start-up hold a PostgreSQL advisory lock - instances starting together upgrade
+  the schema once.</li>
+  <li><b>A tenant's database</b> created by two instances at once is created once; the second
+  <code>CREATE DATABASE</code> is taken as done.</li>
+  <li><b>Instance ids</b> are UUIDs, unique whichever instance creates them.</li>
+</ul>
+<p>What is each instance's own:</p>
+<table class="gtable">
+  <tr><td>The clock</td><td>an instance stamps the history it writes (<code>modifiedAt</code>, <code>createdAt</code>) with its own clock, and the stamps order an attribute's instances and give the Entity its <code>modifiedAt</code>. <b>Keep the clocks synchronised (NTP)</b>: a skew between two instances is a skew in the order of the writes they served</td></tr>
+  <tr><td>When the history is written</td><td>an instance queues a request's history right after the response, and a writer commits it with the others queued meanwhile, in one transaction. An instance that dies between the response and that commit leaves the write in the current state and not in the history - with <code>--troeSync</code> too, which queues it before the response but does not wait for the commit</td></tr>
+  <tr><td>The shared PostgreSQL down</td><td>every instance keeps serving the current state; each holds the history of the writes it serves, up to 8&nbsp;MiB, and loses what does not fit; <code>/ready</code> stays 200. <code>--troeDownExit</code> makes an instance exit instead</td></tr>
+</table>
+
+<h2 id="troubleshooting">Instances that disagree</h2>
+<p>The symptom: MongoDB holds everything, but each instance knows only what was created on it. Clients that list
+subscriptions to reconcile them see different answers depending on which instance replies, and create
+duplicates.</p>
+<ol>
+  <li><b>Is <code>--high-availability mongo</code> set on every instance?</b> Without it there is no
+  synchronisation at all, and this is what that looks like.</li>
+  <li><b>Is the change stream working?</b> Look in every instance's log for <code>HA: change stream error</code>.
+  <code>not authorized ... $changeStream ... allChangesForCluster</code> there means the
+  <a href="#docs/high-availability/privileges">privileges</a> are missing.</li>
+  <li><b>Grant the privileges, then restart the instances</b> - a rolling restart is fine. A running instance
+  retries the stream every 5 seconds and receives changes once the privileges are in place, but changes made
+  before that are not replayed; a restart loads the complete state from MongoDB.</li>
+  <li><b>Check</b>: create a subscription through the load balancer, then ask <b>each instance directly</b> for
+  <code>GET /ngsi-ld/v1/subscriptions/&lt;id&gt;</code>. Every one must answer <code>200</code>.</li>
+  <li><b>Clean up the duplicates</b> made while the instances disagreed - they are real subscriptions, and
+  synchronising does not remove them. <code>GET /ngsi-ld/v1/subscriptions</code> answers from the instance's
+  cache: to see what is stored, look in MongoDB (the <code>subscriptions</code> collection of the tenant's
+  database) or ask each instance after its restart, and <code>DELETE</code> the extras.</li>
+</ol>
+
+<h2 id="not-covered">Not synchronised: Snapshots</h2>
+<p>Each instance loads the Snapshots (NGSI-LD § 5.16) at start-up, but changes to them are not synchronised: a
+Snapshot created through one instance is known to the others only after they restart.</p>
+<p class="muted">Running the instances on Kubernetes: <a href="#docs/kubernetes">Kubernetes</a>.</p>
+</article>

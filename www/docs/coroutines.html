@@ -1,0 +1,96 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/coroutines.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Coroutines</h1>
+<p class="lead">A request that <b>waits</b> - a forward to another broker, an <code>@context</code> download, a
+notification to send - runs as a coroutine of the event loop that read it. Where it would block on a socket it
+hands the socket to the loop and yields; the loop serves every other connection meanwhile and resumes it when the
+socket is ready. One thread, any number of requests waiting at once, no thread switch.</p>
+
+<h2 id="where">Where a request runs</h2>
+<table class="gtable">
+  <tr><th>The request</th><th>Runs</th></tr>
+  <tr><td>cannot wait - the entities family, <code>corDB</code>, everything it needs cached</td><td><b>inline</b>, on the loop that read it - no coroutine</td></tr>
+  <tr><td>can wait, on the built-in HTTP server or the cor:// server</td><td><b>a coroutine</b> of that loop</td></tr>
+  <tr><td>can wait, on libmicrohttpd</td><td>a worker thread</td></tr>
+  <tr><td>any request with <code>mongoc</code>, with TRoE <code>timescale</code>, or a PATCH that waits for a bridge service (<code>?ddsSync</code>)</td><td>a worker thread (HTTP); a thread of its own for the connection (cor://)</td></tr>
+</table>
+<p>The last row's waits are inside a library that knows nothing of the loop - libmongoc, libpq, the bridge's
+condition variable: a coroutine there would stop the loop for the length of the wait. So coraine lets a request be
+a coroutine with <code>corDB</code> and TRoE <code>none</code> or <code>corDB</code>, except for
+<code>?ddsSync</code>.</p>
+<div class="g-callout">
+<p><b>A broker with coroutines</b> is one with the built-in HTTP server (<code>cmake -DCOR_HTTP_SERVER=builtin</code>;
+libmicrohttpd is the default - <a href="#docs/building">Building</a>) or a cor:// listener (<code>--corPort</code>),
+<code>--database corDB</code>, and <code>--troe none</code> or <code>--troe corDB</code>.</p>
+</div>
+
+<h3 id="post-response">After the response</h3>
+<p>The post-response phase - a write's notifications above all - runs the same way: inline when the request left
+nothing that can wait, else as a coroutine with <code>corDB</code>. A pending bridge goal release waits on the
+bridge, and goes to a worker.</p>
+
+<h3 id="cap">The cap</h3>
+<p><b>1024 coroutines per loop.</b> Past it, or with no stack to be had, a request that can wait goes to a worker
+(HTTP), or moves its connection to a thread of its own (cor://, when nothing else of that connection is in flight;
+else it runs on the loop).</p>
+
+<h2 id="waiting">What waits, and how</h2>
+<p>Every wait of the broker's clients goes through one function, as <code>poll()</code> on one descriptor:</p>
+<pre>int corRestWaitFd(int fd, short events, int timeoutMs, short* reventsP);</pre>
+<p>In a coroutine it registers the descriptor with the loop's epoll (one <code>epoll_ctl</code>,
+<code>EPOLLONESHOT</code>), arms the timeout and yields; on a worker or a libmicrohttpd thread it is
+<code>poll()</code>.</p>
+<table class="gtable">
+  <tr><th>Wait</th><th>How it yields</th></tr>
+  <tr><td>HTTP and cor:// clients</td><td>non-blocking sockets; a full send buffer waits for <code>POLLOUT</code></td></tr>
+  <tr><td>TLS</td><td><code>SSL_connect</code>, reads and writes retry on <code>SSL_ERROR_WANT_READ/WRITE</code>; a read checks <code>SSL_pending</code> before it waits</td></tr>
+  <tr><td>connect</td><td>non-blocking, a wait for <code>POLLOUT</code></td></tr>
+  <tr><td>name resolution</td><td>a name that is neither numeric nor <code>localhost</code> is resolved on a thread of its own while the coroutine waits on an eventfd</td></tr>
+  <tr><td>a call that blocks in another library</td><td>run on a thread of its own, the coroutine waiting on an eventfd - notifications to <code>mqtt://</code> and other non-HTTP schemes, sent by a bridge plugin, go this way</td></tr>
+  <tr><td>an <code>@context</code> another request is downloading</td><td>the request yields until it is cached</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>For code that runs in a coroutine.</b> A request's state is reached through one thread-local pointer,
+<code>corRestP</code>, saved before a wait and restored after it. <b>No lock may be held across a wait</b>: a
+coroutine that yielded holding a mutex deadlocks the next coroutine of its thread that wants it - what the clients,
+the notification senders and the registration probe read is pinned, and they wait without a lock.</p>
+</div>
+
+<h2 id="scheduler">The scheduler</h2>
+<p>In corBase, tested on x86-64 and on aarch64 (under QEMU).</p>
+<table class="g-opts">
+  <tr><th>Part</th><th>What it does</th></tr>
+  <tr><td>corCo</td><td>the switch - callee-saved registers and the stack pointer, in assembly, x86-64 and aarch64. A yield and a resume take ~23 ns; a coroutine created, run and finished ~29 ns.</td></tr>
+  <tr><td>stacks</td><td>256 KiB of address space each (<code>MAP_NORESERVE</code> - only the pages a request touches cost memory), a guard page below it - an overflow is a SIGSEGV the crash report names - from a pool per thread</td></tr>
+  <tr><td>corCoLoop</td><td>the waits and timers, on the thread's epoll; a waiting coroutine's event is tagged, so the loop tells it from its own connections</td></tr>
+  <tr><td>corCoLoopPark / Wake</td><td>a coroutine waits until another of its loop wakes it</td></tr>
+  <tr><td>corCoBlocking</td><td>a blocking call on a thread of its own</td></tr>
+</table>
+
+<h2 id="servers">The servers</h2>
+<table class="g-opts">
+  <tr><th>Server</th><th></th></tr>
+  <tr><td>built-in HTTP<span class="env">--httpLoops</span></td><td>event loops on one port; 0, the default, is one per core, at most 4 (the cores the process may run on - its CPU affinity and cgroup quota). Loop 0 accepts every connection and deals them out in turn, so they are spread evenly - the kernel's <code>SO_REUSEPORT</code> hash splits a handful unevenly. A coroutine's response goes out on its loop's thread.</td></tr>
+  <tr><td>cor:// server<span class="env">--corPort</span></td><td>a connection is armed once and multiplexed: the loop reads every frame, starts each request inline or as a coroutine, and queues each response as it finishes</td></tr>
+  <tr><td>cor:// client</td><td>one connection per peer per thread, shared by that thread's requests, any number in flight - a distributed operation has every cor:// forward in flight at once (<a href="#docs/cor-protocol">The cor format and cor://</a>)</td></tr>
+</table>
+
+<h3 id="stop">At a stop</h3>
+<p>The broker drains the workers, then stops the loops. A stopped loop cancels its coroutines' waits: one waiting
+for a socket is resumed with -1 (<code>ECANCELED</code>), a parked one with 0, and every later wait fails at once.
+A request or post-response phase still waiting - a Context Source that does not connect, a notification endpoint
+that does not answer - runs its failure path to its end and frees what it holds, without waiting out its timeout.
+Then the connections still holding a request are closed. A stop takes no longer for it; a request in flight is
+answered as failed, a notification in flight counted as failed.</p>
+
+<h2 id="not-yet">Not coroutines today</h2>
+<ul>
+  <li><code>mongoc</code> requests - the driver blocks; a yielding mongoc stream would change that</li>
+  <li>libmicrohttpd's requests - they wait on a worker thread</li>
+  <li>the cap and the stack size are fixed - no option sets them</li>
+</ul>
+<p class="muted">The numbers - where a request runs on one core, the three-broker chain, the write that notifies:
+<a href="#docs/performance">Performance</a>; the source:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/coroutines.md">doc/coroutines.md</a>.</p>
+</article>

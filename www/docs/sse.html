@@ -1,0 +1,165 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/sse.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Server-Sent Events</h1>
+<p class="lead">A subscription made on its own event stream: one <code>POST</code> creates it, and the response
+stays open with its notifications as events. For a client the broker cannot connect to, that wants neither a
+WebSocket nor a server of its own - nothing but plain HTTP.</p>
+
+<pre>curl -N -H 'Content-Type: application/json' -d '{
+  "type": "Subscription", "entities": [ { "type": "Vehicle" } ],
+  "notification": { "endpoint": { "uri": "urn:ngsi-ld:self" } } }' \
+  http://localhost:1026/ngsi-ld/v1/subscriptions</pre>
+<pre><span class="o">: stream
+
+event: notification
+data: {"id":"urn:ngsi-ld:Notification:...","type":"Notification","subscriptionId":"urn:ngsi-ld:Subscription:...","data":[...]}
+</span></pre>
+<p>The <code>201</code> is a <code>text/event-stream</code> that does not end - the WHATWG HTML standard's
+Server-Sent Events (HTML &sect; 9.2): events made of <code>event:</code> and <code>data:</code> lines with a blank
+line after each, and comments, lines that start with <code>:</code>. A change-driven subscription's events come as
+the entities change, a periodic one's once per interval. The broker never connects to the client; the client's
+other requests are ordinary HTTP requests.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_SSE=OFF</code> leaves it out, and so does
+<code>SUBSCRIPTIONS=OFF</code> (<a href="#docs/building">Building</a>). No plugin to load.</p>
+
+<h2 id="create">Creating it</h2>
+<p><code>POST /ngsi-ld/v1/subscriptions</code> or <code>POST /ngsi-ld/v1/csourceSubscriptions</code> on the broker's
+HTTP port, with <code>notification.endpoint.uri</code> <code>urn:ngsi-ld:self</code>. The endpoint alone decides -
+no header is needed.</p>
+<pre>HTTP/1.1 201 Created
+Location: /ngsi-ld/v1/subscriptions/urn:ngsi-ld:Subscription:...
+Content-Type: text/event-stream
+Cache-Control: no-cache
+X-Accel-Buffering: no
+Transfer-Encoding: chunked</pre>
+<table class="gtable">
+  <tr><th>Refused</th><th>Status</th></tr>
+  <tr><td>an <code>Accept</code> without <code>text/event-stream</code>, <code>text/*</code> or <code>*/*</code> (no <code>Accept</code> is fine)</td><td>406</td></tr>
+  <tr><td>over cor:// - that request has no HTTP response to stream</td><td>400</td></tr>
+  <tr><td><code>--sseStreams</code> streams open already, or the broker stopping</td><td>503</td></tr>
+</table>
+<p>Anything else a subscription is refused for is refused here too, before the stream: the <code>201</code> is the
+stream, an error is an ordinary response. <code>Accept: text/event-stream</code> on a subscription with another
+endpoint is an ordinary create whose <code>201</code> is JSON - an <code>Accept</code> naming only
+<code>text/event-stream</code> is then a 406.</p>
+<table class="g-opts">
+  <tr><th>On the subscription</th><th>What it does</th></tr>
+  <tr><td>endpoint.accept</td><td><code>application/ld+json</code> (the default with this endpoint) puts the <code>@context</code> in each notification's body - an event has no <code>Link</code> header to carry it; the core context when the subscription names none. <code>application/json</code> leaves it out.</td></tr>
+  <tr><td>endpoint.uri</td><td>shown as <code>urn:ngsi-ld:self</code> by <code>GET /subscriptions/{id}</code></td></tr>
+  <tr><td>timesSent, lastNotification, lastSuccess</td><td>move when an event is written on the stream</td></tr>
+</table>
+<div class="g-callout">
+<p><b>A subscription stays on its stream for its whole life.</b> A <code>PATCH</code> that changes the endpoint to
+or from <code>urn:ngsi-ld:self</code> is a 400. Everything else is patched as on any subscription, but a periodic one
+stays periodic and a change-driven one change-driven: adding or removing <code>timeInterval</code> is a 400. The
+interval itself may change.</p>
+</div>
+
+<h2 id="stream">The stream</h2>
+<table class="gtable">
+  <tr><th>When</th><th>On the stream</th></tr>
+  <tr><td>at once</td><td>the comment <code>: stream</code>. A notification made before the stream is open waits for it (up to 1000 of them).</td></tr>
+  <tr><td>per notification</td><td><code>event: notification</code>, one <code>data:</code> line with the Notification (or ContextSourceNotification) as JSON on one line, a blank line. No <code>id:</code> - there is nothing to resume.</td></tr>
+  <tr><td>15 s with nothing sent</td><td>the comment <code>: keep-alive</code>, so that a proxy does not close an idle stream</td></tr>
+</table>
+
+<h3 id="ends">How it ends</h3>
+<ul>
+  <li><b>The client leaves</b> - it closes the connection, or is killed: the broker sees it within a second and
+  deletes the subscription.</li>
+  <li><b>The broker ends it</b> when the subscription is deleted (<code>DELETE</code>), when the client falls 16 MiB
+  behind (the connection is cut, the subscription deleted), and when the broker stops (every stream ended, every
+  subscription on one deleted).</li>
+  <li><b>A killed broker</b> deletes nothing. At its next start every subscription and context source
+  subscription on <code>urn:ngsi-ld:self</code> is deleted, in every tenant - no stream outlives the broker that
+  served it. Not with <code>--high-availability</code>: there, a stream may be another instance's, open.</li>
+</ul>
+
+<h3 id="periodic">Periodic subscriptions</h3>
+<p>A subscription with <code>timeInterval</code> (seconds) is made on its stream the same way, for entities and
+for context sources:</p>
+<ul>
+  <li>the first event within a second of the <code>201</code>, then one per interval - the matching entities as
+  they are then. Two events are never closer than the interval.</li>
+  <li><b>Entities</b>: an interval in which no entity matches sends no event (the keep-alives still come).
+  <b>Context sources</b>: an event every interval, its <code>data</code> empty when no registration matches
+  (&sect; 12.4.7).</li>
+  <li>an entity subscription's counters move when the event is handed to the stream; a context source
+  subscription's when it is written.</li>
+</ul>
+
+<h2 id="browser">In a browser</h2>
+<p><code>EventSource</code> sends a <code>GET</code>, so a page reads the stream with <code>fetch()</code>:</p>
+<pre>const r = await fetch('/ngsi-ld/v1/subscriptions', { method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ type: 'Subscription', entities: [ { type: 'Vehicle' } ],
+                         notification: { endpoint: { uri: 'urn:ngsi-ld:self' } } }) });
+const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+let text = '';
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break;                                 <span class="c">// the stream ended: the subscription is gone</span>
+  text += value;
+  let end;
+  while ((end = text.indexOf('\n\n')) &gt;= 0) {
+    const block = text.slice(0, end); text = text.slice(end + 2);
+    const data = block.split('\n').find(l =&gt; l.startsWith('data: '));
+    if (data) console.log(JSON.parse(data.slice(6)));
+  }
+}</pre>
+<p>With <code>--auth</code> the request carries its token (<code>Authorization</code>) as every request does; the
+stream is the response to the create, so it is authorized as the create is
+(<a href="#docs/authorization">Authorization</a>).</p>
+
+<h2 id="vs-websocket">Server-Sent Events or a WebSocket</h2>
+<p>Both deliver notifications to a client the broker cannot connect to.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th></th><th><a href="#docs/websocket">WebSocket</a> (<code>ws.so</code>)</th><th>Server-Sent Events</th></tr>
+  <tr><td>carries</td><td>the whole API, both ways</td><td>one subscription's notifications, broker to client</td></tr>
+  <tr><td>the connection</td><td><code>GET /ngsi-ld/v1/ws</code>, <code>Upgrade: websocket</code></td><td>the <code>POST</code> that creates the subscription; its <code>201</code> is the stream</td></tr>
+  <tr><td>subscriptions per connection</td><td>any number, made over it</td><td>one - the one the <code>POST</code> made</td></tr>
+  <tr><td>the endpoint</td><td><code>urn:ngsi-ld:self</code>, or the connection's id (both stored as the id)</td><td><code>urn:ngsi-ld:self</code></td></tr>
+  <tr><td>the subscription lives</td><td>as long as the connection</td><td>as long as the stream</td></tr>
+  <tr><td>moving a subscription on or off</td><td>a <code>PATCH</code> of the endpoint</td><td>no - on its stream for life</td></tr>
+  <tr><td>through proxies, HTTP/2</td><td>needs <code>Upgrade</code> passed through; not over HTTP/2</td><td>plain HTTP; a proxy must not buffer it</td></tr>
+  <tr><td>a gateway in front (APISIX)</td><td>sees the upgrade only; each message's <code>Authorization</code> is checked by the broker</td><td>sees the create, an ordinary <code>POST</code> with its own <code>Authorization</code> and <code>NGSILD-Tenant</code></td></tr>
+  <tr><td>the client</td><td>a WebSocket library, the <code>metadata</code>/<code>body</code> envelope, <code>requestId</code>s</td><td>any HTTP client - <code>curl -N</code>, <code>fetch()</code>; an event's <code>data</code> is the Notification</td></tr>
+  <tr><td>binary</td><td>possible (<code>ngsi-ld.cor</code>, not yet)</td><td>no - text only</td></tr>
+  <tr><td>loaded</td><td><code>--transports ws</code></td><td>always, in a build with it</td></tr>
+</table>
+</div>
+<p>The same in both: a client that reconnects creates its subscriptions again and is sent nothing it missed; a
+subscription ends with its connection; a killed broker's are deleted at its next start. c&sup3; uses the
+WebSocket.</p>
+<p>Server-Sent Events is not a transport - a transport carries the API; this carries one subscription's
+notifications. Nor is it a notification binding: there is no address the broker sends to, the notification is
+written on a response that is already open.</p>
+
+<h2 id="deploy">Deployment</h2>
+<div class="g-callout warn">
+<p><b>A buffering proxy holds events back.</b> nginx buffers unless told not to; the broker's
+<code>X-Accel-Buffering: no</code> tells it, per response. APISIX is nginx.</p>
+</div>
+<ul>
+  <li><b>A browser over HTTP/1.1 opens about 6 connections per host</b>, and each open stream is one. A page
+  reading many subscriptions wants HTTP/2 in front, or one subscription for them all.</li>
+  <li><b><code>--sseStreams</code></b> caps the streams open at a time - default 1000; one more is a 503.</li>
+</ul>
+<table class="g-opts">
+  <tr><th>Metric (<code>/admin/metrics</code>)</th><th>Counts</th></tr>
+  <tr><td>ngsild_sse_streams</td><td>the streams there - open, or their <code>201</code> on its way</td></tr>
+  <tr><td>ngsild_sse_events_total</td><td>the notifications written as events</td></tr>
+  <tr><td>ngsild_sse_streams_refused_total</td><td>the 503s: <code>--sseStreams</code> streams there, or the broker stopping</td></tr>
+</table>
+<p class="muted">The metrics need the admin API (<code>--apiPlugins admin</code>) and a build with
+<code>COR_FEATURE_METRICS</code>.</p>
+
+<h2 id="ngsi-ld">NGSI-LD</h2>
+<p>Not in the specification: its bindings are HTTP and MQTT. Server-Sent Events solves what MQTT solves - a broker
+that cannot reach the client - with no second server and no WebSocket. Not yet: Service Executions' notifications
+(<code>POST /services</code>) on a stream.</p>
+<p class="muted">How it is built - corRest's response stream, corNgsild's <code>urn:ngsi-ld:self</code> hook, the
+broker's stream table: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/sse.md">doc/sse.md</a>.</p>
+</article>

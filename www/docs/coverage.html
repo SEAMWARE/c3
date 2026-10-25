@@ -1,0 +1,180 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/coverage.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Test coverage</h1>
+<p class="lead">How much of the broker the functional tests run, what the uncovered part is, and how much of the
+NGSI-LD specification a test asserts - two different questions, each with its own figures.</p>
+
+<h2 id="figures">The figures</h2>
+<p>Measured on 2026-09-03, on <code>577e633</code>, with <code>make coverage</code>. Both suites green: 634/634 on
+mongoc, 584/584 on corDB.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Run</th><th>Tests</th><th>Lines</th><th>Functions</th><th>Branches</th></tr>
+  <tr><td><code>make coverage</code> <span class="muted">(mongoc)</span></td><td>634 / 634 pass</td><td>83.8% <span class="muted">(26347/31448)</span></td><td>97.7% <span class="muted">(1324/1355)</span></td><td><b>65.5%</b> <span class="muted">(18318/27984)</span></td></tr>
+  <tr><td><code>make coverage DB=corDB</code></td><td>584 / 584 pass</td><td>80.1% <span class="muted">(23664/29552)</span></td><td>93.5% <span class="muted">(1229/1314)</span></td><td><b>62.8%</b> <span class="muted">(16908/26936)</span></td></tr>
+</table>
+</div>
+<p>The figure is the <b>broker's</b>: <code>corRest</code>, <code>corNgsild</code> and <code>corJsonld</code> are static
+archives linked whole into the binary, and <code>make coverage</code> instruments them too. Per repository:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Repository</th><th>Lines, mongoc</th><th>Lines, corDB</th><th>Branches, mongoc</th><th>Branches, corDB</th></tr>
+  <tr><td><code>corNgsild</code></td><td><b>85.8%</b></td><td>83.8%</td><td>68.7%</td><td>67.6%</td></tr>
+  <tr><td><code>coraine/src</code></td><td>83.5%</td><td>77.5%</td><td>62.6%</td><td>57.3%</td></tr>
+  <tr><td><code>corJsonld</code></td><td>80.7%</td><td>80.2%</td><td>68.1%</td><td>67.6%</td></tr>
+  <tr><td><code>corRest</code></td><td>76.5%</td><td>76.4%</td><td>60.6%</td><td>60.5%</td></tr>
+</table>
+</div>
+<p><code>corNgsild</code> - most of the NGSI-LD rules, 12k lines - is the best-covered. <code>corRest</code> and
+<code>corJsonld</code> do not know which database is underneath, and barely move between the runs; the difference is
+<code>coraine/src</code> and, through the 56 mongoc-only tests against corDB's 6, <code>corNgsild</code>.</p>
+
+<div class="g-callout">
+<p><b>Branches is the number to move.</b> A line is covered if it ran once: <code>if (a &amp;&amp; b)</code> that only
+ever runs with both true is a covered line and two uncovered branches - and the second case is where untested
+behaviour hides. Hence branch coverage close to twenty points below line coverage.</p>
+</div>
+<div class="g-callout warn">
+<p><b>A rise is not always a new test.</b> Dead code removed raises the percentage too, and the headline cannot say
+which. Read the numerator: if it has not moved, nothing new is tested.</p>
+</div>
+
+<h2 id="two-runs">Two runs, two measurements</h2>
+<p>A test that pins a backend-specific answer - MongoDB's earth model in the fourth digit of a distance, the
+tenant-wide 2dsphere index that keeps a GeoProperty and a Property from sharing an attribute name - declares
+<code>REQUIRE_DB</code> and belongs to one run only: 634 tests on mongoc, 584 on corDB. Each report leaves out the
+database plugin <b>not</b> under test - a corDB run cannot execute a line of <code>mongoc.so</code>.</p>
+<p>So a mongoc run's never-entered functions include ones only the corDB path reaches, and the other way round:
+<code>geoEntityValidate</code> is called only from corDB, <code>attrInstanceOf</code> only when the broker evaluates
+<code>q</code> itself. A zero in one run is a property of the run, until its caller is followed.</p>
+
+<h2 id="environment">The figure depends on the environment</h2>
+<p>The HA cache sync (<code>--high-availability mongo</code>) rides a MongoDB change stream, which reads the oplog -
+a standalone mongod has none. <code>corTestParams.sh</code> probes for a replica set: on one,
+<code>ha_cache_sync.test</code> is in the run; on a standalone it is not, and nothing in the output says so. Against a
+standalone the HA code (108/149 lines, 10/10 functions, 72/114 branches) reads as unexecuted: -0.34&nbsp;pp on lines,
+-0.73&nbsp;pp on functions, -0.26&nbsp;pp on branches.</p>
+<p>The figures above are from a single-node replica set. So are the CI jobs that run the suite (<code>ci.yml</code>'s
+functest matrix, the nightly's coverage and valgrind jobs - <code>quay.io/seamware/mongo-rs</code>,
+<code>mongo:8.2</code> with <code>--replSet</code>). Two jobs stay on a standalone: <b>perf</b>, whose comparison with
+recorded history an oplog would shift, and <b>ETSI</b>, which has no HA test.</p>
+
+<h2 id="uncovered">What the uncovered lines are</h2>
+<p>The 5&nbsp;101 uncovered lines of the mongoc run - 2&nbsp;660 in <code>coraine/src</code>, 1&nbsp;710 in
+<code>corNgsild</code>, 534 in <code>corRest</code>, 197 in <code>corJsonld</code>:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Share</th><th>Lines</th><th>What it is</th></tr>
+  <tr><td><b>63.0%</b></td><td>3216</td><td><b>ordinary code with no failure guard</b></td></tr>
+  <tr><td>26.9%</td><td>1374</td><td>inside a NULL / invalid-argument guard</td></tr>
+  <tr><td>5.3%</td><td>268</td><td>inside 31 functions the suite never enters</td></tr>
+  <tr><td>2.6%</td><td>132</td><td>guarded by a database / driver failure</td></tr>
+  <tr><td>1.3%</td><td>64</td><td>the NULL-driver-method - 501/422 convention</td></tr>
+  <tr><td>0.5%</td><td>25</td><td>defensive paths - <code>COR_X</code>, <code>default:</code> on an exhaustive switch</td></tr>
+  <tr><td>0.2%</td><td>12</td><td><code>pthread_create</code> failing, a short <code>fread</code>, an allocator returning NULL</td></tr>
+  <tr><td>0.2%</td><td>10</td><td>network / socket failure</td></tr>
+</table>
+</div>
+<p>What needs <b>fault injection</b> - a database failing on demand, a socket dying mid-write, an allocator
+returning NULL - is 154 lines, about 3&nbsp;% of it. The largest group is ordinary behaviour without a test: the
+<code>success</code>/<code>errors</code> of a batch operation that half works (64 lines), <code>idPattern</code> across
+subscription validation, CSR notification and distributed-operation matching (23), the @context cache's LRU eviction
+and its expiry sweep (14 and 10), <code>$minDistance</code> (4), <code>expiresAt</code> on a Context-Source subscription (4).
+The files with the most of it:</p>
+<table class="gtable">
+  <tr><th>File</th><th>Uncovered</th><th>Covered</th></tr>
+  <tr><td><code>corRest/corRestClientMulti.c</code></td><td>187</td><td>58.9%</td></tr>
+  <tr><td><code>mongoc/mongocEntityQuery.c</code></td><td>172</td><td>73.9%</td></tr>
+  <tr><td><code>corRest/corRestClient.c</code></td><td>122</td><td>69.0%</td></tr>
+  <tr><td><code>corNgsild/ldEntityMatch.c</code></td><td>120</td><td>64.6%</td></tr>
+</table>
+<p><code>mongocEntityQuery.c</code> builds the database pushdown of the query predicates and
+<code>ldEntityMatch.c</code> evaluates them in the broker - two implementations of each that must agree.</p>
+
+<h3 id="never-entered">The 31 functions never entered</h3>
+<table class="gtable">
+  <tr><th>Lines</th><th>Functions</th><th>What they are</th></tr>
+  <tr><td>125</td><td>18</td><td>shutdown and cleanup - they run as the process goes away, where a test reads nothing</td></tr>
+  <tr><td>51</td><td>5</td><td><code>ringSelfIntersects</code> and its helpers, parked on purpose - kept for a strict-validation mode</td></tr>
+  <tr><td>42</td><td>1</td><td><code>httpEndpointDetect</code>, start-up detection of the broker's own reachable endpoint</td></tr>
+  <tr><td>41</td><td>3</td><td>untested behaviour - of which one real gap: <code>corRestClientResponseHeader</code>, a 3xx with a <code>Location</code> header from a Context Source</td></tr>
+  <tr><td>9</td><td>4</td><td>null-object defaults</td></tr>
+</table>
+<p>The corDB run has 85 never-entered functions and 1&nbsp;282 lines: the 56 mongoc-only tests and the HA test.</p>
+<p class="muted">The never-entered bucket comes from the gcov JSON. The others are classified by machine - an uncovered
+line goes to the nearest enclosing guard by indentation - so the NULL / invalid-argument share is an upper bound and
+"ordinary code" a lower one.</p>
+
+<h2 id="reproduce">Reproducing it</h2>
+<pre>make coverage                <span class="c"># mongoc  - coverage-mongoc/index.html</span>
+make coverage DB=corDB       <span class="c"># corDB   - coverage-corDB/index.html</span>
+make coverage-etsi           <span class="c"># the ETSI test suite - coverage-etsi/index.html</span></pre>
+<p>The ETSI target instruments the broker, the NGSI-LD libraries and the mongoc and timescale plugins. Each of these
+gives a wrong number when it is missed:</p>
+<ol>
+  <li><b>The coverage tree is built from scratch</b> - a <code>.gcno</code> of a renamed or deleted source otherwise
+  reports a vanished file as unexecuted.</li>
+  <li><b><code>SEAMWARE_PLUGIN_DIR</code> is exported beside <code>COR_PLUGIN_DIR</code></b> - without it a test's
+  <code>--apiPlugins admin</code> loads the installed, uninstrumented <code>admin.so</code>, and the admin plugin reads 0&nbsp;%.</li>
+  <li><b>gcovr &gt;= 8.3 with <code>--gcov-ignore-parse-errors=negative_hits.warn_once_per_file</code></b> - gcov
+  can report a negative hit count in a threaded binary (GCC bug 68080); without the flag gcovr drops the whole file
+  from the report and exits 0.</li>
+  <li><b>The libraries are instrumented, and the root is the sibling directory</b> - otherwise they link in without
+  counters and leave both sides of the fraction.</li>
+  <li><b>The flags go in <code>EXTRA_CFLAGS</code>, never <code>DFLAGS</code></b> - <code>DFLAGS</code> on the command
+  line replaces a library's own defines; <code>EXTRA_CFLAGS</code> is appended last.</li>
+  <li><b>The mongod is a replica set</b> - a single node is enough: <code>mongod --replSet rs0</code>, then
+  <code>rs.initiate()</code> once.</li>
+</ol>
+<div class="g-callout warn">
+<p><b>The libraries stay instrumented afterwards.</b> <code>make libs-rebuild</code> takes them back; <code>make libs</code>
+does not - it is incremental, and a change of compiler flags is invisible to it.</p>
+</div>
+
+<h2 id="spec">Coverage of the specification</h2>
+<p>A different question: which statements of ETSI TS 104-175 does a test <b>assert</b>? Every statement was checked
+against the functional suite (70 spec units, with a <code>make coverage</code> baseline). An unasserted statement is
+behaviour no test pins down - not behaviour the broker fails; most of them work.</p>
+<table class="gtable">
+  <tr><td>spec statements</td><td><b>2&nbsp;314</b></td></tr>
+  <tr><td>asserted by a test</td><td>1&nbsp;051</td></tr>
+  <tr><td>partially asserted</td><td>373</td></tr>
+  <tr><td>unasserted</td><td>890 - of which 245 high-priority</td></tr>
+</table>
+<p>By area, the most unasserted first (statements / asserted / partial / unasserted):</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Area</th><th>Statements</th><th>Asserted</th><th>Partial</th><th>Unasserted</th></tr>
+  <tr><td>entity-attr-CRUD</td><td>357</td><td>150</td><td>54</td><td>153</td></tr>
+  <tr><td>temporal</td><td>274</td><td>90</td><td>39</td><td>145</td></tr>
+  <tr><td>entity-maps</td><td>160</td><td>22</td><td>45</td><td>93</td></tr>
+  <tr><td>consume</td><td>172</td><td>90</td><td>16</td><td>66</td></tr>
+  <tr><td>discovery</td><td>161</td><td>77</td><td>21</td><td>63</td></tr>
+  <tr><td>batch</td><td>195</td><td>101</td><td>35</td><td>59</td></tr>
+  <tr><td>subscription</td><td>187</td><td>98</td><td>31</td><td>58</td></tr>
+  <tr><td>registration</td><td>147</td><td>76</td><td>18</td><td>53</td></tr>
+  <tr><td>distops</td><td>136</td><td>60</td><td>32</td><td>44</td></tr>
+  <tr><td>snapshots</td><td>116</td><td>55</td><td>18</td><td>43</td></tr>
+  <tr><td>context</td><td>71</td><td>36</td><td>13</td><td>22</td></tr>
+  <tr><td>ordering</td><td>28</td><td>5</td><td>5</td><td>18</td></tr>
+  <tr><td>query-filter</td><td>90</td><td>59</td><td>17</td><td>14</td></tr>
+  <tr><td>pagination</td><td>44</td><td>30</td><td>4</td><td>10</td></tr>
+  <tr><td>multi-attr-datasetId</td><td>40</td><td>28</td><td>2</td><td>10</td></tr>
+  <tr><td>query-projection</td><td>21</td><td>12</td><td>1</td><td>8</td></tr>
+  <tr><td>local-scope</td><td>20</td><td>9</td><td>3</td><td>8</td></tr>
+  <tr><td>common-behaviour</td><td>28</td><td>15</td><td>6</td><td>7</td></tr>
+  <tr><td>json-ld</td><td>30</td><td>16</td><td>8</td><td>6</td></tr>
+  <tr><td>counting</td><td>17</td><td>9</td><td>3</td><td>5</td></tr>
+  <tr><td>errors</td><td>20</td><td>13</td><td>2</td><td>5</td></tr>
+</table>
+</div>
+<p>Every gap, by priority and area, each naming the test that is missing:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/spec-coverage-gaps.md">doc/spec-coverage-gaps.md</a>.</p>
+
+<h2 id="more">Further</h2>
+<ul>
+  <li>The full text: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/coverage.md">doc/coverage.md</a>.</li>
+  <li>Running the suite and writing a test: <a href="#docs/testing">Testing</a>.</li>
+</ul>
+</article>

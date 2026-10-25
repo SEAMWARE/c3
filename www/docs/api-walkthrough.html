@@ -1,0 +1,107 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/api-walkthrough.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide steps">
+<h1>API walkthrough</h1>
+<p class="lead">An entity created, read, queried, changed, watched and deleted - six requests, on a broker that
+needs no other service.</p>
+
+<pre>coraine --database corDB --troe none --apiPlugins admin -pp 2</pre>
+<p>corDB keeps the entities in the broker's own memory, <code>--troe none</code> keeps no history,
+<code>-pp 2</code> indents the JSON it answers with. The examples use port 1026 and <code>curl</code>; the API is
+under <code>/ngsi-ld/v1</code>.</p>
+
+<h2 id="create"><span class="g-n">1</span>Create an entity</h2>
+<pre>curl -X POST http://localhost:1026/ngsi-ld/v1/entities \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "id":       "urn:ngsi-ld:Vehicle:A100",
+        "type":     "Vehicle",
+        "brand":    { "type": "Property",     "value": "Mercedes" },
+        "speed":    { "type": "Property",     "value": 80, "observedAt": "2026-08-20T10:00:00Z" },
+        "isParked": { "type": "Relationship", "object": "urn:ngsi-ld:OffStreetParking:P1" }
+      }'</pre>
+<p><code>201 Created</code>, and a <code>Location</code> header naming the entity. With a <code>Content-Type</code>
+of <code>application/json</code> the <code>@context</code> is the one in the <code>Link</code> header - without
+one, the NGSI-LD core context.</p>
+
+<h2 id="retrieve"><span class="g-n">2</span>Retrieve it</h2>
+<pre>curl http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100</pre>
+<p>Three representations, chosen with <code>?format=</code>:</p>
+<table class="gtable">
+  <tr><th><code>format</code></th><th>An attribute is</th></tr>
+  <tr><td><code>normalized</code> <span class="muted">(the default)</span></td><td>its full object - <code>{ "type": "Property", "value": 80, "observedAt": ... }</code></td></tr>
+  <tr><td><code>concise</code></td><td>the same, without what can be inferred - <code>"speed": 80</code> when nothing else is there</td></tr>
+  <tr><td><code>keyValues</code></td><td>its value only</td></tr>
+</table>
+
+<h2 id="query"><span class="g-n">3</span>Query</h2>
+<pre><span class="c"># by type</span>
+curl 'http://localhost:1026/ngsi-ld/v1/entities?type=Vehicle'
+
+<span class="c"># by the values of an attribute (q, § 4.9)</span>
+curl 'http://localhost:1026/ngsi-ld/v1/entities?type=Vehicle&amp;q=speed>50'
+
+<span class="c"># some of the attributes, and how many entities there are in all</span>
+curl 'http://localhost:1026/ngsi-ld/v1/entities?type=Vehicle&amp;attrs=speed&amp;count=true'</pre>
+<p><code>count=true</code> puts the total in the <code>NGSILD-Results-Count</code> header of the response. A page is
+<code>limit</code> and <code>offset</code>; the <code>Link</code> headers point to the next and the previous
+one. A <code>q</code> on an attribute the deployment queries often wants an index -
+<a href="#docs/database-indexes">Database indexes</a>.</p>
+
+<h2 id="update"><span class="g-n">4</span>Update</h2>
+<pre><span class="c"># attributes added, or overwritten</span>
+curl -X POST http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100/attrs \
+  -H 'Content-Type: application/json' \
+  -d '{ "colour": { "type": "Property", "value": "black" } }'
+
+<span class="c"># the entity merge-patched (§ 5.6.16)</span>
+curl -X PATCH http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100 \
+  -H 'Content-Type: application/json' \
+  -d '{ "speed": { "type": "Property", "value": 95 } }'
+
+<span class="c"># one attribute</span>
+curl -X PATCH http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100/attrs/speed \
+  -H 'Content-Type: application/json' \
+  -d '{ "type": "Property", "value": 100 }'</pre>
+
+<h2 id="subscribe"><span class="g-n">5</span>Subscribe</h2>
+<p>A subscription asks for a notification each time a matching entity changes:</p>
+<pre>curl -X POST http://localhost:1026/ngsi-ld/v1/subscriptions \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "id":   "urn:ngsi-ld:Subscription:S1",
+        "type": "Subscription",
+        "entities": [ { "type": "Vehicle" } ],
+        "watchedAttributes": [ "speed" ],
+        "q": "speed>90",
+        "notification": {
+          "attributes": [ "speed", "brand" ],
+          "format": "keyValues",
+          "endpoint": { "uri": "http://localhost:9977/notify", "accept": "application/json" }
+        }
+      }'</pre>
+<p>Anything with an HTTP endpoint receives them. An MQTT endpoint (<code>mqtt://host:port/topic</code>,
+<code>mqtts://...</code>) works the same way with the MQTT bridge loaded - <code>--bridges mqtt</code>; without it
+such a subscription is refused. The subscription itself is read, patched and deleted at
+<code>/ngsi-ld/v1/subscriptions/{id}</code>.</p>
+
+<h2 id="delete"><span class="g-n">6</span>Delete</h2>
+<pre>curl -X DELETE http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100</pre>
+
+<h2 id="next">Further</h2>
+<ul>
+  <li><b>Distributed operations</b> - another broker or Context Source registered as the source of some
+  entities, and the broker forwards to it: <code>--distributed</code>, and
+  <code>/ngsi-ld/v1/csourceRegistrations</code> (the Registry API works without the option).</li>
+  <li><b>The history</b> - with a temporal plugin (<code>--troe corDB</code> inside the corDB store, <code>--troe timescale</code> in PostgreSQL)
+  every attribute's history is queried under <code>/ngsi-ld/v1/temporal/entities</code>.</li>
+  <li><b>The whole API</b> - coraine implements ETSI GS CIM 009 v1.9.1; the specification is the reference.</li>
+</ul>
+<div class="g-callout">
+<p><b>The history is written after the response.</b> A temporal write is history, not state the caller waits for,
+so a request does not pay for it - and a <code>201</code> does not mean the history row can be read yet: an entity
+created and its temporal representation read at once may not show it. <code>--troeSync</code> gives
+read-your-writes: the history is handed over before the response (handed over, not committed - nothing waits for
+the database), and a temporal read waits for what was handed over before it. Writes pay 1-6 % for it.</p>
+</div>
+</article>

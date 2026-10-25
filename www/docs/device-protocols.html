@@ -1,0 +1,112 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/device-protocols.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Speaking to devices directly</h1>
+<p class="lead">A FIWARE deployment normally has two tiers: devices speak their own protocols to an IoT Agent, the
+agent translates to NGSI-LD and forwards to a context broker. coraine can do the device side itself, through its
+bridge plugins - which makes the tiers a build and configuration choice, not an architecture.</p>
+
+<div class="g-callout">
+<p><b>Built:</b> the bridges this rests on - <a href="#docs/dds">DDS and ROS 2</a>,
+<a href="#docs/mqtt-bridge">MQTT topics</a>, <a href="#docs/modbus-bridge">Modbus TCP registers</a>.
+<b>Not built:</b> the <i>cor-agent</i> edge build, released bridges for the other device protocols (LWM2M/CoAP,
+OPC-UA, LoRaWAN), and a registration whose endpoint names a bridge (a value read on demand). Tracked in the
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md">roadmap</a>. Prototype bridges for each FIWARE IoT Agent's protocol are listed in
+<a href="#docs/iot-agents/bridges">FIWARE IoT Agents</a>.</p>
+</div>
+
+<h2 id="shapes">Three shapes, one broker</h2>
+<table class="gtable">
+  <tr><th>Shape</th><th>What runs</th><th>Fits</th></tr>
+  <tr><td><b>Agent + broker</b></td><td>a small broker build with the device bridges at the edge; a full broker
+  centrally, with no device protocol compiled in</td><td>many sites, many devices, agents near them</td></tr>
+  <tr><td><b>One broker, both jobs</b></td><td>one broker with the device bridges and the full NGSI-LD API</td>
+  <td>a small installation - FIWARE@Home on a Raspberry Pi: one process, the devices in the flat, no tier to
+  operate</td></tr>
+  <tr><td><b>Broker only</b></td><td>no device bridge compiled in</td><td>a cloud broker fed by agents, or by other
+  brokers</td></tr>
+</table>
+<p>A deployment that starts with one broker and grows splits the tiers by changing how it is built and where the
+pieces run - not by changing products. <b>cor-agent</b> is the name of the first shape's edge build: this broker,
+compiled down by its per-feature switches and shipped as its own image - a build configuration, not a separate
+codebase.</p>
+
+<h2 id="bridges">A device is a foreign endpoint</h2>
+<p>A DDS topic carrying a robot's pose and an MQTT topic carrying a thermostat's temperature are the same problem:
+something that does not speak NGSI-LD holds a value that belongs in an attribute. Device protocols use the bridge
+model every bridge uses:</p>
+<ul>
+  <li>A <b>bridge</b> is a transport instance - the MQTT connection, the CoAP server, the DDS participant. Few, fixed
+  at start-up.</li>
+  <li>A <b>channel</b> ties one foreign endpoint to one entity attribute, with a direction and a retention
+  policy.</li>
+</ul>
+<p>"North" and "south" say where a deployment puts things; they are not two mechanisms.</p>
+
+<h2 id="flow-delegation">Flow or delegation</h2>
+<p>A device's value reaches the broker in one of two ways, and the specification names both - ETSI TS 104 175,
+Annex G, <i>Suggested actuation workflows</i>:</p>
+<table class="gtable">
+  <tr><th>The value...</th><th>Modelled as</th><th>Annex G's workflow</th></tr>
+  <tr><td>flows through the broker - pushed by the device, or pushed to it</td><td>a <b>channel</b></td><td>subscription / notification (§ G.4.2, § G.5)</td></tr>
+  <tr><td>lives at the device or its adapter, fetched when read</td><td>a <b>registration</b> whose endpoint names a bridge scheme</td><td>forwarding (§ G.4.3, § G.6)</td></tr>
+</table>
+<p><b>Lazy attributes</b> are why the second exists. A device's battery level is read when someone asks, because
+polling it drains what is measured: the broker holds nothing and fetches on demand. Over the push model the same
+read is a notification to the adapter, a write back and the client's <code>GET</code> waiting on both; forwarding is
+one hop. One protocol often wants both - OPC-UA monitored items push and its reads pull; LWM2M observes and reads -
+so the choice is per attribute, not per protocol.</p>
+<p>Annex G is informative: a workflow, not a mechanism of the API. For commands that mechanism is <b>Service
+Execution</b> (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/service-execution.md">doc/service-execution.md</a>):
+a command is a service of the device's entity, and the bridge plugin its executor. Writing an attribute stays a
+state change that a channel carries.</p>
+<p><b>Device provisioning</b> - registering a device and mapping its readings to attributes, in bulk, from templates,
+with service groups and keys - is a layer over channels and Service Registrations: a device's measures become a
+DataChannel, each command a Service Registration (designs:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/iot-agent-measures.md">IoT Agent measures</a>,
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/iot-agent-executor.md">IoT Agents as Service Executors</a>).</p>
+
+<h2 id="axes">Transport and payload are two axes</h2>
+<p>FIWARE's agent library configures device communications <i>"regardless of the payload, syntax or transport
+protocol used"</i>. Split the same way, the plugins are a sum, not a product:</p>
+<table class="gtable">
+  <tr><th>Transports</th><th>Payload codecs</th></tr>
+  <tr><td>HTTP, MQTT, AMQP, CoAP, Kafka, DDS</td><td>JSON, UltraLight 2.0, LWM2M objects, ISOXML/ADAPT, CSV</td></tr>
+</table>
+<p>UltraLight over MQTT and UltraLight over HTTP are one codec and two transports, not two agents. LoRaWAN and Sigfox
+carry network semantics of their own, not just a payload, and stay whole.</p>
+
+<h2 id="more">What a broker at the edge adds</h2>
+<p>An IoT Agent is a protocol adapter: it provisions devices, forwards their measurements to a broker, and answers
+the broker as a registered context provider for lazy attributes and commands. It serves no subscriptions or
+registrations of its own, hosts no context, answers no queries and has no temporal API - it is paired with a broker
+to be useful. A broker doing the same job also brings:</p>
+<ul>
+  <li><b>Subscriptions at the edge</b> - a rule reacting to a sensor runs where the sensor is, with no round trip,
+  and keeps working while the uplink is down.</li>
+  <li><b>Context hosted locally</b> - device state queried on the spot with the whole query language: <code>q</code>,
+  geo-queries, <code>attrs</code>, projections.</li>
+  <li><b>Registrations both ways</b> - the edge broker as a context source for a central one, or federated with
+  peers.</li>
+  <li><b>Temporal history at the edge</b>, through the same history plugins.</li>
+  <li><b>Snapshots, tenants, JSON-LD <code>@context</code> handling</b> - at the point the data arrives.</li>
+</ul>
+<p>The cost is size and operational surface: an agent is a smaller thing to run. The per-feature compilation is
+what keeps an edge build to what its deployment turned on.</p>
+
+<h2 id="parity">The parity bar</h2>
+<p>Using the broker instead of an agent is meant never to lose function. The agents to match:</p>
+<table class="gtable">
+  <tr><th>Agent</th><th>Carries</th></tr>
+  <tr><td>IoT Agent for JSON</td><td>JSON payloads over HTTP/MQTT</td></tr>
+  <tr><td>IoT Agent for UltraLight</td><td>UltraLight 2.0 over HTTP/MQTT</td></tr>
+  <tr><td>IoT Agent for LWM2M</td><td>Lightweight M2M over CoAP</td></tr>
+  <tr><td>IoT Agent for OPC-UA</td><td>OPC Unified Architecture</td></tr>
+  <tr><td>IoT Agent for LoRaWAN</td><td>LoRaWAN networks</td></tr>
+  <tr><td>IoT Agent for Sigfox</td><td>Sigfox networks</td></tr>
+  <tr><td>IoT Agent for ISOXML</td><td>ISOXML/ADAPT, agricultural machinery, over HTTP</td></tr>
+</table>
+<p>Beyond them: DDS, MQTT as a transport in its own right rather than only under a payload agent, CSV, and Kafka.
+What each agent does - provisioning, active and lazy attributes, commands and their status lifecycle - is in
+<a href="#docs/iot-agents">FIWARE IoT Agents</a>.</p>
+</article>

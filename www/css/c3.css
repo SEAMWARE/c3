@@ -857,3 +857,26 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 12px; }
 .gtable th, .gtable td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
 .gtable td:first-child { white-space: nowrap; }
 @media (max-width: 600px) { .gtable td:first-child { white-space: normal; } }
+
+/* Guides - the parts every guide shares (docs/*.html): a lead, numbered sections, callouts, link cards, options */
+.guide .lead { font-size: 18px; line-height: 1.55; color: var(--text-2); max-width: 760px; }
+.guide.steps h2 { display: flex; align-items: center; gap: 12px; margin: 36px 0 10px; padding-top: 18px; border-top: 1px solid var(--line-soft); font-family: var(--title); font-size: 22px; font-weight: 400; }
+.g-n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 14px; font-weight: 600; flex: none; }
+.g-callout { margin: 16px 0; padding: 12px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 8px; background: var(--panel-2); line-height: 1.55; }
+.g-callout.warn { border-left-color: var(--warn); }
+.g-callout > :first-child { margin-top: 0; }
+.g-callout > :last-child { margin-bottom: 0; }
+.g-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 14px 0; padding: 0; list-style: none; }
+.g-cards a { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-deep); text-decoration: none; color: var(--text); }
+.g-cards a:hover { border-color: var(--accent-2); }
+.g-cards a span { font-size: 14px; line-height: 1.45; color: var(--muted); }
+.g-opts { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+.g-opts th, .g-opts td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); line-height: 1.45; }
+.g-opts td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 13px; color: var(--accent-soft); }
+.g-opts .env { display: block; color: var(--dim); font-size: 12px; }
+.g-scroll { overflow-x: auto; }
+.guide pre .o { color: var(--ok); }
+.guide figure.g-fig { margin: 16px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); }
+.guide figure.g-fig svg { display: block; width: 100%; height: auto; }
+.guide figure.g-fig figcaption { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--dim); }
+@media (max-width: 600px) { .g-opts td:first-child { white-space: normal; } }

@@ -1,0 +1,170 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/iot-agents.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>FIWARE IoT Agents</h1>
+<p class="lead">What FIWARE's IoT Agents are and how they work - provisioning, the four attribute kinds, commands -
+and where each of their concepts sits in coraine's model. The background to
+<a href="#docs/device-protocols">Speaking to devices directly</a>.</p>
+
+<h2 id="what">What an IoT Agent is</h2>
+<p>A translator between a device protocol and NGSI. Devices speak MQTT with UltraLight, CoAP with LWM2M, OPC-UA,
+LoRaWAN, Sigfox; the agent turns that into entity updates against a context broker, and broker-side writes back
+into device commands. Nearly all agents are built on <b><code>iotagent-node-lib</code></b>, a library: it supplies the
+provisioning API, the device and group model, the northbound NGSI interactions and the command machinery; each agent
+adds a southbound binding and a payload codec.</p>
+<div class="g-callout">
+<p><b>An agent is a southbound adapter, not an NGSI endpoint.</b> It provisions devices and config groups over its
+own REST API, forwards measurements to a broker (<code>updateContext</code>), and answers broker-initiated requests
+as a <b>registered Context Provider</b> for lazy attributes and commands. It serves no subscriptions or registrations
+of its own, hosts no context, answers no queries, has no temporal API. It <i>uses</i> subscriptions and
+registrations; it does not <i>serve</i> them - without a broker behind it, it does nothing.</p>
+</div>
+
+<h2 id="annex-g">The specification's account: Annex G</h2>
+<p>ETSI TS 104 175, Annex G, <i>Suggested actuation workflows</i> (informative), calls the agent a <b>Context
+Adapter</b> and gives two models (§ G.4.1):</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Model</th><th>Clauses</th><th>The adapter acts as</th><th>State</th><th>Delivery</th></tr>
+  <tr><td>Subscription / notification</td><td>§ G.4.2, § G.5</td><td>"a Context Source as well as a Context Consumer"</td><td>none of its own</td><td>subscriptions carry command requests to it; it writes the results back</td></tr>
+  <tr><td>Forwarding</td><td>§ G.4.3, § G.6</td><td>"a Context Storage as well as a Context Producer"</td><td><b>its own</b>, possibly on the device</td><td>it registers "I am responsible for command property X"; the broker forwards</td></tr>
+</table>
+</div>
+<p>Forwarding is what makes <b>lazy attributes</b> possible: an attribute read only when someone asks, because
+reading it costs something. Annex G describes workflows built from existing primitives, not a mechanism of the API -
+the gap NGSI-LD <b>Service Execution</b> closes.</p>
+
+<h2 id="provisioning">Provisioning</h2>
+<p>Two resources, both under <code>/iot</code>, both outside NGSI:</p>
+<table class="gtable">
+  <tr><th>Resource</th><th>Endpoints</th></tr>
+  <tr><td>Config groups <span class="muted">(formerly service groups)</span></td><td><code>GET</code> / <code>POST</code> / <code>PUT</code> / <code>DELETE /iot/groups</code></td></tr>
+  <tr><td>Devices</td><td><code>GET</code> / <code>POST /iot/devices</code>; <code>GET</code> / <code>PUT</code> / <code>DELETE /iot/devices/:deviceId</code>; <code>POST /iot/op/delete</code> for batch removal</td></tr>
+</table>
+<ul>
+  <li>A config group is identified by an <b><code>apikey</code> + <code>resource</code></b> pair, unique. The
+  <code>apikey</code> authenticates requests from devices and says which group they belong to.</li>
+  <li>A group supplies defaults; a device may override them.</li>
+  <li>Multi-tenancy is the <code>FIWARE-Service</code> and <code>FIWARE-ServicePath</code> headers.</li>
+</ul>
+<p>This is a device registry - the one concept with no counterpart in a broker.</p>
+
+<h2 id="kinds">Four attribute kinds</h2>
+<table class="gtable">
+  <tr><th>Kind</th><th>Provisioning key</th><th>Meaning</th></tr>
+  <tr><td><b>Active</b></td><td><code>attributes</code></td><td>measures <b>pushed</b> by the device; the agent sends them to the broker</td></tr>
+  <tr><td><b>Lazy</b></td><td><code>lazy</code></td><td>passive measures <b>pulled</b> on demand - the agent is the registered Context Provider, the broker forwards the read</td></tr>
+  <tr><td><b>Static</b></td><td><code>static_attributes</code></td><td>fixed values held in the broker, never updated by the device</td></tr>
+  <tr><td><b>Commands</b></td><td><code>commands</code></td><td>actions invoked on the device: the broker writes the attribute, the agent delivers it southbound</td></tr>
+</table>
+<p>Active against lazy is flow against delegation in the agents' own words: active attributes flow through and the
+broker holds them; lazy ones live at the device and are fetched - the battery level, where polling drains what is
+measured.</p>
+
+<h2 id="commands">Commands</h2>
+<p>Writing a command attribute triggers its delivery. The agent keeps two attributes per command, named after it:</p>
+<table class="gtable">
+  <tr><th>Attribute</th><th>NGSI type</th><th>Carries</th></tr>
+  <tr><td><code>&lt;cmd&gt;_status</code></td><td><code>commandStatus</code></td><td>where the command has got to</td></tr>
+  <tr><td><code>&lt;cmd&gt;_info</code></td><td><code>commandResult</code></td><td>the result - information retrieved, or the outcome of an actuation</td></tr>
+</table>
+<p>The status values, in the library's own words (quoted exactly, typos included):</p>
+<table class="gtable">
+  <tr><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>UNKNOWN</code></td><td>"This is the initial value."</td></tr>
+  <tr><td><code>PENDING</code></td><td>"In a PUSH command means that command has been sent to device but not device has still not respond. In a PULL command means that command has been stored and device still has no ask for it."</td></tr>
+  <tr><td><code>DELIVERED</code></td><td>"The command has been delivered to phisical device."</td></tr>
+  <tr><td><code>OK</code></td><td>"The command has been delivered and device has respond."</td></tr>
+  <tr><td><code>ERROR</code></td><td>"There is a kind of error."</td></tr>
+  <tr><td><code>EXPIRED</code></td><td>"This meens that pull command has been expired without be delivered to device according with <code>pollingExpiration</code> time defined by config."</td></tr>
+</table>
+<p><b>PUSH or PULL</b> is whether the agent can reach the device or waits for the device to call in. A sleeping,
+battery-powered or NAT'd device polls: the command is stored until it asks, and expires if it never does. With
+<code>cmdMode: notification</code> the entity is created at provisioning with its command attributes
+<code>null</code> - not yet triggered.</p>
+
+<h2 id="landscape">The agents</h2>
+<table class="gtable">
+  <tr><th>Agent</th><th>Carries</th></tr>
+  <tr><td>IoT Agent for JSON</td><td>JSON payloads over HTTP/MQTT</td></tr>
+  <tr><td>IoT Agent for UltraLight</td><td>UltraLight 2.0 over HTTP/MQTT</td></tr>
+  <tr><td>IoT Agent for LWM2M</td><td>Lightweight M2M over CoAP</td></tr>
+  <tr><td>IoT Agent for OPC-UA</td><td>OPC Unified Architecture</td></tr>
+  <tr><td>IoT Agent for LoRaWAN</td><td>LoRaWAN networks</td></tr>
+  <tr><td>IoT Agent for Sigfox</td><td>Sigfox networks</td></tr>
+  <tr><td>IoT Agent for ISOXML</td><td>ISOXML/ADAPT, agricultural machinery, over HTTP</td></tr>
+</table>
+<p>Seven, plus <code>iotagent-node-lib</code> itself. The same FIWARE catalogue chapter (<i>Interface with IoT, Robots
+and Third-Party Systems</i>) holds components that are not IoT Agents: <b>Fast DDS</b> and <b>Micro XRCE-DDS</b> (DDS
+middleware - coraine's <a href="#docs/dds">DDS bridge</a> runs on a DDS stack), <b>Oliot</b> (an EPCIS mediation
+gateway), <b>Kurento</b> and <b>OpenVidu</b> (media streams). There is no CSV or CKAN agent; the <b>CKAN
+extensions</b> publish a broker's data in CKAN - the opposite direction.</p>
+<p>The agents are mostly combinations of two axes - the library configures device communications <i>"regardless of
+the payload, syntax or transport protocol used"</i>: transports (HTTP, MQTT, AMQP, CoAP) and payload codecs (JSON,
+UltraLight 2.0, LWM2M objects, ISOXML/ADAPT). UltraLight over MQTT and over HTTP are one codec, two transports.
+LoRaWAN and Sigfox carry network semantics, join procedures and operator back-ends, and do not decompose.</p>
+
+<h2 id="bridges">Each agent as a bridge plugin</h2>
+<p>For each of the seven agents there is a coraine bridge plugin that does the job inside the broker. The six
+<code>corIota*</code> bridges are <b>prototypes, not released</b>: measures arrive as DataChannel records, written
+attributes go back to the device, commands are Service Executions where the agent has commands, and each takes what
+its agent takes, the same way, with the same answers. None of them has the provisioning API yet
+(<code>/iot/groups</code>, <code>/iot/devices</code>) - a device's DataChannel comes from the
+<code>--bridgeConfig</code> file. For OPC-UA, the OPC UA bridge plays the part.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Agent</th><th>Bridge</th><th>Loaded with</th><th>What it does</th></tr>
+  <tr><td>JSON</td><td><a href="https://github.com/SEAMWARE/corIotaJsonBridge">corIotaJsonBridge</a></td><td><code>--bridges iotajson</code></td><td>measures over HTTP and MQTT; commands over MQTT, HTTP, or held until the device polls for them</td></tr>
+  <tr><td>UltraLight 2.0</td><td><a href="https://github.com/SEAMWARE/corIotaUlBridge">corIotaUlBridge</a></td><td><code>--bridges iotaul</code></td><td>the same, with UltraLight 2.0 payloads</td></tr>
+  <tr><td>LWM2M</td><td><a href="https://github.com/SEAMWARE/corIotaLwm2mBridge">corIotaLwm2mBridge</a></td><td><code>--bridges iotalwm2m</code></td><td>an LwM2M server, CoAP over UDP of its own: observed resources in, a written attribute as a Write, a Service Execution as an Execute</td></tr>
+  <tr><td>LoRaWAN</td><td><a href="https://github.com/SEAMWARE/corIotaLoraBridge">corIotaLoraBridge</a></td><td><code>--bridges iotalora</code></td><td>uplinks from the MQTT integrations of The Things Stack v3 and ChirpStack v4 (Cayenne LPP, CBOR, or the server's decoder); a written attribute as a downlink</td></tr>
+  <tr><td>Sigfox</td><td><a href="https://github.com/SEAMWARE/corIotaSigfoxBridge">corIotaSigfoxBridge</a></td><td><code>--bridges iotasigfox</code></td><td>the Sigfox backend's callbacks, decoded by the backend's payload grammar; a written attribute as the device's next downlink</td></tr>
+  <tr><td>ISOXML</td><td><a href="https://github.com/SEAMWARE/corIotaIsoxmlBridge">corIotaIsoxmlBridge</a></td><td><code>--bridges iotaisoxml</code></td><td>the task data (<code>TASKDATA.XML</code>) a MICS POSTs, each element a record; a written attribute as task data POSTed back</td></tr>
+  <tr><td>OPC-UA</td><td><a href="https://github.com/SEAMWARE/corOpcuaBridge">corOpcuaBridge</a></td><td><code>--bridges opcua</code></td><td>a client of one OPC UA server: a Variable's value into an attribute and back</td></tr>
+</table>
+</div>
+<p>Each repository's README is its reference: endpoints, payloads, configuration, and what is not built.</p>
+
+<h2 id="mapping">In coraine's model</h2>
+<p>A foreign endpoint tied to an attribute is a <b>channel</b> on a <b>bridge</b> (a transport instance); a device's
+measures are <b>DataChannel</b> records; a command is a <b>Service Execution</b>; a value fetched on read is an
+ordinary <b>registration</b> whose endpoint names a bridge scheme. The rows marked <i>design</i> are designs, not
+built:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Agent concept</th><th>coraine</th></tr>
+  <tr><td>Active attribute (a measure)</td><td>a DataChannel record <span class="muted">(design -
+  <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/iot-agent-measures.md">IoT Agent measures</a>)</span></td></tr>
+  <tr><td>Command</td><td>a <b>service</b> of the device's entity; running it is a Service Execution, the bridge plugin
+  its executor <span class="muted">(design - <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/iot-agent-executor.md">IoT Agents as Service Executors</a>)</span></td></tr>
+  <tr><td>Lazy attribute</td><td>a registration with a bridge-scheme endpoint - the broker holds nothing and fetches on read</td></tr>
+  <tr><td>Static attribute</td><td>an ordinary attribute; a DataChannel mapping's constant</td></tr>
+  <tr><td>Config group + device</td><td>a DataChannel per group and per device (measures), a Service Registration per
+  command; the provisioning API that creates them is a change of its own</td></tr>
+  <tr><td><code>&lt;cmd&gt;_status</code> / <code>&lt;cmd&gt;_info</code></td><td>none: the execution's <code>executionStatus</code> and <code>executionOutput</code></td></tr>
+</table>
+</div>
+
+<h2 id="unverified">Not verified</h2>
+<ul>
+  <li>The library's own transport bindings: HTTP and MQTT are documented on the agents; AMQP appears in the
+  ecosystem, not confirmed from primary documentation.</li>
+  <li>NGSI-LD support: the library is described as working with NGSI-v2 and NGSI-LD; how that is selected is not
+  confirmed.</li>
+  <li>Whether every agent above is maintained, and at what NGSI version - the list is the FIWARE catalogue's.</li>
+  <li>Provisioning payload details beyond the attribute kinds (<code>entity_name</code>, <code>entity_type</code>,
+  <code>timezone</code>, <code>expressionLanguage</code>, transformation expressions), and the southbound details of
+  any one agent.</li>
+</ul>
+
+<h2 id="sources">Sources</h2>
+<p class="muted">The notes on the agents were gathered on 2026-08-26.</p>
+<ul>
+  <li>ETSI TS 104 175, Annex G - the specification's own repository at forge.etsi.org; quotes exact.</li>
+  <li><a href="https://iotagent-node-lib.readthedocs.io/en/latest/api.html"><code>iotagent-node-lib</code> API
+  documentation</a> - provisioning endpoints, attribute kinds, the NGSI surface; and the library's northbound
+  interactions documentation - the command status attributes and values.</li>
+  <li>The FIWARE catalogue, with <a href="https://github.com/FIWARE-GEs/iotagent-opcua">iotagent-opcua</a> and
+  <a href="https://github.com/FIWARE/iotagent-isoxml">iotagent-isoxml</a>.</li>
+</ul>
+</article>

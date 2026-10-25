@@ -1,0 +1,189 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/cor-protocol.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>The cor format and cor://</h1>
+<p class="lead"><b>cor</b> is coraine's binary serialisation of a tree - a request, a response, an entity.
+<b>cor://</b> is the broker's binary API: the same trees, framed for a long-lived TCP connection. A request that
+arrives over cor:// is already a tree, so it goes into the same service routines as an HTTP request, without a
+JSON parse, and its response goes back as a tree.</p>
+
+<h2 id="when">When to use it</h2>
+<ul>
+  <li><b>Between brokers.</b> A context source registration whose endpoint is <code>cor://host:port</code> makes
+  forwarding to that source go over cor:// instead of HTTP - no JSON rendered or parsed on either side of the
+  hop.</li>
+  <li><b>A client that speaks it.</b> corTools' <code>corRequest</code> sends requests over cor://, one at a time or
+  in its load mode.</li>
+  <li><b>Not</b> for what only HTTP carries: a body that is not JSON, a text answer, <code>HEAD</code>.</li>
+</ul>
+<p>cor:// is a communication protocol, not a bridge: it reaches the broker's API, as a client (forwarding) and as
+a server (the listener).</p>
+
+<h2 id="enable">Turning it on</h2>
+<table class="g-opts">
+  <tr><th>For</th><th>What it takes</th></tr>
+  <tr><td>--corPort &lt;port&gt;<span class="env">CORAINE_CORPORT</span></td><td>a cor:// listener next to the HTTP one; 0, the default, is off</td></tr>
+  <tr><td>"endpoint": "cor://host:port"</td><td>in a context source registration: forwarding to it goes over cor://</td></tr>
+  <tr><td>COR_TRANSPORT=cor</td><td>the functests: every test that can runs over cor://, each broker on its HTTP port + 1000 (<a href="#docs/testing">Testing</a>)</td></tr>
+  <tr><td>test/perf/corChain.sh</td><td>the benchmark - three brokers chained: <code>http</code>, <code>cor</code> or <code>cor-all</code></td></tr>
+</table>
+<pre><span class="c"># broker B: HTTP on 1027, cor:// on 2026</span>
+coraine -p 1027 --corPort 2026 --database corDB
+
+<span class="c"># broker A, on 1026, forwards to the sources registered with it</span>
+coraine --distributed --database corDB
+
+<span class="c"># on A: the Vehicles are B's, reached over cor://</span>
+curl -X POST http://localhost:1026/ngsi-ld/v1/csourceRegistrations \
+  -H 'Content-Type: application/json' \
+  -d '{ "type": "ContextSourceRegistration",
+        "information": [ { "entities": [ { "type": "Vehicle" } ] } ],
+        "endpoint": "cor://localhost:2026" }'</pre>
+
+<div class="g-callout">
+<p><b>A broker built without it.</b> <code>make COR_WITH_COR_PROTOCOL=0</code> (or <code>coraine-build --features
+COR_PROTOCOL=OFF</code>) leaves out the cor:// server and client, <code>--corPort</code> and the cor:// forwarder:
+24&nbsp;640 bytes less (stripped, 2026-10-13). <code>--version</code> and <code>GET /build</code> say
+<code>COR_PROTOCOL</code> 0 / false. A registration with a cor:// endpoint is then accepted and not forwarded to: the
+answer carries <code>NGSILD-Warning: 299 &lt;host:port&gt; "The registration endpoint's scheme is not supported by
+this broker"</code>. The cor format stays - corDB's log and history are written in it.</p>
+</div>
+
+<h2 id="what">What it is</h2>
+<ul>
+  <li><b>One format, three uses</b>: cor://, and the bodies of the corDB log and snapshot records.</li>
+  <li><b>The codec knows nothing about NGSI-LD.</b> It lives in corTree and serialises any tree; corNgsild tells
+  it, through callbacks, which names are core terms and which objects are attributes.</li>
+  <li><b>Zero-copy on read</b> - strings keep their NUL and point into the read buffer. <b>Skippable</b> - objects
+  and arrays carry their byte length, so a reader steps over a subtree it does not want in one add.
+  <b>Little-endian</b> - no byte swapping, on x86 or ARM.</li>
+  <li><b>Multiplexed</b> - any number of requests in flight on one connection, answered in the order they finish,
+  run on the event loops' <a href="#docs/coroutines">coroutines</a>.</li>
+</ul>
+
+<h2 id="frame">The frame</h2>
+<p>Every message is a fixed 16-byte header, then one encoded tree.</p>
+<figure class="g-fig">
+<svg viewBox="0 0 880 250" role="img" aria-label="A cor:// frame: a 16-byte header - magic, type, flags, reserved, correlation id, length - then the body, one encoded tree; a node of the tree: tag, kind, name, value">
+  <g style="font-family: var(--mono); font-size: 13px;">
+    <!-- header -->
+    <text x="0" y="16" style="fill: var(--muted); font-size: 12px;">frame header - 16 bytes</text>
+    <text x="680" y="16" style="fill: var(--muted); font-size: 12px;">body</text>
+    <rect x="0"   y="26" width="240" height="54" rx="4" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <rect x="240" y="26" width="60"  height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="300" y="26" width="60"  height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="360" y="26" width="80"  height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="440" y="26" width="120" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="560" y="26" width="110" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="680" y="26" width="200" height="54" rx="4" style="fill: none; stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+    <text x="120" y="50" text-anchor="middle" style="fill: var(--accent-2);">C0 4F 52 01</text>
+    <text x="120" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">magic + version · 4</text>
+    <text x="270" y="50" text-anchor="middle" style="fill: var(--muted);">type</text>
+    <text x="270" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">1</text>
+    <text x="330" y="50" text-anchor="middle" style="fill: var(--muted);">flags</text>
+    <text x="330" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">1</text>
+    <text x="400" y="50" text-anchor="middle" style="fill: var(--muted);">0 0</text>
+    <text x="400" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">reserved · 2</text>
+    <text x="500" y="50" text-anchor="middle" style="fill: var(--muted);">correlation</text>
+    <text x="500" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">id · 4</text>
+    <text x="615" y="50" text-anchor="middle" style="fill: var(--muted);">length</text>
+    <text x="615" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">of the body · 4</text>
+    <text x="780" y="50" text-anchor="middle" style="fill: var(--ok);">one encoded tree</text>
+    <text x="780" y="70" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">length bytes</text>
+    <!-- arrow to node -->
+    <path d="M 780 82 L 780 112 L 440 112 L 440 134" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <path d="M 434 128 L 440 138 L 446 128" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <!-- node -->
+    <text x="140" y="150" style="fill: var(--muted); font-size: 12px;">a node of the tree</text>
+    <rect x="140" y="160" width="200" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="340" y="160" width="100" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+    <rect x="440" y="160" width="140" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="580" y="160" width="160" height="54" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="240" y="184" text-anchor="middle" style="fill: var(--muted);">tag · 1</text>
+    <text x="240" y="204" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">type 3 | name mode 2 | flags 3</text>
+    <text x="390" y="184" text-anchor="middle" style="fill: var(--muted);">kind · 1</text>
+    <text x="390" y="204" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">objects only</text>
+    <text x="510" y="184" text-anchor="middle" style="fill: var(--muted);">name</text>
+    <text x="510" y="204" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">none | term id | string</text>
+    <text x="660" y="184" text-anchor="middle" style="fill: var(--muted);">value</text>
+    <text x="660" y="204" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">per type; a container:</text>
+    <text x="660" y="232" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">byte length, then the children</text>
+  </g>
+</svg>
+<figcaption>A cor:// frame, and a node of the tree it carries. The corDB log and snapshot records carry the same
+trees behind a header of their own.</figcaption>
+</figure>
+<table class="gtable">
+  <tr><th>Header field</th><th>Bytes</th><th></th></tr>
+  <tr><td>magic</td><td>4</td><td><code>C0 4F 52 01</code>: 0xC0, <code>O</code>, <code>R</code>, format version 1</td></tr>
+  <tr><td>message type</td><td>1</td><td>HELLO, HELLO_ACK, REQUEST, RESPONSE, PUSH, CLOSE, ERROR, PING, PONG</td></tr>
+  <tr><td>flags</td><td>1</td><td>bit 0: compressed; bit 1: a fragment, more follows</td></tr>
+  <tr><td>reserved</td><td>2</td><td>zero</td></tr>
+  <tr><td>correlation id</td><td>4</td><td>a REQUEST's, copied into its RESPONSE; 0 for PUSH</td></tr>
+  <tr><td>length</td><td>4</td><td>the body's</td></tr>
+</table>
+<p><b>The magic</b> is what no text can begin with: 0xC0 never appears in valid UTF-8. An HTTP client on the cor://
+port, or the reverse, shows in the first bytes - <code>GET </code> is not <code>C0 4F 52</code> - and is refused at
+once with a clear error. After a framing error a reader can scan for the next magic.</p>
+<p><b>The bodies are trees, not codes.</b> A request is <code>{ op, tenant, path, params, body }</code>, a response
+<code>{ status, headers, body }</code>. A new operation is a new value of <code>op</code>, which an old peer answers
+with "not implemented" instead of failing to parse it. <b>HELLO</b> carries the format version and the lengths of
+the two fixed tables (core terms, namespaces); both are append-only, so two peers use the shorter of each.</p>
+
+<h2 id="small">What makes it small</h2>
+<table class="gtable">
+  <tr><th>Trick</th><th>What it does</th><th>State</th></tr>
+  <tr><td>core terms by id</td><td><code>type</code>, <code>value</code>, <code>observedAt</code>, ... as a 1-byte id (0-239), 2 bytes beyond (up to 4079)</td><td>built</td></tr>
+  <tr><td>the attribute type in the node</td><td>an attribute's <code>type</code> folded into the node's 4-bit kind - one child node less per attribute</td><td>built</td></tr>
+  <tr><td>core terms as values</td><td>a string value that is a core term travels as its id</td><td>built</td></tr>
+  <tr><td>namespaces</td><td>an IRI split at its last <code>/</code>, <code>#</code> or <code>:</code>; the namespace written once, then an index</td><td>built</td></tr>
+  <tr><td>a string table</td><td>a repeated name written once, then a varint index</td><td>built for names; values later</td></tr>
+  <tr><td>small values in the tag</td><td>booleans, null and the integers 0-6 take no value bytes</td><td>built</td></tr>
+  <tr><td>numbers by their size</td><td>zigzag varints; a float lossless as float32 in 4 bytes; <code>42</code> and <code>42.0</code> kept apart</td><td>built</td></tr>
+  <tr><td>packed numeric arrays</td><td>one element type, a count and the raw values - GeoJSON coordinates</td><td>not yet</td></tr>
+  <tr><td>timestamps as integers</td><td>only when the integer re-renders the string byte for byte - nothing is normalised in transit</td><td>not yet</td></tr>
+  <tr><td>front coding of ids, frame compression (zstd)</td><td></td><td>later</td></tr>
+</table>
+<p><b>On cor:// the tables live as long as the connection.</b> A namespace or a name is sent once and reused by
+every message after it. Each side writes its own outgoing tables and mirrors the peer's; frames are encoded in the
+order they are sent and decoded in the order they arrive; a reconnect starts the tables empty again. A corDB
+snapshot or log block keeps tables of its own, so it can be read alone.</p>
+
+<h2 id="multiplex">Multiplexing</h2>
+<ul>
+  <li><b>The server</b> reads every frame that comes on a connection and runs each request as it arrives - inline
+  when it cannot wait, as a coroutine when it can - and writes each response as it finishes.</li>
+  <li><b>The client</b> keeps one connection per peer per thread, shared by the requests of that thread. A
+  distributed operation fanned out to several cor:// sources starts every request before it waits for any: they
+  are all in flight at once.</li>
+  <li><b>With <code>mongoc</code></b> a request that waits cannot be a coroutine (its driver blocks): the connection
+  moves to a thread of its own and is served one request at a time.</li>
+</ul>
+
+<h2 id="numbers">Numbers</h2>
+<p>Three <code>corDB</code> brokers chained A -&gt; B -&gt; C, a GET on A - every request crosses both hops twice; 16
+connections; each broker on two cores, the built-in server, the release build with PGO, deep idle states, two runs
+(2026-10-02):</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Entity</th><th>Mode</th><th>req/s</th><th>p99</th></tr>
+  <tr><td>4 attributes</td><td>HTTP all the way</td><td>42,992-44,418</td><td>0.85-2.23 ms</td></tr>
+  <tr><td>4 attributes</td><td>cor:// between the brokers, HTTP client</td><td>79,991-80,764</td><td>333-346 µs</td></tr>
+  <tr><td>4 attributes</td><td><b>cor:// all the way</b></td><td><b>91,490-91,945</b></td><td><b>235-237 µs</b></td></tr>
+  <tr><td>20 attributes</td><td>HTTP all the way</td><td>24,415-25,127</td><td>1.26-1.30 ms</td></tr>
+  <tr><td>20 attributes</td><td>cor:// between the brokers, HTTP client</td><td>39,703-40,871</td><td>784-810 µs</td></tr>
+  <tr><td>20 attributes</td><td><b>cor:// all the way</b></td><td><b>50,988-53,642</b></td><td><b>398-402 µs</b></td></tr>
+</table>
+</div>
+<p>The HTTP client is wrk; "all the way" is <code>corRequest</code> in its load mode.</p>
+<p><b>One broker, no forwarding</b> - what the transport itself costs, a GET on corDB, 16 connections (release
+build, no PGO, 2026-10-01): cor:// and HTTP at parity on throughput, 145,300 against ~142,000 req/s;
+the p99 under load 209 µs against 4-9 ms.</p>
+<p><b>On the wire</b>: the generic codec gives 84 % of minimised JSON, with the NGSI-LD callbacks 71 %, over 660
+JSON documents of the ETSI suite and coraine's tests - compact names and inline <code>@context</code> text, the least
+favourable case. Broker-to-broker traffic, with its expanded names, is still to be measured.</p>
+
+<p class="muted">The full specification - every tag bit, the term-id encoding, the table rules, the multiplexing
+turns, every measurement: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/cor-protocol-details.md">doc/cor-protocol-details.md</a>;
+the short version: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/cor-protocol.md">doc/cor-protocol.md</a>.</p>
+</article>

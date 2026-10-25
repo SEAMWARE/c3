@@ -1,0 +1,51 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/overview.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>coraine</h1>
+<p class="lead">An NGSI-LD context broker, written in C. It implements ETSI GS CIM 009 v1.9.1 and passes the ETSI
+NGSI-LD conformance suite<sup>*</sup>.</p>
+
+<div class="xp-hero" role="list" aria-label="coraine in numbers">
+  <div class="xp-stat" role="listitem"><span class="xp-x">1</span><span class="xp-what">process</span><span class="xp-how">no other service required (corDB)</span></div>
+  <div class="xp-stat" role="listitem"><span class="xp-x">13&nbsp;MiB</span><span class="xp-what">idle RSS</span><span class="xp-how">3 MiB private dirty</span></div>
+  <div class="xp-stat" role="listitem"><span class="xp-x">9&nbsp;ms</span><span class="xp-what">exec to a served response</span><span class="xp-how">no need to keep it warm</span></div>
+</div>
+<p class="muted xp-note">libmicrohttpd + corDB, 2026-09-16; with the built-in HTTP server 17 MiB and 12 ms, with MongoDB
+20-24 MiB and 26-31 ms - <a href="#docs/performance">Performance and footprint</a>.</p>
+
+<h2 id="plugins">Built of plugins</h2>
+<p>The broker speaks NGSI-LD; shared libraries chosen at start decide the rest:</p>
+<table class="gtable">
+  <tr><th>What</th><th>Chosen with</th><th>Today</th></tr>
+  <tr><td>where the entities live</td><td><code>--database</code></td><td><code>corDB</code> (in the broker, persistent with <code>--dbDir</code>), <code>mongoc</code> (MongoDB), <code>ramDB</code></td></tr>
+  <tr><td>where the history lives</td><td><code>--troe</code></td><td><code>corDB</code> (inside the corDB store), <code>timescale</code> (PostgreSQL / TimescaleDB), <code>ramDB</code> (a ring in RAM), <code>none</code></td></tr>
+  <tr><td>more API</td><td><code>--apiPlugins</code></td><td><code>admin</code></td></tr>
+  <tr><td>how the API is reached besides HTTP</td><td><code>--transports</code></td><td>WebSocket</td></tr>
+  <tr><td>what is not NGSI-LD</td><td><code>--bridges</code></td><td>MQTT, Modbus, DDS, CKAN</td></tr>
+</table>
+<p><a href="#docs/plugin-architecture">Plugin architecture</a> has how they fit, and how to write one.</p>
+
+<h2 id="start">Where to start</h2>
+<ul class="g-cards">
+  <li><a href="#docs/installation">Installation &amp; administration<span>install it, run it, its options, the databases</span></a></li>
+  <li><a href="#docs/api-walkthrough">API walkthrough<span>an entity created, queried, watched and deleted</span></a></li>
+  <li><a href="#docs/building">Building from source<span>the features compiled in or out, your own broker</span></a></li>
+  <li><a href="#docs/migration">Migrating a database<span>another broker's entities into coraine</span></a></li>
+  <li><a href="#docs/performance">Performance and footprint<span>what it costs to run, and how fast it is</span></a></li>
+  <li><a href="#docs/extreme-performance">Extreme performance<span>indexes, and a broker built for your workload</span></a></li>
+</ul>
+
+<h2 id="conformance">Conformance</h2>
+<p class="muted"><sup>*</sup> The conformance runs use a corrected fork of the ETSI suite. The changes are fixes to
+the tests - the suite has bugs of its own, and parts of it do not run as published - never relaxations of what the
+broker must do. They are filed upstream as merge requests for the suite's maintainers; until they are merged, the
+result is against the corrected suite, not the published one: 1106 of 1106 test cases, on MongoDB + TimescaleDB
+and on corDB (2026-10-07).</p>
+
+<h2 id="support">Support and licence</h2>
+<p>Questions, bugs and feature requests: <a href="https://github.com/SEAMWARE/coraine/issues">GitHub issues</a>.
+General FIWARE questions also reach people under the
+<a href="https://stackoverflow.com/questions/tagged/fiware"><code>fiware</code></a> tag on Stack Overflow.
+coraine is licensed under the <a href="https://github.com/SEAMWARE/coraine/blob/main/LICENSE">Apache License 2.0</a>
+- Copyright 2026 Seamware.</p>
+</article>
