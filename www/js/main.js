@@ -13,7 +13,7 @@ import { Compile } from './compile.js';
 import { Run } from './run.js';
 import { assistInit } from './assist.js';
 import { windowInit } from './window.js';
-import { docsShow } from './docs.js';
+import { docsInit, docsShow } from './docs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -123,6 +123,7 @@ async function main() {
   if (!boot) return;
 
   assistInit();
+  docsInit();
   windowInit();
   const connect = new Connect();
   connect.setBrokers(boot.config.brokers);
@@ -160,14 +161,6 @@ async function main() {
   if (fromHash() !== first) history.replaceState(null, '', '#' + first);
   pageShow(first, compile, run);
   window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run));
-
-  // A link to a section of a page (the Documentation page's guides): scrolled to, the page's hash kept
-  document.addEventListener('click', (e) => {
-    const a = e.target.closest('a[data-scroll]');
-    if (!a) return;
-    e.preventDefault();
-    document.getElementById(a.dataset.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
 
   if (boot.last) {
     $('broker-url').value = boot.last.url;

@@ -1,0 +1,9 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+/* site.css - what the website has that c³ does not (site/index.html) */
+header.top > a { display: flex; }
+.site-right { margin-left: auto; }
+.site-gh { color: var(--muted); text-decoration: none; font-size: 14px; }
+.site-gh:hover { color: var(--text); }
+#page-docs { overflow: auto; }
+#app { height: 100%; }
+#app .page { min-height: 0; }
