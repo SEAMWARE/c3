@@ -1,0 +1,274 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/plugin-architecture.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Plugin architecture</h1>
+<p class="lead">The broker binary holds the NGSI-LD logic, the REST layer, the JSON-LD engine and the subscription
+matcher - and no storage code and no temporal code. Storage, history, extra endpoints, transports, bridges and
+authorization are shared objects, chosen at start-up. A new one is written without touching the core.</p>
+
+<figure class="g-fig">
+<svg viewBox="0 0 880 400" role="img" aria-label="The broker core in the middle; on the side of the clients the transport, auth and API plugins; on the other side the current-state and history plugins; below, the bridges to foreign wires">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <text x="40" y="24" style="fill: var(--muted); font-size: 12px;">how a client reaches the broker</text>
+    <text x="630" y="54" style="fill: var(--muted); font-size: 12px;">where the data is kept</text>
+
+    <!-- left column -->
+    <rect x="40" y="40" width="210" height="72" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="56" y="64" style="fill: var(--accent-2); font-weight: 600;">Transport</text>
+    <text x="56" y="84" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--transports</text>
+    <text x="56" y="102" style="fill: var(--muted); font-size: 12px;">ws - the API over a WebSocket</text>
+
+    <rect x="40" y="140" width="210" height="72" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="56" y="164" style="fill: var(--accent-2); font-weight: 600;">Auth</text>
+    <text x="56" y="184" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--auth</text>
+    <text x="56" y="202" style="fill: var(--muted); font-size: 12px;">fdsc, oidc - one at most</text>
+
+    <rect x="40" y="240" width="210" height="72" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="56" y="264" style="fill: var(--accent-2); font-weight: 600;">API services</text>
+    <text x="56" y="284" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--apiPlugins</text>
+    <text x="56" y="302" style="fill: var(--muted); font-size: 12px;">admin - extra endpoints</text>
+
+    <!-- core -->
+    <rect x="330" y="90" width="220" height="180" rx="10" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <text x="440" y="120" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600; font-size: 15px;">the broker</text>
+    <text x="440" y="148" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">NGSI-LD service routines</text>
+    <text x="440" y="168" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">REST layer · JSON-LD</text>
+    <text x="440" y="188" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">subscription matcher</text>
+    <line x1="350" y1="206" x2="530" y2="206" style="stroke: var(--line); stroke-width: 1;"/>
+    <text x="440" y="228" text-anchor="middle" style="fill: var(--ok); font-size: 12px;">built in: HTTP, cor://</text>
+    <text x="440" y="248" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">no storage, no history</text>
+
+    <!-- links left -->
+    <line x1="250" y1="76"  x2="330" y2="130" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="250" y1="176" x2="330" y2="180" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="250" y1="276" x2="330" y2="230" style="stroke: var(--line); stroke-width: 1.5;"/>
+
+    <!-- right column -->
+    <rect x="630" y="70" width="210" height="80" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="646" y="94" style="fill: var(--accent-2); font-weight: 600;">Current state</text>
+    <text x="646" y="114" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--database</text>
+    <text x="646" y="134" style="fill: var(--muted); font-size: 12px;">mongoc, corDB, ramDB - one</text>
+
+    <rect x="630" y="200" width="210" height="80" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="646" y="224" style="fill: var(--accent-2); font-weight: 600;">History (TRoE)</text>
+    <text x="646" y="244" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--troe</text>
+    <text x="646" y="264" style="fill: var(--muted); font-size: 12px;">none, corDB, ramDB, timescale</text>
+
+    <line x1="550" y1="140" x2="630" y2="110" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="550" y1="220" x2="630" y2="240" style="stroke: var(--line); stroke-width: 1.5;"/>
+
+    <!-- bridge -->
+    <rect x="330" y="310" width="220" height="72" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="346" y="334" style="fill: var(--accent-2); font-weight: 600;">Bridges</text>
+    <text x="346" y="354" style="fill: var(--muted); font-family: var(--mono); font-size: 12px;">--bridges</text>
+    <text x="346" y="372" style="fill: var(--muted); font-size: 12px;">mqtt, modbus, dds, ckan, opcua ...</text>
+    <line x1="440" y1="270" x2="440" y2="310" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="550" y1="346" x2="620" y2="346" style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+    <text x="630" y="342" style="fill: var(--muted); font-size: 12px;">how the broker reaches a wire</text>
+    <text x="630" y="360" style="fill: var(--muted); font-size: 12px;">that is not NGSI-LD</text>
+  </g>
+</svg>
+<figcaption>The six plugin kinds around the broker. A transport, like HTTP and cor://, carries the API to clients; a
+bridge carries values to and from something that is not an NGSI-LD client, and answers no request.</figcaption>
+</figure>
+
+<h2 id="kinds">The six plugin kinds</h2>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Kind</th><th>Loaded by</th><th>From <code>&lt;base&gt;/</code></th><th>Register symbol, fills</th><th>Active</th><th>Bundled</th></tr>
+  <tr><td>current state</td><td><code>--database</code>, <code>-db</code></td><td><code>db/currentState/</code></td><td><code>dbRegister</code>, <code>DbDriver</code></td><td>one</td><td><code>mongoc</code> (default), <code>corDB</code>, <code>ramDB</code></td></tr>
+  <tr><td>history (TRoE)</td><td><code>--troe</code></td><td><code>troe/temporal/</code></td><td><code>troeRegister</code>, <code>TroeDriver</code></td><td>one</td><td><code>none</code> (default), <code>corDB</code>, <code>ramDB</code>, <code>timescale</code></td></tr>
+  <tr><td>API services</td><td><code>--apiPlugins</code>, <code>-api</code></td><td><code>api/</code></td><td><code>apiRegister</code>, <code>ApiPlugin</code></td><td>up to 16</td><td><code>admin</code></td></tr>
+  <tr><td>transport</td><td><code>--transports</code></td><td><code>transport/</code></td><td><code>transportRegister</code>, <code>TransportDriver</code></td><td>up to 4</td><td><code>ws</code> - <a href="#docs/websocket">WebSocket</a></td></tr>
+  <tr><td>bridge</td><td><code>--bridges</code>, <code>-br</code></td><td><code>bridge/</code></td><td><code>bridgeRegister</code>, <code>BridgeDriver</code></td><td>up to 8</td><td><code>loopback</code>; <code>mqtt</code>, <code>modbus</code>, <code>dds</code>, <code>ckan</code>, <code>opcua</code> from their own repositories</td></tr>
+  <tr><td>auth</td><td><code>--auth</code></td><td><code>auth/</code></td><td><code>authRegister</code>, <code>AuthDriver</code></td><td>one at most</td><td><code>fdsc</code>, <code>oidc</code> - <a href="#docs/authorization">Authorization</a></td></tr>
+</table>
+</div>
+<p>Several are comma-separated where more than one may be active. HTTP and <a href="#docs/cor-protocol">cor://</a>
+are not plugins - they are built into corRest.</p>
+<div class="g-callout">
+<p><b><code>--troe corDB</code> is not a file of its own.</b> The history inside corDB is the corDB current-state
+plugin's own <code>troeRegister</code> - the same store, the same lock, the same log - so it needs
+<code>--database corDB</code>; with another store the broker stops: <code>TRoE 'corDB' keeps the history inside the
+corDB store - it needs --database corDB</code>. Another store's history goes to an external server
+(<code>timescale</code>).</p>
+</div>
+<div class="g-callout">
+<p><b>A transport is not a bridge.</b> A transport - like HTTP and cor:// - is how a client reaches the broker's
+API. A bridge is how the broker reaches a wire that is not NGSI-LD: a DDS topic, an MQTT broker, an OPC UA server.
+A bridge never answers a request.</p>
+</div>
+
+<h3 id="bundled">The bundled plugins</h3>
+<table class="gtable">
+  <tr><th>Plugin</th><th>Kind</th><th></th></tr>
+  <tr><td><code>mongoc</code></td><td>current state</td><td>MongoDB through libmongoc v2: <code>$geoNear</code>, persistence, context hosting, a database per tenant. The default.</td></tr>
+  <tr><td><code>corDB</code></td><td>current state</td><td>in-process, GEOS geo-filtering, per-tenant isolation; in RAM, or on disk with <code>--dbDir</code> (a log and snapshots). With <code>--troe corDB</code>, its history too.</td></tr>
+  <tr><td><code>ramDB</code></td><td>current state</td><td>corDB in RAM only - no disk options, no <code>--troe corDB</code>: the fastest store, for pub/sub where a restart may start empty</td></tr>
+  <tr><td><code>none</code></td><td>history</td><td>no history. The default.</td></tr>
+  <tr><td><code>corDB</code></td><td>history</td><td>the history inside the corDB store; on disk with <code>--dbDir</code></td></tr>
+  <tr><td><code>ramDB</code></td><td>history</td><td>a ring of the most recent TRoE events in RAM, nothing on disk, shown by <code>/admin/troe/dump</code> - dev and test</td></tr>
+  <tr><td><code>timescale</code></td><td>history</td><td>TimescaleDB / PostgreSQL (hypertables)</td></tr>
+  <tr><td><code>admin</code></td><td>API</td><td><code>/admin/health</code>, <code>/admin/version</code>, <code>/admin/log</code>, <code>/admin/tenants</code>, <code>/admin/plugins</code>, <code>/admin/bridges/{bridge}/inventory</code>, <code>/admin/config</code> (every option, a secret masked)</td></tr>
+  <tr><td><code>ws</code></td><td>transport</td><td>WebSocket, upgraded from <code>GET /ngsi-ld/v1/ws</code> on the HTTP port</td></tr>
+  <tr><td><code>fdsc</code></td><td>auth</td><td>the FIWARE Data Space Connector's tokens and policies, decided as Data Space Connector 10.87.0 decides them; libcrypto</td></tr>
+  <tr><td><code>oidc</code></td><td>auth</td><td>an OpenID provider's access tokens and two roles in them</td></tr>
+  <tr><td><code>loopback</code></td><td>bridge</td><td>hands back what it is given, from a thread of its own - an arriving value testable with no transport; the reference a new bridge is written against</td></tr>
+  <tr><td><code>mqtt</code></td><td>bridge</td><td>libmosquitto: notifications to <code>mqtt://</code> and <code>mqtts://</code> endpoints (TS 104 243) - which need <code>--bridges mqtt</code> - and MQTT topics to attributes, both ways (<a href="#docs/mqtt-bridge">MQTT bridge</a>)</td></tr>
+  <tr><td><code>modbus</code></td><td>bridge</td><td>Modbus TCP registers and coils, polled in, attribute writes out; libc only (<a href="#docs/modbus-bridge">Modbus bridge</a>)</td></tr>
+  <tr><td><code>dds</code></td><td>bridge</td><td>DDS topics and entity attributes, through the DDS Enabler (<a href="#docs/dds">DDS</a>). It links 21.4 MiB over nine libraries, against the broker's own 4.28 MiB over three; an image that carries it and never loads it costs that disk space and nothing else.</td></tr>
+  <tr><td><code>ckan</code></td><td>bridge</td><td>an open data portal's datasets (CKAN's API) read into entities; built by <code>coraine-build --bridges ckan</code></td></tr>
+  <tr><td><code>opcua</code></td><td>bridge</td><td>an OPC UA server through open62541, with certificates, a trust list, a user and password; built by <code>coraine-build --bridges opcua</code></td></tr>
+</table>
+<p>The ordinary image ships <code>modbus</code> and <code>dds</code>, each loaded only when
+<code>--bridges</code> names it. The broker itself does not link libmosquitto.</p>
+
+<h2 id="where">Where plugins are loaded from</h2>
+<p>The base directory is <code>/opt/seamware/plugins</code>, or the environment variable
+<code>SEAMWARE_PLUGIN_DIR</code>; <code>make install</code> copies the bundled plugins into it.
+<code>coraine -u</code> ends with the directory it uses.</p>
+<pre>/opt/seamware/plugins/
+├── db/currentState/    mongoc.so  corDB.so  ramDB.so
+├── troe/temporal/      none.so  ramDB.so  timescale.so      <span class="c"># --troe corDB is corDB.so above</span>
+├── api/                admin.so
+├── transport/          ws.so
+├── auth/               fdsc.so  oidc.so
+└── bridge/             loopback.so  mqtt.so  modbus.so  dds.so  ckan.so  opcua.so</pre>
+<p>A name with a <code>/</code> in it is a path, and skips the base directory - a freshly built <code>.so</code>
+straight from a build tree:</p>
+<pre>coraine --database ../corDB/obj/debug/corDB.so</pre>
+
+<h2 id="loading">How a plugin is loaded</h2>
+<ol>
+  <li>The path is built from the base directory, the kind and the name (unless the name is a path).</li>
+  <li><code>dlopen</code> with <code>RTLD_NOW</code>, and <code>dlsym</code> of the register symbol. A plugin built
+  against another <code>CorNode</code> layout than the broker is refused here, whatever its kind.</li>
+  <li>A DB or TRoE plugin's interface stamp is checked - before its register function is called.</li>
+  <li>The register function is called with a zeroed driver struct, which it fills with its function pointers.</li>
+</ol>
+<p>A plugin does not link the broker's libraries: the broker is linked <code>-rdynamic</code>, with its libraries and
+the Cor-Libs whole-archived, so a plugin resolves <code>corLog</code>, <code>corAlloc</code>, <code>corTree</code>,
+<code>corJson</code>, <code>corNgsild</code>, ... from the running broker at <code>dlopen</code>. A plugin's own
+<code>CMakeLists.txt</code> links only its backend - <code>mongoc2</code>, <code>geos_c</code>, ...</p>
+<ul>
+  <li><b>Its own options.</b> A plugin may publish command-line options (<code>driverP-&gt;args</code>). The broker
+  reads <code>--database</code>, <code>--troe</code>, <code>--apiPlugins</code>, <code>--bridges</code> and
+  <code>--auth</code> before the main parse, loads the plugins and adds their options - so <code>coraine --auth fdsc
+  -u</code> lists the <code>--fdsc*</code> options, and <code>--help</code> differs with the plugins chosen.</li>
+  <li><b>NULL means unsupported.</b> A driver slot left NULL is an operation the plugin does not have: the service
+  routine answers 501 Not Implemented, or does nothing where the specification allows it.</li>
+  <li><b>An auth plugin that cannot load or init stops the broker.</b> No <code>--auth</code> lets every request
+  in.</li>
+</ul>
+
+<h2 id="compat">Built for this broker</h2>
+<div class="g-callout warn">
+<p><b>A plugin that calls Cor-Lib functions must be built against the same lib sources as its broker</b> - for a
+packaged broker, the <code>coraine-dev</code> source of the same version (<a href="#docs/installation">Installation</a>).
+A function the broker lacks fails the <code>dlopen</code>. A changed signature or struct layout is not detected -
+except the two checks below.</p>
+</div>
+
+<h3 id="cornode-layout">The CorNode layout - every plugin</h3>
+<p>Every kind of plugin reads and builds the broker's tree nodes by their fields; built against another layout it
+would read every node at the wrong offsets. The layout has a number, <code>corNodeLayout</code> in corTree's
+<code>CorNode.h</code> - 2 today - which every object built with that header carries, and every driver header
+includes.</p>
+<table class="gtable">
+  <tr><th>Plugin</th><th>Broker</th><th>What happens</th></tr>
+  <tr><td>built against the broker's layout</td><td>any</td><td>loads</td></tr>
+  <tr><td>no <code>corNodeLayout</code>, or another number</td><td>this one</td><td>refused before its register function; the broker says why and exits 1</td></tr>
+  <tr><td>built against layout 2</td><td>from before layout 2</td><td>the plugin requires the symbol <code>corNodeLayout2</code>: the <code>dlopen</code> fails, <code>undefined symbol: corNodeLayout2</code>, and the broker exits 1</td></tr>
+</table>
+<pre><span class="o">bridge plugin 'mqtt' (/opt/seamware/plugins/bridge/mqtt.so): refused - built against another tree-node layout than this broker (plugin: CorNode layout 1, or older - it has no corNodeLayout; broker: CorNode layout 2). It would read every node at the wrong offsets and crash the broker. Rebuild the plugin against this broker's Cor-Libs</span></pre>
+
+<h3 id="db-stamp">The interface stamp - DB and TRoE plugins</h3>
+<p>A DB or TRoE plugin shares structs with the broker by layout - <code>DbDriver</code>, <code>DbQueryFilter</code>,
+<code>Tenant</code>, <code>TroeDriver</code>, ... A mismatch would corrupt memory, so it is refused both ways, and the
+program exits 1:</p>
+<table class="gtable">
+  <tr><th>Side</th><th>Exports</th><th>Checks</th></tr>
+  <tr><td>the broker (<code>coraine</code>, <code>coraine-import</code>)</td><td><code>coraineDbAbi</code></td><td>the plugin's <code>dbPluginAbi</code>, after the <code>dlopen</code>, before the register function</td></tr>
+  <tr><td>the plugin</td><td><code>dbPluginAbi</code></td><td>the broker's <code>coraineDbAbi</code>, first thing in <code>dbRegister</code> / <code>troeRegister</code> - so a broker older than the check is stopped too</td></tr>
+</table>
+<p>The stamp is a hash (sha256, 16 hex digits) of the headers the two sides share structs through, comments stripped
+and whitespace collapsed - a comment edit leaves it as it was, any declaration change gives a new one, and nothing is
+bumped by hand (<code>tools/dbAbiStamp.sh --list</code> names the headers). A refusal names both stamps:</p>
+<pre><span class="o">DB plugin '/opt/seamware/plugins/db/currentState/corDB.so' does not match this broker: it has no DB plugin interface stamp; a plugin built against another DB plugin interface corrupts memory
+  plugin's interface stamp: none - built before the check
+  broker's interface stamp: 8fa2e0424436a91e
+  rebuild the plugin against this broker's source, or install matching versions of the broker and its plugins</span></pre>
+<p>Both checks are always compiled in - safety checks of the plugin interface, with no <code>COR_FEATURE_*</code>
+switch.</p>
+
+<h3 id="abi-versions">Contract versions</h3>
+<table class="gtable">
+  <tr><th>Kind</th><th>Contract</th><th>A mismatch</th></tr>
+  <tr><td>bridge</td><td><code>BRIDGE_ABI_VERSION</code>, in <a href="https://github.com/SEAMWARE/corBridge">corBridge</a> - 16 today</td><td>logged (INFO), not refused: the structs are append-only, an older plugin leaves the newer slots NULL, and a plugin checks the broker's <code>abiVersion</code> and the pointer before calling a slot added after ABI 1</td></tr>
+  <tr><td>auth</td><td><code>AUTH_ABI_VERSION</code> (<code>src/lib/plugin/AuthDriver.h</code>)</td><td>not refused: the broker writes its version before <code>authRegister</code>, the plugin writes back its own, and the broker calls a slot only when the plugin's version has it</td></tr>
+  <tr><td>transport</td><td><code>TRANSPORT_ABI_VERSION</code> (<code>src/lib/plugin/TransportDriver.h</code>)</td><td>the same hand-over, in <code>transportRegister</code>; the version is logged at load</td></tr>
+</table>
+<p>A contract version covers its structs and nothing else - the Cor-Lib functions a plugin calls are the
+"same sources" rule above. API, bridge and transport plugins carry no interface stamp.</p>
+
+<h2 id="bridges">What crosses a bridge</h2>
+<ul>
+  <li><b>A bridge knows nothing about entities.</b> It carries bytes to and from an endpoint; which attribute an
+  endpoint is, is a Channel, kept in the broker. The seam is <code>(endpoint, json, time)</code> both ways - in
+  through <code>BridgeBroker::sampleIn</code>, out through <code>BridgeDriver::publish</code>.</li>
+  <li><b>Everything crossing it is plain data</b> - <code>const char*</code>, <code>int64_t</code>: no tree node, no
+  allocator, no NGSI-LD type. A bridge need not be C - the DDS one is C++, which the broker <code>dlopen</code>s
+  without seeing a C++ token - and its calls arrive on threads the broker did not create.</li>
+  <li><b>No loop.</b> An arriving value is stored through the DB driver and never enters a service routine, while the
+  outbound hook is in the service routines: a value that came in from a transport cannot reach the code that sends
+  values out.</li>
+</ul>
+<p>A bridge may use the Cor-Libs directly - logging, corJson and corTree for its configuration, in an allocator of
+its own. The contract is its own library, <a href="https://github.com/SEAMWARE/corBridge">corBridge</a>;
+<a href="https://github.com/SEAMWARE/corBridgeTemplate">corBridgeTemplate</a> is where a new bridge starts.</p>
+
+<h2 id="interfaces">The driver interfaces</h2>
+<p>The contracts are documented function by function in their headers - read them before writing a plugin.</p>
+<table class="g-opts">
+  <tr><th>Header</th><th>Contract</th></tr>
+  <tr><td>src/lib/db/DbDriver.h</td><td>current state: entity CRUD and batch operations, subscriptions, registrations, snapshots, discovery, tenant setup, geo-match callbacks, optional <code>@context</code> persistence. <code>DB_OK</code>, <code>DB_NOT_FOUND</code>, <code>DB_ALREADY_EXISTS</code>, <code>DB_INVALID_GEOMETRY</code>, <code>DB_BAD_INPUT</code>, <code>DB_ERR</code>.</td></tr>
+  <tr><td>src/lib/troe/TroeDriver.h</td><td>history: the broker queues <code>TroeEvent</code>s during a request and drains them after the response; reads return <code>EntityTemporal</code> trees. <code>TROE_OK</code>, <code>TROE_NOT_FOUND</code>, <code>TROE_UPDATED</code>, <code>TROE_ERR</code>.</td></tr>
+  <tr><td>src/lib/plugin/AuthDriver.h</td><td>auth: <code>authenticate</code> (before anything is done: 401), <code>authorize</code> (once the <code>@context</code> is resolved, before the tenant: 403), <code>release</code>; <code>AuthUnavailable</code> is a 503</td></tr>
+  <tr><td>src/lib/plugin/ApiPlugin.h</td><td>extra endpoints: a flat list of verb + path + handler, optional URL parameters and options, <code>init</code> / <code>close</code> / <code>versionInfo</code></td></tr>
+  <tr><td>src/lib/plugin/TransportDriver.h</td><td>a transport</td></tr>
+  <tr><td>corBridge: BridgeDriver.h, BridgeBroker.h, BridgeServer.h</td><td>what a bridge fills, what the broker hands it in <code>init()</code>, and the peer side the functional test client uses</td></tr>
+</table>
+
+<h2 id="write">Writing a DB plugin</h2>
+<p>One <code>.so</code> exporting <code>void dbRegister(DbDriver*)</code> - as corDB's <code>corDbRegister.c</code>,
+a DB plugin in a repository of its own:</p>
+<pre>#include "db/DbDriver.h"
+
+void dbRegister(DbDriver* driverP)
+{
+  driverP-&gt;alias          = "myStore";
+  driverP-&gt;version        = "0.1.0";
+  driverP-&gt;args           = myArgV;          <span class="c">// or NULL</span>
+  driverP-&gt;init           = myInit;          <span class="c">// after the options are parsed</span>
+  driverP-&gt;close          = myClose;
+  driverP-&gt;entityCreate   = myEntityCreate;
+  driverP-&gt;entityRetrieve = myEntityRetrieve;
+  driverP-&gt;entityQuery    = myEntityQuery;
+  driverP-&gt;entityDelete   = myEntityDelete;
+  <span class="c">// ... what you support; the rest stays NULL (501)</span>
+  driverP-&gt;tenantSetup    = myTenantSetup;
+  driverP-&gt;tenantRelease  = myTenantRelease; <span class="c">// frees what tenantSetup hung on Tenant.pluginData</span>
+}</pre>
+<ol>
+  <li>Compile <code>src/plugins/shared/dbPluginAbi.c</code> into it, with the generated <code>dbAbiStamp.h</code> on the
+  include path, and call <code>dbPluginAbiBrokerCheck("DB")</code> first in <code>dbRegister</code> - without them the
+  broker refuses it.</li>
+  <li>Build it as a <code>SHARED</code> library, linking only its own backend; <code>src/plugins/currentState/mongoc/CMakeLists.txt</code>
+  is the template.</li>
+  <li>Drop <code>myStore.so</code> into <code>&lt;base&gt;/db/currentState/</code> and run
+  <code>coraine --database myStore</code>.</li>
+</ol>
+<p>API and TRoE plugins follow the same pattern, with <code>apiRegister</code> and <code>troeRegister</code>.</p>
+<p class="muted">The source:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/plugin-architecture.md">doc/plugin-architecture.md</a>.</p>
+</article>

@@ -1,0 +1,210 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/migration.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide steps">
+<h1>Migrating a database to coraine</h1>
+<p class="lead">What another broker holds - entities, subscriptions, context source registrations and the
+temporal history - moved into coraine's stores, with the identities and the system timestamps it had there.
+For an operator moving a deployment, today from Orion-LD.</p>
+
+<h2 id="how">How it works</h2>
+<p>Two programs meet in one file, the <b>migration stream</b>. A <b>reader</b> knows its source and nothing of
+coraine's storage. The <b>writer</b>, <code>coraine-import</code>, knows no source: it is linked against the
+broker's libraries, loads the broker's store plugins, and stores what the current broker stores. The broker
+itself carries no import code.</p>
+<figure class="g-fig">
+<svg viewBox="0 0 760 190" role="img" aria-label="A reader per source writes the migration stream; coraine-import writes it into the stores">
+  <g font-family="sans-serif" font-size="13" fill="currentColor">
+    <rect x="10" y="30" width="150" height="56" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="85" y="54" text-anchor="middle">Orion-LD MongoDB</text>
+    <text x="85" y="72" text-anchor="middle" fill="var(--muted)" font-size="11">current state</text>
+    <rect x="10" y="104" width="150" height="56" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="85" y="128" text-anchor="middle">Orion-LD TRoE</text>
+    <text x="85" y="146" text-anchor="middle" fill="var(--muted)" font-size="11">PostgreSQL history</text>
+
+    <rect x="200" y="62" width="140" height="66" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="270" y="88" text-anchor="middle">reader</text>
+    <text x="270" y="106" text-anchor="middle" fill="var(--muted)" font-size="11">orionldExport.py</text>
+
+    <rect x="380" y="62" width="140" height="66" rx="8" fill="none" stroke="var(--ok)"/>
+    <text x="450" y="88" text-anchor="middle">stream.ndjson</text>
+    <text x="450" y="106" text-anchor="middle" fill="var(--muted)" font-size="11">expanded NGSI-LD</text>
+
+    <rect x="560" y="62" width="190" height="66" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="655" y="88" text-anchor="middle">coraine-import</text>
+    <text x="655" y="106" text-anchor="middle" fill="var(--muted)" font-size="11">the broker's store plugins</text>
+    <text x="655" y="152" text-anchor="middle" font-size="12">mongoc | corDB</text>
+    <text x="655" y="170" text-anchor="middle" font-size="12">timescale | corDB</text>
+
+    <g stroke="var(--muted)" fill="none" stroke-width="1.5">
+      <path d="M160 58 L200 84"/><path d="M160 132 L200 106"/>
+      <path d="M340 95 L380 95"/><path d="M520 95 L560 95"/><path d="M655 128 L655 138"/>
+    </g>
+  </g>
+</svg>
+<figcaption>One reader per source; the writer does not change for a new one.</figcaption>
+</figure>
+<div class="g-callout">
+<p><b>The importer and a broker never share a store.</b> The import runs before the broker starts on the same
+stores - and into empty ones: an import never overwrites.</p>
+</div>
+
+<h2 id="stop"><span class="g-n">1</span>Stop the writes to the source</h2>
+<p>What is written after the export is not in the stream. A deployment that cannot stop can export and
+import once, then export and import again what changed - but a record already imported is refused the second
+time, so a second pass carries new entities, not changed ones.</p>
+
+<h2 id="export"><span class="g-n">2</span>Export</h2>
+<p>From a checkout of the coraine repository, with the source's MongoDB - and its TRoE PostgreSQL, for the
+history - reachable:</p>
+<pre>pip install pymongo psycopg            <span class="c"># psycopg only for the history</span>
+tools/migrate/orionldExport.py --mongo mongodb://orion-mongo:27017 --db orion \
+                               --troe 'host=orion-pg user=postgres password=...' \
+                               --out stream.ndjson</pre>
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--mongo</td><td>the MongoDB URI of the current state. Default <code>mongodb://localhost:27017</code></td></tr>
+  <tr><td>--db</td><td>the database-name prefix the deployment ran with (its <code>-db</code>). Default <code>orion</code></td></tr>
+  <tr><td>--troe</td><td>the libpq connection string of the TRoE server, without <code>dbname</code>; <code>none</code> (the default): no history</td></tr>
+  <tr><td>--troeDb</td><td>the TRoE database-name prefix. Default: the <code>--db</code> prefix</td></tr>
+  <tr><td>--tenants</td><td>comma-separated tenants (<code>default</code> or <code>''</code> for the default tenant). Default: all</td></tr>
+  <tr><td>--noCurrent</td><td>leave the current state out - history only</td></tr>
+  <tr><td>--out</td><td>the stream file. Default: stdout</td></tr>
+</table>
+<p>What the exporter leaves out, it says on stderr - <a href="#docs/migration/orionld">below</a>.</p>
+
+<h2 id="import"><span class="g-n">3</span>Import</h2>
+<p>Into the stores the broker will run on, with the broker <b>not</b> running on them:</p>
+<pre>coraine-import --database mongoc --dbHost mongo --troe timescale --troeHost pg --file stream.ndjson
+coraine-import --database corDB  --dbDir /var/lib/coraine --troe corDB      --file stream.ndjson</pre>
+<p><code>coraine-import</code> takes the broker's store options by the broker's names -
+<code>--database</code>, <code>--troe</code>, and each plugin's own (<code>--dbDir</code>, <code>--dbName</code>,
+<code>--dbHost</code>, <code>--troeName</code>, ...) - and <code>--file</code> (<code>-</code>: stdin). Its log is
+stdout; the report is on stderr:</p>
+<pre><span class="o">import of stream.ndjson:
+  entities                        3 imported,      0 refused
+  subscriptions                   3 imported,      0 refused
+  registrations                   1 imported,      0 refused
+  temporal entity events          4 imported,      0 refused
+  temporal instances              8 imported,      0 refused
+  created rows (history)          1 written,       0 failed</span></pre>
+<p>Exit code <b>0</b>: every record imported. <b>1</b>: some were refused, each named above the report by its
+line in the stream and the reason:</p>
+<pre><span class="o">stream.ndjson:3: entity: entity type 'Room' is not expanded - the stream must hold expanded NGSI-LD (full IRIs, core terms short)</span></pre>
+
+<h2 id="start"><span class="g-n">4</span>Start the broker, and compare</h2>
+<p>Start the broker on the same stores, the usual way. Compare with the source: the number of entities per
+type (<code>GET /ngsi-ld/v1/types?details=true</code>), the subscriptions, the registrations, and a few
+entities' temporal evolution.</p>
+
+<h2 id="refused"><span class="g-n">5</span>Deal with what was refused</h2>
+<p>A refused record is not written, and the others are - the import does not stop at the first one. Fix those
+lines of the stream (or the reader), and import a stream of just them.</p>
+<div class="g-callout warn">
+<p><b>Do not import the whole stream again.</b> A record already in the target store is refused, never
+overwritten - a second import of the same stream refuses everything that went in the first time, and exits 1.</p>
+</div>
+
+<h2 id="container">In a container, on Kubernetes</h2>
+<p><code>coraine-import</code> is in the image beside <code>coraine</code>:</p>
+<pre>docker run --rm -v $PWD:/migrate --network &lt;the stores' network&gt; --entrypoint coraine-import \
+       quay.io/seamware/coraine:&lt;tag&gt; --database mongoc --dbHost mongo --file /migrate/stream.ndjson</pre>
+<p>On Kubernetes it is a one-off <b>Job</b> before the broker starts, on the broker's stores. For a persistent
+corDB that is the volume the broker's StatefulSet mounts - <code>ReadWriteOnce</code>: run the Job with the
+StatefulSet at zero replicas, then scale it up (<a href="#docs/kubernetes">Kubernetes</a>).</p>
+<div class="g-callout warn">
+<p><b>Not an initContainer.</b> It would run again at every restart of the pod - and a second import refuses
+everything and exits 1.</p>
+</div>
+
+<h2 id="stream">The stream</h2>
+<p>One JSON object per line (NDJSON), version 1:</p>
+<pre>{"kind":"header","format":"coraine-migration","version":1,"source":"orion-ld"}
+{"kind":"registration","tenant":"","data":{ <span class="c">...a ContextSourceRegistration...</span> }}
+{"kind":"subscription","tenant":"","data":{ <span class="c">...a Subscription...</span> }}
+{"kind":"entity","tenant":"t1","data":{ <span class="c">...an Entity...</span> }}
+{"kind":"temporalEntity","tenant":"","data":{"id":"urn:E1","type":"https://ex.org/T","op":"created","at":"2024-01-02T03:04:05.123Z"}}
+{"kind":"temporalInstance","tenant":"","data":{"id":"urn:E1","type":"https://ex.org/T","attr":"https://ex.org/speed","op":"modified","instance":{ ... }}}</pre>
+<p><code>tenant</code> <code>""</code> or absent is the default tenant. The <code>data</code> is <b>NGSI-LD as the
+API represents it, with every name expanded</b> - nothing of any broker's storage, whatever the source, so the
+stream is readable without coraine.</p>
+<table class="gtable">
+  <tr><th><code>kind</code></th><th>The record</th></tr>
+  <tr><td><code>header</code></td><td>optional, the first line</td></tr>
+  <tr><td><code>entity</code></td><td>an Entity, normalized, with <code>createdAt</code> / <code>modifiedAt</code> on the entity, every attribute instance and every Sub-Attribute. A multi-instance attribute is an array, each instance with its <code>datasetId</code></td></tr>
+  <tr><td><code>subscription</code></td><td>a Subscription with <code>id</code>, <code>createdAt</code>, <code>modifiedAt</code>, and in <code>notification</code> the counters a GET shows - <code>timesSent</code>, <code>timesFailed</code>, <code>lastNotification</code>, <code>lastSuccess</code>, <code>lastFailure</code>. A <code>q</code> names attributes by IRI, the IRI's dots written <code>%2E</code></td></tr>
+  <tr><td><code>registration</code></td><td>a ContextSourceRegistration with <code>id</code>, <code>createdAt</code>, <code>modifiedAt</code></td></tr>
+  <tr><td><code>temporalEntity</code></td><td>an entity-level history event: <code>op</code> <code>created</code> | <code>replaced</code> | <code>deleted</code>, at <code>at</code></td></tr>
+  <tr><td><code>temporalInstance</code></td><td>one attribute instance of the history: the entity's <code>id</code> and <code>type</code>, <code>attr</code>, <code>op</code> <code>created</code> | <code>modified</code> | <code>replaced</code> | <code>deleted</code>, and the <code>instance</code> with its <code>instanceId</code>, <code>createdAt</code>, <code>modifiedAt</code> (a deletion: <code>deletedAt</code>) and <code>datasetId</code></td></tr>
+</table>
+<p>The records are imported in the order they come; the history in batches of 500 events, one transaction
+each. A reader therefore writes the registrations first (an exclusive or redirect registration is refused
+over local entities that hold what it claims), and an entity's <code>temporalEntity</code> records before its
+<code>temporalInstance</code> records.</p>
+
+<h3 id="expanded">Names: expanded, always</h3>
+<p>The importer expands nothing and takes no @context. Every name NGSI-LD expands - an entity type, an
+attribute or Sub-Attribute name, a VocabProperty's vocab, the names in a subscription's <code>entities</code>,
+<code>watchedAttributes</code> and <code>notification.attributes</code>, in a registration's
+<code>information</code>, a history record's <code>type</code> and <code>attr</code> - is an absolute IRI
+(<code>http://</code>, <code>https://</code>, <code>urn:</code>) or an NGSI-LD core term. <code>Room</code>,
+<code>temperature</code> or a compact IRI such as <code>ex:humidity</code> means the stream is not expanded, and
+<b>the record is refused</b>. The member names inside a compound value are the application's own JSON and are
+not checked.</p>
+
+<h2 id="kept">What is kept</h2>
+<table class="gtable">
+  <tr><th></th><th>Kept</th><th>Notes</th></tr>
+  <tr><td>entity id, type(s), scope, expiresAt</td><td>yes</td><td>an entity past its expiresAt is imported, and expires as any other</td></tr>
+  <tr><td>attribute values, every attribute type, datasetId instances, Sub-Attributes, observedAt, unitCode</td><td>yes</td><td></td></tr>
+  <tr><td>createdAt / modifiedAt - entity, instance, Sub-Attribute</td><td>yes</td><td>a level without its own gets the level above's</td></tr>
+  <tr><td>tenants</td><td>yes</td><td>lowercased, as coraine names tenants</td></tr>
+  <tr><td>subscription id, every member, createdAt, modifiedAt</td><td>yes</td><td><code>status</code> is recomputed (it is never stored); <code>isActive: false</code> is kept</td></tr>
+  <tr><td>subscription counters</td><td>yes</td><td></td></tr>
+  <tr><td>registration id, every member, createdAt, modifiedAt</td><td>yes</td><td></td></tr>
+  <tr><td>history - instanceId, createdAt, modifiedAt, observedAt, deletions, deleted entities</td><td>yes</td><td>timescale and corDB</td></tr>
+  <tr><td>history of an entity the stream has none for</td><td>its created row</td><td><a href="#docs/migration/writer">below</a></td></tr>
+  <tr><td>registration counters</td><td>no</td><td>the source keeps none in its database</td></tr>
+  <tr><td>a subscription's subordinate subscriptions</td><td>no</td><td>the broker recreates them from the registrations</td></tr>
+  <tr><td>hosted / cached @contexts</td><td>no</td><td>not yet</td></tr>
+</table>
+
+<h2 id="writer">How the writer writes</h2>
+<p><code>coraine-import</code> writes every record through the code a live write goes through - the conversion
+and checks of a create, the service routines of <code>POST /subscriptions</code> and
+<code>POST /csourceRegistrations</code> - and puts the source's system timestamps, counters and instance ids
+back where the broker would set its own. Every storage format is written only by the plugin that owns it.
+Nothing else a live write does happens: no notification, no forwarding, no history from the current state -
+the history is what the stream's <code>temporal*</code> records say.</p>
+<p><b>An entity the stream gives no history</b>, with a history store: it gets the history a create writes - its
+<code>created</code> event at its createdAt, and an instance of each attribute as it is now. The report counts
+them as <code>created rows</code>. An entity with history in the stream - even a refused history record - gets
+what the stream holds and nothing more.</p>
+<table class="gtable">
+  <tr><th>Why not</th><th></th></tr>
+  <tr><td>the API</td><td>a create through it cannot keep <code>createdAt</code>, <code>modifiedAt</code>, a subscription's counters or an <code>instanceId</code> - the broker sets them, as it must</td></tr>
+  <tr><td>the files</td><td>writing mongoc documents or corDB log records from outside is a second copy of each format, kept in step with the broker for ever</td></tr>
+  <tr><td>an import route on a serving broker</td><td>a route that lets a client set system timestamps is a hole in what a broker guarantees about them</td></tr>
+</table>
+
+<h2 id="orionld">Reading an Orion-LD database</h2>
+<p><code>tools/migrate/orionldExport.py</code> - Python 3; <code>pymongo</code> for the current state,
+<code>psycopg</code> 3 or <code>psycopg2</code> for the history. Per tenant:</p>
+<table class="gtable">
+  <tr><th>Orion-LD</th><th>Read from</th><th>Becomes</th></tr>
+  <tr><td>current state</td><td>MongoDB <code>&lt;db&gt;</code> (default tenant) and <code>&lt;db&gt;-&lt;tenant&gt;</code>: collections <code>entities</code>, <code>csubs</code>, <code>registrations</code></td><td>entity, subscription, registration</td></tr>
+  <tr><td>history (TRoE)</td><td>PostgreSQL <code>&lt;db&gt;</code> and <code>&lt;db&gt;_&lt;tenant&gt;</code>: tables <code>entities</code>, <code>attributes</code>, <code>subAttributes</code></td><td>temporalEntity, temporalInstance</td></tr>
+</table>
+<p>Orion-LD stores names expanded (core terms short), so the reader writes them as they are. Not exported,
+each said on stderr: NGSIv2 subscriptions in <code>csubs</code> (an ObjectId <code>_id</code>), the
+<code>casubs</code> collection, and history rows of an entity whose type neither the history nor the current
+state knows. A history value is what the history table kept: an integral number comes back as an integer, and
+the attribute types the table does not record come back as Properties.</p>
+
+<h2 id="other-sources">Other sources</h2>
+<p>A reader is any program that writes the stream. Planned: Orion (NGSIv2) - the current state, every name
+expanded with the user's @context, a term it does not define an error; history kept outside the broker (CrateDB
+or PostgreSQL tables of an NGSIv2 deployment's history service); and an ETSI neutral export format, once ETSI
+TC DATA defines one - the stream already holds the same content.</p>
+<p class="muted">The field-by-field conversions, the writer's internals and the tests:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/migration.md">doc/migration.md</a>.</p>
+</article>

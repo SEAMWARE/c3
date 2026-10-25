@@ -1,0 +1,136 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/websocket.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>WebSocket</h1>
+<p class="lead">The broker's whole API and its notifications over one connection. A web page opens a
+WebSocket, sends it any request it would send over HTTP, creates subscriptions over it and receives their
+notifications on it - nothing to poll, and no endpoint of its own for the broker to reach.</p>
+
+<pre>coraine --transports ws</pre>
+<p>The WebSocket is a transport plugin, <code>ws.so</code>, loaded by <code>--transports</code>. It is in the build
+by default; <code>-DCOR_FEATURE_TRANSPORTS=OFF</code> leaves it out - no <code>--transports</code>, no
+<code>ws.so</code> (<a href="#docs/building">Building</a>).</p>
+<p>Everything the broker serves over HTTP is served over the connection: entities, batch operations,
+subscriptions, context source registrations and their subscriptions, types and attributes, <code>@context</code>
+documents, temporal, <code>/version</code>, and the API plugins' paths. The notifications of a subscription or
+context source subscription made over the connection come back on it.</p>
+
+<h2 id="connect">Connecting</h2>
+<p><code>GET /ngsi-ld/v1/ws</code> on the broker's HTTP port, with <code>Upgrade: websocket</code> (RFC 6455,
+version 13). Both HTTP servers serve it - libmicrohttpd and the built-in one. The subprotocol
+<code>ngsi-ld.json</code> may be asked for in <code>Sec-WebSocket-Protocol</code>, and is then confirmed; asking for
+none is the same.</p>
+<p>The broker's first message names the connection:</p>
+<pre>{ "metadata": { "connection": "urn:ngsi-ld:WebSocket:4ddb4c6be94beb41-7" } }</pre>
+<p>The id is of this run of the broker - a random part, new at every start, and the connection's number. An id
+of another run, or of another broker instance on the same store, names no connection.</p>
+<table class="gtable">
+  <tr><th>The upgrade is refused for</th><th>Status</th></tr>
+  <tr><td>no <code>Sec-WebSocket-Key</code>; a version other than 13; a subprotocol other than <code>ngsi-ld.json</code></td><td>400</td></tr>
+  <tr><td>an NGSI-LD header in the upgrade request - <code>NGSILD-Tenant</code>, <code>Link</code>, <code>NGSILD-Snapshot</code></td><td>400</td></tr>
+  <tr><td>a path other than <code>/ngsi-ld/v1/ws</code></td><td>404</td></tr>
+</table>
+
+<h2 id="messages">Messages</h2>
+<p>Text messages, each a JSON object with <code>metadata</code> and <code>body</code> - the envelope of the MQTT
+notification binding (ETSI TS 104 243 clause 5), so a notification over a WebSocket is the one MQTT carries.</p>
+
+<h3 id="request">A request</h3>
+<p>Its method and path in <code>metadata</code>, beside the headers HTTP would carry. A <code>requestId</code>, the
+client's choice, comes back in the response, so several requests may be in flight at once.</p>
+<pre>{ "metadata": { "method": "POST", "path": "/ngsi-ld/v1/subscriptions", "requestId": "r1",
+                "Content-Type": "application/json" },
+  "body": { "type": "Subscription", "entities": [ { "type": "Vehicle" } ],
+            "notification": { "endpoint": { "uri": "urn:ngsi-ld:WebSocket:4ddb4c6be94beb41-7" } } } }</pre>
+
+<h3 id="response">A response</h3>
+<p>The status, the <code>requestId</code> and the headers HTTP would return in <code>metadata</code>; the body in
+<code>body</code> - a JSON body as it is, any other (the text of <code>/metrics</code>) as a JSON string.</p>
+<pre>{ "metadata": { "status": 201, "requestId": "r1",
+                "Location": "/ngsi-ld/v1/subscriptions/urn:ngsi-ld:Subscription:..." } }</pre>
+
+<h3 id="notification">A notification</h3>
+<p><code>Content-Type</code> and <code>Link</code> in <code>metadata</code>; the NGSI-LD Notification (or
+ContextSourceNotification) in <code>body</code>.</p>
+
+<h3 id="errors">Errors</h3>
+<p>A request runs through the same service routines as over HTTP, so what it is refused for, and how, is the
+same. Over a WebSocket besides:</p>
+<table class="gtable">
+  <tr><th>Refused</th><th>Status</th></tr>
+  <tr><td>a message that is not a JSON object with a <code>metadata</code> object</td><td>400</td></tr>
+  <tr><td>a request without <code>method</code> or <code>path</code></td><td>400</td></tr>
+  <tr><td>a subscription whose endpoint names another connection</td><td>403</td></tr>
+</table>
+
+<h2 id="tenants">Tenants and headers</h2>
+<p>A connection has no tenant, and no other NGSI-LD header: every message carries its own, so a message means
+the same on every connection. A request's tenant is the <code>NGSILD-Tenant</code> in its <code>metadata</code>;
+without one, the default tenant - as over HTTP.</p>
+<div class="g-callout">
+<p><b>No NGSI-LD headers on the upgrade.</b> An upgrade request with <code>NGSILD-Tenant</code>, <code>Link</code> or
+<code>NGSILD-Snapshot</code> is a 400. Put them in each message's <code>metadata</code> - a browser cannot set
+headers on an upgrade request anyway.</p>
+</div>
+
+<h2 id="subscriptions">Subscriptions on the connection</h2>
+<p>A subscription or context source subscription notifies the connection when its
+<code>notification.endpoint.uri</code> is the connection's id, or <code>urn:ngsi-ld:self</code>. <code>urn:ngsi-ld:self</code>
+is an alias: the broker stores the id in its place, so the subscription shows the id and is the same as one made
+with it (<a href="#docs/sse">Server-Sent Events</a> uses the same value for its streams). A <code>PATCH</code> over
+the connection may set it too; so may a Service Execution's <code>notification.endpoint</code>
+(<code>POST /services</code>).</p>
+<ul>
+  <li><b>A connection is the endpoint only of what is made over it.</b> Another connection's id is refused (403),
+  and so is a connection's id in a subscription made over HTTP or cor:// (400).</li>
+  <li><b>Periodic subscriptions</b> (<code>timeInterval</code>) are notified on the connection once per interval,
+  with the matching entities as they are then - as over HTTP.</li>
+  <li><b>Another endpoint is the client's.</b> A subscription made over the connection may notify an
+  <code>http(s)</code> or <code>mqtt</code> endpoint; it is then not tied to the connection.</li>
+</ul>
+
+<h3 id="lifetime">When the connection closes</h3>
+<p>The client closes it, it breaks, or the broker stops: the subscriptions that notify it are deleted, each in its
+tenant - those made over it to notify it, and those changed over it (<code>PATCH</code>) to notify it. One
+changed since, over HTTP or another connection, to notify elsewhere stays.</p>
+<div class="g-callout warn">
+<p><b>A killed broker deletes nothing - until it starts again.</b> A broker that is killed (not stopped), or
+crashes, leaves its connections' subscriptions in the store. At its next start every subscription, periodic
+subscription and context source subscription that notifies a connection of another run is deleted, in every
+tenant. Not with <code>--high-availability</code>: there, a connection of another run may be another instance's,
+alive, and a killed instance's subscriptions stay.</p>
+</div>
+<p>A client that reconnects creates its subscriptions again, and is sent nothing it missed.</p>
+
+<h2 id="frames">The connection</h2>
+<table class="gtable">
+  <tr><th>Frame</th><th>What happens</th></tr>
+  <tr><td>text</td><td>a message; a fragmented one (a frame and its continuations) is one message</td></tr>
+  <tr><td>ping</td><td>answered with a pong</td></tr>
+  <tr><td>close</td><td>answered with a close</td></tr>
+  <tr><td>binary</td><td>the connection is closed, 1003</td></tr>
+  <tr><td>not masked by the client</td><td>the connection is closed, 1002</td></tr>
+  <tr><td>a message over 16 MiB</td><td>the connection is closed, 1009</td></tr>
+</table>
+<p>A notification to a client that stopped reading gives up after 5 s.</p>
+
+<h2 id="built">How it is built</h2>
+<p>A WebSocket is a <b>transport</b>: it carries the broker's API, as HTTP and cor:// do. Transports are a plugin
+kind of their own, loaded from <code>&lt;plugins&gt;/transport/</code> (<a href="#docs/plugin-architecture">Plugin
+architecture</a>); <code>ws.so</code> is the first.</p>
+<table class="gtable">
+  <tr><th>Part</th><th>Does</th></tr>
+  <tr><td>the plugin</td><td>the protocol: the handshake (<code>Sec-WebSocket-Accept</code>, SHA-1 from libcrypto), the frames, its connections - a thread each</td></tr>
+  <tr><td>the broker</td><td>the messages: it parses a request's envelope, runs it on the connection's thread through the service routines of an HTTP request, answers in an envelope, keeps each connection's subscriptions and delivers their notifications - through the same transport hook <code>mqtt://</code> goes through</td></tr>
+  <tr><td>the upgrade</td><td>corRest finds the <code>Upgrade</code> request, writes the <code>101</code> and hands the socket over - libmicrohttpd's upgrade API, or the built-in server's, with the same contract</td></tr>
+</table>
+
+<h2 id="not-yet">Not yet</h2>
+<ul>
+  <li>a subscription notifying a connection other than its own</li>
+  <li>a second subprotocol, <code>ngsi-ld.cor</code>: binary frames carrying the envelope cor-encoded
+  (<a href="#docs/cor-protocol">The cor format and cor://</a>)</li>
+  <li>cor:// as a transport plugin (<code>cor.so</code>)</li>
+</ul>
+<p class="muted">The source: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/websocket.md">doc/websocket.md</a>.</p>
+</article>

@@ -1,0 +1,87 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/mqtt-bridge.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>The MQTT bridge</h1>
+<p class="lead"><code>mqtt.so</code>, loaded with <code>--bridges mqtt</code>, does two separate things: it delivers
+notifications to <code>mqtt://</code> and <code>mqtts://</code> endpoints, and it ties MQTT topics to entity
+attributes, both ways.</p>
+
+<h2 id="notifications">Notifications over MQTT</h2>
+<p>A subscription whose <code>notification.endpoint.uri</code> is an MQTT URI is delivered over MQTT, as ETSI
+TS 104 243 (<i>NGSI-LD MQTT Notification Binding</i>) defines it. Everything is in the subscription:</p>
+<table class="gtable">
+  <tr><th>Where</th><th>What</th></tr>
+  <tr><td><code>endpoint.uri</code></td><td><code>mqtt[s]://[&lt;user&gt;[:&lt;pass&gt;]@]&lt;host&gt;[:&lt;port&gt;]/&lt;topic&gt;</code> - the ports default to 1883 and 8883</td></tr>
+  <tr><td><code>endpoint.notifierInfo</code></td><td><code>MQTT-QoS</code>: <code>0</code>, <code>1</code>, <code>2</code> (default <code>0</code>)<br><code>MQTT-Version</code>: <code>mqtt3.1.1</code>, <code>mqtt5.0</code> (default <code>mqtt5.0</code>)</td></tr>
+  <tr><td><code>endpoint.receiverInfo</code></td><td>copied into the message's <code>metadata</code></td></tr>
+</table>
+<pre>curl -X POST http://localhost:1026/ngsi-ld/v1/subscriptions \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "type": "Subscription",
+        "entities": [ { "type": "Tank" } ],
+        "notification": {
+          "endpoint": {
+            "uri": "mqtt://mosquitto:1883/plant/alarms",
+            "accept": "application/json",
+            "notifierInfo": [ { "key": "MQTT-QoS", "value": "1" } ]
+          }
+        }
+      }'</pre>
+<p>The message is <code>{ "metadata": { "Content-Type": ..., "Link": ..., ... }, "body": &lt;the Notification&gt; }</code>.
+With <code>--insecureNotif</code>, an <code>mqtts://</code> endpoint's self-signed certificate is accepted.</p>
+<div class="g-callout warn">
+<p><b>Without <code>--bridges mqtt</code> nothing in the broker speaks MQTT</b>, and a subscription with an MQTT
+endpoint is refused (<code>400</code>) when it is created or updated - not accepted and then failing every
+notification.</p>
+</div>
+
+<h2 id="channels">Topics as attributes</h2>
+<p>A message on a topic becomes the attribute's value, and a write to the attribute is published on the topic. The
+bridge is one connection, to the server its configuration names; each channel is one topic. In the
+<code>--bridgeConfig</code> file:</p>
+<pre>{ "mqtt": {
+    "server": { "uri": "mqtt://mosquitto:1883", "MQTT-Version": "mqtt5.0", "clientId": "coraine-plant" },
+    "ngsild": { "topics": {
+      "plant/tank1/level":    { "entityId": "urn:ngsi-ld:Tank:T1", "entityType": "Tank", "attribute": "level",
+                                "channelInfo": [ { "key": "MQTT-QoS", "value": "1" } ] },
+      "plant/tank1/setpoint": { "entityId": "urn:ngsi-ld:Tank:T1", "entityType": "Tank", "attribute": "setpoint" }
+    } } } }</pre>
+<pre>coraine --bridges mqtt --bridgeConfig bridges.json</pre>
+<table class="gtable">
+  <tr><td>The server</td><td>a subscription's MQTT URI without the topic: <code>uri</code> carries user, password,
+  host and port; <code>MQTT-Version</code> is the connection's protocol version (default <code>mqtt5.0</code>);
+  <code>clientId</code> is optional. Without a <code>server</code> the bridge delivers notifications only, and a
+  configured channel is refused.</td></tr>
+  <tr><td>The connection</td><td>opened in the background - a server that is not up yet does not stop the broker.
+  libmosquitto reconnects by itself, and subscribes to every inbound topic again.</td></tr>
+  <tr><td>A topic</td><td>exact: no <code>+</code> or <code>#</code> wildcard, as an arriving message finds its
+  channel by its topic. A wildcard channel is refused and shows as <code>dormant</code> in
+  <code>GET /ngsi-ld/v1/channels</code>, with the reason.</td></tr>
+  <tr><td><code>channelInfo</code></td><td>the keys of a subscription's <code>notifierInfo</code>:
+  <code>MQTT-QoS</code> (<code>0</code>, <code>1</code>, <code>2</code>). An unknown key refuses the channel.</td></tr>
+  <tr><td>A payload</td><td>one that parses as JSON is the value as it is (<code>42.5</code>,
+  <code>{"x": 1}</code>); anything else becomes a JSON string (<code>running</code> → <code>"running"</code>). A
+  write publishes the value's JSON.</td></tr>
+  <tr><td>No echo</td><td>the bridge's own publication does not come back as a sample: MQTT 5's <i>no local</i>
+  subscription option, and on MQTT 3.1.1 (which has none) the last payload published on the topic, dropped once when
+  it returns. The same value published afterwards by a device is a sample.</td></tr>
+</table>
+
+<h2 id="build">Building the plugin</h2>
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corMqttBridge">corMqttBridge</a>; the
+corLibs umbrella clones and builds it with the rest. A broker started without <code>--bridges mqtt</code> never
+loads libmosquitto.</p>
+<pre><span class="c"># needs libmosquitto - Debian/Ubuntu: libmosquitto-dev</span>
+make                  <span class="c"># mqtt.so, debug (traces compiled in)</span>
+make BUILD=release
+make install          <span class="c"># to /opt/seamware/plugins/bridge (PLUGIN_DIR)</span>
+make contract         <span class="c"># does it still satisfy BridgeDriver.h?</span></pre>
+
+<h2 id="tests">Tests</h2>
+<p>In coraine - a bridge is tested through the broker that loads it: <code>subscription_*mqtt*</code>
+(notifications), <code>subscription_mqtt_endpoint_needs_bridge</code>, <code>bridge_mqtt</code> and
+<code>bridge_mqtt_v311_echo</code> (topics). They run a private mosquitto; <code>corTestClient</code> plays the
+device, subscribing to every topic and publishing with <code>POST /mqtt/publish</code>.</p>
+<p class="muted">Other bridges: <a href="#docs/dds">DDS and ROS 2</a>, <a href="#docs/modbus-bridge">Modbus</a>.</p>
+</article>

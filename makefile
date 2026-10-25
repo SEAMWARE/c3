@@ -10,6 +10,8 @@
 #   make run             build, and start c3 on this checkout's pages (ARGS="--port 7901 --no-browser")
 #   make install         $(PREFIX)/bin/c3 and $(PREFIX)/share/c3/www (PREFIX=/usr/local; DESTDIR for packaging)
 #   make uninstall
+#   make site            the documentation as a website, in $(SITE) (build/site): the Documentation page on its own,
+#                        VERSION=<release> (latest) - what seamware.github.io/docs publishes
 #   make clean
 #
 # The backend is built on the cor-libs, as coraine is: SIBLING checkouts (../corHttp, ../corRest, ...)
@@ -80,9 +82,26 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/c3
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3
 
-clean:
-	rm -rf obj c3
+#
+# The website: site/index.html around the Documentation page's own files - docs.js, the guides, the styles
+#
+SITE       ?= build/site
+VERSION    ?= latest
 
-.PHONY: all run install uninstall clean
+site:
+	rm -rf $(SITE)
+	mkdir -p $(SITE)/css $(SITE)/js $(SITE)/img $(SITE)/fonts $(SITE)/docs
+	cp site/index.html $(SITE)/
+	cp www/css/c3.css www/css/compile.css site/site.css $(SITE)/css/
+	cp www/js/docs.js site/site.js $(SITE)/js/
+	cp www/img/coraine-mark.png www/img/seamware.svg $(SITE)/img/
+	cp www/fonts/* $(SITE)/fonts/
+	cp www/docs/* $(SITE)/docs/
+	printf '{ "version": "%s", "commit": "%s" }\n' '$(VERSION)' "$$(git rev-parse --short HEAD 2>/dev/null)" > $(SITE)/version.json
+
+clean:
+	rm -rf obj c3 build
+
+.PHONY: all run install uninstall clean site
 
 -include $(DEPS)

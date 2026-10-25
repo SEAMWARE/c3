@@ -1,0 +1,327 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/testing.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Testing</h1>
+<p class="lead">How to run coraine's functional tests, how the harness reads a test, and how to write one - plus
+the sanitizer, soak and pre-release runs a release is checked with.</p>
+
+<p>Everything here assumes a build - <a href="#docs/building">Building from source</a>. The functional tests are
+under <code>test/funcTests/cases/</code>, and run through <b>corTest</b>, which the <code>corLibs</code> umbrella
+installs as <code>~/git/corLibs/bin/corTest</code>.</p>
+
+<h2 id="run">Running the suite</h2>
+<pre><span class="c"># the whole suite, from the coraine checkout - on MongoDB (mongoc)</span>
+make test
+
+<span class="c"># on corDB, the in-process store</span>
+~/git/corLibs/bin/corTest -db corDB
+
+<span class="c"># a part of it</span>
+corTest cases/create_entity.test       <span class="c"># one file</span>
+corTest --match subscription           <span class="c"># the tests whose --NAME-- matches</span>
+corTest --tags geo,temporal            <span class="c"># the tests with one of these tags</span>
+corTest --fromIx 120                   <span class="c"># from index 120 on</span></pre>
+<p>A test prints one line: <code>index/total/failures-so-far</code>, its name, and <code>OK</code> or
+<code>FAIL: &lt;reason&gt;</code> with its time. corTest exits <code>0</code> when every selected test passed,
+<code>1</code> otherwise. Each test starts the broker (or several) it needs and stops it at the end, so a broker
+that dies costs one test, and <code>--fromIx</code> resumes a run where it stopped.</p>
+
+<h3 id="run-options">Choosing what runs</h3>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>&lt;file.test&gt; | &lt;directory&gt;</td><td>run these; the default is <code>cases/</code></td></tr>
+  <tr><td>--match &lt;grep&gt;</td><td>only the tests whose <code>--NAME--</code> matches</td></tr>
+  <tr><td>--filter &lt;glob&gt;</td><td>the test-file glob (default <code>*.test</code>)</td></tr>
+  <tr><td>--tags &lt;csv&gt;</td><td>only the tests whose <code>--TAGS--</code> meet the list; with no value, lists every known tag</td></tr>
+  <tr><td>--skip-tags &lt;csv&gt;</td><td>every test except those</td></tr>
+  <tr><td>--fromIx &lt;N&gt; / --toIx &lt;N&gt;</td><td>an index range</td></tr>
+  <tr><td>-ix &lt;spec&gt;</td><td>only these 1-based indices, e.g. <code>5-10,102,201-206</code></td></tr>
+  <tr><td>--skip &lt;spec&gt;</td><td>all but these indices - reported and counted as skipped</td></tr>
+  <tr><td>--skipNames &lt;list&gt;<span class="env">CORTEST_SKIP</span></td><td>skip tests by name (globs work, <code>cases/</code> prefix optional) - a standing list that outlives an index change</td></tr>
+  <tr><td>--dryrun</td><td>list the selected tests, run nothing</td></tr>
+  <tr><td>--stopOnError</td><td>stop at the first failure</td></tr>
+  <tr><td>--maxTries &lt;N&gt;</td><td>retry a failing test up to N times (default 1)</td></tr>
+  <tr><td>--keep / --keepLogs</td><td>keep the output files / only the broker logs, also on success</td></tr>
+  <tr><td>-g / --diffTool &lt;path&gt;</td><td>open corDiffGui / another diff tool on a failure</td></tr>
+  <tr><td>-vt</td><td>the main broker under valgrind: a definite or indirect leak, or an error, fails the test</td></tr>
+</table>
+</div>
+
+<h3 id="run-coraine">coraine's own options</h3>
+<p>coraine adds these to corTest (<code>test/funcTests/corTestParams.sh</code>; <code>corTest -u</code> lists them):</p>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>-db corDB|mongoc|ramDB</td><td>the current-state database (default <code>mongoc</code>)</td></tr>
+  <tr><td>-troeDb corDB</td><td>the <code>--troe timescale</code> tests run on <code>--troe corDB</code> (not set by default)</td></tr>
+  <tr><td>-ha yes|no</td><td>the HA cache-sync tests - detected: <code>yes</code> on a mongo replica set</td></tr>
+  <tr><td>-dds yes|no</td><td>the real DDS tests - detected: <code>yes</code> where <code>dds.so</code> is installed</td></tr>
+  <tr><td>-traceLevels &lt;levels&gt;</td><td>the broker's trace levels (corArgs syntax); empty for none</td></tr>
+  <tr><td>-httpServer mhd|builtin</td><td>the HTTP server the broker was built with (default <code>mhd</code>)</td></tr>
+  <tr><td>-buildTests yes|no</td><td>the tests that compile the broker (default <code>no</code>)</td></tr>
+</table>
+</div>
+
+<h3 id="run-time">How long it takes</h3>
+<p>The whole suite - 732 tests - takes <b>14.5 minutes</b> on <code>mongoc</code> (868&nbsp;s, 2026-10-02, on the
+machine of <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md">doc/performance.md</a>).
+The fixed cost of a test:</p>
+<table class="gtable">
+  <tr><td>stopping the broker</td><td>~0.15&nbsp;s with <code>mongoc</code> (its own close), ~0.01&nbsp;s with <code>corDB</code></td></tr>
+  <tr><td>waiting for its port at start-up</td><td>up to 0.02&nbsp;s - polled every 20&nbsp;ms</td></tr>
+  <tr><td>dropping the database</td><td>~0.008&nbsp;s with <code>corMongoDrop</code> (corTools: one libmongoc connection)</td></tr>
+</table>
+<p>Where <code>corMongoDrop</code> is not built (no libmongoc on the machine) the drop falls back to
+<code>mongosh</code>: ~0.3&nbsp;s a drop, and the suite drops 1&nbsp;466 times.</p>
+
+<h3 id="run-cor">Over cor://</h3>
+<pre>COR_TRANSPORT=cor ~/git/corLibs/bin/corTest -db mongoc</pre>
+<p>Every test it can runs on the broker's binary API instead of HTTP: each broker also listens on cor:// (its HTTP
+port + 1000), and <code>corCurl</code> sends the request with <code>corRequest --curl</code>, which prints what it
+prints for an HTTP request - every expectation holds unchanged. What only HTTP carries stays on curl: a body that
+is not JSON, a text answer, <code>HEAD</code>, a POST without a body (411), a method the broker does not have, a
+body over 1&nbsp;MiB (413). <code>COR_TRANSPORT_TRACE=&lt;file&gt;</code> logs which transport each request took.
+The whole suite passes this way; it saves no measurable time - a request is a process start either way.
+<a href="#docs/cor-protocol">The cor format and cor://</a> has the protocol.</p>
+
+<h3 id="run-cordb">corDB in the suite is persistent</h3>
+<p>With <code>-db corDB</code> every broker has <code>--dbDir</code>: a directory per role under
+<code>COR_DB_PERSIST_DIR</code> (default <code>/tmp/corTest-dbDir</code>). As with MongoDB, a (re)start keeps what is
+there and <code>corDbDrop</code> empties it, so every write of the suite goes through corDB's log. A test that gives
+its broker a <code>--dbDir</code> of its own keeps it.</p>
+
+<h2 id="harness">How corTest reads a test</h2>
+<p>corTest is a generic harness for any program that writes to stdout - it knows nothing about HTTP or brokers.
+For each <code>.test</code> file it:</p>
+<ol>
+  <li>splits the file into its sections and writes <code>--INIT--</code>, <code>--RUN--</code> and
+  <code>--TEARDOWN--</code> out as scripts of their own (run with <code>bash</code>);</li>
+  <li>runs <code>--INIT--</code>, then <code>--RUN--</code>, capturing its stdout into <code>&lt;test&gt;.out</code>;</li>
+  <li>compares the <code>.out</code> with <code>--EXPECT--</code> using <b>corDiff</b>;</li>
+  <li>runs <code>--TEARDOWN--</code>.</li>
+</ol>
+<div class="g-callout warn">
+<p><b>Each section is a separate process.</b> A shell variable set in <code>--INIT--</code> is not there in
+<code>--RUN--</code>; what a later section needs is written to a file, or set up again.</p>
+</div>
+<p>The repository plugs in its own verbs: <code>test/funcTests/corTestFunctions.sh</code> (sourced before each
+section - <code>coraineStart</code>, <code>corCurl</code>, <code>corDbDrop</code>, ...) and
+<code>test/funcTests/corTestParams.sh</code> (the options above).</p>
+
+<h3 id="failure">After a failure</h3>
+<p>A passing test leaves nothing behind. A failing one keeps its files next to the <code>.test</code>:</p>
+<table class="gtable">
+  <tr><td><code>&lt;test&gt;.out</code></td><td>the captured stdout of <code>--RUN--</code></td></tr>
+  <tr><td><code>&lt;test&gt;.diff</code></td><td>a unified diff of expected against actual, numbered by the expected lines, each hunk headed by its step; a line its <code>REGEX(...)</code> matches is not a difference</td></tr>
+  <tr><td><code>&lt;test&gt;.run.stderr</code></td><td>stderr of <code>--RUN--</code></td></tr>
+  <tr><td><code>&lt;test&gt;.init.stderr</code>, <code>.teardown.stderr</code></td><td>stderr of setup and cleanup</td></tr>
+</table>
+
+<h2 id="write">Writing a test</h2>
+<p>The first step of <code>cases/create_entity.test</code>:</p>
+<pre>--NAME--
+Create entity and retrieve it
+
+--TAGS--
+create entity
+
+--INIT--
+corDbDrop
+coraineStart
+
+--RUN--
+echo "01. Create entity with id, type, and two properties"
+echo "==================================================="
+payload='{
+  "id": "urn:ngsi-ld:Vehicle:A001",
+  "type": "Vehicle",
+  "speed": { "type": "Property", "value": 120 },
+  "color": { "type": "Property", "value": "red" }
+}'
+corCurl --url /ngsi-ld/v1/entities --payload "$payload"
+echo
+echo
+
+--EXPECT--
+01. Create entity with id, type, and two properties
+===================================================
+HTTP/1.1 201 Created
+Date: REGEX(.*)
+Location: /ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A001
+Content-Length: REGEX(\d+)
+
+
+
+
+--TEARDOWN--
+coraineStop
+corDbDrop</pre>
+<table class="gtable">
+  <tr><th>Section</th><th></th></tr>
+  <tr><td><code>--NAME--</code></td><td>the test's name - required</td></tr>
+  <tr><td><code>--INIT--</code></td><td>setup - optional</td></tr>
+  <tr><td><code>--RUN--</code></td><td>the commands whose stdout is compared - required</td></tr>
+  <tr><td><code>--EXPECT--</code></td><td>the expected stdout - required</td></tr>
+  <tr><td><code>--TEARDOWN--</code></td><td>cleanup - the marker is required, its content is not</td></tr>
+  <tr><td><code>--TAGS--</code></td><td>tags for <code>--tags</code> / <code>--skip-tags</code> - optional</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>A test without a <code>--TEARDOWN--</code> marker is refused before it runs.</b> State left behind - a server,
+a database - surfaces as another test's failure, so "nothing to tear down" is an empty section, never a missing
+one.</p>
+</div>
+
+<h3 id="matching">Matching what varies</h3>
+<p><code>--EXPECT--</code> is not compared byte for byte:</p>
+<ul>
+  <li><b><code>REGEX(pattern)</code></b> matches dynamic content - a date, a generated id, a length - alone on a line
+  or inside one: <code>"id": "REGEX(urn:ngsi-ld:.+)"</code>.</li>
+  <li><b><code>#SORT_START</code> ... <code>#SORT_END</code></b> compares the lines between them in any order, for
+  output whose order is not guaranteed. The two combine.</li>
+</ul>
+<div class="g-callout warn">
+<p><b>No top-level <code>|</code> in a REGEX.</b> The pattern is spliced into the line's pattern unbracketed, so
+<code>x: REGEX(true|false)</code> becomes <code>x:\ true|false</code>: it accepts one branch and rejects the other.
+Write <code>REGEX([a-z]+)</code>.</p>
+</div>
+<p><code>corTest --regen cases/new.test</code> fills an empty <code>--EXPECT--</code> from the captured output;
+coraine's regenerator (<code>test/funcTests/tools/corRegenExpect</code>) turns the process- and run-volatile tokens
+into <code>REGEX(...)</code>. Read what it wrote before committing it.</p>
+
+<h3 id="markers">When a test applies</h3>
+<p>A comment anywhere in the file decides whether a test is in the run:</p>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Marker</th><th>What it does</th></tr>
+  <tr><td># REQUIRE_&lt;TAG&gt;: a b</td><td>the test applies only when that option holds one of the values - <code>REQUIRE_DB: corDB mongoc</code> is either. Otherwise it leaves the run list, and is not counted as skipped</td></tr>
+  <tr><td># SKIP_&lt;TAG&gt;: a b</td><td>the test applies, and is skipped - and reported so - for these values</td></tr>
+  <tr><td># SKIP_VALGRIND: on</td><td>skipped in a <code>-vt</code> run: a test that kills its broker with a signal on purpose, or reads its threads in <code>/proc</code></td></tr>
+  <tr><td># REQUIRE_FEATURE: A B</td><td>applies only if the build has <b>all</b> of them</td></tr>
+  <tr><td># SKIP_FEATURE: A B</td><td>applies only if the build has <b>none</b> of them - a test of the 501 of an endpoint compiled out</td></tr>
+</table>
+</div>
+<p>The features come from <code>COR_TEST_FEATURES</code>, which <code>corTestParams.sh</code> sets by asking the
+binary what it was built with. Unset, both feature markers are inert and every test runs.</p>
+
+<h3 id="no-log">A test never reads the broker's log</h3>
+<p>A test waits on, and asserts on, what the <b>API</b> says. A trace line is there only when the trace levels
+include it and the code was built with its traces - a test waiting on one times out against a build without them
+while the broker works. No test sets <code>COR_TRACE_LEVELS</code>, and the suite passes with
+<code>-traceLevels ""</code>. A warning (<code>COR_W</code>) is different: no trace level or build switch turns it
+off, and a test may check one was given.</p>
+<p>For what happens after the response, <code>corTestFunctions.sh</code> has helpers that poll the API - for an
+attribute member a bridge writes (<code>attrMemberAwait</code>), a bridge's counters and dropped samples
+(<code>bridgeChannelAtLeast</code>, <code>bridgeAtLeast</code>), a DDS endpoint discovered
+(<code>ddsServiceAwait</code>), a goal ended (<code>bridgeGoalEndedAwait</code>) or its temporal history
+(<code>bridgeGoalHistoryAwait</code>).</p>
+
+<h2 id="environment">Tests that need what a machine may not have</h2>
+<p>corTest detects these, and the tests apply or not - nobody has to remember a flag:</p>
+<table class="gtable">
+  <tr><th>Needs</th><th>Detected as</th><th>Where it is not</th></tr>
+  <tr><td>a mongo <b>replica set</b> - the HA cache sync rides a change stream</td><td><code>-ha yes</code></td><td>a standalone mongod</td></tr>
+  <tr><td>the <b>DDS bridge</b> and a <b>real ROS 2 publisher</b></td><td><code>-dds yes</code></td><td>a GitHub runner</td></tr>
+</table>
+<p><code>bridge_dds_ros2_roundtrip</code> is the one test with a real DDS system on the other side of the bridge,
+and it stays local. It needs:</p>
+<pre>make -C ~/git/corDdsBridge COR_BRIDGE_DDS=ON install   <span class="c"># needs the eProsima stack</span>
+docker pull eprosima/vulcanexus:jazzy-desktop          <span class="c"># 6.5 GiB, never pulled by a test</span></pre>
+<p>The ROS 2 demo talker in that image publishes <code>std_msgs/String</code> on <code>/chatter</code> (DDS topic
+<code>rt/chatter</code>); the demo listener observes what the broker publishes. In GitHub Actions
+<code>COR_DDS_ROS2_IMAGE</code> names the image's mirror. <a href="#docs/dds">DDS and ROS 2</a> has the bridge.</p>
+<div class="g-callout warn">
+<p><b>The containers run with <code>--ipc=host</code>, not <code>--net=host</code>.</b> Fast DDS reaches a participant
+on the same machine over shared memory: without <code>--ipc=host</code> the broker discovers nothing, and nothing is
+logged; with both, the topics never surface either.</p>
+</div>
+
+<h2 id="mirrors">CI images: the Docker Hub mirrors</h2>
+<p>The workflows pull nothing from Docker Hub - its anonymous pull limit is per IP, and GitHub's runners share
+theirs. Each image comes from a copy in <code>quay.io/seamware/coraine-ci</code>, tagged
+<code>mirror-&lt;name&gt;-&lt;tag&gt;</code> (every architecture, the same digests), made by
+<code>.github/workflows/mirror-images.yml</code> weekly and on dispatch. A build outside CI needs nothing from
+quay: <code>docker/Dockerfile</code>, the compose files and the test helpers keep the upstream names. To add an
+image:</p>
+<ol>
+  <li>a line in <code>IMAGES</code> in <code>mirror-images.yml</code>;</li>
+  <li><code>gh workflow run mirror-images.yml</code>;</li>
+  <li><code>quay.io/seamware/coraine-ci:mirror-&lt;name&gt;-&lt;tag&gt;</code> in the workflow.</li>
+</ol>
+
+<h2 id="coverage">Coverage</h2>
+<pre>make coverage                <span class="c"># mongoc  - coverage-mongoc/index.html</span>
+make coverage DB=corDB       <span class="c"># corDB   - coverage-corDB/index.html</span>
+make coverage-etsi           <span class="c"># the ETSI test suite - coverage-etsi/index.html</span></pre>
+<p>The figures, what the uncovered lines are, and the details that give a wrong number when missed:
+<a href="#docs/coverage">Test coverage</a>.</p>
+
+<h2 id="sanitizers">Sanitizers</h2>
+<p>The functional suite with every library and the broker built with
+<code>-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g</code> - AddressSanitizer, LeakSanitizer and
+UndefinedBehaviorSanitizer. The tools are in <code>test/sanitizer/</code>:</p>
+<table class="gtable">
+  <tr><td><code>sanSetup.sh &lt;dir&gt; [&lt;bin dir&gt;]</code></td><td>writes <code>gcc-san</code> (the compiler), <code>sanPreload.so</code> (<code>dlclose()</code> a no-op, so a leak inside a plugin names its frames) and the wrappers <code>coraine</code> / <code>coraine-import</code></td></tr>
+  <tr><td><code>sanReport.py &lt;report dir&gt;</code></td><td>the reports, deduplicated by kind and first frames, with the tests that hit each; exit 1 if there is one</td></tr>
+  <tr><td><code>lsan.supp</code></td><td>LeakSanitizer suppressions - third-party stacks only</td></tr>
+</table>
+<p>In a throwaway environment (it installs into <code>/usr/local</code> and <code>/opt/seamware</code>), from the
+coraine checkout, the libraries already built by <code>bootstrap.sh</code>:</p>
+<pre>test/sanitizer/sanSetup.sh /opt/san
+make libs-rebuild CC=/opt/san/gcc-san COR_HTTP_SERVER=mhd
+CC=/opt/san/gcc-san make di CC=/opt/san/gcc-san COR_HTTP_SERVER=mhd
+COR_BROKER=/opt/san/coraine COR_IMPORT=/opt/san/coraine-import corTest -db mongoc
+test/sanitizer/sanReport.py /tmp/san-reports</pre>
+<p><code>CC</code> on the make command line reaches every library's make; <code>CC</code> in the environment is what
+cmake reads for the broker and its plugins. The reports go to <code>$SAN_REPORT_DIR</code> (default
+<code>/tmp/san-reports</code>): <code>asan.&lt;pid&gt;</code>, <code>ubsan.&lt;pid&gt;</code>, and <code>pids</code>
+mapping each pid to its test.</p>
+
+<h2 id="soak">Soak</h2>
+<pre>test/soak/soak.py --db mongoc|corDB [--minutes 120] [--rate 40]</pre>
+<p>A release broker under mixed load at a fixed, moderate rate: creates, PATCHes, retrieves, queries, batch
+operations, deletes, a subscription created and deleted, and three subscriptions notifying a receiver the script
+runs. Each worker caps its entities (<code>--maxEntities</code>), so the store reaches a steady size. corDB runs
+with <code>--dbDir</code>; both with <code>--troe none</code>. It fails on:</p>
+<ul>
+  <li>the broker exiting or not answering, or a status other than the one expected;</li>
+  <li>a retrieve not returning the value last written;</li>
+  <li>RssAnon growing after the warm-up (the first 15&nbsp;%, at least 5 minutes) by more than
+  <code>max(--rssMaxGrowthPct %, --rssMaxGrowthMiB)</code>;</li>
+  <li>an <code>E</code> or <code>X</code> line in the broker's log, or a notification count other than the one
+  expected;</li>
+  <li>a final read - every live entity, its value, the count, the subscriptions - that differs from what was written.</li>
+</ul>
+<p>It measures no throughput.</p>
+
+<h2 id="prerelease">The pre-release campaign</h2>
+<p>Everything a release is checked with, in one run of <code>.github/workflows/prerelease.yml</code> (or Actions -
+Pre-release - Run workflow):</p>
+<pre>gh workflow run prerelease.yml -f ref=release/0.5.0              <span class="c"># soakMinutes=120, only=all</span>
+gh workflow run prerelease.yml -f ref=release/0.5.0 -f only=soak -f soakMinutes=30</pre>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Part</th><th>What</th><th>Jobs</th></tr>
+  <tr><td><code>nightly</code></td><td>valgrind on both HTTP servers, ETSI (mhd/builtin × mongoc, mhd corDB), coverage, performance, the DDS bridge image, the suite on arm64</td><td>17</td></tr>
+  <tr><td><code>packages</code></td><td>the Debian packages built (pgo), then installed in clean containers</td><td>20</td></tr>
+  <tr><td><code>sanitizers</code></td><td>the whole suite under ASan + UBSan, {mhd, builtin} × {mongoc, corDB}</td><td>4</td></tr>
+  <tr><td><code>upgrade</code></td><td><code>test/upgrade/upgradeCheck.sh</code> from the image of the newest <code>v*</code> tag before <code>ref</code> to this build, mongoc + corDB</td><td>1</td></tr>
+  <tr><td><code>soak</code></td><td><code>soakMinutes</code> per database, mongoc and corDB</td><td>2</td></tr>
+  <tr><td><code>summary</code></td><td>every job of the run in the run summary; red if any part is</td><td>1</td></tr>
+</table>
+</div>
+<ul>
+  <li>Every part tests the sha <code>ref</code> names when the run starts; the libraries are at <code>main</code>.</li>
+  <li>The campaign's tools come from the branch the workflow is dispatched on, the code and its suite from <code>ref</code>.</li>
+  <li>Nothing is published - no coverage site, no performance history, no apt repository.</li>
+  <li><code>only</code> runs one part, to re-run the one that went red.</li>
+</ul>
+
+<h2 id="more">Further</h2>
+<ul>
+  <li>The full text: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/testing.md">doc/testing.md</a>, with the
+  list of mirrored images.</li>
+  <li>The harness: <a href="https://github.com/SEAMWARE/corTest">corTest</a> - its README has every option and the
+  companion tools (corDiff, corDiffGui, corRegenExpect).</li>
+</ul>
+</article>

@@ -1,0 +1,607 @@
+{
+  "comment": "The Documentation page's contents (docs.js) - in c³ and on the website (make site). A group lists guides (the reader's order: previous / next follow it) (id: www/docs/<id>.html, written for the reader from the Markdown in 'from') and repositories (repo: opens it on GitHub). 'from' is where a guide's facts come from, 'at' the commit of that repository it was last brought up to date with - tools/docsStale.py lists the guides whose sources changed since. 'privateGroup': the private repositories of that kind the user can read are added to it, in c³ only (GET /api/repos/private).",
+  "groups": [
+    {
+      "title": "Start here",
+      "items": [
+        {
+          "id": "overview",
+          "title": "coraine",
+          "desc": "what it is, what it is built of, where to start",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/index.md",
+              "at": "e5aa1b23"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "c94d687e"
+            }
+          ]
+        },
+        {
+          "id": "installation",
+          "title": "Installation",
+          "desc": "apt, Docker or source; the first start, the databases and their options, checking an installation, upgrading",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/installation.md",
+              "at": "ef327118"
+            },
+            {
+              "repo": "coraine",
+              "path": "docker/README.md",
+              "at": "713b7e0b"
+            }
+          ]
+        },
+        {
+          "id": "api-walkthrough",
+          "title": "API walkthrough",
+          "desc": "an entity created, read, queried, changed, watched and deleted",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/api-walkthrough.md",
+              "at": "8d25453b"
+            }
+          ]
+        },
+        {
+          "id": "administration",
+          "title": "Administration",
+          "desc": "every command-line option with its environment variable, the log, the admin API, health probes, memory, request and response limits",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/installation.md",
+              "at": "ef327118"
+            }
+          ]
+        },
+        {
+          "id": "building",
+          "title": "Building from source",
+          "desc": "the libraries, the make targets, coraine-build, the feature switches and the HTTP server",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/building.md",
+              "at": "73aadc94"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/building-details.md",
+              "at": "95794ae2"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/extreme-performance.md",
+              "at": "bfcd2fbe"
+            }
+          ]
+        },
+        {
+          "id": "migration",
+          "title": "Migrating a database to coraine",
+          "desc": "another broker's entities, subscriptions, registrations and history moved in, with their timestamps",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/migration.md",
+              "at": "58316209"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Deploying",
+      "items": [
+        {
+          "id": "kubernetes",
+          "title": "Kubernetes",
+          "desc": "the image, memory, probes, stopping and metrics, and two manifests",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/kubernetes.md",
+              "at": "e34f793d"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "c94d687e"
+            }
+          ]
+        },
+        {
+          "id": "high-availability",
+          "title": "High availability",
+          "desc": "several instances on one MongoDB replica set, kept in step by change streams",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/high-availability.md",
+              "at": "8d25453b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Performance",
+      "items": [
+        {
+          "id": "performance",
+          "title": "Performance and footprint",
+          "desc": "how small and how fast: disk, RAM, start-up, per operation and per database, more entities and cores, what durability costs",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "c94d687e"
+            }
+          ]
+        },
+        {
+          "id": "extreme-performance",
+          "title": "Extreme performance",
+          "desc": "indexes on what you query, and a broker trained on your workload - from c³ or the command line",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/extreme-performance.md",
+              "at": "bfcd2fbe"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "c94d687e"
+            }
+          ]
+        },
+        {
+          "id": "database-indexes",
+          "title": "Database indexes",
+          "desc": "what each store indexes, how to see what a query uses, and what to add",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "c94d687e"
+            },
+            {
+              "repo": "c3",
+              "path": "doc/indexes.md",
+              "at": "43034ed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "The API beyond HTTP",
+      "items": [
+        {
+          "id": "websocket",
+          "title": "WebSocket",
+          "desc": "the whole API and its notifications over one connection - messages, tenants, subscriptions on the connection",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/websocket.md",
+              "at": "c6ac7d90"
+            }
+          ]
+        },
+        {
+          "id": "sse",
+          "title": "Server-Sent Events",
+          "desc": "a subscription made on its own event stream - plain HTTP, and when to choose it over a WebSocket",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/sse.md",
+              "at": "77619c98"
+            }
+          ]
+        },
+        {
+          "id": "timepoint",
+          "title": "Timepoint - an entity as it was",
+          "desc": "the Core API's retrieve and query at a point in time, from the history inside corDB",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/timepoint.md",
+              "at": "69620a6c"
+            }
+          ]
+        },
+        {
+          "id": "cor-protocol",
+          "title": "The cor format and cor://",
+          "desc": "the binary tree format and the broker's binary API - when to use it, the frame, the numbers",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/cor-protocol.md",
+              "at": "1e0ff6bb"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/cor-protocol-details.md",
+              "at": "9269c286"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Devices and bridges",
+      "items": [
+        {
+          "id": "dds",
+          "title": "DDS and ROS 2",
+          "desc": "topics, services and actions as entity attributes - what the bridge does, its configuration and options",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/dds.md",
+              "at": "596685ae"
+            },
+            {
+              "repo": "corDdsBridge",
+              "path": "README.md",
+              "at": "79f8e6e"
+            }
+          ]
+        },
+        {
+          "id": "device-protocols",
+          "title": "Speaking to devices directly",
+          "desc": "the broker on the device side: three deployment shapes, flow or delegation, what parity with the agents means",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/device-protocols.md",
+              "at": "596685ae"
+            }
+          ]
+        },
+        {
+          "id": "modbus-bridge",
+          "title": "The Modbus bridge",
+          "desc": "Modbus TCP registers as entity attributes: addresses, channelInfo, polling, writes",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/modbus-bridge.md",
+              "at": "d3aa9172"
+            },
+            {
+              "repo": "corModbusBridge",
+              "path": "README.md",
+              "at": "71337b5"
+            }
+          ]
+        },
+        {
+          "id": "mqtt-bridge",
+          "title": "The MQTT bridge",
+          "desc": "notifications to mqtt:// endpoints, and MQTT topics as entity attributes",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/mqtt-bridge.md",
+              "at": "16489106"
+            },
+            {
+              "repo": "corMqttBridge",
+              "path": "README.md",
+              "at": "62f7254"
+            }
+          ]
+        },
+        {
+          "id": "iot-agents",
+          "title": "FIWARE IoT Agents",
+          "desc": "what the agents do - provisioning, attribute kinds, commands - and the bridge plugin for each",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/iot-agents.md",
+              "at": "596685ae"
+            },
+            {
+              "repo": "corIotaJsonBridge",
+              "path": "README.md",
+              "at": "639565c"
+            },
+            {
+              "repo": "corIotaUlBridge",
+              "path": "README.md",
+              "at": "59b1d6d"
+            },
+            {
+              "repo": "corIotaLwm2mBridge",
+              "path": "README.md",
+              "at": "336b41c"
+            },
+            {
+              "repo": "corIotaLoraBridge",
+              "path": "README.md",
+              "at": "e9bbee2"
+            },
+            {
+              "repo": "corIotaSigfoxBridge",
+              "path": "README.md",
+              "at": "2815924"
+            },
+            {
+              "repo": "corIotaIsoxmlBridge",
+              "path": "README.md",
+              "at": "94932c0"
+            },
+            {
+              "repo": "corOpcuaBridge",
+              "path": "README.md",
+              "at": "7d1b22f"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Security",
+      "items": [
+        {
+          "id": "authorization",
+          "title": "Authorization in the broker",
+          "desc": "the auth plugins - OpenID Connect roles, the Data Space Connector's tokens and ODRL policies - and how a request is decided",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/authorization.md",
+              "at": "d22ffc0b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Inside coraine",
+      "items": [
+        {
+          "id": "plugin-architecture",
+          "title": "Plugin architecture",
+          "desc": "the six plugin kinds, where they load from, and the checks that refuse a plugin built for another broker",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/plugin-architecture.md",
+              "at": "65b0ac47"
+            }
+          ]
+        },
+        {
+          "id": "coroutines",
+          "title": "Coroutines",
+          "desc": "where a request runs, how a request that waits yields to the event loop, and which configurations get it",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/coroutines.md",
+              "at": "ef1938a7"
+            }
+          ]
+        },
+        {
+          "id": "testing",
+          "title": "Testing",
+          "desc": "running the functional suite, how corTest reads a test, writing one - and the sanitizer, soak and pre-release runs",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/testing.md",
+              "at": "225e22e7"
+            },
+            {
+              "repo": "corTest",
+              "path": "README.md",
+              "at": "34b842f"
+            }
+          ]
+        },
+        {
+          "id": "coverage",
+          "title": "Test coverage",
+          "desc": "how much of the broker the functests run, what the uncovered part is, and how much of the spec a test asserts",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/coverage.md",
+              "at": "506d9d42"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/spec-coverage-gaps.md",
+              "at": "16489106"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "The broker",
+      "items": [
+        {
+          "repo": "coraine",
+          "desc": "the NGSI-LD context broker"
+        }
+      ]
+    },
+    {
+      "title": "The control center",
+      "items": [
+        {
+          "repo": "c3",
+          "desc": "c³ - build, run, explore and configure coraine brokers"
+        }
+      ]
+    },
+    {
+      "title": "Bridges, protocols and agents",
+      "privateGroup": "bridges",
+      "items": [
+        {
+          "repo": "corBridge",
+          "desc": "the contract every bridge plugin implements - the seam to non-NGSI-LD transports"
+        },
+        {
+          "repo": "corBridgeTemplate",
+          "desc": "start a new bridge here: the entry points, an example transport, a functest, CI"
+        },
+        {
+          "repo": "corMqttBridge",
+          "desc": "MQTT"
+        },
+        {
+          "repo": "corModbusBridge",
+          "desc": "Modbus"
+        },
+        {
+          "repo": "corDdsBridge",
+          "desc": "DDS / ROS 2: topics, services and actions as entity attributes"
+        },
+        {
+          "repo": "corOpcuaBridge",
+          "desc": "OPC UA: Variables as Channels, Objects as AssetChannels"
+        },
+        {
+          "repo": "corCkanBridge",
+          "desc": "open data from a CKAN portal, ingested as entities"
+        },
+        {
+          "repo": "corIotaJsonBridge",
+          "desc": "the FIWARE IoT Agent JSON, its commands as Service Executions"
+        },
+        {
+          "repo": "corIotaUlBridge",
+          "desc": "the FIWARE IoT Agent UltraLight 2.0"
+        },
+        {
+          "repo": "corIotaLwm2mBridge",
+          "desc": "the FIWARE IoT Agent for LwM2M - an LwM2M server"
+        },
+        {
+          "repo": "corIotaLoraBridge",
+          "desc": "the FIWARE IoT Agent LoRaWAN - TTN v3, ChirpStack v4"
+        },
+        {
+          "repo": "corIotaSigfoxBridge",
+          "desc": "the FIWARE IoT Agent for Sigfox - callbacks and downlinks"
+        },
+        {
+          "repo": "corIotaIsoxmlBridge",
+          "desc": "the FIWARE IoT Agent for ISOXML (ISO 11783-10 task data)"
+        },
+        {
+          "repo": "corAasBridge",
+          "desc": "an Asset Administration Shell server, as a bridge plugin"
+        }
+      ]
+    },
+    {
+      "title": "Libraries",
+      "items": [
+        {
+          "repo": "corBase",
+          "desc": "basic utilities: strings, time, files, coroutines"
+        },
+        {
+          "repo": "corLog",
+          "desc": "logging and trace levels"
+        },
+        {
+          "repo": "corAlloc",
+          "desc": "request arenas - fast allocation, freed at once"
+        },
+        {
+          "repo": "corArgs",
+          "desc": "command-line options and environment variables"
+        },
+        {
+          "repo": "corHash",
+          "desc": "hash tables"
+        },
+        {
+          "repo": "corTree",
+          "desc": "the in-memory tree (CorNode) every JSON document becomes"
+        },
+        {
+          "repo": "corJson",
+          "desc": "the JSON parser and renderer"
+        },
+        {
+          "repo": "corJsonld",
+          "desc": "JSON-LD: @context handling, expansion and compaction"
+        },
+        {
+          "repo": "corNgsild",
+          "desc": "NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations"
+        },
+        {
+          "repo": "corDB",
+          "desc": "the in-process NGSI-LD store, persistent with --dbDir, and its history"
+        },
+        {
+          "repo": "corProm",
+          "desc": "Prometheus metrics"
+        },
+        {
+          "repo": "corPlugin",
+          "desc": "the plugin loader"
+        },
+        {
+          "repo": "corHttp",
+          "desc": "the built-in HTTP server"
+        },
+        {
+          "repo": "corRest",
+          "desc": "the REST layer: services, requests, the HTTP and cor:// clients"
+        }
+      ]
+    },
+    {
+      "title": "Tools and integrations",
+      "privateGroup": "tools",
+      "items": [
+        {
+          "repo": "corLibs",
+          "desc": "the umbrella that builds every library"
+        },
+        {
+          "repo": "corTest",
+          "desc": "the functional test harness"
+        },
+        {
+          "repo": "corTools",
+          "desc": "test and benchmark tools"
+        },
+        {
+          "repo": "corApisixNgsild",
+          "desc": "an APISIX plugin: coraine's NGSI-LD access decision, for any NGSI-LD broker"
+        },
+        {
+          "repo": "corMcp",
+          "desc": "an MCP server for NGSI-LD brokers: an AI assistant reads a broker through it"
+        }
+      ]
+    }
+  ]
+}

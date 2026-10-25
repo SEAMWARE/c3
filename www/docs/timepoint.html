@@ -1,0 +1,75 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/timepoint.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Timepoint - an entity as it was</h1>
+<p class="lead">The Core API's retrieve and query, evaluated at a point in time: the entities as they were at
+<code>timeAt</code>. The answer is an ordinary Entity, or an Entity array - not the temporal representation of
+<code>/temporal/entities</code>. NGSI-LD v2.1 (ETSI DATAINFRA(26)000027).</p>
+
+<pre><span class="c"># the vehicle as the broker held it at 10:00</span>
+curl 'http://localhost:1026/ngsi-ld/v1/temporal/timepoint/entities/urn:ngsi-ld:Vehicle:A100?timeAt=2026-10-20T10:00:00Z'
+
+<span class="c"># the vehicles faster than 50 then</span>
+curl 'http://localhost:1026/ngsi-ld/v1/temporal/timepoint/entities?type=Vehicle&amp;q=speed&gt;50&amp;timeAt=2026-10-20T10:00:00Z'</pre>
+
+<h2 id="resources">The resources</h2>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Resource</th><th>Operation</th><th>Core API counterpart</th></tr>
+  <tr><td><code>GET /ngsi-ld/v1/temporal/timepoint/entities/{entityId}</code></td><td>retrieveEntityTimepoint</td><td><code>GET /entities/{entityId}</code></td></tr>
+  <tr><td><code>GET /ngsi-ld/v1/temporal/timepoint/entities</code></td><td>queryEntityTimepoint</td><td><code>GET /entities</code></td></tr>
+  <tr><td><code>POST /ngsi-ld/v1/temporal/timepoint/entityOperations/query</code></td><td>queryEntityTimepoint</td><td><code>POST /entityOperations/query</code></td></tr>
+</table>
+</div>
+
+<h2 id="timeat">timeAt</h2>
+<p>Mandatory: a missing or invalid <code>timeAt</code> is a 400 BadRequestData.</p>
+<ul>
+  <li><b><code>GET</code></b> - the URL parameter <code>timeAt</code>.</li>
+  <li><b><code>POST</code></b> - a member of the Query: <code>{ "type": "Query", ..., "timeAt": "..." }</code>.</li>
+</ul>
+<div class="g-callout">
+<p><b>The Query's <code>timeAt</code>, not a <code>temporalQ</code>'s.</b> A <code>temporalQ</code> selects entities by
+their history (<code>timerel</code>, its own <code>timeAt</code>); the timepoint's <code>timeAt</code> picks the instance
+of each attribute an entity had then. A timepoint query with a <code>temporalQ</code> is a 400 - and so is a Core API
+<code>POST</code> query with a <code>timeAt</code> member: a Query there has none.</p>
+</div>
+
+<h3 id="system-time">What "as it was" means</h3>
+<p><code>timeAt</code> is on system time: the entity as the broker held it at <code>timeAt</code> - each attribute's
+last write at or before it.</p>
+<table class="gtable">
+  <tr><th>The entity at <code>timeAt</code></th><th>The answer</th></tr>
+  <tr><td>created after it, or deleted at it</td><td>not there - a retrieve is a 404</td></tr>
+  <tr><td>an attribute deleted before it</td><td>the entity without that attribute</td></tr>
+  <tr><td>deleted and created again</td><td>the life <code>timeAt</code> is in - an earlier life's attributes do not come back</td></tr>
+  <tr><td>its types</td><td>its current ones - a change of types is not kept in the history</td></tr>
+</table>
+
+<h2 id="params">Everything else is the Core API's</h2>
+<p>Its parameters, their meaning, its rendering and its errors - <code>q</code>, <code>geoQ</code>, <code>scopeQ</code>,
+<code>type</code>, <code>ids</code>, <code>idPattern</code>, <code>pick</code>, <code>omit</code>, <code>attrs</code>,
+<code>datasetId</code>, <code>lang</code>, <code>options</code> (concise, keyValues, sysAttrs), <code>limit</code>,
+<code>offset</code>, <code>count</code>, ... - evaluated on the entities as they were. A <code>q</code> on
+<code>speed</code> filters on the speed at <code>timeAt</code>; <code>count</code> counts the entities that matched
+then.</p>
+<table class="gtable">
+  <tr><th>Not on the timepoint resources</th><th>Why</th></tr>
+  <tr><td><code>join</code>, <code>joinLevel</code> (400, an unknown parameter)</td><td>the linked entities would be read as they are now</td></tr>
+  <tr><td><code>entityMap</code> (400, an unknown parameter)</td><td>a map's pages read the entities as they are now</td></tr>
+  <tr><td><code>NGSILD-Snapshot</code> (400)</td><td>a timepoint request is not served from a Snapshot</td></tr>
+</table>
+<p>A timepoint request creates no automatic EntityMap, and is local: no registration's source is asked.</p>
+
+<h2 id="history">Where the history comes from</h2>
+<p>From the TRoE inside corDB:</p>
+<pre>coraine --database corDB --troe corDB</pre>
+<p>Add <code>--dbDir</code> to keep it on disk. A TRoE without the timepoint reads - <code>--troe none</code>,
+<code>--troe ramDB</code>, and today <code>--troe timescale</code> - answers as it does for any temporal operation it
+lacks.</p>
+
+<h2 id="build">Build</h2>
+<p><code>COR_FEATURE_TIMEPOINT</code> - on by default; off removes the resources, about 2.4 KB of the broker
+(<a href="#docs/building">Building</a>).</p>
+<p class="muted">The source: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/timepoint.md">doc/timepoint.md</a>.</p>
+</article>

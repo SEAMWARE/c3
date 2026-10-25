@@ -1,0 +1,253 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/kubernetes.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Kubernetes</h1>
+<p class="lead">What a coraine deployment on Kubernetes needs - the image, the memory settings, the probes, the
+stop and the metrics - and two manifests: <code>mongoc</code> as a Deployment, a persistent <code>corDB</code> as
+a StatefulSet.</p>
+
+<h2 id="image">The image</h2>
+<p><code>quay.io/seamware/coraine:&lt;tag&gt;</code> - one immutable tag per merge to <code>main</code>:
+<code>0.5.0</code> for a release, <code>0.5.0-&lt;date&gt;-&lt;commit&gt;</code> for a merge. There is no
+<code>latest</code> tag: name the tag you tested.</p>
+<ul>
+  <li><b>Multi-arch</b> - linux/amd64 and linux/arm64 under the same tag; <code>&lt;tag&gt;-amd64</code> and
+  <code>&lt;tag&gt;-arm64</code> pin one. The arm64 image is built without the DDS bridge.</li>
+  <li><b>The entry point</b> runs <code>coraine -fg</code> with the container's arguments appended. <code>args:</code>
+  in a manifest replaces the default arguments, <code>--database mongoc --troe none --apiPlugins admin</code>.</li>
+  <li><b>Every option is also an environment variable</b>: <code>CORAINE_</code> + the long option in upper case -
+  <code>--healthPort</code> is <code>CORAINE_HEALTHPORT</code>.</li>
+</ul>
+
+<h2 id="memory">Memory</h2>
+<table class="g-opts">
+  <tr><th>Setting</th><th>Why</th></tr>
+  <tr><td>requests.memory = limits.memory</td><td>with CPU set the same way, the pod is in the Guaranteed QoS class - the last evicted when the node runs short of memory</td></tr>
+  <tr><td>no --memoryLimit</td><td>the broker reads the container's limit from its cgroup (<code>memory.max</code>) and sets its memory budget to 85&nbsp;% of it</td></tr>
+  <tr><td>--memoryLimit &lt;MiB&gt;<span class="env">CORAINE_MEMORYLIMIT</span></td><td>a budget of its own, when 85&nbsp;% is not the margin wanted. Above the container's limit the broker logs a warning: the kernel kills first</td></tr>
+  <tr><td>MALLOC_ARENA_MAX=2</td><td>glibc's per-thread arenas keep freed memory resident. With <code>corDB</code> and libmicrohttpd (2026-10-01), 10&nbsp;000 entities took 67&nbsp;MiB instead of 89, 100&nbsp;000 took 335&nbsp;MiB instead of 376. Its cost in throughput with many threads is not measured, so it is not the image's default</td></tr>
+</table>
+<p><b>Over the budget the broker refuses requests</b> (503 and <code>Retry-After</code>) instead of growing until the
+kernel kills it: over 90&nbsp;% of it writes, over all of it everything but deletes and monitoring. A kill with
+<code>corDB</code> takes the store's RAM with it, and a persistent store is then loaded again. What counts is the
+broker's anonymous and shared memory - not the <code>corDB</code> log, which is memory-mapped page cache the
+kernel reclaims.</p>
+<p>The memory is sampled every 100&nbsp;ms. Between two samples one query is held by a byte budget of its own:
+what it fetches - current state, temporal history, the answers of the Context Sources of a distributed query -
+stops at <code>--maxResponseSize</code>, by default 1/16 of the memory budget.</p>
+<div class="g-callout">
+<p><b>Sizing with <code>corDB</code>:</b> about 3.5&nbsp;KiB resident per entity of five attributes - 100&nbsp;000
+entities are about 355&nbsp;MiB, a million about 3.5&nbsp;GiB. With <code>mongoc</code> the entities are in
+MongoDB.</p>
+</div>
+<p>With a CPU limit, the broker's HTTP event loops and its worker pool follow the CPUs the container may use - its
+CPU affinity and its cgroup quota - not the node's core count.</p>
+
+<h2 id="probes">Probes</h2>
+<p>Start the broker with <b><code>--healthPort &lt;port&gt;</code></b> and point the probes at that port:</p>
+<pre>livenessProbe:
+  httpGet: { path: /live, port: health }
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+readinessProbe:
+  httpGet: { path: /ready, port: health }
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 2</pre>
+<div class="g-callout warn">
+<p><b>Not on 1026.</b> A probe on the API port waits in the same queue as the requests, behind them. Under load it
+times out, the liveness probe fails, and Kubernetes restarts a broker that was only busy - in the middle of the
+load. The health port is a thread of its own, outside the HTTP server, answering from figures kept current in the
+background: nothing it answers waits for a request or a database.</p>
+</div>
+<table class="gtable">
+  <tr><th></th><th>Answers 503</th></tr>
+  <tr><td><code>/live</code></td><td>only when a request has been in flight longer than <code>--healthStallTimeout</code> seconds (default 30) and no request finished in that time - the broker is stuck. <b>Never for memory or a database</b>: a restart cures neither, and empties the caches, drops every connection and, with <code>corDB</code>, loads the whole store again</td></tr>
+  <tr><td><code>/ready</code></td><td>while the store loads at start-up; while the current-state store does not answer its ping; over the hard memory budget; while stuck; from SIGTERM on. Kubernetes takes the pod out of the Service's endpoints until it passes</td></tr>
+</table>
+<ul>
+  <li><b>A PostgreSQL that does not answer leaves <code>/ready</code> at 200.</b> Every pod shares the one temporal
+  store, and a 503 for it would take all of them out at once: the broker serves the current state and its
+  subscriptions, and holds the history, then loses it.</li>
+  <li><b>No <code>startupProbe</code> is needed.</b> The health port opens before the store loads: <code>/live</code>
+  answers 200 through a long load of a persistent <code>corDB</code>, and <code>/ready</code> turns 200 when it is
+  done.</li>
+  <li>A <code>tcpSocket</code> probe on the health port works too, and tells only that the port is open.</li>
+  <li>Without <code>--healthPort</code> nothing listens; the image's Docker <code>HEALTHCHECK</code> asks
+  <code>GET /version</code> on 1026, which is exempt from the memory budget.</li>
+</ul>
+
+<h2 id="stopping">Stopping</h2>
+<p>On SIGTERM the broker answers <code>/ready</code> with 503, stops taking requests, lets those in flight finish,
+and closes the store. A persistent <code>corDB</code> (<code>--dbDir</code>) then syncs every tenant's log - from
+then on every acknowledged write is on the disk - and writes a snapshot per tenant.</p>
+<p>The snapshot only makes the next start faster: it loads instead of the log replay. A broker killed during its
+snapshots (<code>terminationGracePeriodSeconds</code> over, then SIGKILL) has lost nothing; it replays the log at
+its next start. Give it a grace period long enough for the snapshot of the store it holds when the start time
+matters.</p>
+
+<h2 id="metrics">Metrics</h2>
+<p><code>GET /metrics</code> on 1026, in the Prometheus text format, served by the <code>admin</code> API plugin -
+without <code>--apiPlugins admin</code> it answers 404. It is exempt from the memory budget.</p>
+<pre>metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "1026"
+    prometheus.io/path:   /metrics</pre>
+<p>Or, with the Prometheus Operator, a <code>ServiceMonitor</code> on the Service's <code>api</code> port and path
+<code>/metrics</code>. The memory budget is there as <code>ngsild_memory_budget_bytes</code>,
+<code>ngsild_memory_used_bytes</code>, <code>ngsild_memory_resident_bytes</code> and
+<code>ngsild_requests_refused_memory_total</code>.</p>
+
+<h2 id="mongoc">mongoc - a Deployment</h2>
+<p>The store is MongoDB, outside the pod; the broker keeps no state of its own that a restart loses.</p>
+<div class="g-callout warn">
+<p><b>More than one replica needs <code>--high-availability mongo</code></b> and a MongoDB replica set: it keeps
+the instances' caches of subscriptions, registrations and @contexts in step. Without it, a subscription created
+through one instance is unknown to the others - <a href="#docs/high-availability">High availability</a>.</p>
+</div>
+<pre>apiVersion: v1
+kind: Secret
+metadata:
+  name: coraine-mongo
+stringData:
+  uri: "mongodb://coraine:CHANGE-ME@mongo-0.mongo,mongo-1.mongo,mongo-2.mongo/?replicaSet=rs0&amp;authSource=admin"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coraine
+spec:
+  replicas: 1                       <span class="c"># more than one: --high-availability mongo</span>
+  selector:
+    matchLabels: { app: coraine }
+  template:
+    metadata:
+      labels: { app: coraine }
+    spec:
+      containers:
+        - name: coraine
+          image: quay.io/seamware/coraine:0.5.0
+          args:
+            - --database
+            - mongoc
+            - --dbURI
+            - $(MONGO_URI)
+            - --troe
+            - none
+            - --apiPlugins
+            - admin
+            - --healthPort
+            - "8081"
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef: { name: coraine-mongo, key: uri }
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+          ports:
+            - { name: api,    containerPort: 1026 }
+            - { name: health, containerPort: 8081 }
+          resources:
+            requests: { cpu: "2", memory: 1Gi }
+            limits:   { cpu: "2", memory: 1Gi }
+          livenessProbe:
+            httpGet: { path: /live, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: health }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coraine
+spec:
+  selector: { app: coraine }
+  ports:
+    - { name: api, port: 1026, targetPort: api }</pre>
+<p>The health port is not in the Service: the kubelet probes the pod directly.</p>
+
+<h2 id="cordb">corDB on disk - a StatefulSet</h2>
+<p>The store is in the broker's process, kept on a volume with <code>--dbDir</code>. <b>One replica</b> - a second
+would be a second, separate store. The volume is <code>ReadWriteOnce</code>: one node, one broker.</p>
+<pre>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: coraine
+spec:
+  serviceName: coraine
+  replicas: 1                       <span class="c"># the store is the process's: never more than one</span>
+  selector:
+    matchLabels: { app: coraine }
+  template:
+    metadata:
+      labels: { app: coraine }
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: coraine
+          image: quay.io/seamware/coraine:0.5.0
+          args:
+            - --database
+            - corDB
+            - --dbDir
+            - /data
+            - --troe
+            - none
+            - --apiPlugins
+            - admin
+            - --healthPort
+            - "8081"
+          env:
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+          ports:
+            - { name: api,    containerPort: 1026 }
+            - { name: health, containerPort: 8081 }
+          resources:
+            requests: { cpu: "2", memory: 4Gi }
+            limits:   { cpu: "2", memory: 4Gi }
+          livenessProbe:
+            httpGet: { path: /live, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: health }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          volumeMounts:
+            - { name: data, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ ReadWriteOnce ]
+        resources:
+          requests: { storage: 20Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coraine
+spec:
+  selector: { app: coraine }
+  ports:
+    - { name: api, port: 1026, targetPort: api }</pre>
+<p>The disk holds the log segments (up to 1&nbsp;GiB each, 64&nbsp;MiB with <code>--dbCompress</code>) and the
+snapshots; 100&nbsp;000 entities of four attributes are 38&nbsp;MB as a log or as a snapshot. With
+<code>--troe corDB</code> the temporal history is on the same volume. The other corDB options -
+<code>--dbSync</code>, <code>--dbSnapshotEvery</code>, <code>--dbCompress</code> - are in
+<a href="#docs/installation">Installation</a>.</p>
+<div class="g-callout">
+<p><b>Importing a database first?</b> A one-off Job on the same volume, with the StatefulSet at zero replicas -
+<a href="#docs/migration">Migrating a database to coraine</a>.</p>
+</div>
+</article>

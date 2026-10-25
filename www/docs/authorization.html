@@ -1,0 +1,416 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/authorization.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Authorization in the broker</h1>
+<p class="lead">coraine decides who sent a request, and whether it may do what it asks, in the broker itself -
+through an auth plugin, one at most, chosen with <code>--auth</code>. Two come with it: OpenID Connect tokens with a
+read and a write role, and the FIWARE Data Space Connector's tokens and ODRL policies.</p>
+
+<h2 id="modes">The modes</h2>
+<table class="gtable">
+  <tr><th>Started with</th><th>A request is</th></tr>
+  <tr><td><span class="muted">no <code>--auth</code></span></td><td>let in. None of the code runs; built with
+  <code>-DCOR_FEATURE_AUTH=OFF</code> it is not in the broker at all</td></tr>
+  <tr><td><code>--auth oidc</code></td><td>an OpenID provider's access token (Keycloak, Auth0, Entra ID, ...) and two
+  roles in it: one reads, one reads and writes; and the tenants the token may use - <a href="#docs/authorization" data-scroll="oidc">below</a></td></tr>
+  <tr><td><code>--auth fdsc</code></td><td>the Data Space Connector's provider-side security: VCVerifier's access
+  token, the ODRL-PAP's policies - decided as the connector decides them - <a href="#docs/authorization" data-scroll="fdsc">below</a></td></tr>
+  <tr><td><code>--auth fdsc --fdscNgsild</code></td><td>the same policies, decided on the entity as NGSI-LD has it:
+  its stored, expanded types, entity by entity, attribute by attribute - <a href="#docs/authorization" data-scroll="fdsc-ngsild">below</a></td></tr>
+  <tr><td><code>--auth &lt;name|path&gt;</code></td><td>a plugin of your own - <a href="#docs/authorization" data-scroll="own-plugin">below</a></td></tr>
+</table>
+<p>Inside the broker the request is already parsed, its <code>@context</code> applied, every type and attribute
+name expanded, a batch split into its entities. A decision there is a lookup, not a second parse, and it can do what
+a proxy in front cannot: decide per entity in a batch, decide on the <b>stored</b> type of an entity whose request
+does not carry one, make "may only read type X" a condition of the query itself.</p>
+
+<h2 id="flow">How a request is decided</h2>
+<figure class="g-fig">
+<svg viewBox="0 0 720 456" role="img" aria-label="A request through the auth plugin: authenticate, authorize, the broker's preparation, entity, the response; 401, 403 and 503 on the way">
+  <defs>
+    <marker id="az-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <g font-family="inherit" font-size="13" fill="currentColor">
+    <!-- the column -->
+    <rect x="20" y="16"  width="420" height="54" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="36" y="38" font-weight="600">A request arrives</text>
+    <text x="36" y="58" fill="var(--muted)" font-size="12">HTTP, cor://, each WebSocket message - its route is looked up</text>
+
+    <rect x="20" y="90"  width="420" height="54" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="36" y="112" font-weight="600">authenticate - who sent it?</text>
+    <text x="36" y="132" fill="var(--muted)" font-size="12">before anything else: no 404 / 405 decided, no body parsed</text>
+
+    <rect x="20" y="164" width="420" height="54" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="36" y="186" font-weight="600">authorize - may it do this?</text>
+    <text x="36" y="206" fill="var(--muted)" font-size="12">before the tenant; oidc.so and fdsc.so: before the @context</text>
+
+    <rect x="20" y="238" width="420" height="54" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="36" y="260" font-weight="600">The broker prepares the request</text>
+    <text x="36" y="280" fill="var(--muted)" font-size="12">@context resolved, tenant resolved, names expanded</text>
+
+    <rect x="20" y="312" width="420" height="54" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="36" y="334" font-weight="600">entity - may it, this entity?</text>
+    <text x="36" y="354" fill="var(--muted)" font-size="12">each entity read or written - fdsc.so with --fdscNgsild</text>
+
+    <rect x="20" y="386" width="420" height="54" rx="8" fill="none" stroke="var(--ok)"/>
+    <text x="36" y="408" font-weight="600">The operation runs, the response is sent</text>
+    <text x="36" y="428" fill="var(--muted)" font-size="12">then release - the plugin's identity handle is freed</text>
+
+    <g stroke="var(--muted)" stroke-width="1.4" marker-end="url(#az-arr)">
+      <line x1="230" y1="70"  x2="230" y2="88"/>
+      <line x1="230" y1="144" x2="230" y2="162"/>
+      <line x1="230" y1="218" x2="230" y2="236"/>
+      <line x1="230" y1="292" x2="230" y2="310"/>
+      <line x1="230" y1="366" x2="230" y2="384"/>
+      <line x1="440" y1="117" x2="486" y2="117"/>
+      <line x1="440" y1="191" x2="486" y2="191"/>
+      <line x1="440" y1="339" x2="486" y2="339"/>
+    </g>
+
+    <!-- the exits -->
+    <rect x="488" y="94"  width="212" height="46" rx="8" fill="none" stroke="var(--warn)"/>
+    <text x="500" y="114" font-weight="600">401</text>
+    <text x="500" y="131" fill="var(--muted)" font-size="12">WWW-Authenticate</text>
+
+    <rect x="488" y="168" width="212" height="46" rx="8" fill="none" stroke="var(--warn)"/>
+    <text x="500" y="188" font-weight="600">403</text>
+    <text x="500" y="205" fill="var(--muted)" font-size="12">nothing done, no tenant created</text>
+
+    <rect x="488" y="308" width="212" height="62" rx="8" fill="none" stroke="var(--warn)"/>
+    <text x="500" y="328" font-weight="600">403 · its error in a 207</text>
+    <text x="500" y="345" fill="var(--muted)" font-size="12">or left out of a query's</text>
+    <text x="500" y="361" fill="var(--muted)" font-size="12">response, a notification</text>
+
+    <text x="488" y="250" fill="var(--warn)" font-size="12">503 at any of these: the plugin</text>
+    <text x="488" y="266" fill="var(--warn)" font-size="12">cannot decide (no keys, no policies)</text>
+    <text x="488" y="282" fill="var(--warn)" font-size="12">- refused, never let in</text>
+  </g>
+</svg>
+<figcaption>The broker asks the plugin at three points. A refusal ends the request where it is: a request that may not
+create a tenant leaves no tenant behind, and one refused before its <code>@context</code> has the broker fetch no URL
+the client named.</figcaption>
+</figure>
+<ul>
+  <li><b>Every request is asked</b> - HTTP, cor://, and each message of a WebSocket connection (the connection
+  carries no credentials; each message has its own <code>Authorization</code> in its metadata). Not asked: an
+  in-process forward (its request was asked when it arrived), the broker's own requests, and the health port
+  (<code>--healthPort</code>), a server of its own.</li>
+  <li><b>The answers</b> are ProblemDetails of type <code>about:blank</code> (RFC 9457 § 4.2.1), with the plugin's
+  title and detail.</li>
+  <li><b>A query</b> decided entity by entity may return a page with fewer entities than its <code>limit</code>; its
+  position links name only entities the request may read; its count counts the ones left out.</li>
+  <li><b>Not decided entity by entity, so refused</b> where entities are decided: <code>join=inline</code>, and the
+  EntityMaps themselves (a map names its entities by id).</li>
+</ul>
+
+<h3 id="notifications">Notifications</h3>
+<p>A subscription notifies long after the request that made it, so the broker keeps its <b>owner</b> - who created it,
+or last updated it - in the store's collection <code>subscriptionOwners</code>, beside the subscription and never in
+it (nothing that renders a subscription can show it). Each notification is decided on the owner: the entities the
+owner may not read are left out, and a notification left with none is not sent. An owner not known leaves out every
+entity - fail closed. A PATCH of the subscription makes its sender the owner. A restored owner is cached for 30&nbsp;s,
+so an owner one broker of a <a href="#docs/high-availability">high-availability</a> set stores is seen by the others
+within that.</p>
+
+<h3 id="fail-closed">Fail closed</h3>
+<div class="g-callout warn">
+<p><b><code>--auth</code> asks for security; the broker never starts without it.</b> A plugin that cannot be loaded,
+or whose <code>init</code> refuses its options, stops the broker (exit 1). A plugin that cannot decide answers 503.
+A plugin's own options exist only when it is loaded: <code>coraine --auth oidc -u</code> lists them.</p>
+</div>
+
+<h3 id="metadata">How a client finds where to log in</h3>
+<p>The broker serves the plugin's OAuth 2.0 Protected Resource Metadata (RFC 9728), <b>without authentication</b>, at
+<code>GET /.well-known/oauth-protected-resource</code> - the issuers in <code>authorization_servers</code>, and the
+plugin's own members. Every 401 names it:</p>
+<pre>WWW-Authenticate: Bearer error="invalid_token", error_description="wrong issuer", resource_metadata="http://broker:1026/.well-known/oauth-protected-resource"</pre>
+<p>c³ reads it on the first 401. Without <code>--auth</code> the route is a 404. It is <code>COR_FEATURE_AUTH_METADATA</code>,
+on by default, about 1&nbsp;KB of the broker.</p>
+
+<!-- ======================================================================= -->
+<h2 id="oidc">--auth oidc: an OpenID provider's tokens and roles</h2>
+<p>No policies, nothing decided per entity: each request is decided at its admission, on its method and its NGSI-LD
+operation, before the broker fetches a <code>@context</code> for it. Built with <code>COR_FEATURE_AUTH_OIDC</code> (on
+by default).</p>
+<ul>
+  <li><b>The token</b> - <code>Authorization: Bearer</code>, a JWT signed with RS256 or ES256, checked against the
+  provider's JWK Set; <code>iss</code> must be <code>--oidcIssuer</code>, <code>exp</code> and <code>nbf</code> hold
+  within <code>--oidcLeeway</code>, <code>aud</code> holds <code>--oidcAudience</code> when given. No token, or one that
+  does not hold: <b>401</b>. A token is checked once; a request that sends it again finds it in a cache and only its
+  <code>exp</code> and <code>nbf</code> are checked again.</li>
+  <li><b>The keys</b> - from the discovery document (<code>&lt;issuer&gt;/.well-known/openid-configuration</code>, or
+  <code>--oidcDiscovery</code>), whose <code>issuer</code> must be <code>--oidcIssuer</code>; or <code>--oidcJwks</code>.
+  Fetched every <code>--oidcRefresh</code> seconds, every second until there are some, and at once (at most once a
+  second) when a token names a key the set lacks. Until there are keys, every request is a <b>503</b>.</li>
+  <li><b>The tenants</b> - the claim <code>--oidcTenantsClaim</code> (default <code>tenants</code>), an array or a
+  space-separated string: <code>default</code> is the default tenant, <code>*</code> every tenant. A token without the
+  claim may use the default tenant only. Another tenant: <b>403</b>, decided before the tenant is resolved - a create
+  in a tenant the token may not use creates no tenant.</li>
+  <li><b>Subscriptions</b> - creating or updating one is a write. Its owner (the roles and tenants of that token)
+  holds for <code>--oidcOwnerMaxAge</code> seconds: roles or tenants taken away at the provider stop its notifications
+  within that. After it, none are sent until a request with a valid token updates the subscription.</li>
+</ul>
+<table class="gtable">
+  <tr><th>Role</th><th>Default name</th><th>May</th></tr>
+  <tr><td>read</td><td><code>ngsild-read</code></td><td><code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>, and
+  the queries that are POSTs: <code>POST /entityOperations/query</code>, <code>POST /temporal/entityOperations/query</code>,
+  <code>POST /temporal/timepoint/entityOperations/query</code></td></tr>
+  <tr><td>write</td><td><code>ngsild-write</code></td><td>every request, the reads too</td></tr>
+</table>
+<p>A token without the role a request needs: <b>403</b>, its detail naming the role.</p>
+
+<h3 id="oidc-options">Options</h3>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--oidcIssuer &lt;url&gt;<span class="env">CORAINE_OIDCISSUER</span></td><td>the provider's issuer, the <code>iss</code> a token must have - required (<code>https://keycloak.example.org/realms/city</code>)</td></tr>
+  <tr><td>--oidcDiscovery &lt;url&gt;<span class="env">CORAINE_OIDCDISCOVERY</span></td><td>the discovery document's URL, when the broker reaches the provider by another name than its issuer's</td></tr>
+  <tr><td>--oidcJwks &lt;url|file&gt;<span class="env">CORAINE_OIDCJWKS</span></td><td>the JWK Set itself, instead of the discovery document - not with <code>--oidcDiscovery</code></td></tr>
+  <tr><td>--oidcAudience &lt;aud&gt;<span class="env">CORAINE_OIDCAUDIENCE</span></td><td>an audience a token must have. Default: not checked - and the broker says so at start-up: a token the provider issued for any of its clients is taken</td></tr>
+  <tr><td>--oidcRolesClaim &lt;path&gt;<span class="env">CORAINE_OIDCROLESCLAIM</span></td><td>the claim holding the roles, dot-separated - default <code>realm_access.roles</code> (Keycloak's realm roles); <code>resource_access.&lt;client&gt;.roles</code>, <code>scope</code>, <code>roles</code>, <code>groups</code></td></tr>
+  <tr><td>--oidcReadRole &lt;role&gt;<span class="env">CORAINE_OIDCREADROLE</span></td><td>the role that reads - default <code>ngsild-read</code></td></tr>
+  <tr><td>--oidcWriteRole &lt;role&gt;<span class="env">CORAINE_OIDCWRITEROLE</span></td><td>the role that reads and writes - default <code>ngsild-write</code></td></tr>
+  <tr><td>--oidcLeeway &lt;s&gt;<span class="env">CORAINE_OIDCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code> - default 60</td></tr>
+  <tr><td>--oidcRefresh &lt;s&gt;<span class="env">CORAINE_OIDCREFRESH</span></td><td>seconds between two fetches of the keys - default 300</td></tr>
+  <tr><td>--oidcTenantsClaim &lt;path&gt;<span class="env">CORAINE_OIDCTENANTSCLAIM</span></td><td>the claim holding the tenants a token may use - default <code>tenants</code></td></tr>
+  <tr><td>--oidcAnyTenant<span class="env">CORAINE_OIDCANYTENANT</span></td><td>no tenant check: a token may use every tenant</td></tr>
+  <tr><td>--oidcOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_OIDCOWNERMAXAGE</span></td><td>seconds a subscription's owner holds - default 86&nbsp;400, a day</td></tr>
+  <tr><td>--oidcAnonymousRead<span class="env">CORAINE_OIDCANONYMOUSREAD</span></td><td>a read without a token is let in, in every tenant; a write without one is still a 401</td></tr>
+</table>
+</div>
+
+<h3 id="keycloak">With Keycloak</h3>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcAudience coraine</pre>
+<ol>
+  <li>Realm roles <code>ngsild-read</code> and <code>ngsild-write</code>, given to the users and service accounts that
+  need them.</li>
+  <li>The tenants: a user attribute <code>tenants</code> (several values: <code>default</code>, <code>t1</code>, ...),
+  and on the client a "User Attribute" mapper - user attribute <code>tenants</code>, token claim name
+  <code>tenants</code>, multivalued, added to the access token. Keycloak 26 keeps only the attributes its user profile
+  declares: declare <code>tenants</code> there, or let the realm keep unmanaged attributes.</li>
+  <li>An audience mapper on the client the applications log in with, adding <code>coraine</code> to the access token's
+  <code>aud</code> - Keycloak's access tokens do not carry it otherwise.</li>
+  <li>A broker that reaches Keycloak by an internal name while the tokens carry the public one adds
+  <code>--oidcDiscovery http://keycloak:8080/realms/city/.well-known/openid-configuration</code>; the
+  <code>jwks_uri</code> in it must be one the broker can reach.</li>
+</ol>
+
+<!-- ======================================================================= -->
+<h2 id="fdsc">--auth fdsc: the Data Space Connector's security</h2>
+<p><code>fdsc.so</code> takes what the connector's provider side has, unchanged: the <b>access token</b> VCVerifier
+issues for a Verifiable Presentation, checked as APISIX's <code>openid-connect</code> checks it, and the <b>ODRL
+policies</b> of the ODRL-PAP, evaluated as OPA evaluates the Rego the PAP generates from them. A deployment's tokens
+and policies need no change: for every request, the same 401, 403 or pass.</p>
+<p><b>Target:</b> FIWARE Data Space Connector 10.87.0 (2026-10-09) - VCVerifier 6.23.1, odrl-authorization 2.4.3
+(APISIX 3.17.0, OPA 1.11.0) - and odrl-pap 1.7.3 (<code>SEAMWARE/odrl-pap</code>, 2026-10-14; the connector's chart pins
+1.7.1). <code>test/fdscDiff/fdscDiff.sh</code> runs that chain in docker beside coraine, both given the same verifier
+and PAP, and compares the answers by class (401, 403, 503, let through): <b>64 cases, 0 differences</b> (2026-10-13),
+apart from one decided on purpose.</p>
+
+<h3 id="fdsc-options">Options</h3>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--fdscDiscovery &lt;url&gt;<span class="env">CORAINE_FDSCDISCOVERY</span></td><td>the verifier's OpenID discovery document - the URL APISIX's <code>openid-connect</code> has as <code>discovery</code> (<code>http://verifier:3000/services/&lt;service&gt;/.well-known/openid-configuration</code>). Its <code>jwks_uri</code> gives the keys, its <code>issuer</code> the <code>iss</code> a token must have</td></tr>
+  <tr><td>--fdscJwks &lt;url|file&gt;<span class="env">CORAINE_FDSCJWKS</span></td><td>the JWK Set itself, instead of <code>--fdscDiscovery</code> - needs <code>--fdscIssuer</code></td></tr>
+  <tr><td>--fdscIssuer &lt;iss&gt;<span class="env">CORAINE_FDSCISSUER</span></td><td>the issuer a token must have - default: the discovery document's</td></tr>
+  <tr><td>--fdscAudience &lt;aud&gt;<span class="env">CORAINE_FDSCAUDIENCE</span></td><td>an audience a token must have - default: not checked, as APISIX does not check it</td></tr>
+  <tr><td>--fdscLeeway &lt;s&gt;<span class="env">CORAINE_FDSCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code> - default 120, what APISIX allows</td></tr>
+  <tr><td>--fdscPap &lt;url&gt;<span class="env">CORAINE_FDSCPAP</span></td><td>the ODRL-PAP's base URL (<code>http://odrl-pap:8080</code>) - the policies are read from its <code>GET /policy</code></td></tr>
+  <tr><td>--fdscPolicies &lt;url|file&gt;<span class="env">CORAINE_FDSCPOLICIES</span></td><td>the policies themselves (the PAP's listing, an array, one policy, or an <code>@graph</code>), instead of <code>--fdscPap</code></td></tr>
+  <tr><td>--fdscOrganization &lt;did&gt;<span class="env">CORAINE_FDSCORGANIZATION</span></td><td>the provider's DID - the PAP's <code>GENERAL_ORGANIZATION_DID</code>; <code>vc:role</code> reads a credential's roles for it</td></tr>
+  <tr><td>--fdscRefresh &lt;s&gt;<span class="env">CORAINE_FDSCREFRESH</span></td><td>seconds between two fetches of keys and policies - default 30</td></tr>
+  <tr><td>--fdscStrippedPath<span class="env">CORAINE_FDSCSTRIPPEDPATH</span></td><td><code>http:path</code> reads the <code>x-stripped-path</code> header, as the connector's Rego does - only behind a gateway that sets it and drops a client's. Default: the request's path</td></tr>
+  <tr><td>--fdscAnonymous<span class="env">CORAINE_FDSCANONYMOUS</span></td><td>a request without a token is let in as no one, instead of a 401 - only a <code>vc:any</code> policy can allow it anything</td></tr>
+  <tr><td>--fdscNgsild<span class="env">CORAINE_FDSCNGSILD</span></td><td>decide on the entity, as NGSI-LD has it - <b>decisions differ from the connector's</b></td></tr>
+  <tr><td>--fdscOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_FDSCOWNERMAXAGE</span></td><td>with <code>--fdscNgsild</code>: seconds a subscription's owner (its maker's credential) holds. 0 (default): until the credential's own <code>validUntil</code> (VC 1.1: <code>expirationDate</code>)</td></tr>
+</table>
+</div>
+<p>A source of keys and a source of policies are required; without either the broker does not start.</p>
+
+<h3 id="fdsc-token">The token</h3>
+<ul>
+  <li><code>Authorization: Bearer &lt;JWT&gt;</code>, as APISIX takes it with <code>bearer_only</code>: a compact JWS,
+  <code>alg</code> RS256 or ES256, verified with the key of its <code>kid</code>. <code>alg: none</code>, or an
+  <code>alg</code> that is not its key's, is refused.</li>
+  <li><code>iss</code> is always checked. <code>aud</code> is checked with <code>--fdscAudience</code> - recommended:
+  VCVerifier sets it to the service id, and without it a token issued for another service is accepted.</li>
+  <li>A bad token: 401 with <code>error="invalid_token"</code>; no token: 401 with <code>WWW-Authenticate: Bearer</code>.
+  The credential is the token's <code>verifiableCredential</code> (else <code>vc</code>).</li>
+  <li>A token whose signature has been checked is kept (1024 of them) - a client sends the same token for its 30
+  minutes - and its claims are checked on every request. The kept tokens are dropped when the key set changes.</li>
+  <li>The token's size is a cost of every request: a 696-byte token takes 0.86&nbsp;µs of a PATCH with libmicrohttpd
+  1.0.10, 0.31&nbsp;µs with the header patch every build of the stack applies (PATCH, 50 connections, the broker on one
+  core, corDB, 2026-10-13 - <a href="#docs/performance">Performance</a>). With <code>--auth</code> the broker says once
+  in its log when requests carry an <code>Authorization</code> header over 512 bytes.</li>
+</ul>
+
+<h3 id="fdsc-refresh">Keys and policies</h3>
+<p>A thread of the plugin fetches the keys and the policies (the PAP's <code>GET /policy</code>, page by page) every
+<code>--fdscRefresh</code> seconds, and every second while either is missing. Each is replaced whole, once read
+completely; a failed fetch keeps what is in use.</p>
+<table class="gtable">
+  <tr><th>When</th><th>Then</th></tr>
+  <tr><td>no keys yet</td><td>a request with a token is a 503</td></tr>
+  <tr><td>no policies yet</td><td>every request is a 503 - the connector answers 503 too while OPA has no bundle</td></tr>
+  <tr><td>a token signed by a key the set lacks</td><td>401, and the keys are fetched at once (at most once a second) - VCVerifier makes a new key at every start, and the client's next token is let in</td></tr>
+  <tr><td>a policy that cannot be read</td><td>skipped and said in the log, as the PAP refuses it</td></tr>
+</table>
+
+<h3 id="fdsc-decision">How a policy decides</h3>
+<ul>
+  <li>A request is allowed when <b>one</b> policy allows it; no policy allows nothing. The policies are evaluated in
+  the PAP's order, and the first that allows decides.</li>
+  <li>A policy allows when <b>all</b> its rules hold - the rules of all its permissions together, as the PAP puts
+  them in one rule set: two permissions are an AND. Prohibitions, obligations and duties are ignored, as the PAP
+  ignores them.</li>
+  <li>A rule on a value the request or the credential does not have is not true - nor its negation
+  (<code>neq</code>, <code>isNoneOf</code>).</li>
+  <li>A token with two or more credentials satisfies no <code>vc:</code> word and no issuer assignee.</li>
+</ul>
+<p>The words, as the PAP's <code>mapping.json</code> has them - the most used:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Word</th><th>Reads</th></tr>
+  <tr><td><code>odrl:read</code> / <code>odrl:modify</code> / <code>odrl:delete</code> / <code>ngsild:create</code> / <code>odrl:use</code></td><td>the method: GET / <b>PATCH only</b> / DELETE / POST / any of them</td></tr>
+  <tr><td>assignee <code>vc:any</code></td><td>anyone</td></tr>
+  <tr><td>assignee <code>&lt;string&gt;</code>, <code>odrl:Party</code></td><td>the credential's <code>issuer</code> is that string</td></tr>
+  <tr><td><code>ngsi-ld:entityType</code></td><td>the third <code>:</code> part of the last path segment (<code>urn:ngsi-ld:&lt;Type&gt;:...</code>), else <code>?type=</code>, else the body's <code>type</code> - as sent, never expanded; for a batch, the one type all its entities have</td></tr>
+  <tr><td><code>vc:role</code> / <code>vc:type</code></td><td>the credential's roles for the organisation / its <code>type</code></td></tr>
+  <tr><td><code>http:path</code> / <code>http:bodyValue "$.a.b"</code></td><td>the request's path / the body's value at <code>a.b</code>, as sent</td></tr>
+  <tr><td><code>odrl:dateTime</code> / <code>odrl:dayOfWeek</code> / <code>odrl:hourOfDay</code></td><td>now, in ms / 0 = Monday, UTC / 0-23, UTC</td></tr>
+</table>
+</div>
+
+<h3 id="fdsc-differs">Where coraine decides otherwise, on purpose</h3>
+<p>Where the connector's chain does not work at all, coraine does not copy the failure:</p>
+<table class="gtable">
+  <tr><th></th><th>The connector</th><th>coraine</th></tr>
+  <tr><td>ES256</td><td>APISIX's <code>openid-connect</code> cannot use an EC key without <code>x5c</code>, and
+  VCVerifier's has none: every token refused (<a href="https://github.com/FIWARE/data-space-connector/issues/238">data-space-connector#238</a>)</td><td>verified</td></tr>
+  <tr><td><code>x-stripped-path</code></td><td><code>http:path</code> reads the header first, and APISIX passes a
+  client's on: a client's own header makes an <code>http:isInPath</code> rule hold for any request</td><td>the request's
+  path; the header only with <code>--fdscStrippedPath</code></td></tr>
+  <tr><td>a left operand without its argument (<code>"odrl:leftOperand": "http:bodyValue"</code>)</td><td>odrl-pap 1.7.1
+  stored it, and OPA refused the whole bundle: every request denied. Since 1.7.2 the PAP refuses it (a 500)
+  (<a href="https://github.com/SEAMWARE/odrl-pap/issues/58">odrl-pap#58</a>)</td><td>the policy API refuses it (400); a
+  file or an older PAP that has one: that policy skipped, logged, the others used</td></tr>
+</table>
+
+<h3 id="fdsc-connector">Inside a Data Space Connector</h3>
+<p>The provider's data route goes to coraine instead of through APISIX's <code>openid-connect</code> and
+<code>opa</code> plugins:</p>
+<table class="gtable">
+  <tr><th>The APISIX route</th><th>coraine</th></tr>
+  <tr><td><code>openid-connect.discovery</code></td><td><code>--fdscDiscovery</code>, the same URL</td></tr>
+  <tr><td><code>openid-connect.bearer_only</code>, <code>use_jwks</code></td><td>what <code>fdsc.so</code> does</td></tr>
+  <tr><td><code>opa.policy: policy/main</code>, <code>with_body: true</code></td><td><code>--fdscPap http://odrl-pap:8080</code></td></tr>
+  <tr><td>the PAP's <code>GENERAL_ORGANIZATION_DID</code></td><td><code>--fdscOrganization</code></td></tr>
+</table>
+<p>VCVerifier, the Trusted Issuers List, the Credentials Config Service and the ODRL-PAP stay as they are; nothing on
+the consumer side changes. The route of <code>GET /.well-known/openid-configuration</code> on the data host to the
+verifier stays on the proxy or ingress in front. For a broker other than coraine, the same decision is made in APISIX
+by the plugin <code>ngsild-pep</code> (<a href="https://github.com/SEAMWARE/corApisixNgsild">corApisixNgsild</a>), which
+runs <code>fdsc.so</code>'s code in the gateway - without <code>--fdscNgsild</code>, which needs the stored entity.</p>
+
+<h3 id="fdsc-ngsild">--fdscNgsild: decided on the entity</h3>
+<p>The same policies; what their words read is what NGSI-LD has:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th></th><th>The connector (default)</th><th><code>--fdscNgsild</code></th></tr>
+  <tr><td><code>ngsi-ld:entityType</code></td><td>the id's third part, <code>?type=</code> as one string, the body's
+  <code>type</code> - as sent</td><td>the entity's types - the body's for a create, the <b>stored</b> entity's otherwise
+  - expanded; the policy's type expanded with the broker's default context</td></tr>
+  <tr><td>an id that does not say its type, <code>/attrs/{attr}</code></td><td>no type: denied</td><td>the stored type</td></tr>
+  <tr><td>a request <code>@context</code> that makes the word another type</td><td>the word matches</td><td>it does not</td></tr>
+  <tr><td>a batch</td><td>one type sought in the array - none: denied</td><td>entity by entity - a denied one is its 403 in the 207</td></tr>
+  <tr><td>a query</td><td><code>?type=A,B</code> is one string; a POST query has no type</td><td>each entity found, on its stored type - the denied ones left out</td></tr>
+  <tr><td>the action</td><td>the HTTP method: a POST query is a create</td><td>the NGSI-LD operation: a POST query is a read, a PUT a modification</td></tr>
+  <tr><td>notifications</td><td>not decided</td><td>for the subscription's owner, entity by entity; the owner's credential kept, until its <code>validUntil</code> or <code>--fdscOwnerMaxAge</code></td></tr>
+</table>
+</div>
+<p>Two words of coraine's own, read with <code>--fdscNgsild</code> only (without it a policy that uses one is skipped,
+and the log says why): <code>ngsi-ld:tenant</code> - the request's <code>NGSILD-Tenant</code>, <code>""</code> for the
+default tenant; and <code>ngsi-ld:attribute</code> - one attribute at a time, expanded. With
+<code>ngsi-ld:attribute</code> a read leaves out the attributes no policy allows (<code>id</code>, <code>type</code>
+stay), a write of an attribute not allowed is a 403, and a write of the entity whole (a delete, a replace) needs a
+policy that holds whatever the attribute.</p>
+<div class="g-callout warn">
+<p><b>A kept owner credential is personal data at rest.</b> It goes with its subscription (a DELETE of it), and it is
+never checked again for revocation - VCVerifier checks that when it issues a token. <code>--fdscOwnerMaxAge</code>
+bounds how long a revoked credential still receives notifications.</p>
+</div>
+
+<h3 id="policy-api">The broker as its own PAP</h3>
+<p>With <code>--policyApiPort &lt;port&gt;</code> the broker serves the ODRL-PAP's <code>/policy</code> API (odrl-pap
+1.7.3) on a port of its own, and <code>fdsc.so</code> reads from it as from the PAP:
+<code>--fdscPap http://127.0.0.1:&lt;port&gt;</code>. The policies are documents of the default tenant's collection
+<code>odrlPolicies</code>: they outlive the broker. Built with <code>COR_FEATURE_POLICY_API</code> (on by default).</p>
+<table class="gtable">
+  <tr><th>Request</th><th>Does</th></tr>
+  <tr><td><code>GET /policy?page&amp;pageSize</code></td><td>the policies in the order they were created - <code>[{"id", "odrl:uid", "odrl"}]</code>; <code>pageSize</code> 25 by default</td></tr>
+  <tr><td><code>POST /policy</code></td><td>a policy: 200, <code>Location:</code> its id (ten letters)</td></tr>
+  <tr><td><code>PUT /policy/{id}</code></td><td>creates or replaces policy <code>{id}</code></td></tr>
+  <tr><td><code>GET /policy/{id}</code>, <code>GET /policy/odrl/{uid}</code></td><td>one policy, by id or by <code>odrl:uid</code> - or 404</td></tr>
+  <tr><td><code>DELETE /policy/{id}</code>, <code>DELETE /policy/odrl/{uid}</code></td><td>204, whether there was one or not</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>The policy port has no authentication</b>, as the PAP has none: whoever reaches it can change every policy.
+<code>--policyApiHost</code> (default <code>127.0.0.1</code>) keeps it to the machine; in Kubernetes, give the port a
+Service of its own and a NetworkPolicy that lets in only what writes policies (contract-management). The port needs
+libmicrohttpd - a broker built with the built-in HTTP server refuses <code>--policyApiPort</code> at start-up.</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2 id="own-plugin">A plugin of your own</h2>
+<p><code>--auth &lt;name&gt;</code> loads <code>&lt;plugins&gt;/auth/&lt;name&gt;.so</code> (or a path) and calls its
+<code>authRegister(AuthDriver*)</code>. The contract is <code>src/lib/plugin/AuthDriver.h</code>, at
+<code>AUTH_ABI_VERSION</code> 6, append-only. Only plain data crosses it - strings, integers, function pointers - so a
+plugin can be written in any language that exports a C function:</p>
+<pre>#include "plugin/AuthDriver.h"
+
+static AuthVerdict authenticate(const AuthRequest* reqP, void** identityP, AuthAnswer* answerP)
+{
+  const char* key = reqP-&gt;header("X-Api-Key");
+
+  if ((key == NULL) || (strcmp(key, "secret") != 0))
+  {
+    answerP-&gt;detail = "no API key";
+    return AuthUnauthenticated;
+  }
+
+  return AuthAllow;
+}
+
+void authRegister(AuthDriver* driverP)
+{
+  driverP-&gt;abiVersion   = AUTH_ABI_VERSION;
+  driverP-&gt;name         = "apikey";
+  driverP-&gt;authenticate = authenticate;     <span class="c">// authorize NULL: an authenticated request may do anything</span>
+}</pre>
+<p>Built as a shared object, put in <code>&lt;plugins&gt;/auth/apikey.so</code>, run with <code>--auth apikey</code>.</p>
+<table class="gtable">
+  <tr><th>Entry point</th><th>Called</th><th>Refuses with</th></tr>
+  <tr><td><code>authenticate</code></td><td>right after the route is looked up</td><td><code>AuthUnauthenticated</code> - 401</td></tr>
+  <tr><td><code>authorize</code></td><td>after <code>authenticate</code>; with <code>authorizeBeforeContext</code> before the <code>@context</code> is resolved, else after it; always before the tenant</td><td><code>AuthDeny</code> - 403</td></tr>
+  <tr><td><code>entity</code></td><td>for each entity read or written, with the attributes a write writes</td><td><code>AuthDeny</code> - 403, an entry of a 207, or left out</td></tr>
+  <tr><td><code>notify</code></td><td>once per notification, on its owner (<code>identitySave</code> / <code>identityRestore</code>)</td><td>not sent</td></tr>
+  <tr><td><code>resourceMetadata</code></td><td>for <code>/.well-known/oauth-protected-resource</code> and every 401</td><td>-</td></tr>
+  <tr><td><code>release</code></td><td>when the response is sent</td><td>-</td></tr>
+</table>
+<p>Any of them may answer <code>AuthUnavailable</code> - 503. A plugin is called on the broker's request threads,
+concurrently, possibly on a coroutine's stack: it is thread-safe and <b>never blocks</b> - keys and policies are fetched
+by threads of its own. <code>AuthRequest</code> gives the method, path, URL parameters, the NGSI-LD operation, the
+tenant, and accessors for a header, the body as the client sent it, and a term expanded with the request's
+<code>@context</code> or with the broker's default one.</p>
+
+<div class="g-callout warn">
+<p><b>Open point.</b> With <code>--fdscNgsild</code>, a request whose decision depends on the entity has its
+<code>@context</code> fetched before <code>entity</code> decides it: a client with a right to some entity can have the
+broker fetch a URL of its choice.</p>
+</div>
+<p class="muted">The full contract, the whole vocabulary and every case:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/authorization.md">doc/authorization.md</a>.</p>
+</article>

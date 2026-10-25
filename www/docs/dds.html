@@ -1,0 +1,110 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/dds.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>DDS and ROS 2</h1>
+<p class="lead">coraine speaks DDS, and so ROS 2, through its DDS bridge: topics, services and actions become
+entity attributes. A robot's pose is an NGSI-LD attribute, and writing an attribute publishes a sample, calls a
+service or sends a goal.</p>
+
+<h2 id="what">What it does</h2>
+<table class="gtable">
+  <tr><th>DDS</th><th>In the broker</th></tr>
+  <tr><td>Topics</td><td>Both ways. A sample becomes the value of an attribute; writing the attribute publishes a
+  sample. The configuration says which topic is which entity's attribute.</td></tr>
+  <tr><td>Services</td><td>Writing the service's attribute calls the service. The reply lands in the same attribute
+  (<code>reply</code>), beside the request it answers (<code>request</code>). The write waits a moment for it
+  (<code>?ddsSync=true</code>), or answers at once and the reply arrives later.</td></tr>
+  <tr><td>Actions</td><td>Writing the action's attribute sends a goal. Each goal is an instance of the attribute
+  of its own, and its feedback, status and result appear there as they come. A goal can carry an endpoint that is
+  notified of its progress, and it can be cancelled.</td></tr>
+  <tr><td>Discovery</td><td>Topics, services and actions that no configuration names are shown on one catch-all
+  entity, <code>urn:ngsi-ld:dds:default</code> - "what is on this bus?" answers itself. A discovered service is
+  callable, too.</td></tr>
+</table>
+<ul>
+  <li><b>Pre-population.</b> Every configured attribute exists from start-up - its entity is created if it is not
+  there yet - with the value <code>"uninitialized"</code> until the first sample.</li>
+  <li><b>History.</b> A DDS update goes into the temporal history like any other write.</li>
+  <li><b>Short names.</b> A default user <code>@context</code> (<code>--defaultUserContext</code> - a URL, or a file
+  such as the <code>dds-context.jsonld</code> the mapping tool writes) expands the configuration's entity types and
+  attribute names. A client that uses the same short names without an <code>@context</code> of its own reads and
+  writes the same attributes.</li>
+</ul>
+
+<h2 id="mirror">The entity mirrors the wire</h2>
+<p>A value DDS never saw is not stored, and a slow robot does not make the broker slow:</p>
+<table class="gtable">
+  <tr><th>When</th><th>The broker</th></tr>
+  <tr><td>A value does not fit the topic's DDS type</td><td>refuses it - <code>400</code>, nothing stored</td></tr>
+  <tr><td>An attribute is written</td><td>sends it to DDS <b>first</b>, and stores it only if DDS took it</td></tr>
+  <tr><td>A service is slow to answer</td><td>waits briefly, if asked to, then answers <code>202</code>; the reply lands when it comes</td></tr>
+  <tr><td>One write, several attributes, DDS refuses one</td><td>writes the others; the <code>207</code> names the refused one</td></tr>
+  <tr><td>An action's last goal is over</td><td>keeps the attribute - its default instance, without the goals</td></tr>
+  <tr><td>A ROS name has a <code>/</code></td><td><code>robot1/navigate</code> becomes the attribute <code>robot1_navigate</code></td></tr>
+</table>
+
+<h2 id="config">Configuration</h2>
+<p>One file, shared by the plugin and the broker: the DDS Enabler reads <code>dds.ddsmodule</code>, the broker
+reads <code>dds.ngsild</code>.</p>
+<pre>{
+  "dds": {
+    "ddsmodule": { "dds": { "domain": 0 } },
+    "ngsild": {
+      "topics": {
+        "rt/pose": { "entityId": "urn:ngsi-ld:Robot:1", "entityType": "Robot", "attribute": "pose" }
+      }
+    }
+  }
+}</pre>
+<pre>coraine --bridges dds --bridgeConfig /path/to/that.json</pre>
+<p>Services and actions are entries of <code>ngsild.services</code> and <code>ngsild.actions</code>, with the same
+<code>entityId</code>, <code>entityType</code> and <code>attribute</code>. A service's DDS types are
+<code>requestType</code> and <code>replyType</code> - by default its name with <code>_Request</code> and
+<code>_Response</code>; they are configured because a service, unlike a topic, cannot be learned by listening.
+An action names its ROS 2 action type once, in <code>type</code>; its DDS types follow from it.</p>
+
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--bridges dds<span class="env">CORAINE_BRIDGES</span></td><td>loads the DDS bridge, <code>dds.so</code></td></tr>
+  <tr><td>--bridgeConfig &lt;file&gt;<span class="env">CORAINE_BRIDGECONFIG</span></td><td>the configuration file above</td></tr>
+  <tr><td>--defaultUserContext &lt;url|file&gt;<span class="env">CORAINE_DEFAULTUSERCONTEXT</span></td><td>the default user <code>@context</code>; the broker also serves it, as <code>/ngsi-ld/v1/jsonldContexts/defaultUserContext</code></td></tr>
+  <tr><td>--ddsSync<span class="env">CORAINE_DDSSYNC</span></td><td>a PATCH of a service attribute waits for the reply by default; <code>?ddsSync=false</code> opts out. Default: it does not wait</td></tr>
+  <tr><td>--ddsSyncTimeout &lt;ms&gt;<span class="env">CORAINE_DDSSYNCTIMEOUT</span></td><td>how long a waiting PATCH gives a service before answering <code>202</code>. 0 (default): the configuration's <code>syncTimeoutMs</code>, else 200</td></tr>
+  <tr><td>--ddsSyncWaitMax &lt;n&gt;<span class="env">CORAINE_DDSSYNCWAITMAX</span></td><td>at most this many requests wait for a service at once (default 8); the rest send without waiting (<code>202</code>), so a slow DDS network cannot take every worker</td></tr>
+</table>
+
+<h2 id="build">Building the plugin</h2>
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corDdsBridge">corDdsBridge</a>, and is
+part of no umbrella build: the DDS stack it links is 21.4&nbsp;MiB across nine libraries (<code>libfastdds</code>
+alone 16&nbsp;MiB), about five times the whole broker. Only a deployment that wants DDS clones and builds it.</p>
+<pre>make            <span class="c"># build</span>
+make install    <span class="c"># dds.so into /opt/seamware/plugins/bridge/</span>
+make contract   <span class="c"># does it still satisfy BridgeDriver.h? needs no DDS at all</span></pre>
+<ul>
+  <li><b>Needs</b> the DDS Enabler and Fast DDS in <code>/usr/local</code>, and <code>nlohmann-json3-dev</code>.</li>
+  <li><b>C++, behind a C contract.</b> The DDS Enabler's API is C++ only. The plugin is a C++ shared object that
+  exports one C symbol, <code>bridgeRegister</code>; the broker stays C. <code>libstdc++</code> enters the broker's
+  process when the plugin is loaded.</li>
+  <li><b>Whether it builds</b> is <code>COR_BRIDGE_DDS</code>: <code>auto</code> (the default - where the Enabler is
+  installed, and it says which), <code>ON</code> (a missing dependency is an error), <code>OFF</code>.</li>
+</ul>
+<div class="g-callout">
+<p><b><code>nlohmann-json3-dev</code> is needed although nothing in the plugin uses it.</b> The Enabler's own public
+header <code>ddsenabler_participants/Writer.hpp</code> includes <code>&lt;nlohmann/json.hpp&gt;</code>, so its absence
+shows as an error in a file of the Enabler's. <code>make</code> checks for it by name.</p>
+</div>
+
+<h2 id="tests">Tests</h2>
+<p>Close to forty functional tests cover the DDS side, eight of them against real ROS 2 nodes: talker and listener,
+a Fibonacci action server, service servers, a <code>geometry_msgs/Twist</code> topic. They run on both of coraine's
+databases.</p>
+
+<h2 id="not-yet">Not yet</h2>
+<ul>
+  <li>A service or a fast action answering within the time a write already spends forwarding to other brokers, its
+  answer going straight into the response.</li>
+  <li>Bridges and channels created and changed at runtime - today they come from the configuration file.</li>
+</ul>
+<p class="muted">Other bridges: <a href="#docs/mqtt-bridge">MQTT</a>, <a href="#docs/modbus-bridge">Modbus</a>;
+devices in general: <a href="#docs/device-protocols">Speaking to devices directly</a>.</p>
+</article>

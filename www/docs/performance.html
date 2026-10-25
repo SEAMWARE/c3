@@ -1,0 +1,489 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/performance.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Performance and footprint</h1>
+<p class="lead">How small coraine is - on disk, in RAM, at start-up - how fast it answers per operation and per
+database, how it holds up with more entities and more cores, and what the durable configuration costs. Every
+number comes with the conditions it was measured under.</p>
+
+<p>Two other guides cover what makes a deployment faster than these numbers:
+<a href="#docs/extreme-performance">Extreme performance</a> (indexes on the attributes you query, and a broker
+trained on your workload) and <a href="#docs/database-indexes">Database indexes</a> (what each store indexes).</p>
+
+<h2 id="conditions">Where the numbers come from</h2>
+<p>One machine, a laptop, and release builds. Nothing here is an estimate.</p>
+<table class="gtable">
+  <tr><td>CPU</td><td>AMD Ryzen 9 8940HX - 16 physical cores / 32 threads, 64&nbsp;MiB L3, 5.39&nbsp;GHz boost</td></tr>
+  <tr><td>RAM</td><td>60&nbsp;GiB</td></tr>
+  <tr><td>OS</td><td>Ubuntu 26.04, gcc 15.2.0, x86-64</td></tr>
+  <tr><td>Build</td><td><code>CMAKE_BUILD_TYPE=Release</code> (<code>-O2</code>), stripped, <code>COR_FEATURE_ICU_COLLATION=OFF</code>; PGO where a table says so</td></tr>
+  <tr><td>Databases</td><td>MongoDB 8.2 and PostgreSQL 16 + TimescaleDB as containers on the host network, unless a table says otherwise</td></tr>
+</table>
+<p>Four builds are measured - the two axes that change what a coraine process is made of:</p>
+<ul>
+  <li><b>The HTTP server</b> - <code>corHttp</code>, the built-in epoll server, with no external dependency; or
+  libmicrohttpd (the default of the image and the packages).</li>
+  <li><b>The current-state database</b> - <code>--database corDB</code>, the entities in the broker's own RAM
+  (on disk too with <code>--dbDir</code>); or <code>--database mongoc</code>, the entities in a MongoDB server.</li>
+</ul>
+<p><b>Every rate is per core</b> unless it says otherwise: the broker is pinned to a stated number of
+<b>physical</b> cores (the SMT siblings left out, the topology read from <code>/sys</code>), and the load
+generator runs on other cores. A figure is the median of three 5-second <code>wrk -t8 -c50</code> runs, each
+started on a quiet machine (load average below 2); a run stops at the first non-2xx answer. The
+fixture is 100 five-attribute entities of ~550 bytes each, so a <code>limit=20</code> query returns about
+11&nbsp;KB. TRoE is <code>none</code> unless a row says otherwise.</p>
+<div class="g-callout">
+  <b>Latency depends on how deep the CPU sleeps.</b> With one client, most of a request's time is a core
+  waking up: the three-broker cor:// chain gave 11&nbsp;000 requests/s with the idle states as the machine
+  ships them, 14&nbsp;200 with the deep ones disabled - the same build, minutes apart. Every latency here is
+  taken with the deep states on, the machine's own setting. Many clients keep the cores awake, so throughput
+  barely moves.
+</div>
+
+<h2 id="size">Size on disk</h2>
+<p>What installing coraine adds to a bare <code>ubuntu:26.04</code>, stripped. The libraries that image
+already carries (libc, libstdc++, libssl, libz and the rest, ~14.5&nbsp;MiB) are not counted: coraine does
+not install them.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>Build</th><th>coraine's own code</th><th>Added libraries</th><th>Total added</th></tr></thead>
+  <tbody>
+  <tr><td><code>corHttp</code> + <code>corDB</code></td><td>1.66&nbsp;MiB</td><td>3.17&nbsp;MiB (2)</td><td><b>4.83&nbsp;MiB</b></td></tr>
+  <tr><td><code>corHttp</code> + <code>mongoc</code></td><td>1.62&nbsp;MiB</td><td>9.94&nbsp;MiB (5)</td><td>11.56&nbsp;MiB</td></tr>
+  <tr><td>libmicrohttpd + <code>corDB</code></td><td>1.67&nbsp;MiB</td><td>10.89&nbsp;MiB (11)</td><td>12.56&nbsp;MiB</td></tr>
+  <tr><td>libmicrohttpd + <code>mongoc</code></td><td>1.63&nbsp;MiB</td><td>17.66&nbsp;MiB (14)</td><td>19.29&nbsp;MiB</td></tr>
+  <tr><td><code>corHttp</code> + <code>corDB</code> + history in-process (<code>--troe corDB</code>)</td><td>1.65&nbsp;MiB</td><td>3.17&nbsp;MiB (2)</td><td><b>4.82&nbsp;MiB</b></td></tr>
+  <tr><td><code>corHttp</code> + <code>corDB</code> + history in PostgreSQL</td><td>1.73&nbsp;MiB</td><td>5.47&nbsp;MiB (12)</td><td>7.20&nbsp;MiB</td></tr>
+  <tr><td>libmicrohttpd + <code>mongoc</code> + history in PostgreSQL</td><td>1.70&nbsp;MiB</td><td>19.86&nbsp;MiB (23)</td><td>21.56&nbsp;MiB</td></tr>
+  <tr><td>the smallest broker, <code>corHttp</code> + <code>corDB</code></td><td>1.35&nbsp;MiB</td><td>none</td><td><b>1.35&nbsp;MiB</b></td></tr>
+  <tr><td>the smallest broker, libmicrohttpd + <code>corDB</code></td><td>1.36&nbsp;MiB</td><td>7.72&nbsp;MiB (9)</td><td>9.08&nbsp;MiB</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-21, main <code>f4f4a92a</code>, <code>coraine-build --release --bridges none</code> - every
+feature switch at its default but in the smallest broker. Own code: the stripped <code>coraine</code>, the
+database plugin and <code>none.so</code>.</p>
+<ul>
+  <li><b>The two added libraries of <code>corDB</code> are GEOS</b> (geo-queries, 3.17&nbsp;MiB) - larger than
+  coraine itself. <code>GEOQ=OFF</code> takes them away.</li>
+  <li><b>libmicrohttpd costs nine libraries, 7.72&nbsp;MiB</b>: GnuTLS and what it pulls in. The built-in server
+  removes all nine.</li>
+  <li><b><code>mongoc</code> costs three libraries, 6.77&nbsp;MiB</b> (<code>libmongoc</code>, <code>libbson</code>,
+  <code>libsasl2</code>) - before MongoDB itself is installed anywhere.</li>
+  <li><b>History in the broker (<code>--troe corDB</code>) adds no library and no measurable size.</b></li>
+  <li><b>The smallest broker</b> - every feature switch off but <code>HEALTH</code>, <code>CHANNEL_STATUS_IN</code>
+  and <code>CHANNEL_CHECKS</code>, so GEOS too - keeps the entity API, batch operations included, the
+  in-process stores and the bridges. Its executable is 1&nbsp;220&nbsp;224 bytes against 1&nbsp;533&nbsp;312
+  (<code>corHttp</code>, -20.4&nbsp;%). The choices: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/building-details.md#every-choice-coraine-build-offers">every choice coraine-build offers</a>.</li>
+</ul>
+<div class="g-callout">
+  <b>ICU is off in every row.</b> Linking ICU for the root collation of <code>orderBy</code> on strings costs
+  three libraries and 39.2&nbsp;MiB - <code>libicudata</code> alone is 31.6&nbsp;MiB.
+  <code>COR_FEATURE_ICU_COLLATION=ON</code> brings it back; without it, ASCII sorts exactly as root collation
+  does and the rest is approximated.
+</div>
+
+<h2 id="ram">RAM</h2>
+<p>The broker process's resident set. <i>Private dirty</i> is the part no other process shares: what a second
+broker on the same machine costs.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>Build</th><th>Idle RSS</th><th>Private dirty</th><th>100&nbsp;000 entities</th><th>Per entity</th></tr></thead>
+  <tbody>
+  <tr><td>libmicrohttpd + <code>corDB</code></td><td><b>13&nbsp;MiB</b></td><td><b>3&nbsp;MiB</b></td><td>358&nbsp;MiB</td><td>3.53&nbsp;KiB</td></tr>
+  <tr><td><code>corHttp</code> + <code>corDB</code></td><td>17&nbsp;MiB</td><td>9&nbsp;MiB</td><td>354&nbsp;MiB</td><td>3.45&nbsp;KiB</td></tr>
+  <tr><td>libmicrohttpd + <code>mongoc</code></td><td>20&nbsp;MiB</td><td>4&nbsp;MiB</td><td>68&nbsp;MiB + mongod</td><td>-</td></tr>
+  <tr><td><code>corHttp</code> + <code>mongoc</code></td><td>24&nbsp;MiB</td><td>10&nbsp;MiB</td><td>45&nbsp;MiB + mongod</td><td>-</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-09-16, release builds; the entities loaded in batches of 200-500.</p>
+<p><b>With <code>corDB</code> an entity is RAM</b> - the number to size a machine with. With <code>mongoc</code>
+the broker stays nearly flat, and MongoDB holds the entities. The built-in server starts ~4&nbsp;MiB heavier:
+it allocates its connection pool at start-up, so no request calls <code>malloc</code> for the server's own
+machinery.</p>
+
+<h3 id="stored-trees">The stored trees</h3>
+<p>What <code>corDB</code> keeps of an entity is a tree of nodes, allocated in the tree heap: a node, its name
+and a string value in one block, carved from 16&nbsp;KiB pages, with no allocator header per block. A node
+that is not an object or an array is 32 bytes, not 40.</p>
+<table class="gtable">
+  <thead><tr><th>Build</th><th>RSS</th><th>Per entity</th><th></th></tr></thead>
+  <tbody>
+  <tr><td><code>malloc</code>, 40-byte nodes (0.5.x)</td><td>270&nbsp;MiB</td><td>2&nbsp;445&nbsp;B</td><td></td></tr>
+  <tr><td>tree heap, 40-byte nodes</td><td>240&nbsp;MiB</td><td>2&nbsp;140&nbsp;B</td><td>-11&nbsp;%</td></tr>
+  <tr><td>tree heap, 32-byte scalars (0.6.0)</td><td><b>231&nbsp;MiB</b></td><td><b>2&nbsp;047&nbsp;B</b></td><td><b>-14.5&nbsp;%</b></td></tr>
+  </tbody>
+</table>
+<p class="muted">100&nbsp;000 entities of the larger perf store (five attributes, 24 nodes each), <code>corDB</code>
+in RAM, release builds, loaded in batches of 500, the RSS after the load; two runs of each, ABBA, within
+0.2&nbsp;%. The load took the same time in all three (23.5-23.7&nbsp;s).</p>
+
+<h3 id="ram-million">At one and ten million entities</h3>
+<p>~2.0&nbsp;KiB of RAM a <code>corDB</code> entity (2.14 and 2.05&nbsp;KiB), ~630 bytes on disk. A
+<code>mongoc</code> broker holds 125&nbsp;MiB at either size, and mongod grows:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th></th><th>mongoc 1M</th><th>mongoc 10M</th><th>corDB 1M</th><th>corDB 10M</th></tr></thead>
+  <tbody>
+  <tr><td>broker RSS</td><td>125&nbsp;MiB</td><td>125&nbsp;MiB</td><td>2.04&nbsp;GiB</td><td>19.5&nbsp;GiB</td></tr>
+  <tr><td>mongod RSS</td><td>1.25&nbsp;GiB</td><td>1.77&nbsp;GiB</td><td>-</td><td>-</td></tr>
+  <tr><td>MongoDB documents (<code>dataSize</code>)</td><td>768&nbsp;MiB</td><td>7.5&nbsp;GiB</td><td>-</td><td>-</td></tr>
+  <tr><td>on disk</td><td>128&nbsp;MiB</td><td>1.27&nbsp;GiB</td><td>602&nbsp;MiB</td><td>5.9&nbsp;GiB</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-19, coraine 0.6.0-dev release (main <code>b23e42f0</code>), libmicrohttpd, not pinned;
+<code>corDB</code> with <code>--dbDir</code> on the local NVMe; the fixture entity (five attributes, ~550 bytes of
+JSON). corDB's type index (the default since) adds 51 bytes an entity: 2.09&nbsp;GiB at one million.</p>
+
+<div class="g-callout warn">
+  <b>glibc's allocator arenas add 10-25&nbsp;%.</b> With many threads glibc keeps separate arenas, and memory
+  freed in one is not handed back. <code>MALLOC_ARENA_MAX=2</code>: 89 → 67&nbsp;MiB at 10&nbsp;000 entities,
+  376 → 335&nbsp;MiB at 100&nbsp;000 (libmicrohttpd + <code>corDB</code>, 2026-10-01). What it costs in
+  throughput is not measured, so it is not the default; in a container with a tight memory limit it is the
+  first thing to set.
+</div>
+
+<h2 id="startup">Start-up, and what else has to run</h2>
+<table class="gtable">
+  <thead><tr><th>Build</th><th>From <code>exec</code> to a served response</th></tr></thead>
+  <tbody>
+  <tr><td>libmicrohttpd + <code>corDB</code></td><td><b>9&nbsp;ms</b></td></tr>
+  <tr><td><code>corHttp</code> + <code>corDB</code></td><td>12&nbsp;ms</td></tr>
+  <tr><td>libmicrohttpd + <code>mongoc</code></td><td>26&nbsp;ms</td></tr>
+  <tr><td><code>corHttp</code> + <code>mongoc</code></td><td>31&nbsp;ms</td></tr>
+  </tbody>
+</table>
+<p class="muted">2026-09-16, release builds. The built-in server's 3&nbsp;ms is its connection pool;
+<code>mongoc</code>'s 17&nbsp;ms is the handshake with MongoDB.</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th><code>--database</code> / <code>--troe</code></th><th>Also required</th></tr></thead>
+  <tbody>
+  <tr><td><code>corDB</code> / <code>none</code> or <code>corDB</code></td><td><b>nothing</b> - the history, too, is in the broker's process</td></tr>
+  <tr><td><code>mongoc</code></td><td>a MongoDB server: 1.02-1.15&nbsp;GiB resident at rest, a WiredTiger cache of half of (RAM - 1&nbsp;GiB) by default, and cores (<a href="#docs/performance" data-scroll="cores">below</a>)</td></tr>
+  <tr><td><code>timescale</code></td><td>PostgreSQL + TimescaleDB: 128&nbsp;MiB of shared buffers by default, 313&nbsp;MiB across its 10 processes as measured; on the broker's machine 2.3&nbsp;MiB and 9-10 more libraries for <code>libpq</code></td></tr>
+  </tbody>
+</table>
+</div>
+<p>A <code>corHttp</code> + <code>corDB</code> broker with <code>--troe corDB</code> is one process, 17&nbsp;MiB,
+4.8&nbsp;MiB of new files on disk, and no socket to anything else - temporal history included.</p>
+
+<h2 id="per-core">Throughput on one core</h2>
+<p>The page size decides the rate of a query. Requests/s and entities/s are the same number only at
+<code>limit=1</code>:</p>
+<table class="gtable">
+  <thead><tr><th><code>GET /entities?type=Vehicle&amp;limit=N</code></th><th>requests/s</th><th>entities/s</th></tr></thead>
+  <tbody>
+  <tr><td>1 entity</td><td><b>82&nbsp;672</b></td><td>82&nbsp;672</td></tr>
+  <tr><td>20 entities</td><td>12&nbsp;577</td><td><b>251&nbsp;540</b></td></tr>
+  <tr><td>100 entities</td><td>2&nbsp;750</td><td><b>275&nbsp;000</b></td></tr>
+  </tbody>
+</table>
+<p class="muted">libmicrohttpd + <code>corDB</code> on disk (<code>--dbDir</code>), PGO release, coraine 0.5.0,
+2026-10-10.</p>
+
+<h3 id="per-build">The four builds, a page of 20</h3>
+<table class="gtable">
+  <thead><tr><th>Build</th><th>requests/s</th><th>entities/s</th><th>measured</th></tr></thead>
+  <tbody>
+  <tr><td>libmicrohttpd + <code>corDB</code></td><td><b>12&nbsp;577</b></td><td><b>251&nbsp;540</b></td><td>2026-10-10, PGO, <code>--dbDir</code></td></tr>
+  <tr><td><code>corHttp</code> + <code>corDB</code></td><td>9&nbsp;508</td><td>190&nbsp;160</td><td>2026-09-16, no PGO</td></tr>
+  <tr><td>libmicrohttpd + <code>mongoc</code></td><td>7&nbsp;342</td><td>146&nbsp;840</td><td>2026-10-05, PGO (libraries only), MongoDB 8.2 on seven other cores</td></tr>
+  <tr><td><code>corHttp</code> + <code>mongoc</code></td><td>4&nbsp;634</td><td>92&nbsp;680</td><td>2026-09-16, no PGO, MongoDB 4.4 through a port mapping - a floor</td></tr>
+  </tbody>
+</table>
+
+<h3 id="per-operation">Per operation</h3>
+<p>One core, libmicrohttpd + <code>corDB</code>, the PGO build in RAM and with <code>--dbDir</code> (the durable
+configuration). Requests/s, the median of three runs:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>Operation</th><th>in RAM</th><th><code>--dbDir</code></th><th></th><th>p99, <code>--dbDir</code></th></tr></thead>
+  <tbody>
+  <tr><td>query, 1 entity</td><td>81&nbsp;083</td><td>82&nbsp;672</td><td>+2.0&nbsp;%</td><td>0.66&nbsp;ms</td></tr>
+  <tr><td>query, 20 entities</td><td>12&nbsp;536</td><td>12&nbsp;577</td><td>+0.3&nbsp;%</td><td>3.91&nbsp;ms</td></tr>
+  <tr><td>query, 20 entities, 200 connections</td><td>12&nbsp;477</td><td>12&nbsp;477</td><td>+0.0&nbsp;%</td><td>16.54&nbsp;ms</td></tr>
+  <tr><td>retrieve</td><td>91&nbsp;141</td><td>90&nbsp;916</td><td>-0.2&nbsp;%</td><td>0.58&nbsp;ms</td></tr>
+  <tr><td><code>PATCH</code> an attribute, 1 connection</td><td>50&nbsp;243</td><td>48&nbsp;625</td><td>-3.2&nbsp;%</td><td>0.76&nbsp;ms</td></tr>
+  <tr><td><code>PATCH</code> an attribute</td><td>115&nbsp;173</td><td>104&nbsp;400</td><td>-9.4&nbsp;%</td><td>0.54&nbsp;ms</td></tr>
+  <tr><td>create</td><td>69&nbsp;936</td><td>54&nbsp;707</td><td>-21.8&nbsp;%</td><td>4.37&nbsp;ms</td></tr>
+  <tr><td>merge</td><td>84&nbsp;160</td><td>78&nbsp;548</td><td>-6.7&nbsp;%</td><td>0.69&nbsp;ms</td></tr>
+  <tr><td>delete</td><td>128&nbsp;309</td><td>126&nbsp;714</td><td>-1.2&nbsp;%</td><td>0.44&nbsp;ms</td></tr>
+  <tr><td>batch update (20)</td><td>12&nbsp;038</td><td>10&nbsp;022</td><td>-16.7&nbsp;%</td><td>5.45&nbsp;ms</td></tr>
+  <tr><td>batch create (20)</td><td>8&nbsp;470</td><td>5&nbsp;873</td><td>-30.7&nbsp;%</td><td>21.61&nbsp;ms</td></tr>
+  <tr><td>batch delete (20)</td><td>25&nbsp;325</td><td>23&nbsp;814</td><td>-6.0&nbsp;%</td><td>3.26&nbsp;ms</td></tr>
+  <tr><td><code>PATCH</code>, 1 subscriber notified</td><td>22&nbsp;670</td><td>22&nbsp;043</td><td>-2.8&nbsp;%</td><td>2.97&nbsp;ms</td></tr>
+  <tr><td><code>PATCH</code>, ~210 subscriptions</td><td>21&nbsp;741</td><td>21&nbsp;416</td><td>-1.5&nbsp;%</td><td>2.66&nbsp;ms</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-09/10, coraine <code>e289dc6c</code>, <code>make pgo</code> (the Docker image's build), broker
+on CPU 0, wrk on CPUs 1-15, 50 connections unless named, idle states deep; <code>--dbDir</code> on the local NVMe
+(ext4 on LUKS), <code>--dbSync interval</code>. The profile adds +1.0&nbsp;% (delete) to +9.4&nbsp;% against the same
+source without it.</p>
+<ul>
+  <li><b>Batching is worth two to four times per entity</b>: batch update 200&nbsp;440 entities/s against
+  104&nbsp;400 one at a time (1.9×), batch create 117&nbsp;460 against 54&nbsp;707 (2.1×), batch delete
+  476&nbsp;280 against 126&nbsp;714 (3.8×) - one request, one parse, one lock for twenty.</li>
+  <li><b>A request that cannot wait runs inline</b>, on the I/O thread that read it - with <code>corDB</code>,
+  every <code>/entities</code> request whose <code>@context</code>s are cached and that no registration can make
+  distributed. Handing it to a worker instead (<code>--noInline</code>) halves a retrieve on one core: 43&nbsp;568
+  against 83&nbsp;785 (2026-10-01). With <code>mongoc</code> every request goes to a worker.</li>
+  <li><b>The built-in server</b> on the same core, PGO, in RAM: query 1 entity 80&nbsp;457, retrieve 88&nbsp;391,
+  <code>PATCH</code> 105&nbsp;918, create 68&nbsp;981, and a notifying <code>PATCH</code> 43&nbsp;168 - almost twice
+  libmicrohttpd's 22&nbsp;670.</li>
+</ul>
+
+<h3 id="many-clients">More clients on one core</h3>
+<table class="gtable">
+  <thead><tr><th>Clients</th><th>libmicrohttpd</th><th>p99</th><th><code>corHttp</code></th><th>p99</th></tr></thead>
+  <tbody>
+  <tr><td>10</td><td>6&nbsp;239</td><td>3.43&nbsp;ms</td><td>5&nbsp;359</td><td><b>1.79&nbsp;ms</b></td></tr>
+  <tr><td>50</td><td>6&nbsp;030</td><td>106.8&nbsp;ms</td><td>5&nbsp;834</td><td><b>42.9&nbsp;ms</b></td></tr>
+  <tr><td>200</td><td>6&nbsp;147</td><td>206.0&nbsp;ms</td><td>4&nbsp;821</td><td><b>75.8&nbsp;ms</b></td></tr>
+  <tr><td>1000</td><td>5&nbsp;654</td><td>292.0&nbsp;ms</td><td>4&nbsp;790</td><td>303.0&nbsp;ms</td></tr>
+  </tbody>
+</table>
+<p class="muted">2026-09-16, the same query on one core, release builds without PGO.</p>
+<p>A hundred times the clients, 9&nbsp;% less throughput: the extra clients wait, and do not slow the broker
+down for the ones already there. The built-in server holds the p99 two to three times lower up to 200 clients.</p>
+
+<h2 id="cores">Eight cores, and what the database costs</h2>
+<p>A deployment is the broker <b>and</b> the databases it needs. Here they share eight physical cores - the
+broker, mongod and PostgreSQL pinned to the same eight - and the load generator runs on the other eight.</p>
+
+<figure class="xp-chart" aria-label="Requests a second of create and PATCH on eight shared cores, per configuration">
+  <div class="xp-axis" aria-hidden="true"><span>0</span><span>35k</span><span>70k</span><span>105k</span><span>140k</span><span>175k</span><span>210k</span></div>
+  <div class="xp-group">
+    <div class="xp-label">MongoDB</div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 20.9%"><span>43&nbsp;811</span></div>
+      <div class="xp-bar on" style="--w: 8.3%"><span>17&nbsp;486</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">MongoDB<br><span class="muted">+ TimescaleDB history</span></div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 12.2%"><span>25&nbsp;605</span></div>
+      <div class="xp-bar on" style="--w: 6.3%"><span>13&nbsp;215</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">corDB on disk</div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 55.9%"><span>117&nbsp;299</span></div>
+      <div class="xp-bar on" style="--w: 69.4%"><span>145&nbsp;664</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">corDB on disk<br><span class="muted">+ its history</span></div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 39.7%"><span>83&nbsp;325</span></div>
+      <div class="xp-bar on" style="--w: 57.3%"><span>120&nbsp;379</span></div>
+    </div>
+  </div>
+  <div class="xp-group">
+    <div class="xp-label">ramDB<br><span class="muted">no disk</span></div>
+    <div class="xp-bars">
+      <div class="xp-bar off" style="--w: 96.1%"><span>201&nbsp;907</span></div>
+      <div class="xp-bar on" style="--w: 83.0%"><span>174&nbsp;382</span></div>
+    </div>
+  </div>
+  <figcaption><span class="xp-key off"></span>create <span class="xp-key on"></span><code>PATCH</code> - requests/s,
+  50 connections, linear scale. The conditions are those of the table below.</figcaption>
+</figure>
+
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>requests/s</th><th>MongoDB</th><th>MongoDB + TimescaleDB</th><th>corDB on disk</th><th>corDB on disk + history</th><th>ramDB</th></tr></thead>
+  <tbody>
+  <tr><td>create</td><td>43&nbsp;811</td><td>25&nbsp;605</td><td>117&nbsp;299</td><td>83&nbsp;325</td><td>201&nbsp;907</td></tr>
+  <tr><td>create, 1 connection</td><td>8&nbsp;181</td><td>8&nbsp;112</td><td>28&nbsp;540</td><td>22&nbsp;816</td><td>31&nbsp;407</td></tr>
+  <tr><td>batch create (20)</td><td>12&nbsp;070</td><td>2&nbsp;463</td><td>13&nbsp;864</td><td>7&nbsp;955</td><td>51&nbsp;141</td></tr>
+  <tr><td>merge</td><td>27&nbsp;150</td><td>19&nbsp;195</td><td>101&nbsp;528</td><td>80&nbsp;441</td><td>124&nbsp;902</td></tr>
+  <tr><td><code>PATCH</code></td><td>17&nbsp;486</td><td>13&nbsp;215</td><td>145&nbsp;664</td><td>120&nbsp;379</td><td>174&nbsp;382</td></tr>
+  <tr><td><code>PATCH</code>, 1 connection</td><td>3&nbsp;891</td><td>3&nbsp;424</td><td>38&nbsp;332</td><td>36&nbsp;714</td><td>39&nbsp;631</td></tr>
+  <tr><td>batch update (20)</td><td>3&nbsp;130</td><td>2&nbsp;227</td><td>34&nbsp;762</td><td>23&nbsp;239</td><td>40&nbsp;501</td></tr>
+  <tr><td><code>DELETE</code></td><td>28&nbsp;399</td><td>23&nbsp;547</td><td>205&nbsp;280</td><td>183&nbsp;448</td><td>221&nbsp;244</td></tr>
+  <tr><td>batch delete (20)</td><td>7&nbsp;351</td><td>6&nbsp;278</td><td>67&nbsp;070</td><td>48&nbsp;329</td><td>69&nbsp;480</td></tr>
+  <tr><td><code>GET /entities/{id}</code></td><td>55&nbsp;595</td><td>51&nbsp;998</td><td>481&nbsp;812</td><td>493&nbsp;889</td><td>469&nbsp;348</td></tr>
+  <tr><td>query, <code>limit=20</code></td><td>24&nbsp;143</td><td>22&nbsp;957</td><td>76&nbsp;649</td><td>78&nbsp;933</td><td>76&nbsp;213</td></tr>
+  <tr><td>p99, <code>PATCH</code></td><td>3.48&nbsp;ms</td><td>6.70&nbsp;ms</td><td>0.69&nbsp;ms</td><td>0.94&nbsp;ms</td><td>0.54&nbsp;ms</td></tr>
+  <tr><td>p99, batch update (20)</td><td>19.1&nbsp;ms</td><td>32.8&nbsp;ms</td><td>2.51&nbsp;ms</td><td>3.97&nbsp;ms</td><td>1.50&nbsp;ms</td></tr>
+  <tr><td>p99, <code>GET /entities/{id}</code></td><td>1.33&nbsp;ms</td><td>1.48&nbsp;ms</td><td>0.18&nbsp;ms</td><td>0.14&nbsp;ms</td><td>0.17&nbsp;ms</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-05 (the MongoDB + TimescaleDB column 2026-10-21, <code>--troeWriters 8</code>), coraine PGO
+release, mongod 8.2 and PostgreSQL 16 + TimescaleDB as containers on the host network, 50 connections unless
+named, median of 3 × 5&nbsp;s. corDB with <code>--dbDir</code>, its log memory-mapped.</p>
+<ul>
+  <li><b>Reads never touch the history.</b> corDB answers a retrieve at 8.7× MongoDB's rate, 481&nbsp;812 a
+  second at a p99 of 0.18&nbsp;ms.</li>
+  <li><b>History in a database server</b> costs a write 1-80&nbsp;% (create 43&nbsp;811 → 25&nbsp;605, batch
+  create 12&nbsp;070 → 2&nbsp;463); in corDB 4-43&nbsp;%. corDB with its history writes faster than MongoDB
+  without any on every row but batch create, and 2.8-11× MongoDB + TimescaleDB.</li>
+  <li><b>Persistence costs little:</b> ramDB, no disk at all, is 1.0-1.7× corDB on disk; 3.7× on batch create,
+  which grows the store fastest.</li>
+</ul>
+
+<h3 id="mongo-cores">The cores MongoDB needs</h3>
+<p>Measured CPU of both processes, behind one saturated broker core:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>Cores of the deployment</th><th><code>corDB</code></th><th><code>mongoc</code></th></tr></thead>
+  <tbody>
+  <tr><td>query, <code>limit=20</code></td><td>1.00</td><td>1.65</td></tr>
+  <tr><td><code>GET /entities/{id}</code></td><td>1.00</td><td>2.27</td></tr>
+  <tr><td><code>PATCH</code></td><td>1.00</td><td>3.61</td></tr>
+  <tr><td>batch update</td><td>1.00</td><td><b>5.06</b></td></tr>
+  </tbody>
+</table>
+</div>
+<p>With the broker on one core and mongod narrowed to 1-7 cores, reads level off at one mongod core
+(4&nbsp;978 queries/s), <code>PATCH</code> at three (8&nbsp;553) and batch updates of 20 at four
+(1&nbsp;392). <span class="muted">2026-09-16, release builds, <code>docker update --cpuset-cpus</code>.</span></p>
+
+<h3 id="entities">More entities</h3>
+<p>Ten times the store, the same rates. Random entities of the whole store, requests/s at 50 connections
+(p50 in µs):</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th></th><th>mongoc 1M</th><th>mongoc 10M</th><th>corDB 1M</th><th>corDB 10M</th></tr></thead>
+  <tbody>
+  <tr><td>retrieve</td><td>59&nbsp;815 (756)</td><td>59&nbsp;167 (765)</td><td>483&nbsp;327 (84)</td><td>496&nbsp;014 (82)</td></tr>
+  <tr><td><code>PATCH</code></td><td>18&nbsp;880 (2&nbsp;481)</td><td>17&nbsp;561 (2&nbsp;670)</td><td>91&nbsp;261 (532)</td><td>95&nbsp;810 (442)</td></tr>
+  <tr><td>create</td><td>48&nbsp;215 (935)</td><td>48&nbsp;469 (924)</td><td>84&nbsp;597 (510)</td><td>101&nbsp;186 (451)</td></tr>
+  <tr><td>first page of a 1&nbsp;% type</td><td>16&nbsp;670 (2&nbsp;837)</td><td>17&nbsp;188 (2&nbsp;750)</td><td>78&nbsp;832 (517)</td><td>83&nbsp;418 (522)</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">The conditions of <a href="#docs/performance" data-scroll="ram-million">At one and ten million
+entities</a>: 2026-10-19, <code>b23e42f0</code>, built without corDB's type index. From 1M to 10M every scenario
+moved by 6&nbsp;% or less, but four (-7 to +20&nbsp;%).</p>
+<p>A query by type on <code>corDB</code> walks the type's own list - the type index, on by default
+(<code>COR_FEATURE_TYPE_INDEX</code>). At one million entities it takes a deep page of a 0.1&nbsp;% type
+(<code>offset=200</code>) from 814 to 103&nbsp;560 requests/s and its first page from 22&nbsp;462 to
+110&nbsp;862; a create costs 13.9&nbsp;% (2026-10-20, the same machine and configuration, one run each).</p>
+
+<h2 id="durable">What the durable configuration costs</h2>
+<p><code>--dbDir</code> makes <code>corDB</code> survive a restart. Every write appends its effect to a
+memory-mapped log, so the record is in the kernel before the response; the log is synced to the disk every
+100&nbsp;ms (<code>--dbSync interval</code>, the default) and snapshotted as it grows. A broker that dies
+loses nothing it acknowledged; a machine that dies, at most the last 100&nbsp;ms. The tables marked <code>--dbDir</code> use this
+configuration.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--dbDir<span class="env">CORAINE_DBDIR</span></td><td>the store's directory - without it, RAM only</td></tr>
+  <tr><td>--dbSync<span class="env">CORAINE_DBSYNC</span></td><td><code>interval</code> (the default), <code>request</code> (a write answers when its record is on the disk), <code>none</code></td></tr>
+  <tr><td>--dbSyncInterval<span class="env">CORAINE_DBSYNCINTERVAL</span></td><td>the milliseconds between two syncs of the log</td></tr>
+  <tr><td>--dbCompress<span class="env">CORAINE_DBCOMPRESS</span></td><td>the snapshots and the finished log segments compressed (zstd, on the snapshot thread); the open segment never</td></tr>
+</table>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>requests/s</th><th>in RAM</th><th><code>--dbDir</code></th><th></th><th><code>--dbSync request</code></th><th></th></tr></thead>
+  <tbody>
+  <tr><td>query, <code>limit=20</code></td><td>129&nbsp;809</td><td>131&nbsp;029</td><td>+1&nbsp;%</td><td>135&nbsp;354</td><td>+4&nbsp;%</td></tr>
+  <tr><td><code>GET /entities/{id}</code></td><td>612&nbsp;808</td><td>617&nbsp;642</td><td>+1&nbsp;%</td><td>645&nbsp;924</td><td>+5&nbsp;%</td></tr>
+  <tr><td><code>PATCH</code></td><td>136&nbsp;257</td><td>108&nbsp;000</td><td>-21&nbsp;%</td><td>23&nbsp;478</td><td>-83&nbsp;%</td></tr>
+  <tr><td><code>PATCH</code>, 1 connection</td><td>50&nbsp;511</td><td>48&nbsp;467</td><td>-4&nbsp;%</td><td>1&nbsp;798</td><td>-96&nbsp;%</td></tr>
+  <tr><td>merge</td><td>85&nbsp;419</td><td>72&nbsp;456</td><td>-15&nbsp;%</td><td>23&nbsp;903</td><td>-72&nbsp;%</td></tr>
+  <tr><td><code>DELETE</code></td><td>169&nbsp;207</td><td>160&nbsp;588</td><td>-5&nbsp;%</td><td>20&nbsp;707</td><td>-88&nbsp;%</td></tr>
+  <tr><td>batch update (20)</td><td>36&nbsp;220</td><td>29&nbsp;264</td><td>-19&nbsp;%</td><td>16&nbsp;920</td><td>-53&nbsp;%</td></tr>
+  <tr><td>create</td><td>121&nbsp;491</td><td>81&nbsp;895</td><td>-33&nbsp;%</td><td>22&nbsp;387</td><td>-82&nbsp;%</td></tr>
+  <tr><td>create, 1 connection</td><td>36&nbsp;925</td><td>33&nbsp;204</td><td>-10&nbsp;%</td><td>1&nbsp;784</td><td>-95&nbsp;%</td></tr>
+  <tr><td>batch create (20)</td><td>64&nbsp;733</td><td>22&nbsp;019</td><td>-66&nbsp;%</td><td>8&nbsp;716</td><td>-87&nbsp;%</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-05, PGO release, one tenant, the whole machine (32 threads, nothing pinned), 50
+connections unless named, the log on an NVMe disk (ext4).</p>
+<ul>
+  <li><b>Reads cost nothing</b> - they never touch the log.</li>
+  <li><b>A write that changes the store costs 4-21&nbsp;%</b>: encoding its record and copying it into the
+  log. An attribute update logs the attributes, not the entity.</li>
+  <li><b>Creates cost more</b>, because a growing store needs snapshots: batch create's p99 is 23.6&nbsp;ms
+  against 2.06&nbsp;ms in RAM.</li>
+  <li><b><code>--dbSync request</code> runs at the disk's speed</b>: ~1&nbsp;800 writes/s on one connection,
+  ~21&nbsp;000-24&nbsp;000 with fifty sharing each sync.</li>
+  <li><b><code>--dbCompress</code></b>: on eight cores every scenario within -2.3 to +2.9&nbsp;%; batch create
+  with history, the scenario that snapshots most, -7.4&nbsp;%.</li>
+  <li><b>Recovery</b>: 100&nbsp;000 entities (38&nbsp;MB of log or snapshot) are back in <b>0.19&nbsp;s</b>
+  after <code>kill -9</code> or a clean stop (2026-10-04).</li>
+</ul>
+
+<h3 id="history">The history in TimescaleDB</h3>
+<p>The timescale plugin's writer threads (<code>--troeWriters</code>, 8 in these runs) put the history rows
+of many requests in one transaction. Counted until the last history row is in the database, on the eight
+shared cores: create 24&nbsp;025/s, create on one connection 7&nbsp;601/s, batch create (20) 2&nbsp;321/s;
+120&nbsp;000 history rows/s on a create at 50 connections. A create costs the broker 82&nbsp;µs without
+history, 97&nbsp;µs with.</p>
+<p><code>--troeSync</code> hands a request's history to the writers before the response, so a temporal read
+sees it at once; the response does not wait for the commit. It costs -0.0 to -6.4&nbsp;% (create on one
+connection, about 6&nbsp;µs a create); reads -0.4&nbsp;%.</p>
+<p class="muted">2026-10-21, PGO build, mongod 8.2 and PostgreSQL 16 + TimescaleDB on the eight shared cores,
+<code>synchronous_commit</code> on, 5&nbsp;s after a 2&nbsp;s warm-up, ABBA.</p>
+
+<h3 id="on-disk">What the data takes on disk</h3>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>Bytes, 100&nbsp;000 entities</th><th>total</th><th>per entity</th></tr></thead>
+  <tbody>
+  <tr><td>corDB, <code>--dbDir</code></td><td>74&nbsp;418&nbsp;601</td><td>744</td></tr>
+  <tr><td>corDB, <code>--dbDir --dbCompress</code> (the snapshot of a clean stop)</td><td>1&nbsp;360&nbsp;203</td><td>14</td></tr>
+  <tr><td>MongoDB 8.2, the documents (BSON)</td><td>107&nbsp;177&nbsp;790</td><td>1&nbsp;072</td></tr>
+  <tr><td>MongoDB 8.2, on disk (<code>storageSize</code> + <code>indexSize</code>)</td><td>11&nbsp;329&nbsp;536</td><td>113</td></tr>
+  <tr><td>history, ten updates of each: <code>--troe corDB</code></td><td>425&nbsp;960&nbsp;175</td><td></td></tr>
+  <tr><td>history: <code>--troe corDB --dbCompress</code></td><td>52&nbsp;081&nbsp;577</td><td></td></tr>
+  <tr><td>history: <code>--troe timescale</code> (the database's growth)</td><td>1&nbsp;727&nbsp;322&nbsp;632</td><td></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-10-05, the fixture entity (five attributes, ~550 bytes of JSON), batch creates of 500; for
+the history every entity's <code>speed</code> updated ten times. The fixture favours a compressor: every entity
+carries the same description and names. A corDB record decodes on its own, so it carries its attributes'
+expanded IRIs - most of its 744 bytes. TimescaleDB's own compression is off, as coraine creates the tables;
+<code>--dbCompress</code> never compresses the open history segment (under 64&nbsp;MiB).</p>
+
+<h2 id="container">In a container</h2>
+<p>The same build on the same core loses nothing with <code>--net=host</code>; a port mapping adds a hop per
+request:</p>
+<div class="g-scroll">
+<table class="gtable">
+  <thead><tr><th>One core, 50 clients unless named</th><th><code>--net=host</code></th><th><code>-p 1026:1026</code></th></tr></thead>
+  <tbody>
+  <tr><td><code>corDB</code>, queries and single-entity writes</td><td>-0.1 to +11&nbsp;%</td><td>+3 to -14&nbsp;%</td></tr>
+  <tr><td><code>corDB</code>, batch requests</td><td>±2&nbsp;%</td><td>-2 to -4&nbsp;%</td></tr>
+  <tr><td><code>corDB</code>, one client (create, <code>PATCH</code>)</td><td>+4&nbsp;%</td><td><b>-30&nbsp;%</b></td></tr>
+  <tr><td><code>mongoc</code>, queries and writes</td><td>±5&nbsp;%</td><td>-5 to -17&nbsp;%</td></tr>
+  <tr><td><code>mongoc</code>, batch requests</td><td>±4&nbsp;%</td><td>0 to -5&nbsp;%</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">2026-09-30, the same release build as a native binary and as an image, the broker on one physical
+core (<code>taskset</code> / <code>--cpuset-cpus</code>), the load generator on the others.</p>
+<div class="g-callout warn">
+  <b>Pin both sides when measuring a container.</b> Unpinned, the load generator and the containerised broker
+  compete for the same CPUs, and the container loses: large query responses looked 40&nbsp;% slower than
+  natively. Pinned, the difference is gone.
+</div>
+
+<h2 id="reproduce">Measuring it yourself</h2>
+<p><code>test/perf/reproduce.sh</code> produces the core figures from a published image, Docker and
+<code>wrk</code>. It pins the broker to 1 and then 4 physical cores, runs <code>wrk</code> on others, and prints a
+figure only if every response was a 2xx and, for writes, the broker's entity count matches what
+<code>wrk</code> saw acknowledged. The report names the image by digest, the CPU and the kernel. Linux only.</p>
+<pre>curl -fsSLO https://raw.githubusercontent.com/SEAMWARE/coraine/main/test/perf/reproduce.sh
+less reproduce.sh                                   <span class="c"># the load scripts are inside it</span>
+bash reproduce.sh quay.io/seamware/coraine:&lt;version&gt;   <span class="c"># CORES="1 2 4 8", DURATION, REPEATS change the sweep</span></pre>
+<p>From source, <code>test/perf/perfRun.sh</code> runs every request shape and prints one JSON object per run
+(<code>PERF_BROKER_CORES</code> pins the broker, <code>PERF_ENTITIES</code> sizes the store),
+<code>test/perf/coreScale.sh</code> sweeps cores, and <code>test/perf/corChain.sh</code> measures forwarding
+through three brokers.</p>
+
+<p>The full measurements - the PGO tables of both HTTP servers, forwarding over HTTP and cor://, the request
+arena's and the HTTP server's sizes, the subscription matching, the costs of authorization, and every
+scenario on <code>mongoc</code>: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md">doc/performance.md</a>.</p>
+</article>

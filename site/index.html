@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- site/index.html - the website of the documentation (make site): c³'s Documentation page on its own -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="coraine, the NGSI-LD context broker: installation, building, the API, performance, bridges and every library it is built from.">
+<title>coraine documentation</title>
+<link rel="icon" href="img/coraine-mark.png">
+<link rel="stylesheet" href="css/c3.css">
+<link rel="stylesheet" href="css/compile.css">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+<div id="app">
+  <header class="top">
+    <a href="#docs"><img class="mark" src="img/coraine-mark.png" alt="coraine"></a>
+    <div class="brand"><span class="word">coraine</span><span class="tag sep" aria-hidden="true">-</span><span class="tag">documentation</span></div>
+    <div class="top-right site-right">
+      <span class="chip" id="site-version" hidden></span>
+      <a class="site-gh" href="https://github.com/SEAMWARE/coraine">GitHub</a>
+      <img class="sw" src="img/seamware.svg" alt="Seamware">
+    </div>
+  </header>
+  <main class="page" id="page-docs">
+    <section class="cp-card docs" id="docs-index" aria-label="Documentation">
+      <h1>Documentation</h1>
+      <p class="muted">The guides, the broker, c³ and every component they are built from. A guide opens here; a component opens its repository on GitHub. <a href="https://github.com/SEAMWARE/c3">c³</a>, the coraine Control Center, has the same pages, offline.</p>
+      <div class="docs-search">
+        <input type="search" id="docs-search" placeholder="Search the guides" aria-label="Search the guides" autocomplete="off">
+        <div class="ds-results" id="docs-results" hidden></div>
+      </div>
+      <div id="docs-groups"></div>
+    </section>
+    <div class="docs-reader" id="docs-reader" hidden>
+      <nav class="docs-side" aria-label="Guides">
+        <a class="docs-back" href="#docs">← Documentation</a>
+        <div class="docs-search">
+          <input type="search" id="docs-search-2" placeholder="Search" aria-label="Search the guides" autocomplete="off">
+          <div class="ds-results" id="docs-results-2" hidden></div>
+        </div>
+        <div id="docs-nav"></div>
+      </nav>
+      <section class="cp-card docs-body" aria-live="polite">
+        <div id="docs-guide"></div>
+        <nav class="docs-pager" id="docs-pager" aria-label="Previous and next guide"></nav>
+      </section>
+      <nav class="docs-toc" id="docs-toc" aria-label="On this page"></nav>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="js/site.js"></script>
+</body>
+</html>

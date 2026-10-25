@@ -1,0 +1,240 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/building.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide steps">
+<h1>Building from source</h1>
+<p class="lead">The published image runs the broker with no compiler involved. Build from source to change
+coraine, to run it where no image suits, or to compile out the features a deployment does not use.</p>
+
+<h2 id="packages"><span class="g-n">1</span>Install the system packages</h2>
+<p>Debian / Ubuntu:</p>
+<table class="gtable">
+  <tr><th>Needed for</th><th>Package</th></tr>
+  <tr><td>the toolchain</td><td><code>cmake build-essential</code></td></tr>
+  <tr><td>the HTTP server</td><td><code>libmicrohttpd-dev</code></td></tr>
+  <tr><td>TLS</td><td><code>libssl-dev</code></td></tr>
+  <tr><td>geo-queries</td><td><code>libgeos-dev</code></td></tr>
+  <tr><td>the MongoDB plugin (<code>mongoc.so</code>)</td><td>mongo-c driver <b>v2</b> - <code>mongoc2.pc</code>, found by pkg-config</td></tr>
+  <tr><td>the TimescaleDB plugin</td><td><code>libpq-dev</code></td></tr>
+  <tr><td>the MQTT bridge (<code>mqtt.so</code>)</td><td><code>libmosquitto-dev</code></td></tr>
+</table>
+<div class="g-callout">
+<p><b>The mongo-c v2 driver is the most common build snag.</b> Without MongoDB, build without it -
+<code>cmake -DCOR_FEATURE_MONGOC=OFF</code> - and run the broker with <code>--database corDB</code>.</p>
+</div>
+
+<h2 id="libs"><span class="g-n">2</span>Clone and build the libraries</h2>
+<p>coraine links the Cor-Libs - <code>corBase corLog corAlloc corArgs corHash corTree corJson corProm corRest
+corNgsild corJsonld corPlugin</code> - and they must sit as <b>siblings</b> of <code>coraine</code> under one
+parent directory (by default <code>~/git</code>): the build references <code>../&lt;lib&gt;/lib&lt;lib&gt;.a</code>.
+The <code>corLibs</code> umbrella's bootstrap clones every one of them, and <code>corTest</code>, beside itself,
+and builds them:</p>
+<pre>git clone git@github.com:SEAMWARE/corLibs.git
+./corLibs/bootstrap.sh</pre>
+<p>It works wherever it is cloned - the layout comes from the umbrella's own location. Later, <code>make</code>
+in coraine rebuilds <code>corRest</code>, <code>corNgsild</code> and <code>corJsonld</code> by itself; the other
+libraries must already be built.</p>
+
+<h2 id="build"><span class="g-n">3</span>Build and install the broker</h2>
+<pre>cd ~/git/coraine
+make i             <span class="c"># release build + install</span>
+make di            <span class="c"># debug build + install</span></pre>
+<p>Install writes the broker to <code>/usr/local/bin</code>, the plugins to <code>/opt/seamware/plugins</code> and
+the configuration to <code>/opt/seamware/etc</code> - run it with the permissions for that, or create the
+directories first.</p>
+<div class="g-callout">
+<p><b>Installing while brokers run is safe.</b> Each file is copied beside the installed one and renamed over
+it, never written in place: a running broker keeps the files it started with and loads the new ones at its
+next start. A plain copy <i>onto</i> a plugin a broker has loaded changes its code under it, and it dies of
+SIGSEGV within seconds.</p>
+</div>
+
+<h2 id="check"><span class="g-n">4</span>Check what the binary carries</h2>
+<pre>coraine --version            <span class="c"># without starting it</span>
+<span class="o">coraine 0.6.0-dev
+features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 CONTEXT_HOSTING=1 MONGOC=1 ...
+httpServer: mhd</span>
+curl localhost:1026/build    <span class="c"># a running broker</span></pre>
+<p><code>GET /build</code> answers with three kinds of fact, fixed at three different moments: the
+<code>features</code> compiled in (at the build), the <code>plugins</code> built against the ones
+<code>loaded</code> (at start-up, from a directory the binary does not own), and the <code>runtime</code>
+settings that change what a client gets (at a restart) - a broker with <code>REGISTRATIONS</code> compiled in
+and <code>--distributed</code> off accepts registrations and forwards nothing, and this is the one place both
+show. It is not under <code>/admin</code>: the admin API is itself a feature a build can leave out.
+<code>GET /version</code> is product, version and the linked libraries' commits.</p>
+
+<h2 id="make">The make targets</h2>
+<table class="g-opts">
+  <tr><th>Target</th><th>What it does</th></tr>
+  <tr><td>make<br>make release</td><td>a release build, in <code>BUILD_RELEASE/</code></td></tr>
+  <tr><td>make debug</td><td>a debug build, in <code>BUILD_DEBUG/</code></td></tr>
+  <tr><td>make pgo</td><td>a profile-guided release build, in <code>BUILD_PGO/</code> - <a href="#docs/building/pgo">below</a></td></tr>
+  <tr><td>make tune WORKLOAD=&lt;file&gt;</td><td>profile-guided on a workload of your own - <a href="#docs/building/pgo">below</a></td></tr>
+  <tr><td>make i<br>make di</td><td>release / debug, and install</td></tr>
+  <tr><td>make install_pgo</td><td>install the <code>BUILD_PGO/</code> build</td></tr>
+  <tr><td>make ci<br>make cdi</td><td>clean, then <code>make i</code> / <code>make di</code></td></tr>
+  <tr><td>make install</td><td>copy the broker and the plugins to <code>/usr/local/bin</code>, <code>/opt/seamware/plugins</code>, <code>/opt/seamware/etc</code></td></tr>
+  <tr><td>make clean</td><td>remove the build trees</td></tr>
+  <tr><td>make test</td><td>the functional test suite (<code>corTest</code>) - <a href="#docs/testing">Testing</a></td></tr>
+  <tr><td>make coverage</td><td>a coverage report per database, <code>coverage-&lt;db&gt;/index.html</code> - <a href="#docs/coverage">Test coverage</a></td></tr>
+  <tr><td>make coverage-etsi</td><td>the coverage of the whole ETSI test suite, <code>coverage-etsi/index.html</code></td></tr>
+</table>
+
+<h2 id="coraine-build">coraine-build - a build from the installed packages</h2>
+<p><code>coraine-build</code> builds a broker of your own from the exact source of the installed packages - the
+tarball <code>coraine-dev</code> installs (<code>/usr/share/coraine/src/coraine-src.tar.xz</code>), or a
+directory of git clones. Nothing is written outside the directory it is given, and root is not needed.</p>
+<pre>coraine-build --features REGISTRATIONS=OFF,SERVICE_EXECUTION=OFF,MONGOC=OFF ~/coraine-edge
+. ~/coraine-edge/install/env           <span class="c"># bin/ on PATH, the broker pointed at plugins/ and etc/</span>
+coraine -fg --database corDB</pre>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>&lt;dir&gt;</td><td>where the source is unpacked and built: a new or empty directory, or one an earlier <code>coraine-build</code> unpacked into (the source is then reused). The result is in <code>&lt;dir&gt;/install</code>: <code>bin/coraine</code>, <code>bin/coraine-import</code>, <code>plugins/</code>, <code>etc/</code>, <code>env</code></td></tr>
+  <tr><td>--release</td><td>optimised, traces compiled out (<code>--traceLevels</code> is not there), no training - the default</td></tr>
+  <tr><td>--pgo</td><td>profile-guided: built instrumented, trained on the measured request shapes, rebuilt with the profile - what the <code>coraine</code> package and the image hold. A few minutes more; needs <code>curl</code>, <code>wrk</code> and <code>python3</code>; libmicrohttpd only</td></tr>
+  <tr><td>--tune &lt;workload&gt;</td><td>profile-guided, trained on <b>your</b> workload, and the knobs measured on it; the best are kept in <code>&lt;dir&gt;/install/etc/tune.env</code></td></tr>
+  <tr><td>--debug</td><td><code>-g</code>, not optimised, traces compiled in (<code>--traceLevels</code> works) - for reproducing a problem report, not for production</td></tr>
+  <tr><td>--features &lt;list&gt;</td><td>comma-separated <code>NAME=ON|OFF</code>, the name without <code>COR_FEATURE_</code> - <a href="#docs/building/features">the switches</a></td></tr>
+  <tr><td>--http-server &lt;s&gt;</td><td><code>mhd</code> (libmicrohttpd, the default) or <code>builtin</code> (corHttp) - <a href="#docs/building/http-server">below</a>; <code>builtin</code> not with <code>--pgo</code> / <code>--tune</code> yet</td></tr>
+  <tr><td>--bridges &lt;list&gt;</td><td>the bridge plugins to build: <code>mqtt</code>, <code>modbus</code>, <code>dds</code>, <code>ckan</code>, <code>opcua</code>, or <code>none</code> (default <code>mqtt,modbus</code>). One whose libraries are not installed stops the build and says so</td></tr>
+  <tr><td>--list-bridges</td><td>every bridge, whether it can be built here and why not (<code>--json</code>: a JSON array)</td></tr>
+  <tr><td>--list-features</td><td>every feature switch, its default and what it is; with <code>--json</code> also its group and what it <code>requires</code></td></tr>
+  <tr><td>--name &lt;exe&gt;</td><td>the broker's executable name (default <code>coraine</code>) - a broker built for one role named after it. 1-64 of <code>A-Z a-z 0-9 . _ -</code>, starting with a letter or a digit; not <code>coraine-import</code></td></tr>
+  <tr><td>--source &lt;file&gt;</td><td>the source tarball (default: the one <code>coraine-dev</code> installs)</td></tr>
+  <tr><td>--source &lt;dir&gt;</td><td>a directory of git clones, side by side as <code>bootstrap.sh</code> clones them: coraine at its checked-out commit, each library at <code>origin/main</code> (<code>LIBS_REF=HEAD</code>: the branch each clone has checked out). Committed trees only; <code>coraine-dev</code> is not needed</td></tr>
+</table>
+</div>
+
+<h3 id="bridge-sizes">The bridges</h3>
+<p>What a bridge adds to an install: the stripped plugin and the libraries it loads that a bare
+<code>ubuntu:26.04</code> does not have - measured 2026-10-13 on main <code>c44d4b4e</code>, release builds.</p>
+<table class="gtable">
+  <tr><th>Bridge</th><th>Needs</th><th>Size</th></tr>
+  <tr><td><code>mqtt</code> <span class="muted">default</span></td><td>libmosquitto (<code>libmosquitto-dev</code>)</td><td>+0.13 MiB</td></tr>
+  <tr><td><code>modbus</code> <span class="muted">default</span></td><td>no library</td><td>+0.03 MiB</td></tr>
+  <tr><td><code>dds</code></td><td>eProsima Fast DDS and the DDS Enabler - <a href="#docs/dds">DDS</a></td><td>+23.6 MiB - five times the broker</td></tr>
+  <tr><td><code>ckan</code></td><td>no library</td><td>+0.03 MiB</td></tr>
+  <tr><td><code>opcua</code></td><td>open62541 1.4 (<code>libopen62541-1.4-dev</code>: Ubuntu 26.04, Debian 13 - Ubuntu 24.04 has none)</td><td>+9.1 MiB</td></tr>
+</table>
+
+<h2 id="features">Compiling features out</h2>
+<p>Every feature that can be left out is a <code>COR_FEATURE_*</code> switch:
+<code>cmake -DCOR_FEATURE_&lt;X&gt;=OFF</code>, or <code>coraine-build --features &lt;X&gt;=OFF</code>. All are on by
+default except <code>ICU_COLLATION</code>. A route whose feature is compiled out keeps its place and answers
+<b>501</b>, <code>NotAvailableInThisDeployment</code> - not 404: the resource is not missing, this deployment
+declined the feature, and the client's move is a different deployment.</p>
+<p><b>Size</b> is what turning the switch from its default changes in what a build installs - the stripped
+programs and plugins, and the libraries they load that a bare <code>ubuntu:26.04</code> does not have.
+Measured 2026-10-13 on main <code>c44d4b4e</code>, release builds, one switch at a time against the default
+build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so a small switch reads
+0 or 4 KiB.</p>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Switch</th><th>Off</th><th>Size</th></tr>
+  <tr><td colspan="3" class="muted">NGSI-LD API</td></tr>
+  <tr><td>SUBSCRIPTIONS</td><td>the 7 subscription routes answer 501; <code>SNAPSHOT_SUBSCRIPTIONS</code> and <code>SSE</code> go with it</td><td>-64 KiB</td></tr>
+  <tr><td>REGISTRATIONS</td><td>15 routes answer 501: Context Source Registrations, registration subscriptions, EntityMaps; the forwarding library goes</td><td>-72 KiB</td></tr>
+  <tr><td>AUTO_ENTITY_MAP</td><td>no automatic EntityMaps and no <code>--autoEntityMaps</code>: pages by <code>offset</code> / <code>limit</code>, a map only when a client asks</td><td>-4 KiB</td></tr>
+  <tr><td>RESPONSE_BUDGET</td><td>no byte budget of a query, no <code>--maxResponseSize</code></td><td>-12 KiB</td></tr>
+  <tr><td>TIMEPOINT</td><td>no timepoint resources (<code>/temporal/timepoint/...</code>) - <a href="#docs/timepoint">Timepoint</a></td><td></td></tr>
+  <tr><td>ICU_COLLATION</td><td><b>off by default.</b> On: <code>orderBy</code> on strings by ICU root collation, and <code>collation=&lt;locale&gt;</code>. Off: ASCII sorts the same; punctuation does not sort before digits, a non-ASCII letter sorts by its bytes, <code>collation=</code> is ignored. Needs <code>libicu-dev</code>, and corNgsild built to match (<code>make -C ../corNgsild COR_WITH_ICU=0 di</code>)</td><td>on: +39.2 MiB, three libraries</td></tr>
+  <tr><td colspan="3" class="muted">Snapshots</td></tr>
+  <tr><td>SNAPSHOT_WRITE</td><td>a write naming a Snapshot (<code>NGSILD-Snapshot</code>) answers 422 - Snapshots are read-only</td><td>under a page</td></tr>
+  <tr><td>SNAPSHOT_SUBSCRIPTIONS</td><td>a subscription write naming a Snapshot answers 422. Off by itself when <code>SUBSCRIPTIONS</code> or <code>SNAPSHOT_WRITE</code> is</td><td>under a page</td></tr>
+  <tr><td colspan="3" class="muted">JSON-LD @context</td></tr>
+  <tr><td>CONTEXT_HOSTING</td><td>the 4 <code>/jsonldContexts</code> routes answer 501; an inline @context and the core context work as before</td><td>-20 KiB</td></tr>
+  <tr><td colspan="3" class="muted">Geo</td></tr>
+  <tr><td>GEOQ</td><td>a geo-query answers 501; GeoProperties are stored and served as before; GEOS is not linked. Set with <code>coraine-build</code> (or <code>make COR_WITH_GEOQ=0</code>) - <code>CMAKE_FEATURES</code> refuses it</td><td>-3.19 MiB</td></tr>
+  <tr><td colspan="3" class="muted">Security</td></tr>
+  <tr><td>AUTH</td><td>no <code>--auth</code>, every request let in; <code>fdsc.so</code> not built; <code>AUTH_OIDC</code> and <code>AUTH_METADATA</code> go with it - <a href="#docs/authorization">Authorization</a></td><td>-113 KiB</td></tr>
+  <tr><td>AUTH_OIDC</td><td><code>oidc.so</code> not built</td><td></td></tr>
+  <tr><td>AUTH_METADATA</td><td>no <code>/.well-known/oauth-protected-resource</code></td><td></td></tr>
+  <tr><td>POLICY_API</td><td>no <code>--policyApiPort</code>, no <code>/policy</code> API. Off by itself with the built-in HTTP server</td><td>-9 KiB</td></tr>
+  <tr><td colspan="3" class="muted">Beyond NGSI-LD</td></tr>
+  <tr><td>SERVICE_EXECUTION</td><td>service registrations, executions and executors (ETSI GR CIM-055): 17 routes answer 501</td><td>-169 KiB</td></tr>
+  <tr><td>ADMIN_CONFIG</td><td><code>GET /admin/config</code> answers 501. Off by itself when <code>ADMIN_API</code> is</td><td></td></tr>
+  <tr><td>BRIDGE_HTTP_LISTEN</td><td>the broker serves no port for a bridge plugin (an IoT Agent's southbound port)</td><td></td></tr>
+  <tr><td>DATA_CHANNELS, ASSET_CHANNELS, CHANNEL_STATUS_IN, CHANNEL_CHECKS, CHANNEL_WRITE_BACK, BRIDGE_INVENTORY</td><td>what a bridge plugin may do through the broker, each on its own - <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/building-details.md">building-details.md</a></td><td></td></tr>
+  <tr><td colspan="3" class="muted">Protocols</td></tr>
+  <tr><td>COR_PROTOCOL</td><td>no <code>--corPort</code>; a <code>cor://</code> registration is not forwarded to. The cor format stays - corDB's log is written in it. Set with <code>coraine-build</code> or <code>make COR_WITH_COR_PROTOCOL=0</code>, not a cmake <code>-D</code> alone - <a href="#docs/cor-protocol">cor://</a></td><td>-24 KiB</td></tr>
+  <tr><td>TRANSPORTS</td><td>no <code>--transports</code>, <code>ws.so</code> not built - <a href="#docs/websocket">WebSocket</a></td><td>-38 KiB</td></tr>
+  <tr><td>SSE</td><td>no <code>--sseStreams</code>; a subscription on <code>urn:ngsi-ld:self</code> is a 400 - <a href="#docs/sse">Server-Sent Events</a></td><td></td></tr>
+  <tr><td colspan="3" class="muted">Operations</td></tr>
+  <tr><td>ADMIN_API</td><td><code>admin.so</code> not built; <code>METRICS</code> goes with it</td><td>-40 KiB</td></tr>
+  <tr><td>METRICS</td><td>no <code>/admin/metrics</code>, <code>/metrics</code></td><td>-17 KiB</td></tr>
+  <tr><td>HEALTH</td><td>no <code>--healthPort</code> - <a href="#docs/kubernetes">Kubernetes</a></td><td>-8 KiB</td></tr>
+  <tr><td colspan="3" class="muted">Stores and tools</td></tr>
+  <tr><td>MONGOC</td><td><code>mongoc.so</code> not built and its libraries not loaded; run <code>--database corDB</code></td><td>-6.8 MiB</td></tr>
+  <tr><td>Q_PREFILTER</td><td><code>mongoc</code>: every <code>q</code> value term reads the collection; storage format 1 - <a href="#docs/database-indexes">Database indexes</a></td><td></td></tr>
+  <tr><td>DB_INDEXES</td><td>no declared indexes: no <code>--dbValueIndexes</code>, <code>/admin/indexes</code> answers 501</td><td></td></tr>
+  <tr><td>MIGRATE</td><td><code>coraine-import</code> not built - <a href="#docs/migration">Migration</a>. The broker carries no import code either way</td><td>-1.3 MiB</td></tr>
+</table>
+</div>
+<p>Tenants, entity scope, <code>datasetId</code> and multi-type entities have no switch - they are always in the
+broker. <code>coraine-build --list-features --json</code> gives every switch with its group and what it
+<code>requires</code>. Every switch builds turned from its default alone: the nightly builds each one and checks
+that <code>--version</code> says so.</p>
+
+<h3 id="reduced-tree">A reduced tree beside the ordinary one</h3>
+<pre>make di CMAKE_FEATURES=-DCOR_FEATURE_REGISTRATIONS=OFF BUILD_DEBUG=BUILD_DEBUG_MINIMAL</pre>
+<div class="g-callout warn">
+<p><b>CMake caches what it is given, per build directory.</b> The same command again with a different feature
+keeps the previous one off as well, and the build still succeeds. Give each combination a directory of its
+own, and check <code>coraine --version</code> or <code>GET /build</code> after any reduced build.</p>
+</div>
+<p>A reduced build is at your own risk: the combinations nobody has tried are the ones most worth reporting.
+Open an issue at <a href="https://github.com/SEAMWARE/coraine/issues">github.com/SEAMWARE/coraine/issues</a>
+with the switches set and the <code>GET /build</code> output.</p>
+
+<h2 id="http-server">The HTTP server</h2>
+<pre>cmake -DCOR_HTTP_SERVER=mhd        <span class="c"># libmicrohttpd - the default</span>
+cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP library</span></pre>
+<table class="gtable">
+  <tr><th></th><th>libmicrohttpd (<code>mhd</code>)</th><th>corHttp (<code>builtin</code>)</th></tr>
+  <tr><td>Model</td><td>a thread per connection</td><td>edge-triggered epoll loops sharing one port; loop 0 accepts and deals connections out in turn</td></tr>
+  <tr><td>Dependencies</td><td>libmicrohttpd 1.0.10 and GnuTLS behind it: nine libraries, 7.29 MiB</td><td>corAlloc and libc - 12 KiB of corHttp, <b>-7.3 MiB</b> against libmicrohttpd</td></tr>
+  <tr><td><code>--httpLoops</code></td><td>accepted, ignored</td><td>the number of loops; <code>0</code> (the default): one per core, at most four</td></tr>
+  <tr><td><code>POLICY_API</code></td><td>yes</td><td>no - its port is a second listener, and corHttp has one</td></tr>
+  <tr><td>Profile-guided, tuned</td><td>yes</td><td>not yet</td></tr>
+</table>
+<p>The value reaches CMake and corRest's own make, and decides whether libmicrohttpd is on the link line at
+all: <code>ldd coraine</code> shows it took, and a running broker reports it as <code>build.httpServer</code> on
+<code>GET /build</code>. The wire format of both is the same, byte for byte.</p>
+<p>The four-loop cap: on 8 cores, eight loops bought 16&nbsp;% over four and made p99 seven times worse. One per
+core: four loops on a single core compete for it, and measure slower than one.</p>
+<p>corHttp serves no TLS (the broker is put behind a proxy that does) and no HTTP pipelining - a second request
+in the same packet as the first is dropped; curl, browsers and the ETSI suite's HTTP library do not
+pipeline.</p>
+<div class="g-callout">
+<p><b>Which libmicrohttpd.</b> The images and CI build 1.0.10 with corLibs'
+<code>tools/mhd/mhdBuild.sh</code>, which accepts a release tarball only with its pinned SHA-256. On a
+workstation: <code>~/git/corLibs/tools/mhd/mhdBuild.sh --sudo</code> (to <code>/usr/local</code>, with TLS). A
+distribution's <code>libmicrohttpd-dev</code> works as well - but 1.0.4 and 1.0.5 fixed HTTP request smuggling
+(CWE-444): a release before 1.0.5 is not one to put behind a gateway.</p>
+</div>
+
+<h2 id="pgo">Profile-guided and tuned builds</h2>
+<p><code>make pgo</code> (<code>coraine-build --pgo</code>) builds the broker and its libraries instrumented,
+trains them on <code>test/perf/pgoTrain.sh</code> - perfRun's request shapes on corDB in RAM and on disk with
+history, a write that notifies, the three-broker forwarding chain over HTTP and cor:// - and rebuilds them with
+the profile: +1-10&nbsp;% per core against Release, about 6 minutes, with <code>wrk</code>. The image is built
+this way.</p>
+<p><code>make tune WORKLOAD=my-workload.json</code> (<code>coraine-build --tune</code>) trains on your workload
+instead, and measures two more knobs on it - the memory allocator (glibc's <code>malloc</code>, jemalloc,
+tcmalloc) and <code>--dbLockPrefer reads|writes</code>. About 15 minutes; it writes
+<code>tune-result.json</code>, and the best settings to <code>etc/tune.env</code> in the install;
+<code>make install_pgo</code> installs the result. What it gains, the workload file, and how to run it:
+<a href="#docs/extreme-performance">Extreme performance</a>.</p>
+<div class="g-callout warn">
+<p><b>Measure on a quiet machine.</b> A browser, a build or a video call running beside the training is
+measured too (<code>make tune</code> warns when a browser is up). Run it where the broker will run, or on the
+same kind of machine.</p>
+</div>
+
+<h2 id="next">Further</h2>
+<ul class="g-cards">
+  <li><a href="#docs/testing">Testing<span>the functional suite, run against the build</span></a></li>
+  <li><a href="#docs/plugin-architecture">Plugin architecture<span>the stores, the history, the APIs and the bridges, each a plugin the broker loads</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/coraine/blob/main/doc/building-details.md">building-details.md<span>every switch in full: what it removes, its size, the code it leaves</span></a></li>
+</ul>
+</article>

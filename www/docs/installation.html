@@ -1,0 +1,311 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/installation.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Installation</h1>
+<p class="lead">How to install coraine - from the apt repository, as a Docker image or from source - start it,
+choose its database, check that it works, and upgrade it. The options of a running broker, its admin API and
+its health probes are in <a href="#docs/administration">Administration</a>.</p>
+
+<p>coraine is one binary plus the plugins it loads at start. With the corDB store it needs <b>no other
+service</b>. The MongoDB store needs a MongoDB server; the TimescaleDB history needs PostgreSQL with the
+TimescaleDB extension.</p>
+
+<ul class="g-cards">
+  <li><a href="#docs/installation" data-scroll="apt">apt<span>Ubuntu 26.04, Ubuntu 24.04 LTS, Debian 13 - amd64 and arm64. A systemd service included.</span></a></li>
+  <li><a href="#docs/installation" data-scroll="docker">Docker<span>One immutable image tag per merge to main, release and debug flavours.</span></a></li>
+  <li><a href="#docs/installation" data-scroll="source">From source<span>The Cor-Libs and coraine cloned and built at their pinned versions.</span></a></li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="apt">Install with apt</h2>
+<p>Two packages, from the signed repository <b>https://seamware.github.io/apt</b>:</p>
+<pre>curl -fsSL https://seamware.github.io/apt/coraine.gpg | sudo tee /usr/share/keyrings/coraine.gpg &gt; /dev/null
+echo "deb [signed-by=/usr/share/keyrings/coraine.gpg] https://seamware.github.io/apt $(. /etc/os-release; echo $VERSION_CODENAME) main" \
+  | sudo tee /etc/apt/sources.list.d/coraine.list
+sudo apt update &amp;&amp; sudo apt install coraine        <span class="c"># or coraine-dev</span></pre>
+
+<table class="gtable">
+  <tr><th>Package</th><th>What it holds</th></tr>
+  <tr><td><code>coraine</code></td><td>the broker (<code>/usr/bin/coraine</code>), <code>coraine-import</code>, every plugin but the DDS
+  bridge (<code>/opt/seamware/plugins</code>), <code>/opt/seamware/etc/contextSourceExtras.json</code>, the systemd unit
+  <code>coraine.service</code> with its options file <code>/etc/default/coraine</code>, and c³, the control center
+  (<code>/usr/bin/c3</code>)</td></tr>
+  <tr><td><code>coraine-dev</code></td><td><code>coraine-build</code>, and the exact source of the same version - coraine and every
+  Cor-Lib at the commits built - in <code>/usr/share/coraine/src/coraine-src.tar.xz</code>, with the toolchain and libraries
+  to build it as dependencies. No installed headers, no libraries</td></tr>
+</table>
+
+<ul>
+  <li><b>Components.</b> <code>main</code> holds the releases; <code>testing</code> holds builds of a commit between
+  releases - put <code>testing</code> in place of <code>main</code> on the <code>deb</code> line.</li>
+  <li><b>Versions.</b> <code>0.5.0+&lt;dist&gt;</code> for a release, <code>0.5.0~git&lt;YYYYMMDD&gt;.&lt;sha8&gt;+&lt;dist&gt;</code>
+  for any other commit (it sorts before <code>0.5.0</code>); <code>&lt;dist&gt;</code> is <code>ubuntu26.04</code>,
+  <code>ubuntu24.04</code> or <code>debian13</code>.</li>
+  <li><b>Without the repository.</b> Each run of the <code>Packages</code> workflow keeps its <code>.deb</code> files as
+  artifacts (<code>debs-&lt;dist&gt;-&lt;arch&gt;</code>): <code>sudo apt install ./coraine_0.5.0+ubuntu24.04_amd64.deb</code>
+  - apt resolves the dependencies.</li>
+  <li><b>Dependencies</b> come from the distribution: OpenSSL, GEOS, libmicrohttpd, libmosquitto, libpq, zstd, and on
+  Ubuntu 26.04 the MongoDB C driver v2. Ubuntu 24.04 and Debian 13 package only v1 of that driver, so there the package
+  carries v2 privately, in <code>/opt/seamware/lib</code>; the system's <code>libmongoc-1.0</code> is not touched.</li>
+</ul>
+
+<h3 id="apt-service">The service</h3>
+<div class="g-callout warn"><p>The service is installed <b>not enabled and not started</b>: the broker listens on every
+interface and has no authentication of its own (<a href="#docs/authorization">Authorization</a>). Configure it first.</p></div>
+<pre>sudoedit /etc/default/coraine
+sudo systemctl enable --now coraine
+journalctl -u coraine -f</pre>
+<ul>
+  <li>It runs <code>/usr/bin/coraine -fg</code> as the system user <code>coraine</code>, with the options of
+  <code>/etc/default/coraine</code> as <code>CORAINE_*</code> environment variables
+  (<a href="#docs/administration/env">every option has one</a>).</li>
+  <li>Out of the box: corDB on disk in <code>/var/lib/coraine/db</code>, no temporal history, port 1026.</li>
+  <li><code>systemctl stop</code> is a clean stop (SIGTERM): requests in flight finish, corDB syncs its log and
+  writes a snapshot per tenant. An upgrade of the package restarts a running broker.</li>
+  <li>Removing the package stops the broker. Purging it removes <code>/etc/default/coraine</code> and keeps the data
+  in <code>/var/lib/coraine</code> and the user <code>coraine</code>.</li>
+</ul>
+
+<h3 id="coraine-dev">coraine-dev - a broker of your own</h3>
+<pre>coraine-build --list-features
+coraine-build --features REGISTRATIONS=OFF,SERVICE_EXECUTION=OFF ~/coraine-small
+. ~/coraine-small/install/env
+coraine -fg --database corDB</pre>
+<p><code>coraine-build [options] &lt;dir&gt;</code> unpacks the source into <code>&lt;dir&gt;</code> and builds there, as
+any user; nothing is written outside it. The result is in <code>&lt;dir&gt;/install</code> - <code>bin/</code>,
+<code>plugins/</code>, <code>etc/</code> and <code>env</code>, which points <code>PATH</code>, <code>SEAMWARE_PLUGIN_DIR</code>,
+<code>SEAMWARE_ETC_DIR</code> and <code>CORAINE_CONTEXTSOURCEEXTRAS</code> at it.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th>The build</th></tr>
+  <tr><td>--release</td><td>the default: optimised, traces compiled out</td></tr>
+  <tr><td>--debug</td><td>traces compiled in (<code>--traceLevels</code>)</td></tr>
+  <tr><td>--pgo</td><td>profile-guided, trained on the measured request shapes - as the packages and the image</td></tr>
+  <tr><td>--tune &lt;workload&gt;</td><td>profile-guided on your workload - <a href="#docs/extreme-performance">Extreme performance</a></td></tr>
+  <tr><td>--features NAME=ON|OFF,...</td><td>the <code>COR_FEATURE_*</code> switches; <code>--list-features</code> lists them (<code>--json</code> as JSON)</td></tr>
+  <tr><td>--http-server builtin</td><td>corHttp, the built-in HTTP server, instead of libmicrohttpd; the switches that need libmicrohttpd off (<code>POLICY_API</code>). Not with <code>--pgo</code> or <code>--tune</code></td></tr>
+  <tr><td>--name &lt;exe&gt;</td><td>the broker is <code>install/bin/&lt;exe&gt;</code>: 1-64 of <code>A-Z a-z 0-9 . _ -</code>, not <code>coraine-import</code>. It reads the same <code>CORAINE_*</code> variables</td></tr>
+  <tr><td>--source &lt;clones&gt;</td><td>a directory of git clones (coraine and every Cor-Lib side by side) instead of the tarball - committed trees only</td></tr>
+</table>
+<p>A plugin of your own - a bridge, say - is compiled against the headers in the unpacked tarball and links none of
+the broker's libraries; a plugin built from the tarball of version X matches the <code>coraine</code> package of version
+X. How: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#building-a-plugin-against-it">Building a plugin against it</a>
+and <a href="#docs/plugin-architecture">Plugin architecture</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="docker">Install with Docker</h2>
+<pre><span class="c"># in memory, nothing else needed</span>
+docker run --rm -p 1026:1026 quay.io/seamware/coraine:&lt;tag&gt; --database corDB --apiPlugins admin
+
+<span class="c"># against MongoDB</span>
+docker run --rm -p 1026:1026 quay.io/seamware/coraine:&lt;tag&gt; --database mongoc --dbHost mongo</pre>
+<ul>
+  <li><b>Tags.</b> <code>quay.io/seamware/coraine:&lt;version&gt;-&lt;date&gt;-&lt;sha&gt;</code> - one immutable tag per merge to
+  main, never <code>latest</code> - and the same with <code>-debug</code>, the debug flavour of that build.</li>
+  <li><b>Two flavours.</b> <code>release</code>: traces compiled out, for deploying. <code>debug</code>: traces compiled in,
+  for <code>--traceLevels</code> and for replaying a crash report from a release image of the same tag.</li>
+  <li><b>Options</b> are the arguments after the image name, or <code>-e CORAINE_*</code> variables. The port is not
+  fixed: pass <code>--port</code> and publish the one you chose.</li>
+  <li><b>Building one</b>: <code>make docker</code> in the coraine repository (<code>DOCKER_BUILD=debug</code> for the debug
+  flavour). It stages each Cor-Lib's <b>committed</b> state - uncommitted work in a sibling repository is not in the image.
+  <code>docker/docker-compose.yml</code> is a broker with MongoDB.</li>
+</ul>
+<p>The image's own page: <a href="https://github.com/SEAMWARE/coraine/blob/main/docker/README.md">docker/README.md</a>.
+On a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="source">Install from source</h2>
+<pre>git clone git@github.com:SEAMWARE/corLibs.git
+./corLibs/bootstrap.sh          <span class="c"># clones and builds every Cor-Lib at its pinned version</span>
+cd coraine
+make i                          <span class="c"># release build + install</span></pre>
+<p><code>make install</code> writes the broker to <code>/usr/local/bin/coraine</code>, the plugins to
+<code>/opt/seamware/plugins/{db/currentState,troe/temporal,api}/</code> and the provenance file to
+<code>/opt/seamware/etc/contextSourceExtras.json</code> - run it with the privileges for that, or create those
+directories first.</p>
+<div class="g-callout"><p>The MongoDB C driver <b>v2</b> (<code>mongoc2.pc</code>) is the usual build snag: few distributions
+package it. <code>cmake -DCOR_FEATURE_MONGOC=OFF</code> builds without MongoDB; run with <code>--database corDB</code>.</p></div>
+<p>The system packages (Debian / Ubuntu): <code>libmicrohttpd-dev</code>, <code>libssl-dev</code>, <code>libmosquitto-dev</code> (MQTT),
+<code>libgeos-dev</code> (geo-queries), <code>libicu-dev</code> (<code>orderBy</code> collation), <code>libpq-dev</code> (TimescaleDB),
+<code>cmake build-essential</code>, and the MongoDB C driver v2. Every package and make target:
+<a href="#docs/building">Building</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="first-start">First start</h2>
+<p>The defaults: port <b>1026</b>, the <code>mongoc</code> store (MongoDB on <code>localhost:27017</code>), no
+temporal history, no API plugins.</p>
+<pre><span class="c"># in memory, pretty JSON, the admin API on - no other service</span>
+coraine --database corDB --troe none --apiPlugins admin -pp 2
+
+<span class="c"># MongoDB, the broker on another port</span>
+coraine --port 1027 --database mongoc --dbHost localhost
+
+<span class="c"># every option, the selected plugins' own included</span>
+coraine --apiPlugins admin --database mongoc -u</pre>
+<p>The broker runs in the foreground and logs to its standard output. The first requests to try:
+<a href="#docs/api-walkthrough">API walkthrough</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="databases">The databases</h2>
+<p>Two choices: the <b>current state</b> (<code>--database</code>) and the <b>temporal history</b>, TRoE
+(<code>--troe</code>). Each is a plugin with options of its own, listed by <code>coraine --database X --troe Y -u</code>.</p>
+<table class="gtable">
+  <tr><th><code>--database</code></th><th>The store</th></tr>
+  <tr><td><code>mongoc</code> <span class="muted">(default)</span></td><td>MongoDB. A database per tenant; needed for <code>--high-availability mongo</code> (with a replica set)</td></tr>
+  <tr><td><code>corDB</code></td><td>in the broker's memory; on disk too with <code>--dbDir</code></td></tr>
+  <tr><td><code>ramDB</code></td><td>corDB built without the disk - nothing written anywhere</td></tr>
+</table>
+<table class="gtable">
+  <tr><th><code>--troe</code></th><th>The history</th></tr>
+  <tr><td><code>none</code> <span class="muted">(default)</span></td><td>no history; the Temporal API has nothing to answer</td></tr>
+  <tr><td><code>corDB</code></td><td>inside corDB's own store - it needs <code>--database corDB</code></td></tr>
+  <tr><td><code>timescale</code></td><td>PostgreSQL + TimescaleDB, a database per tenant (<code>corh</code>, <code>corh_&lt;tenant&gt;</code>)</td></tr>
+  <tr><td><code>ramDB</code></td><td>a ring of the latest TRoE events in RAM - a dev/test tool; answers no temporal query</td></tr>
+</table>
+
+<h3 id="mongodb">MongoDB</h3>
+<p><b>MongoDB 8.2</b> (<code>mongo:8.2</code>): the functional suite, CI and the performance figures run on it.</p>
+<div class="g-callout warn"><p>MongoDB 8.0 does not start on a Linux kernel 6.19 or newer - mongod exits at once
+(<a href="https://jira.mongodb.org/browse/SERVER-121912">SERVER-121912</a>). In a container the kernel is the host's, so
+<code>mongo:8.0</code> fails the same way on such a host. 8.2 starts.</p></div>
+<table class="g-opts">
+  <tr><th>Option</th><th>Default - what it does</th></tr>
+  <tr><td>--dbHost<span class="env">CORAINE_DBHOST</span></td><td><code>localhost</code></td></tr>
+  <tr><td>--dbPort<span class="env">CORAINE_DBPORT</span></td><td>27017</td></tr>
+  <tr><td>--dbName<span class="env">CORAINE_DBNAME</span></td><td><code>cor</code> - the default tenant's database; every other tenant has one of its own</td></tr>
+  <tr><td>--globalDb<span class="env">CORAINE_GLOBALDB</span></td><td><code>coraine</code> - the database for state that belongs to no tenant (the JSON-LD contexts)</td></tr>
+  <tr><td>--dbUser / --dbPwd<span class="env">CORAINE_DBUSER, CORAINE_DBPWD</span></td><td>none - the user and password</td></tr>
+  <tr><td>--dbURI<span class="env">CORAINE_DBURI</span></td><td>none - a full MongoDB URI in place of the host, port and user</td></tr>
+  <tr><td>--dbTimeout<span class="env">CORAINE_DBTIMEOUT</span></td><td>30 - seconds a start waits for MongoDB</td></tr>
+  <tr><td>--dbValueIndexes<span class="env">CORAINE_DBVALUEINDEXES</span></td><td>none - the declared indexes: the attributes whose <code>q</code> an index serves (<a href="#docs/database-indexes">Database indexes</a>)</td></tr>
+</table>
+<p><code>--dbPwd</code> and <code>--dbURI</code> are secrets: <code>GET /admin/config</code> shows <code>***</code>.</p>
+
+<h3 id="cordb">corDB on disk</h3>
+<p>With <b><code>--dbDir &lt;directory&gt;</code></b> corDB survives a restart: every write appends its effect to a log,
+synced every 100 ms, with a snapshot as the log grows. A clean stop (SIGTERM) loses nothing, and neither does
+<code>kill -9</code>, a crash or an OOM kill - the log is memory-mapped, so a record is in the kernel's page cache before
+the response. A power cut loses at most the last unsynced interval.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th>Default - what it does</th></tr>
+  <tr><td>--dbDir<span class="env">CORAINE_DBDIR</span></td><td>none: in RAM only. The directory - a subdirectory per tenant (<code>snap-N.cor</code>, <code>log-N.cor</code>)</td></tr>
+  <tr><td>--dbSync<span class="env">CORAINE_DBSYNC</span></td><td><code>interval</code>: synced every <code>--dbSyncInterval</code> ms. <code>request</code>: a write answers once its record is on the disk. <code>none</code>: written, never synced</td></tr>
+  <tr><td>--dbSyncInterval<span class="env">CORAINE_DBSYNCINTERVAL</span></td><td>100 - ms between two syncs</td></tr>
+  <tr><td>--dbSnapshotEvery<span class="env">CORAINE_DBSNAPSHOTEVERY</span></td><td>64 - MiB of log after which a tenant is snapshotted (and at least as much as its last snapshot)</td></tr>
+  <tr><td>--dbCompress<span class="env">CORAINE_DBCOMPRESS</span></td><td>off - snapshots and finished log segments compressed (zstd); the open segment never. A store written with it is read with or without it</td></tr>
+  <tr><td>--dbLockPrefer<span class="env">CORAINE_DBLOCKPREFER</span></td><td><code>reads</code> - <code>reads</code> or <code>writes</code>: whom a tenant's store lock lets in first when both wait (also ramDB)</td></tr>
+  <tr><td>--dbValueIndexes<span class="env">CORAINE_DBVALUEINDEXES</span></td><td>none - the declared indexes, as for MongoDB (also ramDB)</td></tr>
+</table>
+<p>What it costs: <a href="#docs/performance">Performance</a>. How it works:
+<a href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">corDB's persistence</a>.</p>
+
+<h3 id="ramdb">ramDB</h3>
+<p><code>--database ramDB</code> is the same store and the same API as corDB, with nothing written anywhere - for a
+broker whose content is only ever the latest value (pub/sub, a cache in front of another system).</p>
+<div class="g-callout warn"><p><b>A restart starts empty</b>, by design, and nothing warns about it at runtime.
+<code>--dbDir</code> is an unknown option with ramDB, and <code>--troe corDB</code> is refused; <code>none</code>,
+<code>timescale</code> and <code>ramDB</code> work.</p></div>
+
+<h3 id="timescale">TimescaleDB history (<code>--troe timescale</code>)</h3>
+<table class="g-opts">
+  <tr><th>Option</th><th>Default - what it does</th></tr>
+  <tr><td>--troeHost / --troePort<span class="env">CORAINE_TROEHOST, CORAINE_TROEPORT</span></td><td><code>localhost</code> / 5432 - the PostgreSQL server</td></tr>
+  <tr><td>--troeUser / --troePwd<span class="env">CORAINE_TROEUSER, CORAINE_TROEPWD</span></td><td><code>postgres</code> / none. <code>--troePwd</code> is a secret (<code>***</code> in <code>/admin/config</code>)</td></tr>
+  <tr><td>--troeName<span class="env">CORAINE_TROENAME</span></td><td><code>corh</code> - the default tenant's database, and the prefix of the others</td></tr>
+  <tr><td>--troePoolSize<span class="env">CORAINE_TROEPOOLSIZE</span></td><td>10 - connections per tenant for the temporal reads and the Temporal API's writes</td></tr>
+  <tr><td>--troeWriters<span class="env">CORAINE_TROEWRITERS</span></td><td>8 - writer threads per tenant, each on its own connection, writing the history of many requests in one transaction. 0: every request writes its own</td></tr>
+  <tr><td>--troeConnectTimeout<span class="env">CORAINE_TROECONNECTTIMEOUT</span></td><td>30 - seconds a start waits for the database, a try a second; 0: one try</td></tr>
+  <tr><td>--troeDownExit<span class="env">CORAINE_TROEDOWNEXIT</span></td><td>0 (never) - seconds the database may be down before the broker exits with 1 (<a href="#docs/installation" data-scroll="db-down">below</a>)</td></tr>
+  <tr><td>--troeSqlIndexes<span class="env">CORAINE_TROESQLINDEXES</span></td><td><code>none</code> - extra indexes for SQL sent to PostgreSQL directly: <code>attrObserved</code>, <code>geo</code>, <code>time</code></td></tr>
+  <tr><td>--troeValueIndexes<span class="env">CORAINE_TROEVALUEINDEXES</span></td><td>none - the declared indexes of the history (<a href="#docs/database-indexes">Database indexes</a>)</td></tr>
+  <tr><td>--troeInstanceCap / -troeCap<span class="env">CORAINE_TROEINSTANCECAP</span></td><td>1000000 - instances per attribute a temporal query returns without <code>firstN</code> / <code>lastN</code> (also <code>--troe corDB</code>)</td></tr>
+</table>
+<p>A request's history rows are queued for its tenant's writers and written after its response. With
+<b><code>--troeSync</code></b> they are queued before the response, so a temporal read that follows it sees them; no
+response waits for the commit. Measured against the default (eight cores, ABBA): writes 1-3&nbsp;% fewer a second
+with 50 connections, 2-6&nbsp;% with one. The queue holds at most 8&nbsp;MiB. A stop (SIGTERM, SIGINT) writes what is
+queued; <code>kill -9</code>, a crash or an OOM kill loses it - up to 8&nbsp;MiB, the rows of the last few milliseconds while
+the database keeps up. Every broker writing to the same PostgreSQL should run with the same <code>--troeSqlIndexes</code>.</p>
+
+<h3 id="db-down">When PostgreSQL is down</h3>
+<p><b>The current state and its subscriptions are served as before.</b> The history is held in memory, retried, and
+written when the database is back - nothing is lost while what is held stays under 8&nbsp;MiB.</p>
+<table class="gtable">
+  <tr><th>During the outage</th><th>Answer</th></tr>
+  <tr><td>a write or read of the current state</td><td>as always; its subscriptions notify; its history is held</td></tr>
+  <tr><td>a temporal read, a Temporal API write</td><td><b>500</b> <code>InternalError</code>, at once - the history it would read is in the database</td></tr>
+  <tr><td><code>GET /ready</code>, <code>GET /live</code></td><td><b>200</b> - the health report says <code>"status": "degraded"</code>, <code>"recording": false</code></td></tr>
+</table>
+<ul>
+  <li><b>Retries</b>: 100 ms after the first failure, then twice as late each time, up to every 5 s. The outage ends
+  at most 5 s after the database takes connections again. Every row keeps the times of its write - the history is
+  as if there had been no outage.</li>
+  <li><b>Past 8 MiB the history is lost</b>, counted (<code>lostRows</code>) and logged, at most every 10 s. 8&nbsp;MiB is
+  some 5&nbsp;660 creates of an entity of five attributes (~550 bytes of JSON), or some 34&nbsp;200 attribute PATCHes.</li>
+  <li><b><code>--troeDownExit &lt;s&gt;</code></b>: the broker exits (code 1) after <code>&lt;s&gt;</code> seconds of the database
+  down while history is held, or at the first row that would be lost - whichever comes first. What is held is lost at
+  the exit, and a restarted broker waits for the database: with it, an outage of the history is an outage of the
+  broker.</li>
+  <li><b>A start during an outage</b> waits <code>--troeConnectTimeout</code> seconds, then exits with 1. A database that
+  answers and refuses (a schema version newer than this build, a permission) fails the start at once.</li>
+</ul>
+<p>Every case, the log lines, the connection timeouts and the indexes of the history, measured:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#timescaledb-history---troe-timescale">doc/installation.md</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="tenants">Tenants</h2>
+<p>A request names its tenant in the <code>NGSILD-Tenant</code> header. With mongoc each tenant is a database of its
+own, with corDB a store of its own (with <code>--dbDir</code>, a directory of its own). Nothing is configured: a write
+naming an unknown tenant creates it; a read of one that does not exist is <b>404</b> <code>NonexistentTenant</code>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="check">Check an installation</h2>
+<p>With the <code>admin</code> API plugin loaded, on port 1026:</p>
+<pre><span class="c"># 1. the broker answers, and says which build it is  -&gt; 200, "coraine version" and each library's</span>
+curl -s localhost:1026/admin/version
+
+<span class="c"># 2. create an entity  -&gt; 201 Created, with a Location header</span>
+curl -si localhost:1026/ngsi-ld/v1/entities -H 'Content-Type: application/json' \
+     -d '{"id": "urn:ngsi-ld:SanityCheck:1", "type": "SanityCheck",
+          "temperature": {"type": "Property", "value": 21.5}}'
+
+<span class="c"># 3. read it back  -&gt; 200, "temperature" with value 21.5</span>
+curl -s localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:SanityCheck:1
+
+<span class="c"># 4. delete it  -&gt; 204; a second GET is then 404</span>
+curl -si -X DELETE localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:SanityCheck:1</pre>
+<table class="gtable">
+  <tr><th>Check</th><th>How</th></tr>
+  <tr><td>the process</td><td>one, <code>coraine</code>: <code>pgrep -a -x coraine</code>, or <code>docker ps --filter name=coraine</code></td></tr>
+  <tr><td>the port</td><td>TCP 1026 (or <code>--port</code>), NGSI-LD and the admin API: <code>ss -ltnp | grep 1026</code></td></tr>
+  <tr><td>MongoDB</td><td>TCP 27017 outgoing; after step 2 the database exists: <code>mongosh --quiet --eval 'db.getMongo().getDBNames()'</code></td></tr>
+  <tr><td>a broker that does not start</td><td>its output says why - a MongoDB that cannot be reached is the most common cause</td></tr>
+</table>
+
+<!-- ======================================================================= -->
+<h2 id="upgrading">Upgrading</h2>
+<p>Every store records the version of the format its data is written in, and a broker checks it at start - in
+every store it opens, <code>coraine-import</code> too:</p>
+<table class="gtable">
+  <tr><th>Store</th><th>Where</th><th>0.6.0 writes</th></tr>
+  <tr><td><code>mongoc</code></td><td><code>metadata</code>, <code>{ _id: "storageFormat" }</code>, in every tenant's database</td><td>2 (1 without <code>COR_FEATURE_Q_PREFILTER</code>)</td></tr>
+  <tr><td><code>corDB</code> with <code>--dbDir</code></td><td><code>&lt;dbDir&gt;/_storageFormat</code></td><td>1</td></tr>
+  <tr><td><code>timescale</code></td><td><code>max(version)</code> of <code>troe_schema_version</code>, in every tenant's database</td><td>3</td></tr>
+</table>
+<ul>
+  <li>A lower version is upgraded at start, and this build's is written. No version and no data: a new store.</li>
+  <li><b>A higher version - written by a newer release - and the broker does not start</b> (exit 1, the error names the
+  store and both versions). Run that release, or a newer one.</li>
+</ul>
+<div class="g-callout warn">
+<p><b>0.5.x to 0.6.0 on MongoDB: stop every broker on the database first.</b> 0.6.0 marks the attributes that have an
+instance with a datasetId (format 2); 0.5.x writes them without the mark, and <code>q</code> on 0.6.0 then misses them.
+A rolling upgrade with both versions serving the same database is not supported across this version, and 0.5.x
+refuses a format-2 database.</p>
+<p><b>No downgrade to 0.4.x</b> once 0.5.0 has written to a database: 0.4.x reads that format wrong and predates the
+check. Going back from 0.6.0 to 0.5.x: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#storage-format">the script in doc/installation.md</a>.</p>
+</div>
+<p>Another broker's data - entities, subscriptions, registrations, history: <a href="#docs/migration">Migration</a>.</p>
+
+<p class="muted">The full text, every table and measurement:
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md">doc/installation.md</a>.</p>
+</article>
