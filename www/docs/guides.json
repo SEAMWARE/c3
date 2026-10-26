@@ -454,17 +454,17 @@
         {
           "id": "roadmap",
           "title": "Roadmap",
-          "desc": "what is available now, and what is planned - short, medium and long term",
+          "desc": "what is available now, and what is planned - short, medium and long term, and continuous",
           "from": [
             {
               "repo": "coraine",
               "path": "doc/roadmap.md",
-              "at": "733711b9"
+              "at": "7bc75429"
             },
             {
               "repo": "coraine",
               "path": "doc/ideas.md",
-              "at": "733711b9"
+              "at": "7bc75429"
             }
           ]
         }
