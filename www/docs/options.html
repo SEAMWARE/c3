@@ -61,7 +61,7 @@ and its options are also documented with the plugin. An option of a plugin that 
 <p>What the binary says about itself, what it writes to its log, and the few switches that change how every response
 is rendered. The log goes to standard output, one line per message, each line starting with its class: <code>X</code>
 (fatal, the broker exits), <code>E</code> (error), <code>W</code> (warning), <code>I</code> (info), <code>V</code>
-(verbose), <code>D</code> (debug), <code>T</code> (trace). <code>E</code>, <code>W</code> and <code>X</code> lines are
+(verbose), <code>T</code> (trace). <code>E</code>, <code>W</code> and <code>X</code> lines are
 always written; the others only when switched on. Standard output is the default; <code>--logTo</code> and
 <code>--logDir</code> put the log in a file instead, or as well.</p>
 
@@ -135,17 +135,6 @@ the plugins loaded, <code>coraine running on port &lt;port&gt;</code>, and one l
 <span class="c"># I: 000000.000: coraine.c[1857]: main: Advertised HTTP endpoint: http://192.168.1.138:1026 (auto-detected LAN IP)</span>
 <span class="c"># ...</span>
 <span class="c"># I: 000000.020: coraine.c[2280]: main: coraine running on port 1026</span></pre>
-
-<h3 id="debug"><code>--debug</code></h3>
-<table class="g-opts">
-  <tr><th>Short · variable · type</th><td><code>-d</code> · <code>CORAINE_DEBUG</code> · Bool</td></tr>
-  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
-  <tr><th>Values</th><td>a switch</td></tr>
-  <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
-</table>
-<p>Turns on the <code>D</code> (debug) lines of the log. Neither the broker, its plugins nor its libraries write any
-<code>D</code> line today, so it adds nothing to the log. With the <code>admin</code> API plugin it can be switched at
-run time (<code>/admin/log</code>).</p>
 
 <h3 id="traceLevels"><code>--traceLevels</code></h3>
 <table class="g-opts">
@@ -504,7 +493,7 @@ not known</code>, then <code>cannot serve the policy API on no.such.host port 80
 <p>API plugins add HTTP paths of their own next to the NGSI-LD API, on <code>--port</code>. <code>admin</code> serves
 <code>/admin/version</code>, <code>/admin/health</code>, <code>/admin/config</code> (every option with its value, its
 default and where it came from, a secret masked), <code>/admin/log</code> (<code>--verbose</code>,
-<code>--debug</code>, <code>--traceLevels</code> at run time), <code>/admin/metrics</code>,
+<code>--traceLevels</code> at run time), <code>/admin/metrics</code>,
 <code>/admin/tenants</code>, <code>/admin/plugins</code>, <code>/admin/subStats/flush</code>,
 <code>/admin/indexes</code>, <code>/admin/troeIndexes</code>, <code>/admin/troe/dump</code> and
 <code>/admin/bridges/{bridge}/inventory</code> (<a href="#docs/plugin-architecture">Plugin architecture</a>). A plugin
@@ -2171,16 +2160,6 @@ coraine-import --database mongoc --dbHost mongo --troe timescale --troeHost pg -
 <p>The info and verbose lines of the log (<code>I:</code> and <code>V:</code>, stdout): the store plugins coming up,
 the tenants created, the stores closed. The report on stderr is printed with or without it.</p>
 <pre>coraine-import -v --database corDB --dbDir /var/lib/coraine --file stream.ndjson</pre>
-
-<h3 id="import-debug"><code>--debug</code></h3>
-<table class="g-opts">
-  <tr><th>Short · variable · type</th><td><code>-d</code> · <code>CORAINE_DEBUG</code> · Bool</td></tr>
-  <tr><th>Default</th><td><code>false</code></td></tr>
-  <tr><th>Values</th><td>a flag</td></tr>
-  <tr><th>Plugin</th><td>coraine-import</td></tr>
-</table>
-<p>The debug lines of the log (<code>D:</code>, stdout). Independent of <code>--verbose</code>.</p>
-<pre>coraine-import -d --database corDB --dbDir /var/lib/coraine --file stream.ndjson</pre>
 
 <h3 id="import-traceLevels"><code>--traceLevels</code></h3>
 <table class="g-opts">
