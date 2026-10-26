@@ -14,6 +14,8 @@
 //   PUT    /api/brokers/connect {"url", "view", "map", "colourBy", "relationships", "alerts"}: Connect's view of a broker
 //   GET    /api/brokers/tokens  which brokers have an access token, from where - never the token (creds.c)
 //   PUT    /api/brokers/token   {"url", "token", "remember"}; DELETE {"url"} (creds.c)
+//   GET    /api/brokers/headers each broker's own headers - a secret one's value never (creds.c)
+//   PUT    /api/brokers/headers {"url", "headers": [{"name", "value", "secret"}], "remember"}; DELETE {"url"} (creds.c)
 //   PUT    /api/ui              {"lastPage"}
 //   ...    /api/maps/...        the map's downloaded areas (maps.c)
 //   GET    /api/proxy/<path>    the same GET to the broker named in X-C3-Broker (proxy.c)
@@ -513,7 +515,7 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configBrokerConnect);
   else if ((strcmp(path, "/api/brokers/login") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configBrokerLogin);
-  else if ((strcmp(path, "/api/brokers/token") == 0) || (strcmp(path, "/api/brokers/tokens") == 0))
+  else if ((strcmp(path, "/api/brokers/token") == 0) || (strcmp(path, "/api/brokers/tokens") == 0) || (strcmp(path, "/api/brokers/headers") == 0))
     credsRequest(connP, path);
   else if (strncmp(path, "/api/oidc/", 10) == 0)
     oidcRequest(connP, path);

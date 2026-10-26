@@ -243,7 +243,7 @@ header.top { position: relative; }
 .tokenpop {
   position: absolute; right: 14px; top: calc(100% + 6px); z-index: 30; width: min(460px, calc(100vw - 32px));
   padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); font-size: 13px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); font-size: 13px; max-height: calc(100vh - 120px); overflow-y: auto;
 }
 .tokenpop .tp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; }
 .tokenpop .tp-head .mono { font-family: var(--mono); font-weight: 400; }
@@ -274,6 +274,12 @@ header.top { position: relative; }
 .askpop .askbox p { margin: 0 0 14px; color: var(--text-2); }
 .askpop .actions { display: flex; gap: 8px; justify-content: flex-end; }
 .tokenpop .actions { display: flex; gap: 8px; }
+.tokenpop .tp-hdrs { margin-top: 10px; padding-top: 2px; border-top: 1px solid var(--line); }
+.tokenpop .tp-hdr { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.tokenpop .tp-hdr .tp-field { flex: 1; min-width: 0; }
+.tokenpop .tp-hdr .tp-hdr-name { flex: 0 0 34%; }
+.tokenpop .tp-hdr label { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+.tokenpop .tp-hdrs .tp-hint { margin: 6px 0 0; }
 .tokenpop .tp-note { margin: 10px 0 0; color: var(--muted); }
 .tokenpop .tp-note code { font-family: var(--mono); font-size: 12px; }
 .tokenpop .muted { color: var(--muted); }

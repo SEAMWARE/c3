@@ -290,6 +290,9 @@ export class Connect {
     $('tp-close').onclick = () => this.tokenClose();
     $('tp-form').onsubmit = (e) => { e.preventDefault(); this.tokenSet(); };
     $('tp-forget').onclick = () => this.tokenForget();
+    $('tp-hdrs').onsubmit = (e) => { e.preventDefault(); this.headersSet(); };
+    $('tp-hdr-add').onclick = () => { this.headerRow({ name: '', value: '', secret: false }); $('tp-hdr-rows').lastChild.querySelector('input').focus(); };
+    $('tp-hdr-forget').onclick = () => this.headersForget();
     $('tp-login').onsubmit = (e) => { e.preventDefault(); this.login(); };
     $('tp-logout').onclick = () => this.logout();
     $('tp-vc-on').onchange = () => { $('tp-vc').hidden = !$('tp-vc-on').checked; };
@@ -475,7 +478,7 @@ export class Connect {
     $('tokenpop').hidden = false;
     $('token-btn').setAttribute('aria-expanded', 'true');
     $('tp-token').value = '';
-    await this.tokenShow();
+    await Promise.all([this.tokenShow(), this.headersShow()]);
     if (why) $('tp-state').textContent = why + ' ' + $('tp-state').textContent;
     $('tp-token').focus();
   }
@@ -628,6 +631,82 @@ export class Connect {
     const st = await this.tokenState(this.broker);
     if (!st || st.login || st.own || st.def) return true;
     return this.ask(`${this.broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete ${what}?`, 'Delete');
+  }
+
+  //
+  // The headers of the broker's own: a row each - name, value, secret; a secret one comes without its value,
+  // and its field left empty keeps it
+  //
+  headerRow(h) {
+    const row = el('div', 'tp-hdr');
+    const name = el('input', 'tp-field tp-hdr-name');
+    const value = el('input', 'tp-field');
+    const secretBox = el('input');
+    const secret = el('label', null);
+    const remove = el('button', 'iconbtn', '✕');
+
+    name.placeholder = 'name - X-API-Key';
+    name.value = h.name || '';
+    name.setAttribute('aria-label', 'Header name');
+    value.type = h.secret ? 'password' : 'text';
+    value.value = h.secret ? '' : (h.value || '');
+    value.placeholder = (h.secret && h.kept) ? (h.tail ? `kept - …${h.tail}` : `kept - ${h.length} characters`) : 'value';
+    value.setAttribute('aria-label', 'Header value');
+    secretBox.type = 'checkbox';
+    secretBox.checked = !!h.secret;
+    secretBox.onchange = () => { value.type = secretBox.checked ? 'password' : 'text'; };
+    secret.append(secretBox, 'secret');
+    secret.title = 'A secret header\'s value stays in c³\'s backend';
+    remove.type = 'button';
+    remove.setAttribute('aria-label', 'Remove the header');
+    remove.onclick = () => row.remove();
+    for (const i of [name, value]) { i.autocomplete = 'off'; i.spellcheck = false; }
+    row.kept = !!h.kept;                         // a secret value the backend has: an empty field keeps it
+    row.append(name, value, secret, remove);
+    $('tp-hdr-rows').append(row);
+  }
+
+  async headersShow() {
+    let r;
+    try { r = await api.brokerHeaders(); } catch (e) { $('tp-hdr-state').textContent = 'c³ could not say: ' + e.message; return; }
+    const own = (r.brokers && r.brokers[this.tokenUrl]) || null;
+    $('tp-hdr-rows').textContent = '';
+    for (const h of own ? own.headers : []) this.headerRow({ ...h, kept: h.secret });
+    $('tp-hdr-remember').checked = !!(own && own.remembered);
+    $('tp-hdr-forget').disabled = !own;
+    $('tp-hdr-state').textContent = own ? `${own.headers.length} sent with every request${own.remembered ? ', remembered on this machine' : ', for as long as c³ runs'}.` : 'None.';
+  }
+
+  async headersSet() {
+    const headers = [];
+    for (const row of $('tp-hdr-rows').children) {
+      const [name, value, box] = row.querySelectorAll('input');
+      const n = name.value.trim();
+      if (!n && !value.value) continue;          // an empty row
+      const h = { name: n, secret: box.checked };
+      if (value.value || !(box.checked && row.kept)) h.value = value.value;
+      headers.push(h);
+    }
+    try {
+      await api.brokerHeadersSet(this.tokenUrl, headers, $('tp-hdr-remember').checked);
+    } catch (e) {
+      $('tp-hdr-state').textContent = 'Not taken: ' + e.message;
+      return;
+    }
+    await this.headersShow();
+    this.toast(headers.length ? `${plural(headers.length, 'header')} sent to ${this.tokenUrl} from now on` : 'No headers of its own');
+    this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
+  }
+
+  async headersForget() {
+    try {
+      await api.brokerHeadersForget(this.tokenUrl);
+    } catch (e) {
+      $('tp-hdr-state').textContent = 'Not forgotten: ' + e.message;
+      return;
+    }
+    await this.headersShow();
+    this.toast('The headers are forgotten');
   }
 
   async tokenForget() {

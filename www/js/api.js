@@ -45,6 +45,14 @@ export const brokerTokenSet    = (url, token, remember) => call('PUT', '/api/bro
 export const brokerTokenForget = (url) => call('DELETE', '/api/brokers/token', { url });
 
 //
+// The headers of a broker's own - sent with every request to it; a secret one's value stays in the backend
+// (the page gets its last characters), and given back without a value it keeps the one it has
+//
+export const brokerHeaders       = () => call('GET', '/api/brokers/headers');
+export const brokerHeadersSet    = (url, headers, remember) => call('PUT', '/api/brokers/headers', { url, headers, remember });
+export const brokerHeadersForget = (url) => call('DELETE', '/api/brokers/headers', { url });
+
+//
 // Logging in to a broker's OpenID provider (oidc.c): how - kept in c3.json - and the sessions, whose tokens
 // stay in the backend
 //

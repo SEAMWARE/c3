@@ -16,6 +16,7 @@
 #include <time.h>                                // time_t
 
 #include "corHttp/CorHttp.h"                     // CorHttpConn
+#include "corRest/CorRestKeyValue.h"              // CorRestKeyValue
 
 
 
@@ -160,11 +161,13 @@ extern bool         configCompilePresetDelete(char* body, char* errBuf, int errL
 
 // -----------------------------------------------------------------------------
 //
-// creds.c - the access tokens sent to brokers
+// creds.c - the access tokens and the headers sent to brokers
 //
 extern void   credsInit(const char* tokenFile);                           // after configPathResolve
 extern char*  credsToken(const char* broker, const char** sourceP);       // malloc'ed, or NULL
-extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s)
+extern int    credsHeaders(const char* broker, CorRestKeyValue* kv, int max);  // the broker's own + Authorization
+extern void   credsHeadersFree(CorRestKeyValue* kv, int n);
+extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s), /headers
 
 
 
@@ -261,7 +264,7 @@ typedef struct WsConn
 extern void  wsInit(WsConn* wP, int fd, bool client, const char* extra, int extraLen);
 extern void  wsRelease(WsConn* wP);
 extern bool  wsAcceptKey(const char* key, char* out, int outLen);
-extern int   wsConnect(WsConn* wP, const char* url, const char* path, int timeoutMs, int* statusP, char* errBuf, int errLen);
+extern int   wsConnect(WsConn* wP, const char* url, const char* path, const CorRestKeyValue* hdrs, int hdrN, int timeoutMs, int* statusP, char* errBuf, int errLen);
 extern bool  wsSendText(WsConn* wP, const char* text, int len);
 extern bool  wsSendClose(WsConn* wP, int code);
 extern int   wsRead(WsConn* wP, char** dataP, int* lenP, int maxLen);

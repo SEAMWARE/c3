@@ -381,8 +381,8 @@
         </div>
       </div>
       <span class="notice" id="notice" hidden></span>
-      <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token" hidden>
-        <div class="tp-head"><span>Access token for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
+      <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token and headers" hidden>
+        <div class="tp-head"><span>Access token and headers for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
         <p class="tp-state" id="tp-state"></p>
         <form class="tp-login" id="tp-login">
           <div class="tp-sub">Log in to its OpenID provider <span class="muted">(Keycloak, ...)</span></div>
@@ -414,7 +414,18 @@
             <button class="btn" type="button" id="tp-forget">Forget</button>
           </div>
         </form>
-        <p class="tp-note">Sent as <code>Authorization: Bearer</code> with every request to this broker - reads, live values, writes. The broker decides what it allows. A login comes first, and its token is renewed by c³ until the provider ends the session; the provider's client must be a public one that allows <code id="tp-redirect">http://&lt;c³&gt;/api/oidc/callback</code> as a redirect URI. Without a login or a token of its own, a broker gets c³'s default: <code>--token-file</code>, else <code>$C3_TOKEN</code>.</p>
+        <form class="tp-hdrs" id="tp-hdrs">
+          <div class="tp-sub">Headers of its own <span class="muted">(an API key, Basic auth, what a gateway asks for)</span></div>
+          <div class="tp-hdr-rows" id="tp-hdr-rows"></div>
+          <button class="btn" type="button" id="tp-hdr-add">Add a header</button>
+          <label class="tp-remember"><input type="checkbox" id="tp-hdr-remember"> Remember them on this machine <span class="muted">(secrets.json)</span></label>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="tp-hdr-set">Use them</button>
+            <button class="btn" type="button" id="tp-hdr-forget">Forget</button>
+          </div>
+          <div class="tp-hint muted" id="tp-hdr-state"></div>
+        </form>
+        <p class="tp-note">The headers go with every request to this broker, as they are; an <code>Authorization</code> among them takes the place of the token. A secret one's value stays in c³'s backend - the page shows its last characters only. The token is sent as <code>Authorization: Bearer</code> with every request to this broker - reads, live values, writes. The broker decides what it allows. A login comes first, and its token is renewed by c³ until the provider ends the session; the provider's client must be a public one that allows <code id="tp-redirect">http://&lt;c³&gt;/api/oidc/callback</code> as a redirect URI. Without a login or a token of its own, a broker gets c³'s default: <code>--token-file</code>, else <code>$C3_TOKEN</code>.</p>
       </div>
     </div>
 
