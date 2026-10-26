@@ -1,0 +1,218 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/apisix-plugin.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>The NGSI-LD plugin for APISIX</h1>
+<p class="lead"><code>ngsild-pep</code> decides access to an NGSI-LD broker's API in the APISIX gateway: the access
+token checked and the ODRL policies decided as coraine's <code>--auth fdsc</code> decides them - by the same C code,
+<code>fdsc.so</code>'s, compiled into a library the plugin calls once per request. Any NGSI-LD broker can sit behind
+it.</p>
+
+<h2 id="what">What it decides</h2>
+<p>For each request on a route that has the plugin, one call into the library makes the whole decision - the token
+(<i>authenticate</i>) and then the policies (<i>authorize</i>) - and the answer is one of four:</p>
+<table class="gtable">
+  <tr><th>Verdict</th><th>What the client gets</th></tr>
+  <tr><td>allowed</td><td>nothing from the plugin: the request goes on to the broker</td></tr>
+  <tr><td><code>401</code></td><td>no token, or one that does not verify - with <code>WWW-Authenticate</code></td></tr>
+  <tr><td><code>403</code></td><td>a valid token, and no policy allows the request</td></tr>
+  <tr><td><code>503</code></td><td>no keys or no policies yet, or the plugin could not start (the reason is in the detail)</td></tr>
+</table>
+<p>A refusal is the broker's own answer, a ProblemDetails (<code>type</code> <code>about:blank</code>, <code>title</code>,
+<code>status</code>, <code>detail</code>), so a client sees the same body from the gateway as from coraine.</p>
+<p>What the decision reads is what <code>fdsc.so</code> reads without <code>--fdscNgsild</code>: the method, the path,
+the query string, the <code>Authorization</code> header, the <code>x-stripped-path</code> header (only with
+<code>--fdscStrippedPath</code>) and the body (not for <code>GET</code>, <code>HEAD</code>, <code>DELETE</code>).
+Nothing is expanded: <code>ngsi-ld:entityType</code> is the type as the request carries it - the id's third
+<code>:</code> part, <code>?type=</code>, the body's <code>type</code>. The token, the policy words and the
+combination rules are those of <a href="#docs/authorization/fdsc">Authorization - --auth fdsc</a>.</p>
+
+<figure class="g-fig">
+<svg viewBox="0 0 720 200" role="img" aria-label="A client's request through APISIX: the ngsild-pep plugin calls libngsildpep.so; allowed requests go to any NGSI-LD broker, refused ones are answered 401, 403 or 503">
+  <defs>
+    <marker id="ap-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <g font-family="inherit" font-size="13" fill="currentColor">
+    <rect x="16" y="56" width="110" height="54" rx="8" fill="none" stroke="var(--line)"/>
+    <text x="32" y="80" font-weight="600">client</text>
+    <text x="32" y="98" fill="var(--muted)" font-size="12">Bearer token</text>
+
+    <rect x="170" y="20" width="330" height="126" rx="10" fill="none" stroke="var(--line)"/>
+    <text x="186" y="42" font-weight="600">APISIX</text>
+    <rect x="186" y="56" width="140" height="54" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="200" y="78" font-weight="600">ngsild-pep</text>
+    <text x="200" y="96" fill="var(--muted)" font-size="12">Lua, one FFI call</text>
+    <rect x="344" y="56" width="140" height="54" rx="8" fill="none" stroke="var(--accent-2)"/>
+    <text x="358" y="78" font-weight="600">libngsildpep.so</text>
+    <text x="358" y="96" fill="var(--muted)" font-size="12">fdsc.so's code</text>
+    <text x="186" y="134" fill="var(--muted)" font-size="12">keys and policies: files, or fetched by the plugin</text>
+
+    <rect x="560" y="56" width="144" height="54" rx="8" fill="none" stroke="var(--ok)"/>
+    <text x="574" y="78" font-weight="600">NGSI-LD broker</text>
+    <text x="574" y="96" fill="var(--muted)" font-size="12">any - no --auth</text>
+
+    <rect x="186" y="160" width="298" height="30" rx="8" fill="none" stroke="var(--warn)"/>
+    <text x="200" y="180" font-size="12">401 / 403 / 503 - a ProblemDetails, as the broker's</text>
+
+    <g stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ap-arr)">
+      <line x1="126" y1="83" x2="184" y2="83"/>
+      <line x1="326" y1="83" x2="342" y2="83"/>
+      <line x1="500" y1="83" x2="558" y2="83"/>
+      <line x1="256" y1="110" x2="256" y2="158"/>
+    </g>
+  </g>
+</svg>
+<figcaption>The decision is made in the gateway, before the request reaches the broker; the broker behind it needs no
+security of its own.</figcaption>
+</figure>
+
+<h2 id="same-code">The same code as --auth fdsc</h2>
+<p><code>libngsildpep.so</code> is <code>fdsc.so</code> compiled from coraine's sources
+(<code>src/plugins/auth/fdsc/</code>), unchanged, with two files of the plugin's own:</p>
+<table class="gtable">
+  <tr><th>File</th><th>What it is</th></tr>
+  <tr><td><code>src/ngsildPep.c</code></td><td>the gateway adapter: <code>ngsildPepInit</code> (<code>fdsc.so</code>'s
+  options, as a list of strings) and <code>ngsildPepDecide</code> (one decision: an <code>AuthRequest</code> built from
+  the gateway's request, then <code>fdsc.so</code>'s <code>authenticate</code> and <code>authorize</code>)</td></tr>
+  <tr><td><code>src/fdscFetchFile.c</code></td><td><code>fdsc.so</code>'s fetch, for files and <code>mem:&lt;name&gt;</code>
+  only - nothing below the FFI line does network I/O, as a blocking call would stall every request of an nginx
+  worker</td></tr>
+  <tr><td><code>lua/apisix/plugins/ngsild-pep.lua</code></td><td>the plugin: reads the request, makes the one FFI call,
+  lets the request through or answers; fetches the keys and policies over the network when told to</td></tr>
+</table>
+<p><code>test/sameAsFdsc.sh</code> sends coraine's <code>test/fdscDiff</code> cases (the connector's tokens, policy
+vocabulary and combination rules) to APISIX with <code>ngsild-pep</code> in front of a broker started without
+<code>--auth</code>, and to coraine with <code>--auth fdsc</code> - the same keys, the same policies - and compares the
+answers by class (401, 403, 503, let through): 64 cases, 0 differences (2026-10-13). With <code>--pap</code> the keys
+come from a verifier's discovery document and the policies from an ODRL-PAP, fetched by the plugin and by coraine.
+The plugin's CI runs both, with one coraine commit for the library's <code>fdsc.so</code> sources, the cases and the
+broker (its image).</p>
+
+<h2 id="build">Building the library</h2>
+<p>The library has to match the gateway's system. <code>build-in-docker.sh [&lt;image&gt;]</code> builds it inside
+a container of that system - by default <code>debian:12</code>, the base of <code>apache/apisix:3.17.0-debian</code>
+- from the checkouts beside the repository (coraine and the Cor-Libs <code>corJson</code>, <code>corTree</code>,
+<code>corAlloc</code>, <code>corLog</code>, <code>corBase</code>, <code>corArgs</code>, <code>corNgsild</code>), read
+only: nothing of the clones' own build directories is touched.</p>
+<pre>git clone https://github.com/SEAMWARE/corApisixNgsild
+for r in coraine corJson corTree corAlloc corLog corBase corArgs corNgsild; do
+  git clone https://github.com/SEAMWARE/$r
+done
+cd corApisixNgsild
+./build-in-docker.sh        <span class="c"># dist/debian-12/libngsildpep.so</span></pre>
+<p>On a machine that is the gateway's system, <code>make</code> builds it in place - the Cor-Libs built there in
+release (<code>COR_LIBS</code>: their parent directory, <code>CORAINE</code>: the coraine checkout). It needs
+OpenSSL's <code>libcrypto</code>. The Cor-Libs are linked in statically and their symbols hidden: the library exports
+only the plugin's four functions.</p>
+
+<h2 id="install">Installing it in APISIX</h2>
+<p>Three things go into the gateway: the plugin's Lua file, on APISIX's <code>extra_lua_path</code>; the library, and
+the keys and policies when they are files. With the APISIX image, as volumes:</p>
+<pre>services:
+  apisix:
+    image: apache/apisix:3.17.0-debian
+    volumes:
+      - ./config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./corApisixNgsild/lua/apisix/plugins:/opts/custom_plugins/apisix/plugins:ro
+      - ./ngsild:/opts/ngsild:ro          <span class="c"># libngsildpep.so, jwks.json, policies.json</span></pre>
+<p>APISIX runs as its own user in the container: the files must be readable by it.</p>
+
+<h2 id="configuration">Configuration</h2>
+<p>In <code>config.yaml</code> - one configuration per gateway:</p>
+<pre>apisix:
+  extra_lua_path: "/opts/custom_plugins/?.lua"
+plugins:
+  - ngsild-pep
+plugin_attr:
+  ngsild-pep:
+    lib: /opts/ngsild/libngsildpep.so
+    log_level: WARN
+    args: [ "--fdscJwks", "/opts/ngsild/jwks.json", "--fdscPolicies", "/opts/ngsild/policies.json",
+            "--fdscIssuer", "http://verifier:3000", "--fdscOrganization", "did:web:provider" ]</pre>
+<p>and the plugin on a route - here every path, to a broker on port 1026:</p>
+<pre>routes:
+  - uri: /*
+    upstream:
+      nodes:
+        "broker:1026": 1
+      type: roundrobin
+    plugins:
+      ngsild-pep: {}</pre>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Member</th><th>What it is</th></tr>
+  <tr><td>lib</td><td>the library's path - required</td></tr>
+  <tr><td>args</td><td><code>fdsc.so</code>'s own options, as on coraine's command line
+  (<a href="#docs/authorization/fdsc-options">Authorization - Options</a>) - required. A boolean option takes no value
+  (<code>"--fdscAnonymous"</code>); an option <code>fdsc.so</code> does not have is refused</td></tr>
+  <tr><td>log_level</td><td><code>fdsc.so</code>'s own log lines, to the process's stdout (in a container, the
+  container's log, beside nginx's): <code>ERR</code>, <code>WARN</code> (default), <code>INFO</code>,
+  <code>VERBOSE</code></td></tr>
+  <tr><td>fetch</td><td>the keys and the policies fetched by the plugin - below</td></tr>
+</table>
+</div>
+<p>The route's own configuration is empty: <code>"ngsild-pep": {}</code>. The plugin's priority is 2600, ahead of
+APISIX's <code>openid-connect</code> (2599) - it decides alone, and a route needs neither <code>openid-connect</code>
+nor <code>opa</code>.</p>
+<div class="g-callout warn">
+<p><b>A plugin that could not start answers 503 to every request</b> - a wrong <code>lib</code>, a schema error in
+<code>plugin_attr</code>, an option <code>fdsc.so</code> refuses - with the reason in the response's
+<code>detail</code> and in the gateway's error log. Nothing is let through unchecked.</p>
+</div>
+<p>nginx writes a request body larger than its <code>client_body_buffer_size</code> to a temporary file, and the
+plugin then reads it from there - a cost on every such request. NGSI-LD batches are often larger than nginx's
+default; the plugin's test configuration sets <code>client_body_buffer_size 1m</code>
+(<code>nginx_config.http_server_configuration_snippet</code>).</p>
+
+<h3 id="fetch">Keys and policies from the network</h3>
+<p>The C side reads files only. To take the keys from the verifier and the policies from an ODRL-PAP, the plugin
+fetches them in Lua - with nginx's cosockets, which do not block - and hands them to <code>fdsc.so</code> by name,
+which reads them as <code>mem:jwks</code> and <code>mem:policies</code>:</p>
+<pre>plugin_attr:
+  ngsild-pep:
+    lib: /opts/ngsild/libngsildpep.so
+    fetch:
+      discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+      pap:       http://odrl-pap:8080
+      interval:  30
+    args: [ "--fdscJwks", "mem:jwks", "--fdscPolicies", "mem:policies", "--fdscIssuer", "http://verifier:3000",
+            "--fdscOrganization", "did:web:provider", "--fdscRefresh", "2" ]</pre>
+<table class="gtable">
+  <tr><td><code>discovery</code></td><td>the verifier's OpenID discovery document: its <code>jwks_uri</code> is
+  fetched for the keys. Or <code>jwks</code>: the JWK Set's URL itself</td></tr>
+  <tr><td><code>pap</code></td><td>the PAP's base URL: every page of its <code>/policy</code>
+  (<code>?page=N&amp;pageSize=100</code>), as one array</td></tr>
+  <tr><td><code>interval</code></td><td>seconds between two fetches, in each worker - default 30; the first fetch is at
+  start</td></tr>
+  <tr><td><code>--fdscRefresh</code></td><td>how often <code>fdsc.so</code> reads what was fetched</td></tr>
+</table>
+<p>A fetch that fails keeps what is in use, and says so in the log. <code>--fdscIssuer</code> is required here:
+<code>fdsc.so</code> reads no discovery document of its own in the gateway. In <code>args</code>, a source is a file or
+<code>mem:&lt;name&gt;</code> - a URL (<code>--fdscJwks http://...</code>, and so <code>--fdscDiscovery</code> and
+<code>--fdscPap</code>) is an error, as the library does no network I/O.</p>
+
+<h2 id="in-the-broker">What stays in the broker</h2>
+<p><code>--fdscNgsild</code> is refused at start: the plugin answers 503 to every request, and the log says why. With
+it, <code>fdsc.so</code> decides on each entity a request reads or writes - its stored, expanded types, its attributes,
+its tenant, entity by entity in a batch or a query - which the broker has and a gateway does not. That is coraine's
+<code>--auth fdsc --fdscNgsild</code>, in the broker
+(<a href="#docs/authorization/fdsc-ngsild">Authorization - --fdscNgsild</a>).</p>
+<table class="gtable">
+  <tr><th></th><th><code>ngsild-pep</code> in APISIX</th><th>coraine <code>--auth fdsc</code></th></tr>
+  <tr><td>the broker behind</td><td>any NGSI-LD broker</td><td>coraine itself</td></tr>
+  <tr><td>the decision</td><td><code>fdsc.so</code>'s, on the request as sent</td><td>the same; with
+  <code>--fdscNgsild</code>, on the stored entities</td></tr>
+  <tr><td>keys and policies over the network</td><td>fetched by the plugin (Lua), handed to the library</td><td>fetched
+  by <code>fdsc.so</code> (<code>--fdscDiscovery</code>, <code>--fdscPap</code>)</td></tr>
+  <tr><td>sets of keys and policies</td><td>one per gateway (per nginx worker), not per route</td><td>one per
+  broker</td></tr>
+</table>
+
+<h2 id="more">More</h2>
+<ul class="g-cards">
+  <li><a href="#docs/authorization">Authorization<span>--auth oidc and --auth fdsc in the broker: the token, the policy words, the options</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corApisixNgsild" target="_blank" rel="noopener">corApisixNgsild<span>the plugin, its library, build-in-docker.sh and test/sameAsFdsc.sh</span></a></li>
+  <li><a href="#docs/plugin-architecture">Plugin architecture<span>the auth plugins among the broker's others</span></a></li>
+</ul>
+</article>

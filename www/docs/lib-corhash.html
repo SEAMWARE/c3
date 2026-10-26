@@ -1,0 +1,112 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corhash.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corHash</h1>
+<p class="lead">A chained hash table keyed by a string. The caller supplies the hash function and the compare
+function, and the table stores only a pointer to the caller's item - the key is read from the item, never
+copied. Its memory comes from <code>malloc</code> or from a <a href="#docs/lib-coralloc">corAlloc</a> arena.</p>
+
+<h2 id="model">The model</h2>
+<p>A table is an array of <code>slots</code> list heads. An item added is a <code>CorHashListItem</code> -
+the item's pointer, the hash code of its name, the next item - put at the head of its slot's list. A lookup
+hashes the name, walks that slot's list, and calls the compare function only on an item whose cached hash code is
+the same.</p>
+<ul>
+  <li>The slot is <code>hash &amp; (slots - 1)</code> when <code>slots</code> is a power of two, else
+  <code>hash % slots</code>.</li>
+  <li>The table never grows and never rehashes: <code>slots</code> is fixed at creation, and a table holding
+  many more items than slots has long lists.</li>
+  <li>It takes no lock: a table changed by one thread and read by another needs the caller's lock.</li>
+</ul>
+
+<h2 id="functions">The two functions the caller supplies</h2>
+<pre>typedef unsigned int (*CorHashCodeFunction)(const char* name);
+typedef int          (*CorHashCompareFunction)(const char* name, void* itemP);</pre>
+<p>The compare function gets the name looked up and an item of the table, and returns 0 when the item is the one
+with that name. It reads the key from the item - so the key must stay valid, and unchanged, as long as the item
+is in the table. From <code>src/lib/serviceRoutines/getEntities.c</code>, a table of entities (corTree nodes) by
+id:</p>
+<pre>static unsigned int idHash(const char* name)
+{
+  unsigned int h = 5381;
+
+  while (*name != 0)
+    h = (h * 33) ^ (unsigned char) *name++;
+
+  return h;
+}
+
+static int idCompare(const char* name, void* itemP)
+{
+  CorNode* idP = corTreeLookup((CorNode*) itemP, "id");
+
+  return ((idP != NULL) &amp;&amp; (idP-&gt;type == CorString)) ? strcmp(name, idP-&gt;value.s) : 1;
+}</pre>
+
+<h2 id="using">Creating, adding, looking up</h2>
+<pre>CorHashTable* corHashTableCreate(CorAlloc* kaP, CorHashCodeFunction hashFunction,
+                                 CorHashCompareFunction compareFunction, int slots);
+int   corHashItemAdd(CorHashTable* hashTableP, const char* itemName, void* itemData);
+void* corHashItemLookup(CorHashTable* hashTableP, const char* itemName);
+int   corHashItemRemove(CorHashTable* hashTableP, const char* itemName);</pre>
+<table class="g-opts">
+  <tr><th>Function</th><th>Returns</th></tr>
+  <tr><td>corHashTableCreate</td><td>the table, its slots empty; <code>NULL</code> when the memory cannot be had. <code>kaP</code> <code>NULL</code>: <code>malloc</code>. <code>slots</code> must be 1 or more</td></tr>
+  <tr><td>corHashItemAdd</td><td>0, or -1 when the list item cannot be allocated. <code>itemName</code> is hashed, not stored</td></tr>
+  <tr><td>corHashItemLookup</td><td>the item, or <code>NULL</code></td></tr>
+  <tr><td>corHashItemRemove</td><td>0 when an item was unlinked, -1 when none matched. The item itself is the caller's; the list item is freed with <code>malloc</code>, left in the arena with corAlloc</td></tr>
+  <tr><td>corHashItemCustomLookup</td><td>a lookup with another compare function for this one call; the hash function is the table's</td></tr>
+  <tr><td>corHashItemLookupInAllSlots</td><td>a walk over every slot with a compare function, no hash code - every item is compared</td></tr>
+  <tr><td>corHashRelease</td><td>frees the table, its array and its list items - with <code>malloc</code> only; a table in an arena goes with the arena, and the call does nothing</td></tr>
+</table>
+<pre>static CorHashTable* idHashCreate(CorNode* arrayP, int n)
+{
+  int slots = 1024;
+
+  while ((slots &lt; n) &amp;&amp; (slots &lt; (1 &lt;&lt; 20)))
+    slots *= 2;                                         // a power of two: a mask, not a modulo
+
+  CorHashTable* hashP = corHashTableCreate(&amp;corRest.kalloc, idHash, idCompare, slots);
+
+  if (hashP == NULL)
+    return NULL;
+
+  for (CorNode* eP = arrayP-&gt;value.head; eP != NULL; eP = eP-&gt;next)
+  {
+    CorNode* idP = corTreeLookup(eP, "id");
+
+    if ((idP != NULL) &amp;&amp; (idP-&gt;type == CorString))
+      corHashItemAdd(hashP, idP-&gt;value.s, eP);
+  }
+
+  return hashP;                                         // freed with the request's arena
+}</pre>
+
+<h2 id="rules">Rules</h2>
+<div class="g-callout warn">
+<p><b><code>corHashItemAdd</code> does not look first.</b> Adding a name that is in the table already adds a
+second item: a lookup finds the newer one (it is at the head of the list), a remove unlinks the newer one and the
+older one is found again. A caller that wants one item per name looks it up before adding.</p>
+</div>
+<ul>
+  <li><b>Choose the allocator by the table's life.</b> In an arena, a removed item's memory stays allocated until
+  the arena is reset; a table with many adds and removes over a long life belongs on <code>malloc</code>. coraine's
+  per-request tables are in the request's arena; corDB's history tables and coraine's bridge channel cache, which
+  live as long as the process, are on <code>malloc</code>.</li>
+  <li><b>Growing is the caller's.</b> A table that has to grow is replaced: a new table with more slots, every
+  item added to it, the old one released - corDB's history index does this when it doubles.</li>
+  <li><b>The hash function is the table's.</b> <code>corHashItemCustomLookup</code> changes only the compare
+  function; an item found by another key needs <code>corHashItemLookupInAllSlots</code>, which costs a compare
+  per item.</li>
+</ul>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corhash"><b>corHash API</b><span>every entry of <code>corHash.h</code></span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><b>SEAMWARE/corHash</b><span>the repository</span></a></li>
+  <li><a href="#docs/lib-coralloc"><b>corAlloc</b><span>what it depends on: <code>corHash.h</code> includes <code>corAlloc.h</code>, and the library calls <code>corAlloc</code></span></a></li>
+</ul>
+<p>Used by <a href="#docs/lib-corjsonld">corJsonld</a> (a context's terms by name and by value),
+<a href="#docs/lib-cordb">corDB</a> (its indexes and history), and coraine (the bridge channel cache, the
+entities of a query by id, the migration's ids).</p>
+</article>

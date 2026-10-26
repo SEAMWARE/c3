@@ -1,0 +1,372 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-cordb.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corDB - the in-process store</h1>
+<p class="lead">corDB keeps a broker's entities, subscriptions and registrations in the broker's own memory - one
+tree per tenant, no database server - as a database plugin, <code>corDB.so</code>. With <code>--dbDir</code> it is
+durable (an append log and snapshots), and with <code>--troe corDB</code> the same store keeps the temporal history.</p>
+
+<h2 id="plugins">The plugins</h2>
+<p>One library, three shared objects, all built by its makefile:</p>
+<table class="gtable">
+  <tr><th>Plugin</th><th>Selected with</th><th>What it is</th></tr>
+  <tr><td><code>db/currentState/corDB.so</code></td><td><code>--database corDB</code></td><td>the current-state store, in RAM or on disk; its own <code>troeRegister</code> is <code>--troe corDB</code></td></tr>
+  <tr><td><code>db/currentState/ramDB.so</code></td><td><code>--database ramDB</code></td><td>the same sources built with <code>COR_DB_RAM_ONLY=1</code>: no disk, so <code>--dbDir</code> and the other disk options are unknown options, and <code>--troe corDB</code> is refused. Its options: <code>--dbLockPrefer</code>, <code>--dbValueIndexes</code></td></tr>
+  <tr><td><code>troe/temporal/ramDB.so</code></td><td><code>--troe ramDB</code></td><td>a ring of the broker's last 256 TRoE events in RAM, shown by <code>/admin/troe/dump</code> - for tests</td></tr>
+</table>
+<pre>coraine --database corDB                                  <span class="c"># in RAM: a restart starts empty</span>
+coraine --database corDB --dbDir /var/lib/coraine         <span class="c"># durable</span>
+coraine --database corDB --dbDir /var/lib/coraine --troe corDB   <span class="c"># durable, with history</span></pre>
+<p>A plugin is loaded as every DB plugin is (<a href="#docs/plugin-architecture/loading">Plugin architecture</a>): the
+broker checks the interface stamp, then calls <code>dbRegister</code>, which fills the <code>DbDriver</code> with
+corDB's functions - entities and batches, subscriptions, registrations, the document store, NGSI-LD Snapshots,
+the hosted <code>@context</code>s, the declared indexes, tenant drop and release, and the geo-match callbacks. A
+slot left NULL is an operation the plugin does not have; a build without subscriptions or registrations
+(<code>COR_FEATURE_SUBSCRIPTIONS=0</code>, <code>COR_FEATURE_REGISTRATIONS=0</code>) leaves those slots NULL.</p>
+
+<h2 id="store">The store</h2>
+<p>A tenant's data is one <code>CorDbStore</code> (<code>corDbStore.h</code>), made on the tenant's first use and hung
+on <code>Tenant.pluginData</code>. Its tree is an object of three arrays:</p>
+<pre>{ "entities": [ ... ], "subscriptions": [ ... ], "registrations": [ ... ] }</pre>
+<ul>
+  <li><b>Entities in creation order.</b> The store's list is the default order of a query. A replace keeps the
+  entity's place and its <code>createdAt</code>; a delete and a create put it at the end. A replayed log keeps the
+  order: a put of an entity that exists replaces it in place.</li>
+  <li><b>One time per created entity.</b> The store keeps the entity's <code>createdAt</code>, and below it only the
+  times that differ - an attribute that was modified has its own <code>modifiedAt</code>, an added one its own
+  <code>createdAt</code> and <code>modifiedAt</code>. A missing time is the entity's <code>createdAt</code>, put back on
+  every copy that leaves the store (<code>corDbSysTimes.h</code>). Outside corDB every object has every time.</li>
+  <li><b>An attribute's type in the node.</b> The <code>"type"</code> member of an attribute instance or sub-attribute
+  is folded into the node (<code>CorNode.kind</code>) on the way in and given back, first, on every copy out - one
+  node less per instance.</li>
+  <li><b>Copies out.</b> A retrieve or a query clones what it returns under the read lock, into the request's
+  allocator; the caller never holds a pointer into the store.</li>
+</ul>
+
+<h3 id="indexes">The built-in indexes</h3>
+<table class="gtable">
+  <tr><th>Index</th><th>What it is</th></tr>
+  <tr><td>entity id</td><td>a hash table from the id to the entity's <b>predecessor</b> in the list (the array for the
+  first), so a lookup and an unlink are O(1) (<code>corDbIndex.h</code>). Past 4 entities per slot it grows to a table
+  eight times larger, moving 32 old slots at every link, unlink and replace - no write moves them all; a lookup
+  tries the new table, then the old.</td></tr>
+  <tr><td>type</td><td>every type's entities, in the store's order (<code>corDbTypeIndex.h</code>). A query by one type,
+  or by one AND group of types (<code>(A;B)</code> - the member with the shortest list), walks that list; a query with
+  no type or with types in OR walks the store. Built by the first query that can use it, under the read lock; not
+  on disk. 48 bytes for each type of each entity. <code>make COR_FEATURE_TYPE_INDEX=0</code> leaves it out.</td></tr>
+  <tr><td>declared value indexes</td><td>below, <a href="#docs/lib-cordb/value-indexes">Declared indexes</a></td></tr>
+</table>
+<p>A debug build checks every indexed query against a walk of the whole store and aborts on a difference. Out of
+memory, an index is dropped and queries walk the store.</p>
+
+<h2 id="locking">Locking</h2>
+<p>A tenant's store has one <code>pthread_rwlock_t</code>. Readers share it; a writer has it alone - <code>CorNode</code>
+is linked lists, and two writers relinking at once corrupt them. A request is on exactly one tenant, so no request
+takes two locks.</p>
+<p>A function takes the lock for the rest of its scope with one line - <code>COR_DB_READ(tenantP)</code> or
+<code>COR_DB_WRITE(tenantP)</code> - and the compiler's cleanup attribute releases it on every return. The lock is not
+recursive: an entry point that is also called from inside a locked function is split into a locking shell and an
+unlocked <code>...Locked</code> body. Work that needs no lock is done outside it - here, a delete frees the entity after
+the lock (<code>corDbEntityDelete.c</code>):</p>
+<pre>int corDbEntityDelete(Tenant* tenantP, const char* entityId)
+{
+  CorNode* goneP = NULL;
+
+  {
+    COR_DB_WRITE(tenantP);                           <span class="c">// released at the closing brace</span>
+
+    CorDbStore* storeP = corDbStoreOf(tenantP);
+    CorNode*    eP     = corDbIndexLookup(storeP, entityId);
+
+    if (eP != NULL)
+    {
+      corDbIndexUnlink(storeP, eP);
+      corDbPersistAppendId(corDbLockedStore-&gt;persistP, CorDbLogEntityDelete, entityId);   <span class="c">// lock order is log order</span>
+      goneP = eP;
+    }
+  }
+
+  if (goneP == NULL)
+    return DB_NOT_FOUND;
+
+  corTreeFree(goneP);                                <span class="c">// a whole entity's free()s, with no writer waiting</span>
+  return DB_OK;
+}</pre>
+<p class="muted">Shortened from the source: the real function also prepares the entity's history record before the
+lock and walks the store for a store without its id index.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th></th></tr>
+  <tr><td>--dbLockPrefer<span class="env">reads | writes</span></td><td>whom the lock lets in first when readers and writers both wait. <code>reads</code>
+  (the default) is glibc's read-write lock as it is; <code>writes</code> makes it writer-preferring
+  (<code>PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP</code>) - safe, as corDB never takes a store's read lock twice
+  in one thread. Also a <code>ramDB</code> option.</td></tr>
+</table>
+
+<h2 id="persistence">Persistence - <code>--dbDir</code></h2>
+<p>Without <code>--dbDir</code> the store is RAM only. With it, every write appends its <b>effect</b> to a log, under
+the write lock, before the response:</p>
+<figure class="g-fig">
+<svg viewBox="0 0 860 230" role="img" aria-label="A write changes the tree and copies its record into the mapped log under the tenant's write lock; a flusher thread syncs the log every interval; a snapshot thread writes the store in slices; recovery loads the newest snapshot and replays the log after it">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <rect x="20" y="30" width="150" height="56" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="95" y="54" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">a write</text>
+    <text x="95" y="74" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">under the write lock</text>
+
+    <rect x="230" y="30" width="170" height="56" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="315" y="54" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">the tree changed</text>
+    <text x="315" y="74" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">in RAM</text>
+
+    <rect x="460" y="30" width="180" height="56" rx="8" style="fill: none; stroke: var(--accent-2); stroke-width: 1.5;"/>
+    <text x="550" y="54" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">log-N.cor, mapped</text>
+    <text x="550" y="74" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">a memcpy: the page cache</text>
+
+    <rect x="690" y="30" width="150" height="56" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="765" y="54" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">the response</text>
+    <text x="765" y="74" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">after the unlock</text>
+
+    <line x1="170" y1="58" x2="230" y2="58" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="400" y1="58" x2="460" y2="58" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="640" y1="58" x2="690" y2="58" style="stroke: var(--line); stroke-width: 1.5;"/>
+
+    <rect x="460" y="130" width="180" height="56" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="550" y="154" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">the flusher</text>
+    <text x="550" y="174" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">fdatasync every 100 ms</text>
+    <line x1="550" y1="86" x2="550" y2="130" style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+
+    <rect x="230" y="130" width="170" height="56" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="315" y="154" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">snap-N.cor</text>
+    <text x="315" y="174" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">slices of 1000, read lock</text>
+    <line x1="315" y1="86" x2="315" y2="130" style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+
+    <text x="20" y="214" style="fill: var(--muted); font-size: 12px;">at start: the newest snapshot, then every log segment after it, record by record</text>
+  </g>
+</svg>
+<figcaption>The write path with <code>--dbDir</code>. The record is in the kernel's page cache before the response;
+when it reaches the disk is <code>--dbSync</code>.</figcaption>
+</figure>
+
+<h3 id="records">A record is an effect</h3>
+<p>A record says what the write did to the tree, never the request that did it: a replay applies "these attributes
+now are exactly this", with no NGSI-LD semantics, so two releases rebuild the same store from one log.</p>
+<table class="gtable">
+  <tr><th>Record</th><th>Body</th><th>Written by</th></tr>
+  <tr><td><code>ENTITY_PUT</code></td><td>the whole entity</td><td>create, replace, attribute delete, batch create / update / upsert (one record per entity)</td></tr>
+  <tr><td><code>ATTRS_PUT</code></td><td><code>{ "id", "attrs": { ... }, "deleted": [ ... ] }</code> - each member the write named, whole, after it, and those it removed</td><td>PATCH, merge, attribute append and update, batch merge - a one-attribute PATCH logs one attribute, not the entity</td></tr>
+  <tr><td><code>ENTITY_DELETE</code></td><td>the id</td><td>delete, batch delete</td></tr>
+  <tr><td><code>SUB_PUT</code> / <code>SUB_DELETE</code>, <code>REG_PUT</code> / <code>REG_DELETE</code></td><td>the subscription or registration / its id</td><td>their writes</td></tr>
+</table>
+<p>A record is a 28-byte header - magic and version, the body's length, a sequence number per tenant, the system
+time in nanoseconds, a CRC-32C - and a body in the cor binary format, the codec of
+<a href="#docs/cor-protocol">cor://</a>. Every record decodes on its own. A batch is not atomic in NGSI-LD, and is
+logged as one record per entity. The body of a record whose entity exists before the lock is encoded, and its CRC
+taken, before the lock; under it only the header is finished and the body copied.</p>
+
+<h3 id="files">The files</h3>
+<pre>/var/lib/coraine/
+├── _storageFormat          <span class="c"># the storage format, a number as text</span>
+├── _/                      <span class="c"># the default tenant</span>
+│   ├── snap-000041.cor     <span class="c"># the store as of sequence 41</span>
+│   ├── log-000041.cor      <span class="c"># every record since snapshot 41</span>
+│   └── hist-000001.cor     <span class="c"># with --troe corDB: the history</span>
+└── tenant1/</pre>
+<ul>
+  <li><b>The open segment is mapped</b> (<code>mmap</code>, <code>MAP_SHARED</code>, 1.25 GiB of address space) and the
+  file allocated ahead of its records 4 MiB at a time with <code>posix_fallocate</code> - so a full disk is an error at
+  the allocation, not a SIGBUS on a page of a sparse file. A segment rolls at 1 GiB (64 MiB with
+  <code>--dbCompress</code>); a finished one is cut to its records.</li>
+  <li><b>A snapshot</b> is taken on a thread of its own once a tenant has written <code>--dbSnapshotEvery</code> MiB of
+  log and at least as much log as its last snapshot was big, and at a clean stop. It switches the log to a new
+  segment under the write lock, then encodes the store in slices of 1000 entities, each under the read lock; between
+  two slices it waits while writers wait, for at most three times as long as the slice took. Written as
+  <code>snap-N.tmp</code>, synced, renamed; the files before it are then deleted. The snapshot is not the store at one
+  instant: the log after it replays every write made while it was taken.</li>
+  <li><b>The storage format.</b> <code>_storageFormat</code> is read before anything else under <code>--dbDir</code>. A
+  lower format is brought up to this build's; a higher one - a store written by a newer release - stops the start
+  and is left as it is.</li>
+</ul>
+
+<h3 id="recovery">Recovery</h3>
+<ol>
+  <li>The newest <code>snap-N.cor</code> (a <code>.tmp</code> is an interrupted snapshot, deleted). A snapshot that does
+  not decode in full stops the broker.</li>
+  <li><code>log-N.cor</code> and every segment after it, record by record, until a record that is short or fails its
+  CRC. Zeros from there on: the space allocated ahead, the end. Anything else is a torn tail - in the newest segment
+  it is cut and writing continues there; anywhere else it stops the broker. A sequence that does not follow the last
+  one is a gap (pages written out of order before a machine died): the log ends before it, and a later segment is
+  renamed <code>&lt;segment&gt;.torn</code> - kept, not replayed.</li>
+  <li>With <code>--troe corDB</code>, the <code>hist-N.cor</code> segments, in order.</li>
+  <li>The indexes, rebuilt from the tree.</li>
+</ol>
+
+<h3 id="sync">What a stop, a crash and a power cut lose</h3>
+<table class="gtable">
+  <tr><th>Event</th><th>Lost</th></tr>
+  <tr><td>a clean stop (SIGTERM, SIGINT)</td><td>nothing: requests finish, every segment is synced and cut, every tenant snapshotted</td></tr>
+  <tr><td><code>kill -9</code>, a crash, an OOM kill</td><td>nothing acknowledged: the record was in the page cache before the response</td></tr>
+  <tr><td>the machine dies</td><td><code>--dbSync interval</code>: at most the last <code>--dbSyncInterval</code>; <code>--dbSync request</code>: nothing acknowledged; <code>--dbSync none</code>: whatever was not written back</td></tr>
+</table>
+<p>With <code>--dbSync request</code> a write's response waits for its record's <code>fdatasync</code>, after the write
+lock is released; the writers that arrive during one sync share the next (group commit).</p>
+
+<h3 id="pause">A log that cannot be written - the pause</h3>
+<p>With any <code>--dbSync</code>, a log that cannot be written <b>pauses</b> the store: a segment that cannot be
+allocated ahead (a full disk, a file-size limit), a record that cannot be put in the log, a failed
+<code>fdatasync</code>. The pause is broker-wide and every write function checks it first, one atomic load
+(<code>corDbStoreWriteRefused</code>): while paused, a write is refused before it touches the store - 503
+<code>PersistenceUnavailable</code> - and reads are served. The driver's <code>paused</code> function tells the broker,
+which refuses every request but the reads before it is parsed, answers <code>/ready</code> with 503 and counts the
+refusals (<a href="#docs/administration">Administration</a>).</p>
+<ul>
+  <li><b>The reserve.</b> The flusher keeps 8 MiB of the open segment allocated ahead of its records, off the write
+  path - a segment that would pass its roll size with it rolls early - so a full disk pauses the store before a write
+  needs the room, unless more than 8 MiB is written between two of its runs.</li>
+  <li><b>A write already applied</b> when the log failed is answered 503 too: its record not in the log, or a failed
+  sync - every write after it, as a load stops at the first record it cannot read, and with
+  <code>--dbSync request</code> the writes the sync was for. The answer is raised as the write lock is released, after
+  the operation has returned, as corRest's late problem (<code>corRestProblemLate</code>), which replaces the operation's
+  answer.</li>
+  <li><b>The repair.</b> The snapshotter writes a snapshot of each tenant whose log failed, from memory, once a second
+  backing off to once every 16 s; a snapshot rolls the log and drops the files before it. When it has succeeded for
+  every such tenant the pause ends, and the writes answered 503 after they were applied are in that snapshot.
+  <code>--dbSync request</code> waiters whose sync failed wait up to 10 s for it. A failure of the history log is not
+  repaired - the history is not in a snapshot: paused until a restart.</li>
+</ul>
+
+<h3 id="compress"><code>--dbCompress</code></h3>
+<p>Snapshots and finished log and history segments are compressed with zstd, level 3, in frames of at most 64 MiB, on
+the snapshot thread - never the open segment. A file's first four bytes tell a compressed one from a plain one, so a
+start reads a store with the option or without it, and a start with it compresses the finished segments a run without
+it left. libzstd (<code>libzstd.so.1</code>) is loaded with <code>dlopen</code> only then, never linked; missing, the start
+is refused. A compressed file that does not decode to its end is damage, not a torn tail.</p>
+
+<h2 id="history">The history - <code>--troe corDB</code></h2>
+<p><code>--troe corDB</code> is <code>corDB.so</code>'s own <code>troeRegister</code> - the same store, the same lock, the
+same directory - so it needs <code>--database corDB</code>. The history is captured where current state changes,
+at corDB's write sites, not from the broker's TRoE events: current state overwrites, history appends.</p>
+<ul>
+  <li>Every write that reaches an attribute appends an instance: create, replace, merge, PATCH, the batches. A PATCH
+  with an unchanged value appends one too - it changes <code>modifiedAt</code>. A replace records only what it wrote.</li>
+  <li>A deleted attribute instance appends a tombstone (the value <code>urn:ngsi-ld:null</code> and
+  <code>deletedAt</code>); the Scope is recorded as a Property; entity events - created, replaced, deleted - are
+  records of their own, and a deleted entity's history stays.</li>
+  <li>Under the write lock a write only <b>queues</b> its history; whoever releases the lock drains the queue under
+  the tenant's history mutex - the index in RAM and <code>hist-N.cor</code> - before the response. A temporal read
+  drains first.</li>
+  <li>In RAM: entity id, attribute, instances in the order written - each its encoded record and the four times a
+  filter reads without decoding it, in a per-tenant arena of 1 MiB chunks. On disk with <code>--dbDir</code>; snapshots
+  never remove history segments.</li>
+</ul>
+<p>The temporal API reads it - <code>GET /temporal/entities/{id}</code>, <code>GET /temporal/entities</code>,
+<code>POST /temporal/entityOperations/query</code>, with <code>timeproperty</code>, <code>timerel</code>,
+<code>lastN</code> / <code>firstN</code> / <code>offsetN</code>, <code>q</code> and the geo-query - and writes it
+(<code>POST /temporal/entities</code>, attribute and instance deletes, an instance's <code>PATCH</code>).
+<code>aggrMethods</code> are computed by the broker from the instances. History imported with
+<code>coraine-import</code> (<a href="#docs/migration">Migration</a>) comes in through
+<code>TroeDriver.historyImport</code>, with the times it had in the source.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th></th></tr>
+  <tr><td>--troeInstanceCap<span class="env">-troeCap · 1-1000000</span></td><td>the most instances per attribute a temporal retrieve or query
+  returns without <code>lastN</code> or <code>firstN</code>, oldest first (default 1000000). More there: a <code>200</code>
+  with the first page and a <code>Link: &lt;...?offsetN=&lt;cap&gt;&gt;; rel="intervalafter"</code> header. Present only with
+  <code>--troe corDB</code>.</td></tr>
+</table>
+
+<h3 id="timepoint">Timepoint - an entity as it was</h3>
+<p>The same history answers the <a href="#docs/timepoint">timepoint</a> resources: <code>TroeDriver.entityAtRetrieve</code>
+and <code>entityAtQuery</code> are <code>corDbTimepointRetrieve</code> and <code>corDbTimepointQuery</code>. An entity at
+T is rebuilt in the store's own model from the instances the history keeps - so the broker projects, renders,
+matches <code>q</code> and geo and pages it as any store entity - and a query rebuilds each entity at T and runs the
+store's own query over them (<code>corDbEntityQueryList</code>).</p>
+<ul>
+  <li>The entity existed at T when its last lifecycle event at or before T is a create or a replace (system time);
+  instances from before the create that started that life are left out.</li>
+  <li>Per attribute and datasetId: the instance of that life with the latest time at or before T - on
+  <code>modifiedAt</code>, or on <code>observedAt</code> (<code>modifiedAt</code> for an instance without one), by the
+  axis the broker asks for. A tombstone at or before T leaves the attribute out.</li>
+  <li>Its types are its current ones: the history keeps no change of types.</li>
+</ul>
+
+<h2 id="value-indexes">Declared indexes</h2>
+<p>An attribute whose <code>q</code> value terms an index serves is <b>declared</b> - for every tenant, or narrowed to
+one tenant, to one entity type: at start with <code>--dbValueIndexes</code>, on a running broker with
+<code>/admin/indexes</code> (kept as documents of the default tenant's <code>dbIndexes</code> collection, and back at
+the next start). <a href="#docs/database-indexes">Database indexes</a> has both stores' indexes.</p>
+<pre>coraine --database corDB --dbValueIndexes https://example.org/ontology/speed
+coraine --database corDB --dbValueIndexes '[{"attribute": "https://example.org/ontology/speed", "type": "https://example.org/ontology/Vehicle"}]'</pre>
+<ul>
+  <li><b>What it is.</b> In the store of every tenant a declaration covers, a skip list of the attribute's values -
+  every instance's, an array's elements; booleans, numbers, strings - each with its entity
+  (<code>corDbValueIndex.h</code>).</li>
+  <li><b>What it serves.</b> A term on the attribute with <code>==</code>, a range, a list, <code>&lt;</code>,
+  <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>: the candidates are the values the term can match, in the
+  store's order, each then matched as before - the answer is the walk's. An AND takes its term with the fewest
+  candidates; an OR is served when all its members are. Not served: <code>!=</code>, <code>~=</code>,
+  <code>!~=</code>, existence, a sub-attribute, a <code>[member]</code> path.</li>
+  <li><b>When it walks instead.</b> A query by type whose type list is shorter than the candidates walks that list.
+  A page (offset + limit) whose candidates exceed <code>sqrt(page × entities)</code>, at least 64, walks the store -
+  the walk stops at the page, while the index gathers and sorts every candidate. A count, or a query that wants every
+  match, takes the index.</li>
+  <li><b>Built</b> by the first query that can use it, under the read lock - and at once in every store when the admin
+  API declares one. Not on disk. A change of the declarations rebuilds every store's index; the store's writes wait
+  for it.</li>
+  <li><b>Kept</b> by the functions that link, unlink and swap an entity, and by <code>corDbIndexChanged</code> where an
+  entity changes in place; only the entities with a value of a declared attribute are in it.</li>
+  <li><b>Counted</b> per declaration and store: <code>accesses</code> (the <code>q</code> terms served) and
+  <code>updates</code> (the writes that changed it), in <code>GET /admin/indexes</code>.</li>
+</ul>
+<p>At most 64 declarations; a short name (not an IRI) stops the start. <code>make COR_FEATURE_DB_INDEXES=0</code>
+leaves the declared indexes out of the build, and the option with them. What a declared index gains and costs per
+request: <a href="#docs/extreme-performance">Extreme performance</a>.</p>
+
+<h2 id="options">The options</h2>
+<p>Listed by <code>coraine --database corDB -u</code>; each is documented in full, with its errors and an example, in
+<a href="#docs/options/cordb">Command-line options - Plugin: corDB</a>.</p>
+<table class="g-opts">
+  <tr><th>Option</th><th>Default</th><th></th></tr>
+  <tr><td>--dbDir<span class="env">CORAINE_DBDIR</span></td><td>none</td><td>the store's directory, created with its parents if missing; without it, RAM only</td></tr>
+  <tr><td>--dbSync<span class="env">CORAINE_DBSYNC</span></td><td><code>interval</code></td><td><code>interval</code>, <code>request</code> or <code>none</code> - when a write reaches the disk</td></tr>
+  <tr><td>--dbSyncInterval<span class="env">CORAINE_DBSYNCINTERVAL</span></td><td>100</td><td>ms between two rounds of the flusher, 1-60000</td></tr>
+  <tr><td>--dbSnapshotEvery<span class="env">CORAINE_DBSNAPSHOTEVERY</span></td><td>64</td><td>MiB of log before a tenant is snapshotted, 1-65536</td></tr>
+  <tr><td>--dbCompress<span class="env">CORAINE_DBCOMPRESS</span></td><td>off</td><td>snapshots and finished segments compressed (zstd)</td></tr>
+  <tr><td>--dbLockPrefer<span class="env">CORAINE_DBLOCKPREFER</span></td><td><code>reads</code></td><td><code>reads</code> or <code>writes</code> - also <code>ramDB</code></td></tr>
+  <tr><td>--dbValueIndexes<span class="env">CORAINE_DBVALUEINDEXES</span></td><td>none</td><td>declared indexes: IRIs comma-separated, or a JSON array of <code>{ "attribute", "type"?, "tenant"? }</code> - also <code>ramDB</code></td></tr>
+  <tr><td>--troeInstanceCap<span class="env">CORAINE_TROEINSTANCECAP</span></td><td>1000000</td><td>with <code>--troe corDB</code> only</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>A disk option without <code>--dbDir</code> stops the start.</b> <code>--dbSync</code>,
+<code>--dbSyncInterval</code>, <code>--dbSnapshotEvery</code> and <code>--dbCompress</code> act on the disk; given without
+<code>--dbDir</code> - on the command line, in the configuration file or in the environment - each is named:
+<code>corDB: --dbSync without --dbDir - the store is in RAM only, there is no disk for it to act on</code>.</p>
+</div>
+
+<h2 id="build">Building it</h2>
+<p>A Cor-Lib checkout beside its siblings and beside <code>../coraine</code>, whose plugin interface
+(<code>src/lib/db/DbDriver.h</code>, <code>src/lib/troe/TroeDriver.h</code>) it is compiled against; the
+<a href="#docs/cor-libs">corLibs</a> umbrella builds it with the rest. It links only <code>libgeos_c</code> (geo-queries)
+and <code>libm</code>: the Cor-Lib and NGSI-LD functions it calls are resolved from the broker at <code>dlopen</code>.</p>
+<pre>make                         <span class="c"># debug (traces in), into obj/debug</span>
+make BUILD=release
+make BUILD=coverage
+make install                 <span class="c"># corDB.so, ramDB.so to /opt/seamware/plugins/db/currentState, troe/ramDB.so to .../troe/temporal</span>
+make COR_FEATURE_SUBSCRIPTIONS=0 COR_FEATURE_REGISTRATIONS=0   <span class="c"># as a broker built without them</span>
+make COR_WITH_GEOQ=0         <span class="c"># no geo-queries, no libgeos_c</span></pre>
+<p>Every <code>make</code> runs coraine's <code>tools/dbAbiStamp.sh</code> and compiles the stamp into each plugin as
+<code>dbPluginAbi</code> - the broker refuses a plugin built against other headers, and the plugin a broker
+(<a href="#docs/plugin-architecture/db-stamp">The interface stamp</a>). A plugin is built with its broker's feature
+switches. It is tested through the broker: coraine's functional suite with <code>-db corDB</code> (and
+<code>-troeDb corDB</code>), locally and in CI.</p>
+
+<h2 id="reference">Reference</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-cordb"><b>corDB API</b><span>every header and entry - the store, the log, the history, the indexes</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><b>SEAMWARE/corDB</b><span>the repository: README, doc/persistence.md, doc/troe.md</span></a></li>
+  <li><a href="#docs/plugin-architecture"><b>Plugin architecture</b><span>how a DB plugin is loaded, and the contract it fills</span></a></li>
+  <li><a href="#docs/performance/durable"><b>Performance</b><span>what the durable configuration costs, measured</span></a></li>
+</ul>
+<p><b>Depends on</b> <a href="#docs/lib-cortree">corTree</a> (the store's nodes and the cor binary codec),
+<a href="#docs/lib-corngsild">corNgsild</a> (attribute types, the matchers), <a href="#docs/lib-coralloc">corAlloc</a>,
+<a href="#docs/lib-corhash">corHash</a>, <a href="#docs/lib-corbase">corBase</a> (CRC-32C) and
+<a href="#docs/lib-corargs">corArgs</a> (its option table) - all resolved from the broker - and GEOS.
+<b>Used by</b> coraine (<code>--database corDB</code>, <code>--database ramDB</code>, <code>--troe corDB</code>) and
+<code>coraine-import</code>.</p>
+</article>

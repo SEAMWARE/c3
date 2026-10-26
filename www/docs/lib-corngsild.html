@@ -1,0 +1,384 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corngsild.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corNgsild</h1>
+<p class="lead">The NGSI-LD library: what an NGSI-LD body may hold and what it means, the three representations of
+an entity, the q, scopeQ, type and geo languages, the subscription and registration caches, the notifications and
+the distributed operations. It plugs into <a href="#docs/lib-correst">corRest</a> as a set of request hooks and
+leaves storage to the broker - coraine is the broker built on it.</p>
+
+<h2 id="place">Where it sits</h2>
+<p>corNgsild is the largest of the libraries - 117 headers, 100 source files. Below it are
+<a href="#docs/lib-correst">corRest</a> (the request, its arena, the HTTP client) and
+<a href="#docs/lib-corjsonld">corJsonld</a> (the <code>@context</code>s and the expansion); above it, the broker
+supplies what it does not own:</p>
+<table class="gtable">
+  <tr><th>The broker brings</th><th>corNgsild brings</th></tr>
+  <tr><td>the routes: verb, path, service routine, accepted URL parameters, the <code>LdOp</code> of each</td><td>the request hooks: URL parameters parsed into <code>corNgsild</code>, the body parsed, checked, expanded and normalized; the response converted and compacted</td></tr>
+  <tr><td>the service routines and the storage (coraine's database plugins)</td><td>the checks, the storage model and its conversions, merge and replace, the matchers</td></tr>
+  <tr><td>its tenants, each holding its caches</td><td>the caches: subscriptions, periodic subscriptions, registrations, EntityMaps, Snapshots</td></tr>
+  <tr><td>the forwarding transports, the non-HTTP notification transports, an event-stream server, geo matching</td><td>the registries and callbacks they plug into; HTTP notifications, sent through corRest's client</td></tr>
+  <tr><td>the post-response hook that drains the queues</td><td>the queues - notifications, CSR notifications, source-identity probes</td></tr>
+</table>
+<p>The umbrella header <code>corNgsild/corNgsild.h</code> includes the most used ones; the rest are included one by
+one. The map of every header by area is <a href="#docs/lib-corngsild/map">at the end</a>.</p>
+
+<h2 id="request">A request through it</h2>
+<figure class="g-fig">
+<svg viewBox="0 0 880 250" role="img" aria-label="A request: the pre-dispatch hook resets corNgsild, the param hook fills it, the key hook stamps term ids while the body is parsed, the parse hook expands and normalizes the body, the broker's service routine checks, stores and defers notifications, the render hook converts and compacts the response, and the post-response hook dispatches the notifications">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <text x="20" y="22" style="fill: var(--muted); font-size: 12px;">corRest calls corNgsild's hooks around the broker's service routine</text>
+
+    <rect x="20" y="40" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="34" y="62" style="fill: var(--accent-2); font-weight: 600;">pre-dispatch</text>
+    <text x="34" y="82" style="fill: var(--muted); font-size: 12px;">corNgsild zeroed</text>
+    <text x="34" y="100" style="fill: var(--muted); font-size: 12px;">limit = 20</text>
+
+    <rect x="190" y="40" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="204" y="62" style="fill: var(--accent-2); font-weight: 600;">param hook</text>
+    <text x="204" y="82" style="fill: var(--muted); font-size: 12px;">URL parameters</text>
+    <text x="204" y="100" style="fill: var(--muted); font-size: 12px;">into corNgsild</text>
+
+    <rect x="360" y="40" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="374" y="62" style="fill: var(--accent-2); font-weight: 600;">key hook</text>
+    <text x="374" y="82" style="fill: var(--muted); font-size: 12px;">each member stamped</text>
+    <text x="374" y="100" style="fill: var(--muted); font-size: 12px;">with its CorTerm</text>
+
+    <rect x="530" y="40" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="544" y="62" style="fill: var(--accent-2); font-weight: 600;">parse hook</text>
+    <text x="544" y="82" style="fill: var(--muted); font-size: 12px;">@context, expand,</text>
+    <text x="544" y="100" style="fill: var(--muted); font-size: 12px;">normalize</text>
+
+    <rect x="700" y="40" width="160" height="74" rx="10" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <text x="714" y="62" style="fill: var(--text); font-weight: 600;">service routine</text>
+    <text x="714" y="82" style="fill: var(--muted); font-size: 12px;">the broker's: check,</text>
+    <text x="714" y="100" style="fill: var(--muted); font-size: 12px;">store, ldNotifyDefer</text>
+
+    <rect x="530" y="150" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="544" y="172" style="fill: var(--accent-2); font-weight: 600;">render hook</text>
+    <text x="544" y="192" style="fill: var(--muted); font-size: 12px;">format, compact,</text>
+    <text x="544" y="210" style="fill: var(--muted); font-size: 12px;">Link header</text>
+
+    <rect x="360" y="150" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="374" y="172" style="fill: var(--ok); font-weight: 600;">response sent</text>
+
+    <rect x="190" y="150" width="150" height="74" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="204" y="172" style="fill: var(--accent-2); font-weight: 600;">post-response</text>
+    <text x="204" y="192" style="fill: var(--muted); font-size: 12px;">the broker's hook:</text>
+    <text x="204" y="210" style="fill: var(--muted); font-size: 12px;">notifications go out</text>
+
+    <g style="stroke: var(--muted); stroke-width: 1.5; fill: none;">
+      <line x1="170" y1="77" x2="188" y2="77"/><line x1="340" y1="77" x2="358" y2="77"/>
+      <line x1="510" y1="77" x2="528" y2="77"/><line x1="680" y1="77" x2="698" y2="77"/>
+      <path d="M780 114 V187 H682"/>
+      <line x1="530" y1="187" x2="512" y2="187"/><line x1="360" y1="187" x2="342" y2="187"/>
+    </g>
+  </g>
+</svg>
+<figcaption>The hooks <code>ldInit()</code> registers with corRest (<code>ldHooks.c</code>), and the broker's
+post-response hook. The broker's own hooks (tenant, auth, metrics) run around them.</figcaption>
+</figure>
+<table class="g-opts">
+  <tr><th>Step</th><th>What corNgsild does</th></tr>
+  <tr><td>pre-dispatch</td><td>releases a Snapshot or EntityMap pin left behind, zeroes <code>corNgsild</code>, sets <code>limit</code> to 20</td></tr>
+  <tr><td>param hook</td><td>each URL parameter into its <code>corNgsild</code> field; a parameter outside the route's accepted set (<code>LD_PARAMS_*</code>, <code>ldParams.h</code>) corRest has already refused (400). <code>ldContextResolve</code> takes the <code>@context</code> of the Link header, else the default user context, else the core</td></tr>
+  <tr><td>key hook</td><td><code>ldParseKeyHook</code>, corJson's key hook, installed by the pre-payload-parse hook for a route that has an <code>LdOp</code>: each member's term id as it is parsed</td></tr>
+  <tr><td>parse hook</td><td>the <code>@context</code> rules (Link header vs body, <code>application/ld+json</code>, a batch's per-element contexts - a missing one is a <code>BadRequestData</code>, an unreachable one 504), checks on the raw names, <code>corLdExpandEntityTree</code> for entity data or <code>corLdExpandTree</code>, <code>@id</code>/<code>@type</code> aliases, system attributes stripped, Scopes made canonical, <code>ldNormalizeInput</code>. Skipped for <code>/jsonldContexts</code>, a <code>.../value</code> body and a route declared plain JSON</td></tr>
+  <tr><td>service routine</td><td>the broker's, calling the library: <code>ldCheckEntity</code>, <code>ldApiEntityToDbModel</code>, <code>ldEntityMerge</code>, the reg cache matchers, <code>ldNotifyDefer</code>, <code>ldError</code></td></tr>
+  <tr><td>render hook</td><td>a single-entity distributed write's 207 with nothing succeeded flattened to its error (one error, or all 404); storage form to API form, system attributes, language, concise / simplified / temporal / aggregated, GeoJSON; compaction with the response's context; the Link header or an <code>@context</code> member</td></tr>
+  <tr><td>post-response</td><td>the broker calls <code>ldNotifyDispatchPending</code>, <code>ldCsrSubDispatchPending</code>, <code>ldRegCacheProbePending</code> and the request releases - after the response is on the wire</td></tr>
+</table>
+
+<h2 id="state">The per-request state</h2>
+<p>Everything the hooks learn about a request lands in one struct, <code>CorNgsild</code> (<code>CorNgsild.h</code>),
+read as <code>corNgsild.&lt;field&gt;</code> anywhere: the URL parameters as sent and as parsed (<code>q</code> and
+<code>qExpr</code>, <code>type</code> and <code>typeExpr</code>, <code>scopeQ</code> and <code>scopeExpr</code>,
+<code>pick</code> and <code>pickTree</code>, <code>georel</code> and <code>geoRel</code>, <code>orderByV</code>,
+the temporal parameters, <code>format</code>, ...), the request's <code>@context</code> (<code>contextP</code>,
+<code>userContextUrl</code>), its tenant (<code>tenantP</code>, the broker's type, opaque here), and the per-request
+queues.</p>
+<pre>#define corNgsild (*corNgsildBind())
+
+static inline CorNgsild* corNgsildBind(void)
+{
+  CorNgsild* p = (CorNgsild*) corRest.userData;
+  return (p != NULL) ? p : &amp;corNgsildFallback;
+}</pre>
+<p>It belongs to the <b>connection</b>: corRest creates one per connection through the user-data hooks and binds it
+with the connection's <code>corRest</code>, so a request served on a worker thread, or resumed on another, sees its
+own. A thread with no connection - the periodic loop, a bridge's thread - gets a per-thread fallback; such a thread
+calls <code>corNgsildFallbackRelease()</code> before it ends.</p>
+
+<h2 id="terms">Core terms: the CorTerm enum</h2>
+<p>Every term of the core context v1.9 has an id, <code>CorTerm</code> (<code>CorTerm.h</code>):
+<code>CorTermId</code>, <code>CorTermType</code>, <code>CorTermObservedAt</code>, ... in the core context's own
+order, then the terms coraine adds to the core. The id travels on the node - <code>CorNode.termId</code> - and on
+the corJsonld item, so <b>which core term a member is costs no string compare</b>.</p>
+<table class="g-opts">
+  <tr><th>Part</th><th></th></tr>
+  <tr><td>CorTerm</td><td>append-only: the ids are stored and sent in the cor format, so an entry is never reordered, reused or removed. 0 (<code>CorTermNone</code>) is "not a core term"; the ids fit in 15 bits</td></tr>
+  <tr><td>ldCoreTermIdsInit(kaP)</td><td>at startup, after <code>corLdInit</code> and every <code>corLdCoreTermsAdd</code>: hands <code>ldCoreTermNameV</code> to <code>corLdCoreTermIdsSet</code>. -1 when a core term has no <code>CorTerm</code> - the broker does not start</td></tr>
+  <tr><td>ldTermId(nodeP)</td><td>the only way to read a node's term: a load for a node the parser or the expander stamped, one lookup - cached on the node, <code>LD_TERM_NOT_CORE</code> (0x8000) when it is none - for a node built by hand or read from a database</td></tr>
+  <tr><td>ldNodeRename(nodeP, name)</td><td>renames a node and forgets its id. A node renamed any other way keeps a stale id (DEBUG builds log it)</td></tr>
+  <tr><td>ldTreeStampCanonical(treeP)</td><td>stamps a whole stored tree in one pass - a core term is stored short, so one short-name probe per node</td></tr>
+  <tr><td>ldTermClass[CorTermLast]</td><td>the groups of a term as bits: <code>LD_TC_ENTITY_MEMBER</code>, <code>LD_TC_VALUE_KEY</code>, <code>LD_TC_SUBATTR_ONLY</code>, <code>LD_TC_SYS_ATTR</code>, <code>LD_TC_WELL_KNOWN_GEO</code></td></tr>
+  <tr><td>ldAttrMember.h</td><td>the members an Attribute may carry, per Attribute type and per source (a client, a Context Source, the store) - which are kept and which dropped</td></tr>
+</table>
+<pre>for (CorNode* memberP = entityP-&gt;value.head; memberP != NULL; memberP = memberP-&gt;next)
+{
+  if (ldTermId(memberP) == CorTermId)    continue;
+  if (ldTermId(memberP) == CorTermType)  continue;
+
+  // an Attribute, or another entity member - ldIsNotAttribute(memberP) tells
+}</pre>
+<p>A term id says what a node's NAME is, not where it sits: an <code>observedAt</code> inside a compound value is
+<code>CorTermObservedAt</code> too. The <code>KJF_*</code> bits corJsonld sets during expansion
+(<a href="#docs/lib-corjsonld/flags">corJsonld</a>) are the other half.</p>
+
+<h2 id="checks">Checking a payload</h2>
+<pre>bool ldCheckEntity(CorNode* entityP, LdOp op, CorNode* dbEntityP, CorAlloc* faP);
+bool ldCheckAttribute(CorNode* attrP, LdOp op, LdAttrType attrTypeFromDb, CorAlloc* faP);
+bool ldCheckSubscription(CorNode* subP, LdOp op, bool merged, LdFormat* notifFormatP, CorAlloc* faP);
+bool ldCheckRegistration(CorNode* regP, LdOp op, bool merged, CorAlloc* faP);</pre>
+<p>Smaller ones - <code>ldCheckGeo</code>, <code>ldCheckDateTime</code>, <code>ldCheckUri</code>,
+<code>ldRegexValid</code> - are called by these and by the service routines. A check takes the expanded, normalized tree and the operation (<code>LdOp</code>, one bit per NGSI-LD operation,
+§ 4.20); an update passes what is stored. It answers <code>true</code>, or <code>false</code> with the error
+already raised:</p>
+<pre>ldError(400, LD_ERROR_BAD_REQUEST_DATA, "Invalid Array Entry", "entity id is missing or not a string");
+return false;</pre>
+<p><code>ldError</code> is a macro (<code>ldError.h</code>): status, type, title and a printf-style detail into
+<code>corRest.out</code>, logged with the caller's file, line and function. The type URIs are in
+<code>LdProblem.h</code>; <code>LdCheck.h</code> has the one-line checks (<code>OBJECT_CHECK</code>,
+<code>STRING_CHECK</code>, <code>URI_CHECK</code>, <code>DUPLICATE_CHECK</code>, ...) that raise and return in one
+statement. A batch collects per-entity errors in an <code>LdBatchErrorList</code>.</p>
+<p>Before any check, the parse hook has made the body <b>normalized</b>: <code>ldNormalizeInput</code> turns every
+concise or simplified Attribute into an object with its <code>type</code> and its value key. A Merge leaves the bare
+values of a body declared simplified (<code>?format=simplified</code>) to <code>ldEntityMerge</code>, which shapes
+them after the stored Attribute.</p>
+
+<h2 id="model">The storage model</h2>
+<p>The library defines the form the broker stores an entity in and converts both ways:</p>
+<pre>void ldApiEntityToDbModel(CorNode* entityP, CorAlloc* faP, int64_t createdAt);   // API -&gt; storage
+void ldEntityToApi(CorNode* entityP, CorAlloc* faP);                             // storage -&gt; API</pre>
+<pre>"temperature": { "@none":    { "type": "Property", "value": 21, "createdAt": ..., "modifiedAt": ... },
+                 "urn:ds:1": { "type": "Property", "value": 22, ... } }</pre>
+<p>Every Attribute is an object keyed by datasetId, <code>@none</code> for the default instance; timestamps are
+epoch nanoseconds; names are expanded, core terms short. <code>createdAt</code> 0 stamps now; a Replace passes the
+stored entity's. On this form work <code>ldEntityMerge</code> (Merge Entity, with an <code>LdMergeReport</code> of
+what changed and why - which drives the notification triggers), <code>ldEntityFragmentApply</code> (Replace and
+Append), <code>ldEntityAttrsSet</code>, and the subscription matchers.</p>
+
+<h2 id="formats">Representations</h2>
+<p><code>LdFormat</code>: <code>LdFormatNormalized</code>, <code>LdFormatConcise</code>,
+<code>LdFormatSimplified</code>, <code>LdFormatTemporalValues</code>, <code>LdFormatAggregatedValues</code>. The
+render hook applies them to the response tree, in this order:</p>
+<table class="g-opts">
+  <tr><th>Header</th><th></th></tr>
+  <tr><td>ldEntityToApi</td><td>storage form to API form (skipped for a route that sets <code>corNgsild.rawResponse</code>)</td></tr>
+  <tr><td>ldStripSysAttrs</td><td><code>createdAt</code>/<code>modifiedAt</code> out, without <code>?options=sysAttrs</code> (for the temporal representations, after them)</td></tr>
+  <tr><td>ldLangReduce</td><td>a LanguageProperty reduced to one language, <code>?lang=</code></td></tr>
+  <tr><td>ldRender</td><td><code>ldToConcise</code>, <code>ldToSimplified</code></td></tr>
+  <tr><td>ldToTemporalValues, ldToAggregatedValues</td><td>the temporal representations (§ 4.5.8, § 4.5.20)</td></tr>
+  <tr><td>ldToGeoJson</td><td><code>application/geo+json</code></td></tr>
+  <tr><td>compaction</td><td><code>corLdCompactTreeWith</code> the response's context - the request's, else the default user context, else the core</td></tr>
+</table>
+<p>Projection (<code>ldPickOmit</code>, <code>LdProj.h</code> - <code>pick</code>/<code>omit</code> with linked-entity
+nesting, § 4.21), pagination Link headers (<code>ldPagination</code>) and the backwards-compatible output of
+<code>ldConformanceDowngrade</code> are called by the service routines. <code>ldBinCodec</code> is what the cor
+format needs to know of NGSI-LD: a core term's name travels as its <code>CorTerm</code> id, an Attribute's type
+as its <code>LdAttrType</code> (<a href="#docs/cor-protocol">The cor format and cor://</a>).</p>
+
+<h2 id="queries">Queries and q</h2>
+<p>Each selection language is parsed once into a tree and matched against an entity in the storage form:</p>
+<table class="g-opts">
+  <tr><th>Language</th><th>Parse</th><th>Match</th></tr>
+  <tr><td>q</td><td><code>LdQNode* ldQParse(const char* q, CorAlloc* kaP)</code> - NULL with the error raised; <code>ldQParseStored</code> for a q read back from storage</td><td><code>ldEntityMatchQ(entityP, node)</code>; <code>ldEntityMatchQEx</code> with a fetcher for linked-entity sub-queries</td></tr>
+  <tr><td>type (§ 4.17)</td><td><code>ldTypeExprParse</code> - OR of AND groups</td><td><code>ldEntityMatchType</code></td></tr>
+  <tr><td>scopeQ</td><td><code>ldScopeExprParse</code></td><td><code>ldEntityMatchScope</code>, <code>ldScopePatternMatch</code></td></tr>
+  <tr><td>georel</td><td><code>ldGeoRelParse</code></td><td>the broker's <code>LdGeoMatchFunc</code> - the library carries no geometry engine</td></tr>
+  <tr><td>orderBy (§ 4.23)</td><td>into <code>corNgsild.orderByV</code></td><td><code>ldOrderSort</code>, sorts an entity array in place</td></tr>
+</table>
+<p>A q's tree (<code>LdQ.h</code>) is what a database plugin translates for its own query; <code>ldQStripLinked</code>
+gives the part it can evaluate (no linked-entity terms), <code>ldQAttrs</code> every attribute a q names,
+<code>ldQRender</code> / <code>ldQRenderStored</code> a q back to a string, compacted for a response or expanded for
+storage. <code>ldExpandParams</code> expands the names of the vocabulary-bearing URL parameters (type, pick, omit,
+attrs, geoproperty, ...) once the request's <code>@context</code> is known, <code>ldQueryBodyToParams</code> reads a
+§ 5.2.23 Query body into the same fields.</p>
+<p>An <b>EntityMap</b> (<code>LdEntityMap.h</code>, <code>ldEntityMap.h</code>) freezes the result set of a query -
+which entity ids, from which sources - so later pages come from it; all maps of the broker together are capped by
+<code>ldEntityMapMaxBytes</code> (<a href="#docs/options/entityMapMemory">--entityMapMemory</a>). A
+<b>Snapshot</b> (<code>LdSnapshotCache.h</code>) freezes the values.</p>
+
+<h2 id="subs">Subscriptions and the sub cache</h2>
+<p>Each tenant has an <code>LdSubCache</code> (the broker creates it, <code>ldSubCacheCreate()</code>) - and a second
+one for Context Source Registration subscriptions. An item is the subscription tree plus everything a match needs,
+parsed once: the entity selectors, the watched attributes (an <code>attr@datasetId</code> entry names one
+instance), q, scopeQ, geoQ, the trigger mask, the notification's projection, status and counters.</p>
+<pre>LdSubCacheItem* ldSubCacheItemAdd(LdSubCache* cacheP, CorNode* subTree, LdQNode* qExpr, LdFormat format);
+LdSubCacheItem* ldSubCacheItemLookup(LdSubCache* cacheP, const char* subId);
+bool            ldSubCacheItemRemove(LdSubCache* cacheP, const char* subId);
+int             ldSubCacheCandidates(LdSubCache* cacheP, const char* entityId, CorNode* typeP,
+                                     CorAlloc* kaP, LdSubCacheItem*** vPP);</pre>
+<table class="g-opts">
+  <tr><th>Rule</th><th></th></tr>
+  <tr><td>ownership</td><td><code>ldSubCacheItemAdd</code> clones <code>subTree</code> (malloc) and takes <code>qExpr</code>; <code>LdFormatUnset</code> lets it read the format from the tree (a reload from the store)</td></tr>
+  <tr><td>locking</td><td>a read-write lock the CALLER takes (<code>ldSubCacheRdLock</code>, <code>ldSubCacheWrLock</code>, <code>ldSubCacheUnlock</code>): readers for a walk, writers for a change. An item used across a notification send is pinned (<code>ldSubCacheItemPin</code>/<code>Unpin</code>); a removed pinned item waits on a retired list</td></tr>
+  <tr><td>lock order</td><td>the registration cache's lock before the subscription cache's - never the other way</td></tr>
+  <tr><td>the candidate index</td><td>4096 buckets: a subscription whose every selector names an id or a type is under those keys, any other is always a candidate. <code>ldSubCacheCandidates</code> gives the ones a write of this entity could notify, in the order they were added</td></tr>
+  <tr><td>triggers</td><td><code>LD_TRIGGER_*</code> bits; the default is <code>attributeCreated</code> + <code>attributeUpdated</code> (§ 5.2.12)</td></tr>
+</table>
+<p>Subscriptions with <code>timeInterval</code> are in their own cache (<code>LdPernotCache.h</code>), which no write
+walks; <code>ldPernotLoopStart</code> runs them on the periodic loop through the broker's query callback. A
+subscription with <code>throttling</code> buffers its matches in a coalesce-to-latest set
+(<code>ldThrottleDirty.h</code>), flushed by <code>ldThrottleFlushStart</code>'s tick.</p>
+
+<h2 id="notifications">Notifications</h2>
+<p>A write does not notify while it runs. Its service routine queues each changed entity:</p>
+<pre>ldNotifyDefer((LdSubCache*) tenantP-&gt;subCacheP, entityP, LdNotifyEntityCreate, NULL);   // or a merge report</pre>
+<p>and after the response has gone out the broker's post-response hook calls <code>ldNotifyDispatchPending()</code>:
+<code>ldSubscriptionNotifyBatch</code> matches the queue against the candidates and sends <b>one</b> notification
+per subscription, its <code>data</code> every entity of the request that matched, in order. The entity must stay
+valid until then - the request arena or the store's copy. <code>ldSubscriptionUpdateMayMatch</code> lets a PATCH
+skip reading the entity back when no subscription can be notified.</p>
+<table class="g-opts">
+  <tr><th>Endpoint</th><th>Sent by</th></tr>
+  <tr><td>http://, https://</td><td>corNgsild, a POST through corRest's client</td></tr>
+  <tr><td>mqtt://, mqtts://, ...</td><td>the hooks installed with <code>ldNotifyTransportSet(hasFn, sendFn)</code> - coraine's bridges. With none, such a subscription is refused</td></tr>
+  <tr><td>urn:ngsi-ld:self</td><td>the hook of <code>ldNotifyStreamSet(putFn)</code> - coraine's <a href="#docs/sse">server-sent events</a>; compiled only with <code>COR_WITH_EVENT_STREAM=1</code>, the default</td></tr>
+</table>
+<p>A subscription's <code>notification.endpoint.receiverInfo</code> becomes the notification's headers through
+<code>ldReceiverInfoHeadersAdd(reqP, receiverInfo, fromRequest)</code>, on every path that sends one: Authorization
+and the like pass; Content-Type, an @context Link, Prefer, NGSILD-Tenant and NGSILD-Snapshot are the broker's own and
+are skipped. A value <code>urn:ngsi-ld:request</code> takes the triggering request's header with
+<code>fromRequest</code> true, and is left out without one (a periodic tick, a notification re-dispatched from a Context
+Source).</p>
+<p>Three more hooks: <code>ldNotifyFilterHook</code> removes the entities a subscriber may not read (coraine's auth
+plugin; a notification left empty is not sent), <code>ldNotifyStatsHookSet</code> counts each send,
+<code>ldLinkedEntitiesHookSet</code> does a notification's <code>join</code>. The counters
+(<code>timesSent</code>, <code>lastFailure</code>, ...) go to the store through <code>ldStatsFlushLoopStart</code>, a
+thread of its own.</p>
+<h3 id="periodic">The periodic loop</h3>
+<p><code>ldPeriodicLoop.h</code>: one thread that calls each registered tick once a second, in the order they were
+registered, at most 8, each with a scratch arena reset before it. Register with
+<code>ldPeriodicLoopRegister(fn, ctx)</code> before <code>ldPeriodicLoopStart()</code>. On it run the periodic
+subscriptions, throttling, the periodic CSR notifications and the reaper of volatile contexts.</p>
+
+<h2 id="regs">Registrations and the reg cache</h2>
+<p>Each tenant also has an <code>LdRegCache</code> (<code>ldRegCacheCreate()</code>): its Context Source
+Registrations, each parsed once into its RegistrationInfo (entity ids, id patterns, types, property and
+relationship names), its <code>LdRegMode</code> (inclusive, exclusive, redirect, auxiliary), the operations it
+supports (<code>LdOp</code> bits; a § 4.20 group name is its member bits), its counters.</p>
+<pre>int  ldRegCacheMatchForRetrieve(LdRegCache* cacheP, const char* entityId, char** entityTypeV,
+                                LdRegMode modeFilter, LdRegCacheItem*** matchVP);
+int  ldRegCacheMatchForQuery(LdRegCache* cacheP, char** entityIdV, const char* idPattern,
+                             char** entityTypeV, LdRegMode modeFilter, LdRegCacheItem*** matchVP);
+void ldRegCacheMatchRelease(LdRegCacheItem** matchV, int n);</pre>
+<p>A matcher walks under the read lock, pins each match and returns them; the caller forwards to them without the
+lock and then calls <code>ldRegCacheMatchRelease</code> - never <code>free(matchV)</code>. A dispatcher asks once per
+mode (exclusive, redirect, inclusive) and sequences the passes. Writers take <code>ldRegCacheWrLock</code>.</p>
+<p>Around the cache: <code>ldCsrSubNotify.h</code> - subscriptions to registrations and their CsourceNotifications;
+<code>ldDiscovery.h</code> - § 5.10.2 discovery; <code>ldProbeSourceIdentity.h</code> - a new registration's
+<code>/info/sourceIdentity</code>, probed after the response (<code>ldRegCacheProbePending</code>).</p>
+
+<h2 id="distributed">Distributed operations</h2>
+<p>All of it is behind one flag, <code>ldDistributed</code> (<a href="#docs/options/distributed">--distributed</a>):
+off, the forwarding matchers find nothing and every operation stays local; the Registry API works either way.</p>
+<table class="g-opts">
+  <tr><th>Part</th><th></th></tr>
+  <tr><td>ldDistOpSendReceive, ldDistOpSendMulti</td><td>one forward, or a fan-out: headers built (Via, NGSILD-Tenant, the registration's <code>contextSourceInfo</code>), the registration's timeout, its counters updated. In a fan-out the HTTP forwards are in flight together (corRest's multi client), with them those of a plugin that has <code>start</code>/<code>wait</code>; another plugin's go one at a time after them; a registration that points back at this broker is served in-process</td></tr>
+  <tr><td>LdForwarding.h, ldForwarding.h</td><td>the transports: a plugin (<code>LdForwardingPlugin</code>: alias, URL schemes, <code>send</code>, optional <code>start</code>/<code>wait</code>) registered with <code>ldForwardingRegister</code>; the first to claim a scheme keeps it. coraine registers <code>http</code>/<code>https</code> and cor://</td></tr>
+  <tr><td>ldCsourceAlias.h, ldDistOpLoopDetected</td><td>loops: this broker's per-tenant alias in the Via header (<a href="#docs/options/csourceAlias">--csourceAlias</a>); a forward that would come back is not sent</td></tr>
+  <tr><td>ldDistOpForwardContext</td><td>the <code>@context</code> a forward to this registration uses - its <code>jsonldContext</code></td></tr>
+  <tr><td>ldEntityFragment.h, ldWriteResult.h</td><td>a write split by RegistrationInfo; the answers merged into one UpdateResult</td></tr>
+  <tr><td>ldDistMerge.h</td><td>versions of one entity from several sources merged (§ 4.5.5.3)</td></tr>
+  <tr><td>ldDistSub.h</td><td>a subscription forwarded to the matching sources as subordinates, kept in step on PATCH, DELETE and registration changes; their notifications come back to <code>ldBrokerHttpEndpoint</code></td></tr>
+</table>
+<p><code>ldSplitEntities</code> (<a href="#docs/options/noSplitEntities">--noSplitEntities</a> turns it off) decides
+whether a distributed query assembles entities from parts held by several sources, or takes each entity whole from
+one.</p>
+
+<h2 id="using">Using it in a broker</h2>
+<p>coraine's startup (<code>src/lib/startup/startupCoreContext.c</code>, <code>src/app/coraine/coraine.c</code>),
+in order:</p>
+<pre>corLdInit(&amp;contextAlloc, NULL, startupContextDownload, startupContextError);   // corJsonld
+bridgeCoreTermsAdd(&amp;contextAlloc);          // coraine's terms into the core ...
+ldExtensionTermsAdd(&amp;contextAlloc);         // ... and those of its NGSI-LD extensions
+ldCoreTermIdsInit(&amp;contextAlloc);           // every core term its CorTerm
+ldInit();                                    // URL parameters and hooks into corRest; corJsonld's callbacks
+
+// per tenant
+tenantP-&gt;subCacheP    = ldSubCacheCreate();
+tenantP-&gt;pernotCacheP = ldPernotCacheCreate();
+tenantP-&gt;regCacheP    = ldRegCacheCreate();
+tenantP-&gt;regSubCacheP = ldSubCacheCreate();
+
+ldForwardingRegister(&amp;httpPlugin);          // forwarding transports
+ldNotifyTransportSet(transportHas, transportSend);
+ldNotifyStreamSet(streamPut);
+corRestSetPostResponseHook(brokerPostResponseHook);   // calls ldNotifyDispatchPending(), ...
+
+ldPernotLoopStart(brokerPernotCaches, pernotQueryCallback);
+ldThrottleFlushStart(brokerTenantCaches, throttleRetrieveCallback);
+ldCsrSubPeriodicLoopRegister(brokerTenantCaches);
+ldContextHostReaperStart();
+ldPeriodicLoopStart();
+ldStatsFlushLoopStart(subStatsFlushInterval, subStatsFlushAll);</pre>
+<p>The routes carry their operation and accepted parameters (coraine's <code>ngsildServices.c</code>):</p>
+<pre>{ CorVerbPost, "/ngsi-ld/v1/entities", postEntities, LD_PARAMS_POST_ENTITIES, LdOpCreateEntity },</pre>
+<p>Globals the broker sets from its options before it serves: <code>ldDefaultContextUrl</code>
+(<a href="#docs/options/defaultUserContext">--defaultUserContext</a>), <code>ldDistributed</code>,
+<code>ldSplitEntities</code>, <code>ldCsourceAliasBase</code>, <code>ldBrokerHttpEndpoint</code>
+(<a href="#docs/options/httpEndpoint">--httpEndpoint</a>), <code>ldNotifyValueChangeOnly</code>
+(<a href="#docs/options/notifyValueChangeOnly">--notifyValueChangeOnly</a>), <code>ldDefaultCooldownNs</code>
+(<a href="#docs/options/cooldownMillis">--cooldownMillis</a>), <code>ldTimestampHighPrecision</code>
+(<a href="#docs/options/high-precision">--high-precision</a>), <code>ldEntityMapMaxBytes</code>,
+<code>ldContextSourceExtras</code>. Code with no request to take a context from - a configuration file, a sample
+on a bridge, a cache rebuilt from the store - expands with <code>ldDefaultContext(kaP)</code>, not the core alone.</p>
+
+<h3 id="rules">Rules</h3>
+<ul>
+  <li><b>Read a node's term with <code>ldTermId</code>, rename it with <code>ldNodeRename</code>.</b></li>
+  <li><b>Raise with <code>ldError</code> and return false</b>; the render hook turns <code>corRest.out</code> into the ProblemDetails.</li>
+  <li><b>Hold no cache lock across a send</b>: pin, unlock, send, unpin. Registration lock before subscription lock.</li>
+  <li><b>A thread that is not corRest's</b> and calls the library sets up its own <code>corRest</code> arena (as the periodic loop does) and calls <code>corNgsildFallbackRelease()</code> before it ends.</li>
+  <li><b>Trace levels</b> are 200-399 (<code>ldTraceLevels.h</code>).</li>
+</ul>
+<h3 id="build">Building it</h3>
+<table class="g-opts">
+  <tr><th>make variable</th><th></th></tr>
+  <tr><td>COR_WITH_ICU=1</td><td>links ICU for the collation <code>orderBy</code> with <code>collation</code> names; off by default - three shared libraries, 39.2 MiB (the makefile's figure). coraine's CMake option <code>COR_FEATURE_ICU_COLLATION</code> must match</td></tr>
+  <tr><td>COR_WITH_EVENT_STREAM=0</td><td>leaves out the event-stream endpoint (<code>urn:ngsi-ld:self</code>); 1 is the default</td></tr>
+  <tr><td>EXTRA_CFLAGS</td><td>added last to the compile line, for an instrumented build</td></tr>
+</table>
+
+<h2 id="map">The headers, by area</h2>
+<p>Each name links to the header on the <a href="#docs/api-corngsild">API page</a>.</p>
+<table class="gtable">
+  <tr><th>Area</th><th>Headers</th></tr>
+  <tr><td>wiring and per-request state</td><td><a href="#docs/api-corngsild/h-corNgsild">corNgsild</a>, <a href="#docs/api-corngsild/h-CorNgsild">CorNgsild</a>, <a href="#docs/api-corngsild/h-ldInit">ldInit</a>, <a href="#docs/api-corngsild/h-ldHooks">ldHooks</a>, <a href="#docs/api-corngsild/h-ldParams">ldParams</a>, <a href="#docs/api-corngsild/h-ldParamsValidate">ldParamsValidate</a>, <a href="#docs/api-corngsild/h-ldQueryParams">ldQueryParams</a>, <a href="#docs/api-corngsild/h-ldExpandParams">ldExpandParams</a>, <a href="#docs/api-corngsild/h-ldUrlWildcardCheck">ldUrlWildcardCheck</a>, <a href="#docs/api-corngsild/h-ldContextHost">ldContextHost</a>, <a href="#docs/api-corngsild/h-ldStripAtContext">ldStripAtContext</a>, <a href="#docs/api-corngsild/h-ldTenantCaches">ldTenantCaches</a>, <a href="#docs/api-corngsild/h-ldTenantHeader">ldTenantHeader</a>, <a href="#docs/api-corngsild/h-ldUrlPathShown">ldUrlPathShown</a>, <a href="#docs/api-corngsild/h-ldTraceLevels">ldTraceLevels</a></td></tr>
+  <tr><td>core terms and names</td><td><a href="#docs/api-corngsild/h-CorTerm">CorTerm</a>, <a href="#docs/api-corngsild/h-ldCoreTermIds">ldCoreTermIds</a>, <a href="#docs/api-corngsild/h-ldTermId">ldTermId</a>, <a href="#docs/api-corngsild/h-ldTermClass">ldTermClass</a>, <a href="#docs/api-corngsild/h-ldAttrMember">ldAttrMember</a>, <a href="#docs/api-corngsild/h-ldIsEntityKeyword">ldIsEntityKeyword</a>, <a href="#docs/api-corngsild/h-ldExtensionTerms">ldExtensionTerms</a>, <a href="#docs/api-corngsild/h-LdVocab">LdVocab</a>, <a href="#docs/api-corngsild/h-ldParse">ldParse</a>, <a href="#docs/api-corngsild/h-ldNameContentCheck">ldNameContentCheck</a>, <a href="#docs/api-corngsild/h-ldLanguageKey">ldLanguageKey</a></td></tr>
+  <tr><td>checking</td><td><a href="#docs/api-corngsild/h-LdCheck">LdCheck</a>, <a href="#docs/api-corngsild/h-ldCheckEntity">ldCheckEntity</a>, <a href="#docs/api-corngsild/h-ldCheckAttribute">ldCheckAttribute</a>, <a href="#docs/api-corngsild/h-ldCheckGeo">ldCheckGeo</a>, <a href="#docs/api-corngsild/h-ldCheckDateTime">ldCheckDateTime</a>, <a href="#docs/api-corngsild/h-ldCheckUri">ldCheckUri</a>, <a href="#docs/api-corngsild/h-ldRegexValid">ldRegexValid</a>, <a href="#docs/api-corngsild/h-ldIso8601Duration">ldIso8601Duration</a>, <a href="#docs/api-corngsild/h-LdAttrType">LdAttrType</a>, <a href="#docs/api-corngsild/h-ldAttrTypeDetect">ldAttrTypeDetect</a>, <a href="#docs/api-corngsild/h-ldTypes">ldTypes</a>, <a href="#docs/api-corngsild/h-LdNormalizeInput">LdNormalizeInput</a>, <a href="#docs/api-corngsild/h-ldServiceDescription">ldServiceDescription</a></td></tr>
+  <tr><td>errors</td><td><a href="#docs/api-corngsild/h-ldError">ldError</a>, <a href="#docs/api-corngsild/h-LdProblem">LdProblem</a>, <a href="#docs/api-corngsild/h-LdBatchErrors">LdBatchErrors</a></td></tr>
+  <tr><td>entities and the storage model</td><td><a href="#docs/api-corngsild/h-LdOp">LdOp</a>, <a href="#docs/api-corngsild/h-ldApiEntityToDbModel">ldApiEntityToDbModel</a>, <a href="#docs/api-corngsild/h-ldEntityToApi">ldEntityToApi</a>, <a href="#docs/api-corngsild/h-ldEntityMerge">ldEntityMerge</a>, <a href="#docs/api-corngsild/h-ldEntityAttrsSet">ldEntityAttrsSet</a>, <a href="#docs/api-corngsild/h-ldInstanceWritten">ldInstanceWritten</a>, <a href="#docs/api-corngsild/h-ldRegSubMerge">ldRegSubMerge</a>, <a href="#docs/api-corngsild/h-ldSysTimestamp">ldSysTimestamp</a>, <a href="#docs/api-corngsild/h-ldStripSysAttrs">ldStripSysAttrs</a>, <a href="#docs/api-corngsild/h-ldIdGenerate">ldIdGenerate</a>, <a href="#docs/api-corngsild/h-ldExpiresAtPropagate">ldExpiresAtPropagate</a></td></tr>
+  <tr><td>representations</td><td><a href="#docs/api-corngsild/h-LdFormat">LdFormat</a>, <a href="#docs/api-corngsild/h-ldRender">ldRender</a>, <a href="#docs/api-corngsild/h-ldLangReduce">ldLangReduce</a>, <a href="#docs/api-corngsild/h-ldToGeoJson">ldToGeoJson</a>, <a href="#docs/api-corngsild/h-ldToTemporalValues">ldToTemporalValues</a>, <a href="#docs/api-corngsild/h-ldToAggregatedValues">ldToAggregatedValues</a>, <a href="#docs/api-corngsild/h-ldPickOmit">ldPickOmit</a>, <a href="#docs/api-corngsild/h-LdProj">LdProj</a>, <a href="#docs/api-corngsild/h-ldPagination">ldPagination</a>, <a href="#docs/api-corngsild/h-ldConformanceDowngrade">ldConformanceDowngrade</a>, <a href="#docs/api-corngsild/h-ldBinCodec">ldBinCodec</a></td></tr>
+  <tr><td>queries and q</td><td><a href="#docs/api-corngsild/h-LdQ">LdQ</a>, <a href="#docs/api-corngsild/h-ldQParse">ldQParse</a>, <a href="#docs/api-corngsild/h-ldQRender">ldQRender</a>, <a href="#docs/api-corngsild/h-ldQAttrs">ldQAttrs</a>, <a href="#docs/api-corngsild/h-ldQExpandValues">ldQExpandValues</a>, <a href="#docs/api-corngsild/h-LdTypeExpr">LdTypeExpr</a>, <a href="#docs/api-corngsild/h-LdScopeExpr">LdScopeExpr</a>, <a href="#docs/api-corngsild/h-ldScopeMatch">ldScopeMatch</a>, <a href="#docs/api-corngsild/h-LdGeoRel">LdGeoRel</a>, <a href="#docs/api-corngsild/h-LdOrder">LdOrder</a>, <a href="#docs/api-corngsild/h-ldOrderSort">ldOrderSort</a>, <a href="#docs/api-corngsild/h-ldEntityMatch">ldEntityMatch</a>, <a href="#docs/api-corngsild/h-ldQueryBody">ldQueryBody</a>, <a href="#docs/api-corngsild/h-ldQueryBodyCheck">ldQueryBodyCheck</a></td></tr>
+  <tr><td>EntityMaps and Snapshots</td><td><a href="#docs/api-corngsild/h-LdEntityMap">LdEntityMap</a>, <a href="#docs/api-corngsild/h-ldEntityMap">ldEntityMap</a>, <a href="#docs/api-corngsild/h-LdSnapshotCache">LdSnapshotCache</a>, <a href="#docs/api-corngsild/h-ldSnapshotNotify">ldSnapshotNotify</a></td></tr>
+  <tr><td>subscriptions and the sub cache</td><td><a href="#docs/api-corngsild/h-LdSubCache">LdSubCache</a>, <a href="#docs/api-corngsild/h-ldSubCache">ldSubCache</a>, <a href="#docs/api-corngsild/h-LdSubStatus">LdSubStatus</a>, <a href="#docs/api-corngsild/h-ldCheckSubscription">ldCheckSubscription</a>, <a href="#docs/api-corngsild/h-ldSubscriptionCompactQ">ldSubscriptionCompactQ</a>, <a href="#docs/api-corngsild/h-ldSubscriptionCounters">ldSubscriptionCounters</a>, <a href="#docs/api-corngsild/h-ldThrottleDirty">ldThrottleDirty</a>, <a href="#docs/api-corngsild/h-LdPernotCache">LdPernotCache</a>, <a href="#docs/api-corngsild/h-ldPernotCache">ldPernotCache</a>, <a href="#docs/api-corngsild/h-ldPernotLoop">ldPernotLoop</a></td></tr>
+  <tr><td>notifications</td><td><a href="#docs/api-corngsild/h-ldSubscriptionNotify">ldSubscriptionNotify</a>, <a href="#docs/api-corngsild/h-ldNotifyDefer">ldNotifyDefer</a>, <a href="#docs/api-corngsild/h-ldNotifyTransport">ldNotifyTransport</a>, <a href="#docs/api-corngsild/h-ldReceiverInfoHeaders">ldReceiverInfoHeaders</a>, <a href="#docs/api-corngsild/h-ldNotifyStream">ldNotifyStream</a>, <a href="#docs/api-corngsild/h-ldNotifyStatsHook">ldNotifyStatsHook</a>, <a href="#docs/api-corngsild/h-ldLinkedEntitiesHook">ldLinkedEntitiesHook</a>, <a href="#docs/api-corngsild/h-ldSubStatsFlush">ldSubStatsFlush</a>, <a href="#docs/api-corngsild/h-ldStatsFlushLoop">ldStatsFlushLoop</a>, <a href="#docs/api-corngsild/h-ldPeriodicLoop">ldPeriodicLoop</a></td></tr>
+  <tr><td>registrations and the reg cache</td><td><a href="#docs/api-corngsild/h-LdRegCache">LdRegCache</a>, <a href="#docs/api-corngsild/h-ldRegCache">ldRegCache</a>, <a href="#docs/api-corngsild/h-ldCheckRegistration">ldCheckRegistration</a>, <a href="#docs/api-corngsild/h-ldCsrSubNotify">ldCsrSubNotify</a>, <a href="#docs/api-corngsild/h-ldDiscovery">ldDiscovery</a>, <a href="#docs/api-corngsild/h-ldProbeSourceIdentity">ldProbeSourceIdentity</a>, <a href="#docs/api-corngsild/h-ldCsourceAlias">ldCsourceAlias</a></td></tr>
+  <tr><td>distributed operations</td><td><a href="#docs/api-corngsild/h-ldDistOp">ldDistOp</a>, <a href="#docs/api-corngsild/h-LdForwarding">LdForwarding</a>, <a href="#docs/api-corngsild/h-ldForwarding">ldForwarding</a>, <a href="#docs/api-corngsild/h-ldDistMerge">ldDistMerge</a>, <a href="#docs/api-corngsild/h-ldDistSub">ldDistSub</a>, <a href="#docs/api-corngsild/h-ldDiscoveryForward">ldDiscoveryForward</a>, <a href="#docs/api-corngsild/h-ldEntityFragment">ldEntityFragment</a>, <a href="#docs/api-corngsild/h-ldWriteResult">ldWriteResult</a>, <a href="#docs/api-corngsild/h-ldRequestSubstitute">ldRequestSubstitute</a></td></tr>
+</table>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corngsild"><b>corNgsild API</b><span>every header and entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener"><b>SEAMWARE/corNgsild</b><span>the repository</span></a></li>
+  <li><a href="#docs/lib-corjsonld"><b>corJsonld</b><span>what it expands and compacts with</span></a></li>
+  <li><a href="#docs/lib-correst"><b>corRest</b><span>the hooks it plugs into, the request arena, the HTTP client</span></a></li>
+</ul>
+<p>Depends on <a href="#docs/lib-correst">corRest</a>, <a href="#docs/lib-corjsonld">corJsonld</a>,
+<a href="#docs/lib-coralloc">corAlloc</a>, <a href="#docs/lib-corjson">corJson</a>,
+<a href="#docs/lib-cortree">corTree</a>, <a href="#docs/lib-corbase">corBase</a>,
+<a href="#docs/lib-corlog">corLog</a>, pthreads and POSIX regex - and ICU with <code>COR_WITH_ICU=1</code>. Used by
+coraine: its service routines, database plugins, bridges and forwarding transports all work through it.</p>
+</article>

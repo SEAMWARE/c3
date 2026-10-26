@@ -1,0 +1,153 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/cor-libs.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corLibs - the umbrella</h1>
+<p class="lead"><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener">corLibs</a> holds no
+library. It holds what assembling the stack takes: which repositories make it up and in which order they build
+(<code>bootstrap.sh</code>, the makefile), and the environment that build needs (the CI image every cor repository's
+CI runs in).</p>
+
+<h2 id="layout">Siblings, not subdirectories</h2>
+<p>Every library is a repository of its own, and they sit side by side under one parent directory - by default
+<code>~/git</code>. The include paths and the link lines resolve each other as <code>../&lt;name&gt;</code>
+(<code>-I..</code>, <code>../corTree/libcorTree.a</code>), so the layout is part of the build contract. corLibs drives
+the siblings; it does not vendor them.</p>
+<pre>~/git/
+├── corLibs        <span class="c">the umbrella: bootstrap.sh, makefile, iter.sh; collects into bin/ and lib/</span>
+├── corBase  corLog  corAlloc  corArgs  corHash  corTree  corJson  corProm
+├── corHttp  corBridge  corRest  corJsonld  corPlugin  corNgsild
+├── corDB                                  <span class="c">the in-process database plugin</span>
+├── corTools  corTest                      <span class="c">the tools and the test runner</span>
+├── corDdsBridge  corModbusBridge  corMqttBridge  corCkanBridge  corOpcuaBridge
+└── coraine                                <span class="c">the broker</span></pre>
+
+<h2 id="bootstrap">bootstrap.sh</h2>
+<p>Clones every repository of the stack beside corLibs - or, for one already there, fetches, checks out its ref and
+fast-forwards (<code>pull --ff-only</code>, never a merge) - then builds and installs the whole stack with
+<code>make di</code> in the umbrella. The base directory is the parent of the script's own checkout, so a clone
+anywhere works.</p>
+<pre>git clone https://github.com/SEAMWARE/corLibs.git
+./corLibs/bootstrap.sh                 <span class="c"># clone or update, then build</span>
+cd coraine &amp;&amp; make di                  <span class="c"># the broker - coraine itself is not cloned by it</span></pre>
+<table class="g-opts">
+  <tr><th>Variable</th><th>What it does</th></tr>
+  <tr><td>PROTO=ssh</td><td>SSH clone URLs (<code>git@github.com:SEAMWARE/&lt;repo&gt;.git</code>) instead of https</td></tr>
+  <tr><td>NOBUILD=1</td><td>clone only; the build is skipped</td></tr>
+  <tr><td>BASE=&lt;dir&gt;</td><td>place the siblings elsewhere</td></tr>
+  <tr><td>JOBS=&lt;n&gt;</td><td>parallel build jobs (default <code>nproc</code>)</td></tr>
+  <tr><td>COR_GIT_RETRY_SECONDS</td><td>how long a failing clone or fetch is retried, default 600; <code>0</code> disables
+  retrying. The pause between attempts doubles from 3 s up to a minute.</td></tr>
+</table>
+<p>It clones 22 repositories: <code>corBase corLog corAlloc corArgs corHash corTree corJson corProm corPlugin
+corBridge corDdsBridge corModbusBridge corMqttBridge corCkanBridge corOpcuaBridge corHttp corRest corJsonld corNgsild
+corDB corTools corTest</code>, each at <code>main</code>.</p>
+
+<h2 id="build">Building the stack</h2>
+<p>The umbrella's <code>COR_DIRS</code> is the build order, and <code>make &lt;target&gt;</code> runs the target in each
+directory in that order, stopping at the first failure:</p>
+<pre>corBase corLog corAlloc corArgs corHash corTree corJson corProm corHttp corBridge corRest corJsonld corPlugin
+corNgsild corDB corTools corDdsBridge corModbusBridge corMqttBridge</pre>
+<ul>
+  <li><b>corBase</b> first - it needs nothing; then the log, the allocator, the command line, the hash tables, the tree,
+  JSON and the metrics.</li>
+  <li><b>corHttp</b> before corRest, which links it on a <code>COR_HTTP_SERVER=builtin</code> build.</li>
+  <li><b>corDB</b> is built against coraine's plugin interface: without a coraine checkout beside it, it skips itself
+  and says why - coraine's own <code>make di</code> builds it then.</li>
+  <li><b>corTools</b> after the libraries: its tools link the whole stack.</li>
+  <li><b>corDdsBridge</b> gates itself: built where the DDS Enabler is installed, skipped with the reason where it is
+  not; <code>COR_BRIDGE_DDS=ON</code> makes a missing dependency an error. <b>corModbusBridge</b> needs nothing
+  beyond libc, <b>corMqttBridge</b> libmosquitto - both always built.</li>
+  <li><b>corCkanBridge</b> and <b>corOpcuaBridge</b> are cloned and not built here:
+  <a href="#docs/building/coraine-build">coraine-build</a> <code>--bridges</code> builds them. <b>corTest</b> is
+  cloned and not built - its runner and helpers are scripts, copied by <code>install</code>.</li>
+</ul>
+<table class="g-opts">
+  <tr><th>Target</th><th>What it does</th></tr>
+  <tr><td>make / all</td><td>release build of every library</td></tr>
+  <tr><td>make debug</td><td>debug build of every library</td></tr>
+  <tr><td>make install</td><td>build, then collect into <code>bin/</code> and <code>lib/</code> (below)</td></tr>
+  <tr><td>make di</td><td>debug + install - the usual cycle</td></tr>
+  <tr><td>make i</td><td>release + install</td></tr>
+  <tr><td>make ci / cdi</td><td>clean + install / clean + debug + install</td></tr>
+  <tr><td>make clean</td><td>clean every library</td></tr>
+  <tr><td>make test</td><td>each library's own <code>make test</code>, where it has one, and a total of cases and
+  errors</td></tr>
+  <tr><td>make branch / gs / pull</td><td>the checked-out branch, <code>git status -s</code>, <code>git pull</code> - in every
+  library</td></tr>
+  <tr><td>make help</td><td>the targets and the library list</td></tr>
+</table>
+<p><code>./iter.sh '&lt;command&gt;'</code> runs a command in each library directory - <code>./iter.sh 'git log
+--oneline -1'</code>. It reads the list from the makefile's <code>COR_DIRS</code>.</p>
+
+<h3 id="install">What install collects</h3>
+<table class="gtable">
+  <tr><td><code>lib/</code></td><td>every <code>lib*.a</code> and <code>lib*.so</code> of every directory in
+  <code>COR_DIRS</code> (a bridge's <code>.so</code> is a plugin, not a <code>lib*</code>, and is not collected)</td></tr>
+  <tr><td><code>bin/</code></td><td>from corTest: <code>corTest</code>, <code>corTestFunctions.sh</code>,
+  <code>corDiff</code>, <code>corDiffGui</code>, <code>corRegenExpect</code>; from corJson: <code>corJson</code>
+  (corTest sorts every JSON response with it and refuses to run without it - a warning when it is not built); from
+  corTools: <code>corRequest</code>, <code>corTestClient</code>, and <code>corMongoDrop</code> where it was built</td></tr>
+</table>
+<p>coraine's test target runs <code>~/git/corLibs/bin/corTest</code> (<a href="#docs/testing">Testing</a>); the tools in
+<code>bin/</code> are described in <a href="#docs/cor-tools">corTools</a>.</p>
+
+<h2 id="versions">Versions: what is pinned, and where</h2>
+<p><b>The cor repositories are not pinned against each other.</b> Every one tracks <code>main</code>: they move
+together, and a pin between them would only be stale. The umbrella builds whatever each sibling has checked out
+(<code>make branch</code> shows it). What a release contains is recorded the other way round: cutting a coraine release
+tags every Cor-Lib, and corDB, corTools, corTest, corLibs and the DDS, Modbus and MQTT bridges, <code>v&lt;version&gt;</code>
+at the exact commit the release was built from: the linked libraries at the commits <code>GET /version</code> reports,
+the others at the commits the release build checked out.</p>
+<p><b>The external dependencies are pinned</b>, in the CI image (<code>docker/Dockerfile.ci</code>, published as
+<code>quay.io/seamware/coraine-ci</code>):</p>
+<table class="gtable">
+  <tr><th>Dependency</th><th>Pin</th></tr>
+  <tr><td>the base</td><td><code>ubuntu:26.04</code> by digest, not by tag - the broker's runtime image is
+  <code>ubuntu:26.04</code> too</td></tr>
+  <tr><td>the mongo-c driver</td><td><code>MONGOC_VERSION=2.2.2</code>, built from source (pkg-config
+  <code>mongoc2</code>)</td></tr>
+  <tr><td>libmicrohttpd</td><td><code>MHD_VERSION=1.0.10</code>, built by <code>tools/mhd/mhdBuild.sh</code> (below)</td></tr>
+  <tr><td>the eProsima DDS stack</td><td>not named in the image: fetched from corDdsBridge's
+  <code>ddsenabler-pinned.repos</code>, which pins releases, not branches, and built with colcon</td></tr>
+  <tr><td>the image itself</td><td>each repository's CI names a dated tag (<code>coraine-ci:&lt;date&gt;-&lt;commit&gt;</code>),
+  never a moving one: a red run is then a change in that repository, not in the image</td></tr>
+</table>
+<p>The image also carries what the test harness shells out to - <code>python3</code>, <code>jq</code>,
+<code>psql</code>, <code>mongosh</code>, <code>mosquitto</code> (the daemon: the MQTT tests start their own), procps and
+psmisc (<code>pkill</code>, <code>killall</code>), <code>socat</code> - and checks at build time that every one is there.
+<code>Dockerfile.ci-nightly</code> is built <code>FROM</code> it and adds what only the nightly jobs need: valgrind,
+gcovr (pinned, 8.6), wrk. <code>Dockerfile.mongo-rs</code> is <code>mongo:8.2</code> started as a one-member replica set, for the
+cache-sync tests that need a change stream. The <code>baseimage.yml</code> workflow builds them on a pull request that
+touches them, and publishes on a push to <code>main</code>.</p>
+
+<h3 id="mhd">tools/mhd - libmicrohttpd, checked and patched</h3>
+<pre>MHD_VERSION=1.0.10 tools/mhd/mhdBuild.sh --sudo           <span class="c"># a workstation: /usr/local, sudo make install</span>
+tools/mhd/mhdBuild.sh --prefix /opt/mhd -- --disable-https</pre>
+<p>The one place the stack builds libmicrohttpd from - the CI image, coraine's published image and a bare CI runner run
+it. It downloads the release tarball from ftp.gnu.org and accepts it only with the SHA-256 recorded in the script for
+that version (1.0.2 and 1.0.10 today), then applies every patch in <code>patches/&lt;version&gt;/</code> in name order.
+1.0.10 carries one, <code>0001-header-value-fastpath.patch</code>: a header value's plain characters skipped in one
+loop; a patched library behaves as the release does, and coraine works unchanged on an unpatched one. Options:
+<code>--prefix</code> (default <code>/usr/local</code>), <code>--sudo</code>, <code>--keep</code> (leave the build
+directory), and after <code>--</code> options for <code>./configure</code>.</p>
+
+<h2 id="lists">The lists a repository is in</h2>
+<p>A repository added to the stack, or renamed, is a change in each list that names the repositories - one left out
+fails a build far from the change:</p>
+<table class="gtable">
+  <tr><th>List</th><th>Where</th><th>What it decides</th></tr>
+  <tr><td><code>COR_DIRS</code></td><td>corLibs <code>makefile</code></td><td>what <code>make -C corLibs di</code> builds, in
+  which order; <code>iter.sh</code> reads it</td></tr>
+  <tr><td><code>REPOS</code></td><td>corLibs <code>bootstrap.sh</code></td><td>what is cloned, from where, at which ref</td></tr>
+  <tr><td><code>LIBS</code></td><td>coraine <code>docker/vendor-libs.sh</code></td><td>what goes into the image's build
+  context: each repository's committed tree (<code>git archive</code>), with a manifest of the commits. A directory the
+  umbrella builds and this list lacks fails the image build at <code>make -C corLibs di</code></td></tr>
+  <tr><td>the tag lists</td><td>coraine <code>.github/workflows/release.yml</code></td><td>which repositories a release
+  tags, and which the release token may write to</td></tr>
+</table>
+
+<h2 id="also">Also in the repository</h2>
+<p><code>STYLE_GUIDE.md</code> - the coding style of the Cor-Libs and coraine: one guide for all of them, and where a
+rule and existing code disagree, the code is wrong. Building the broker on top of the stack:
+<a href="#docs/building">Building from source</a>.</p>
+</article>

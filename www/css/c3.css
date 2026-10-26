@@ -880,3 +880,13 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 12px; }
 .guide figure.g-fig svg { display: block; width: 100%; height: auto; }
 .guide figure.g-fig figcaption { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--dim); }
 @media (max-width: 600px) { .g-opts td:first-child { white-space: normal; } }
+
+/* API reference pages (docs/api-*.html, tools/apiRef.py): a header per h2, an entry per h3 - its summary, its
+   declarations as written, its comment */
+.guide.api h2 { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line-soft); font-size: 19px; }
+.guide.api h3 { margin: 26px 0 4px; font-size: 15px; }
+.guide.api h3 code { color: var(--text); font-size: 15px; }
+.guide.api .api-src { font-size: 13px; color: var(--dim); }
+.guide.api .api-summary { margin: 0 0 8px; color: var(--text-2); }
+.guide.api pre.api-decl { margin: 6px 0 10px; color: var(--text); }
+.guide.api pre.api-note { background: none; border: none; border-left: 2px solid var(--line); border-radius: 0; padding: 2px 12px; color: var(--muted); }

@@ -1,0 +1,350 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/writing-a-bridge.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Writing a bridge</h1>
+<p class="lead">A bridge is a plugin, <code>&lt;alias&gt;.so</code>, that carries values between the broker and a
+transport that is not NGSI-LD - an MQTT server, a Modbus device, a DDS network, a CKAN portal. The contract it
+satisfies is <a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>; a new
+bridge starts from <a href="https://github.com/SEAMWARE/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>,
+which builds, loads into a broker and moves a value both ways before a line of the new protocol is written.</p>
+
+<figure class="g-fig">
+<svg viewBox="0 0 880 200" role="img" aria-label="A device talks its transport to the bridge plugin; the plugin calls sampleIn on the broker for a value that arrives, and the broker calls publish on the plugin for a value written; the broker's Channel maps the endpoint to an entity attribute">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <rect x="20" y="60" width="140" height="70" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="90" y="92" text-anchor="middle" style="fill: var(--text);">device / peer</text>
+    <text x="90" y="112" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">its own protocol</text>
+
+    <rect x="240" y="60" width="170" height="70" rx="8" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <text x="325" y="92" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">&lt;alias&gt;.so</text>
+    <text x="325" y="112" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">endpoint, json, time</text>
+
+    <rect x="530" y="60" width="150" height="70" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="605" y="92" text-anchor="middle" style="fill: var(--text);">the broker</text>
+    <text x="605" y="112" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">Channels</text>
+
+    <rect x="740" y="60" width="120" height="70" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="800" y="92" text-anchor="middle" style="fill: var(--text);">entity</text>
+    <text x="800" y="112" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">attribute</text>
+
+    <line x1="160" y1="95" x2="240" y2="95" style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="680" y1="95" x2="740" y2="95" style="stroke: var(--line); stroke-width: 1.5;"/>
+
+    <line x1="410" y1="80" x2="530" y2="80" style="stroke: var(--ok); stroke-width: 1.5;"/>
+    <text x="470" y="70" text-anchor="middle" style="fill: var(--ok); font-family: var(--mono); font-size: 12px;">sampleIn() &#8594;</text>
+    <line x1="410" y1="112" x2="530" y2="112" style="stroke: var(--accent-2); stroke-width: 1.5;"/>
+    <text x="470" y="132" text-anchor="middle" style="fill: var(--accent-2); font-family: var(--mono); font-size: 12px;">&#8592; publish()</text>
+
+    <text x="325" y="170" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">knows endpoints, not entities</text>
+    <text x="635" y="170" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">endpoint &#8596; attribute: the broker's</text>
+  </g>
+</svg>
+<figcaption>The seam is <code>(endpoint, json, time)</code> in both directions. Which entity attribute an endpoint is
+belongs to the broker (a Channel, from the bridge configuration file); the plugin carries bytes.</figcaption>
+</figure>
+
+<h2 id="concepts">What a bridge carries</h2>
+<table class="gtable">
+  <tr><td>Endpoint</td><td>the transport's own name for a value - an MQTT topic, a Modbus register, a CKAN resource
+  id. Exact, as the wire spells it: a sample finds its Channel by <code>(alias, endpoint)</code>.</td></tr>
+  <tr><td>Channel</td><td>this endpoint &#8596; this attribute of this entity, this direction. Made by the broker from
+  the <code>ngsild</code> section of the plugin's member of the <code>--bridgeConfig</code> file, shown on
+  <code>GET /ngsi-ld/v1/channels</code>. A Channel the plugin refuses stays, <code>dormant</code>, with the reason.</td></tr>
+  <tr><td>DataChannel</td><td>one endpoint whose samples are records (a row: one JSON object, one member per column),
+  each made into entities by the broker's mapping - inbound, <code>GET /ngsi-ld/v1/dataChannels</code>. The plugin's
+  side is the same <code>sampleIn</code>, one record a call. <a href="#docs/ckan-bridge">The CKAN bridge</a> is one.</td></tr>
+  <tr><td>Bridge</td><td>one transport instance - one connection, one server - on <code>GET /ngsi-ld/v1/bridges</code>.
+  <code>--bridges &lt;alias&gt;</code> loads the plugin; nothing loads one at runtime or from the configuration.</td></tr>
+</table>
+<p>The broker does the NGSI-LD work: a sample becomes an attribute write (<code>observedAt</code> = the sample's
+time), with its notifications and its temporal event. A value that came in from a transport is never published back
+out of it; keeping its own writes from coming back in as samples is the plugin's job. The concepts and the
+configuration file: <a href="#docs/plugin-architecture/bridges">Plugin architecture - what crosses a bridge</a>.</p>
+
+<h2 id="lifecycle">The entry points, in the order they are called</h2>
+<p><code>corBridge/BridgeDriver.h</code> is what the plugin fills in (broker &#8594; plugin),
+<code>corBridge/BridgeBroker.h</code> what the broker hands it (plugin &#8594; broker). Every slot is documented in the
+header; <a href="#docs/api-corbridge">the corBridge API page</a> lists them.</p>
+<table class="gtable">
+  <tr><th>Entry point</th><th>Thread</th><th>What the plugin does</th></tr>
+  <tr><td><code>bridgeRegister(BridgeDriver*)</code></td><td>broker, at load</td><td>the one function the broker looks
+  up: fills in the alias, the version and the entry points it has</td></tr>
+  <tr><td><code>init(configFile, brokerP)</code></td><td>broker, last in start-up</td><td>keeps <code>brokerP</code> (valid
+  until <code>close</code> returns), reads its own member of the configuration file, brings the transport up.
+  <code>configFile</code> is the <code>--bridgeConfig</code> file, else <code>bridges.json</code> in
+  <code>/opt/seamware/etc</code> (<code>$SEAMWARE_ETC_DIR</code>) when it exists, else NULL</td></tr>
+  <tr><td><code>channelTypedAdd</code> / <code>channelAddInfo</code> / <code>channelAdd</code></td><td>broker, after
+  <code>init</code></td><td>once per channel: checks the endpoint and its <code>channelInfo</code>, subscribes. The broker
+  calls the newest the plugin has: <code>channelTypedAdd</code> (ABI 15), else <code>channelAddInfo</code> (ABI 9),
+  else <code>channelAdd</code></td></tr>
+  <tr><td><code>brokerP-&gt;sampleIn(...)</code></td><td>the plugin's own</td><td>a value arrived</td></tr>
+  <tr><td><code>brokerP-&gt;channelStatusIn(...)</code></td><td>the plugin's own, or inside the add call</td><td>ABI 12: a
+  channel carries, or not and why - its <code>status</code> and <code>statusReason</code></td></tr>
+  <tr><td><code>publish(endpoint, json)</code></td><td>broker, inside the request that wrote the attribute</td><td>hands
+  the value to the transport and returns - must not block</td></tr>
+  <tr><td><code>versionInfo()</code></td><td>broker</td><td>one static line, copied into <code>GET /version</code></td></tr>
+  <tr><td><code>close()</code></td><td>broker, at shutdown</td><td>returns only once no plugin thread can call
+  <code>sampleIn</code> any more</td></tr>
+</table>
+<p><code>channelDel</code> is in the contract and is not called: channels come from the configuration file (and from
+endpoints a transport discovers) and none is removed while the broker runs. A plugin may leave it NULL.</p>
+
+<h2 id="register">bridgeRegister and the ABI handshake</h2>
+<p><code>BRIDGE_ABI_VERSION</code> is <b>16</b>. The structs are append-only - never reordered, resized or repurposed -
+and the broker owns them: it zeroes the <code>BridgeDriver</code>, writes <b>its</b> <code>BRIDGE_ABI_VERSION</code>
+into <code>abiVersion</code>, and calls <code>bridgeRegister</code>. The struct has the size of the broker's header,
+so the plugin fills in no slot the broker is too old to have, then writes its own version back. A mismatch is logged
+(INFO), not refused, and an older plugin's unfilled slots are NULL - which is how "not supported" is spelled. From
+the template:</p>
+<pre>__attribute__((visibility("default"))) void bridgeRegister(BridgeDriver* driverP)
+{
+  if (driverP-&gt;abiVersion &lt; 1)
+    driverP-&gt;abiVersion = 1;                          <span class="c">// a host from before the handshake</span>
+
+  driverP-&gt;alias       = "tmpl";                      <span class="c">// --bridges tmpl, and its member of --bridgeConfig</span>
+  driverP-&gt;version     = "0.1.0";
+  driverP-&gt;args        = NULL;
+  driverP-&gt;init        = tmplInit;
+  driverP-&gt;close       = tmplClose;
+  driverP-&gt;versionInfo = tmplVersionInfo;
+  driverP-&gt;channelAdd  = tmplChannelAdd;
+  driverP-&gt;channelDel  = tmplChannelDel;
+  driverP-&gt;publish     = tmplPublish;
+
+  if (driverP-&gt;abiVersion &gt;= 9)
+    driverP-&gt;channelAddInfo = tmplChannelAddInfo;
+
+  driverP-&gt;abiVersion  = BRIDGE_ABI_VERSION;
+}</pre>
+<p>The other direction is the same rule: an upcall added after ABI 1 is called only after checking
+<code>brokerP-&gt;abiVersion</code> <b>and</b> that the pointer is not NULL - a host that is not the broker (the test
+client) fills in only what it needs, and a broker built without a feature leaves its slot NULL:</p>
+<pre>#if BRIDGE_ABI_VERSION &gt;= 12
+  if ((brokerP != NULL) &amp;&amp; (brokerP-&gt;abiVersion &gt;= 12) &amp;&amp; (brokerP-&gt;channelStatusIn != NULL))
+    brokerP-&gt;channelStatusIn("tmpl", endpoint, BridgeChannelDormant, why);
+#endif</pre>
+<p>A plugin written in C++ declares <code>bridgeRegister</code> <code>extern "C"</code>, or the broker's
+<code>dlsym</code> does not find it.</p>
+
+<h2 id="slots">The optional slots</h2>
+<p>A slot left NULL means "not supported": the broker checks every slot before calling it, and treats a NULL as
+<code>BRIDGE_UNSUPPORTED</code>. A plugin fills in what its transport does - the template fills in the ABI 1 slots and
+<code>channelAddInfo</code>; a bridge that only reads (inbound channels) has no <code>publish</code>.</p>
+<table class="gtable">
+  <tr><th>ABI</th><th><code>BridgeDriver</code> slot</th><th>What it is for</th></tr>
+  <tr><td>1</td><td><code>args</code></td><td>command-line options of the plugin's own (<code>CorArg*</code>), shown by
+  <code>coraine -u</code> under <code>Bridge (&lt;alias&gt;) plugin options:</code></td></tr>
+  <tr><td>2-4</td><td><code>serviceInvoke</code>, <code>serverIface</code>, <code>serviceInvokeTracked</code>,
+  <code>actionGoalSend</code>, <code>actionGoalCancel</code></td><td>request/reply services and long-running actions
+  (the broker as a client), as <a href="#docs/dds">the DDS bridge</a> carries them; the plugin owns the correlation,
+  the broker chooses the token</td></tr>
+  <tr><td>9</td><td><code>channelAddInfo</code></td><td>the add call with the channel's <code>channelInfo</code>: JSON
+  text, an array of <code>{"key", "value"}</code> strings, or NULL. The broker checks the shape and never a key - an
+  unknown key is the plugin's to refuse (<code>BRIDGE_BAD_INPUT</code>)</td></tr>
+  <tr><td>10</td><td><code>notifySchemes</code>, <code>notify</code></td><td>notifications to a URI scheme of the
+  transport (<code>"mqtt,mqtts"</code>); <code>notify</code> blocks until the message is handed over or acknowledged.
+  A subscription whose scheme no loaded bridge claims is refused when it is created - <a href="#docs/mqtt-bridge">the
+  MQTT bridge</a></td></tr>
+  <tr><td>11</td><td><code>serviceSchemes</code>, <code>serviceExecute</code>, <code>serviceCancel</code></td><td>Service
+  Execution through the bridge's transport; progress and outcome come back through
+  <code>serviceUpdateIn</code></td></tr>
+  <tr><td>13</td><td><code>payloadCheck</code></td><td>refuse a value a client writes to an attribute the bridge's
+  channels map, before anything is sent or stored - yes or no, never a changed value</td></tr>
+  <tr><td>14</td><td><code>inventory</code></td><td>what the transport can carry, as JSON, for a mapping tool:
+  <code>GET /admin/bridges/{bridge}/inventory</code></td></tr>
+  <tr><td>15</td><td><code>channelTypedAdd</code></td><td>the add call with the channel's type
+  (<code>BridgeChannelType</code>): a Channel's endpoint and a DataChannel's are told apart. A type the plugin does not
+  carry is <code>BRIDGE_UNSUPPORTED</code>, and that channel is dormant</td></tr>
+</table>
+
+<h3 id="upcalls">What the broker offers</h3>
+<table class="gtable">
+  <tr><th>ABI</th><th><code>BridgeBroker</code> slot</th><th>What it is for</th></tr>
+  <tr><td>1</td><td><code>sampleIn</code></td><td>a value arrived: <code>(bridgeName, endpoint, json, publishTime)</code>,
+  the time in nanoseconds since the epoch, 0 when the transport did not say. <code>BRIDGE_NOT_FOUND</code> is no
+  error: nothing claims the endpoint</td></tr>
+  <tr><td>1</td><td><code>logFunction</code></td><td>a line in the broker's log, file/line/function as the plugin passes
+  them - for forwarding a transport library's own log sink</td></tr>
+  <tr><td>2-7</td><td><code>sampleQualifiedIn</code>, <code>replyIn</code>, <code>goalEventIn</code>,
+  <code>goalEventPartIn</code>, <code>sampleMetaIn</code>, <code>replyMetaIn</code>, <code>goalEventMetaIn</code>,
+  <code>replyExchangeIn</code></td><td>replies and goal events, a sub-attribute and an instance
+  (<code>datasetId</code>) the plugin names, and a <code>meta</code> object whose members become Property
+  sub-attributes</td></tr>
+  <tr><td>8</td><td><code>endpointDiscoveredIn</code></td><td>the transport found a service or an action; the broker may
+  make a channel for it on the bridge's catch-all entity and hand it back through the add call</td></tr>
+  <tr><td>11</td><td><code>serviceUpdateIn</code></td><td>a Service Execution's progress and outcome</td></tr>
+  <tr><td>12</td><td><code>channelStatusIn</code></td><td>whether a channel carries, and why not, at any time</td></tr>
+  <tr><td>16</td><td><code>httpListen</code></td><td>the broker serves a port for the plugin - plain HTTP, every request
+  handed to a <code>BridgeHttpHandler</code>, no NGSI-LD route and no authentication on it. NULL also when the broker
+  is built without <code>COR_FEATURE_BRIDGE_HTTP_LISTEN</code></td></tr>
+</table>
+
+<h2 id="rules">Return codes and the rules of the seam</h2>
+<table class="gtable">
+  <tr><th>Code</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>BRIDGE_OK</code></td><td>0</td><td>done</td></tr>
+  <tr><td><code>BRIDGE_ERR</code></td><td>-1</td><td>the transport, or the plugin, failed</td></tr>
+  <tr><td><code>BRIDGE_NOT_FOUND</code></td><td>-2</td><td>no such endpoint / channel</td></tr>
+  <tr><td><code>BRIDGE_UNSUPPORTED</code></td><td>-3</td><td>the plugin does not implement this</td></tr>
+  <tr><td><code>BRIDGE_BAD_INPUT</code></td><td>-4</td><td>malformed endpoint or payload</td></tr>
+</table>
+<ul>
+  <li><b>Plain data.</b> Every parameter is <code>const char*</code>, an integer or a <code>bool</code>: no tree node,
+  no allocator, no NGSI-LD type. A plugin need not be C - the DDS bridge is C++.</li>
+  <li><b>Borrowed.</b> The <code>json</code> handed to <code>publish</code> (and every other text the broker passes) is
+  the broker's for the duration of the call: copy what is needed after it. The broker parses what the plugin hands to
+  <code>sampleIn</code> into its own buffer before returning.</li>
+  <li><b>Threads.</b> <code>publish</code>, <code>serviceInvoke</code>, <code>actionGoalSend</code> and
+  <code>payloadCheck</code> run on a broker thread inside a client's request and must not block. <code>sampleIn</code>
+  and the other upcalls come from the plugin's own threads; the broker sets up its per-request state and takes its
+  locks inside the call, and the plugin prepares nothing. Call it without a lock of the plugin's own held that a broker
+  thread inside <code>publish</code> or the add call may be waiting for - the template's poller releases its mutex
+  first.</li>
+  <li><b>Refusing a channel.</b> Say why through <code>channelStatusIn</code> before the add call returns
+  <code>BRIDGE_BAD_INPUT</code> or <code>BRIDGE_UNSUPPORTED</code>: <code>GET /ngsi-ld/v1/channels</code> then shows the
+  plugin's reason; without it, the broker's own words. The reason is shown over the API - never a credential in it.</li>
+</ul>
+
+<h2 id="symbols">Broker symbols - built against the broker</h2>
+<p>The broker is linked <code>-rdynamic</code> with the Cor-Libs whole-archived, and a plugin is
+<code>dlopen</code>ed with <code>RTLD_NOW</code>. A plugin therefore calls corLog (<code>COR_E</code>,
+<code>COR_W</code>, <code>COR_V</code>, <code>COR_I</code>, <code>COR_T</code>), corAlloc, corJson and corTree without
+linking them - the template parses its configuration with <code>corJsonParse</code> and
+<code>corTreeLookup</code> in a <code>CorAlloc</code> buffer of its own. The way into the broker's NGSI-LD side is
+<code>BridgeBroker</code> and nothing else.</p>
+<div class="g-callout warn">
+<p><b><code>BRIDGE_ABI_VERSION</code> covers the three structs and nothing else.</b> A plugin that calls Cor-Lib
+functions must be built against the same Cor-Lib sources as the broker that loads it - for a packaged broker, the
+<code>coraine-dev</code> source of the same version. A function the broker lacks fails the <code>dlopen</code>; a
+changed signature is not detected. The tree node's layout is: <code>BridgeDriver.h</code> includes
+<code>corTree/CorNode.h</code>, so the plugin carries <code>corNodeLayout</code>, and a plugin built against another
+layout is refused at load (<a href="#docs/plugin-architecture/compat">Built for this broker</a>).</p>
+</div>
+
+<h2 id="template">Starting from the template</h2>
+<pre>mkdir corOpcuaBridge &amp;&amp; git -C corBridgeTemplate archive HEAD | tar -x -C corOpcuaBridge
+cd corOpcuaBridge &amp;&amp; git init -b main
+./rename.sh opcua                      <span class="c"># tmpl -&gt; opcua everywhere: opcua.so, src/opcuaRegister.c, ...</span>
+make &amp;&amp; make test                      <span class="c"># builds, and a broker moves a value both ways through it</span>
+grep -rn --exclude-dir=.git TODO .     <span class="c"># where the protocol goes - the README and the CI too</span></pre>
+<p>An export, not a copy: <code>cp -r</code> takes the template's <code>.git</code> along, with an <code>origin</code>
+that pushes to corBridgeTemplate - <code>rename.sh</code> warns when it sees that. <code>rename.sh &lt;name&gt;</code>
+takes the bridge's alias (lowercase letters and digits, starting with a letter; not <code>tmpl</code>), replaces every
+<code>tmpl</code> / <code>Tmpl</code> / <code>TMPL</code> with <code>&lt;name&gt;</code> / <code>&lt;Name&gt;</code> /
+<code>&lt;NAME&gt;</code> and <code>corBridgeTemplate</code> with <code>cor&lt;Name&gt;Bridge</code>, renames the files
+named <code>tmpl*</code>, removes the README's "from this template" section, and deletes itself.</p>
+<table class="gtable">
+  <tr><th>File</th><th>What it is</th><th>In a real bridge</th></tr>
+  <tr><td><code>src/tmplRegister.c</code></td><td>the seam: <code>bridgeRegister</code>, the driver entry points, reading
+  <code>server</code> and <code>channelInfo</code></td><td>stays; the TODOs: the <code>channelInfo</code> keys, the
+  version line</td></tr>
+  <tr><td><code>src/tmplTransport.h</code></td><td>the transport's interface: open, close, add / remove an endpoint,
+  send, and a receive callback - nothing in it knows the broker</td><td>stays, or grows</td></tr>
+  <tr><td><code>src/tmplTransport.c</code></td><td>the example transport</td><td>replaced by the protocol</td></tr>
+  <tr><td><code>test/funcTests/</code></td><td><code>cases/bridge_tmpl.test</code>, <code>corTestFunctions.sh</code>,
+  <code>corTestParams.sh</code></td><td>the device becomes the protocol's test peer</td></tr>
+  <tr><td><code>makefile</code></td><td><code>BUILD=debug|release</code>, <code>install</code>, <code>contract</code>,
+  <code>test</code></td><td>the transport library goes in <code>LIBS</code></td></tr>
+  <tr><td><code>.github/workflows/ci.yml</code></td><td>the contract check, both builds and the tests, against the cor
+  stack</td><td>installs the transport library</td></tr>
+</table>
+<p>The transport interface a real protocol fills in:</p>
+<pre>typedef void (*TmplReceiveFunc)(const char* endpoint, const char* json, int64_t timeNs);
+
+extern int  tmplTransportOpen(CorNode* serverP, TmplReceiveFunc receiveF);
+extern void tmplTransportClose(void);
+extern int  tmplTransportEndpointAdd(const char* endpoint, BridgeDirection direction, bool text, const char** whyP);
+extern int  tmplTransportEndpointDel(const char* endpoint);
+extern int  tmplTransportSend(const char* endpoint, const char* json);</pre>
+<p>Connect in <code>tmplTransportOpen</code> without waiting for the peer where the protocol allows it - the broker's
+start should not hang or fail on a device that is not up yet; subscribe in <code>tmplTransportEndpointAdd</code>; send
+in <code>tmplTransportSend</code>; call <code>receiveF</code> from the thread the protocol library delivers on. A
+transport with a slow round trip queues in <code>tmplTransportSend</code> and sends from a thread of its own, as
+<a href="#docs/modbus-bridge">the Modbus bridge</a> does.</p>
+
+<h3 id="example-transport">The example transport</h3>
+<p>A directory of files stands in for a device. An endpoint is a relative file path under <code>server.dir</code>
+(letters, digits, <code>_ - . /</code>, no <code>..</code>); one thread polls every inbound endpoint's file each
+<code>pollMs</code> and reports a changed content once, with the file's modification time as the sample's time. A
+published value is written to a temporary file and renamed over the endpoint's file, and remembered as its last
+content, so it does not come back in as a sample. At most 64 endpoints.</p>
+
+<h2 id="config">Configuration</h2>
+<p>One <code>--bridgeConfig</code> file serves every bridge, one member per alias. The <code>ngsild</code> section is
+the broker's - it makes the channels; the rest of the member is the plugin's, read in <code>init</code>:</p>
+<pre>{ "tmpl": { "server": { "dir": "/var/lib/tmpl", "pollMs": 1000 },
+            "ngsild": { "topics": {
+              "tank1/level": { "entityId": "urn:ngsi-ld:Tank:T1", "entityType": "Tank", "attribute": "level" },
+              "tank1/state": { "entityId": "urn:ngsi-ld:Tank:T1", "entityType": "Tank", "attribute": "state",
+                               "channelInfo": [ { "key": "format", "value": "text" } ] } } } } }</pre>
+<table class="gtable">
+  <tr><td><code>server.dir</code></td><td>an absolute path - mandatory; <code>init</code> fails without it</td></tr>
+  <tr><td><code>server.pollMs</code></td><td>an integer, 10-3600000, default 1000</td></tr>
+  <tr><td><code>channelInfo</code> <code>format</code></td><td><code>json</code> (the default: the content is JSON) or
+  <code>text</code> (the content becomes a JSON string); any other key is refused</td></tr>
+</table>
+<p>A channel's direction is <code>both</code> unless the file says otherwise, and every configured attribute exists
+from start-up with the value <code>"uninitialized"</code> until the first sample. A sample on an endpoint no channel
+claims goes to the catch-all entity <code>urn:ngsi-ld:tmpl:default</code>, unless the section says
+<code>"defaultEntity": false</code>.</p>
+<pre>coraine --bridges tmpl --bridgeConfig bridges.json            <span class="c"># installed in &lt;plugin dir&gt;/bridge</span>
+coraine --bridges $PWD/tmpl.so --bridgeConfig bridges.json    <span class="c"># a name with a '/': a path, used as it is</span></pre>
+
+<h2 id="build">Building</h2>
+<pre>make                  <span class="c"># tmpl.so, debug (traces compiled in: -DCOR_T_ON)</span>
+make BUILD=release
+make contract         <span class="c"># does src/tmplRegister.c still satisfy BridgeDriver.h?</span>
+make install          <span class="c"># to /opt/seamware/plugins/bridge (PLUGIN_DIR=...)</span></pre>
+<p>The Cor-Lib headers are found in <code>COR_LIBS</code>, default <code>..</code> - the sibling repositories
+<a href="#docs/cor-libs">corLibs</a>' <code>bootstrap.sh</code> clones. Without them and with the
+<code>coraine-dev</code> package installed, the installed broker's source
+(<code>/usr/share/coraine/src/coraine-src.tar.xz</code>) is unpacked into <code>.coraine-src/</code> and used. For a
+broker built with <a href="#docs/building/coraine-build">coraine-build</a> <code>&lt;dir&gt;</code>:
+<code>make COR_LIBS=&lt;dir&gt;</code> and <code>make install PLUGIN_DIR=&lt;dir&gt;/install/plugins/bridge</code>. The
+<code>.so</code> is compiled <code>-fvisibility=hidden</code>, so of the plugin's own functions only
+<code>bridgeRegister</code> is exported. <code>make contract</code> compiles <code>src/tmplRegister.c</code> alone - it
+includes no transport header, so the check runs where the transport library is not installed.</p>
+
+<h2 id="tests">The functional test</h2>
+<pre>make test</pre>
+<p>Starts <code>coraine</code> from <code>PATH</code> (the package, or <code>. &lt;dir&gt;/install/env</code> after
+<code>coraine-build</code>) on port 19026 with <code>--database ramDB</code> - no database server - loading
+<code>./tmpl.so</code> by path, and runs <code>test/funcTests/cases/*.test</code> with corTest
+(<a href="#docs/testing">Testing</a>). <code>COR_TEST_NO_REAP=on</code> is set: corTest's start-up reaping kills every
+<code>coraine</code> on the host, and these tests stop their broker by its pid. <code>TMPL_BROKER</code>,
+<code>TMPL_PORT</code>, <code>TMPL_PLUGIN</code> and <code>TMPL_TEST_DIR</code> override; the broker's log is
+<code>/tmp/tmpl-bridge-test/broker.log</code>.</p>
+<p><code>bridge_tmpl.test</code> writes a value on the device (<code>deviceWrite tank1/level 42.5
+2026-10-01T12:00:00Z</code>) and waits for the attribute (<code>entityAwait</code>), checks a <code>text</code> channel,
+PATCHes an attribute and waits for the device to receive it (<code>deviceAwait</code>), and lists the channels:</p>
+<pre>../escape dormant samplesIn=0 samplesOut=0 - not an endpoint of this transport - a relative file path, no '..'
+tank1/level available samplesIn=1 samplesOut=0
+tank1/setpoint available samplesIn=0 samplesOut=1
+tank1/state available samplesIn=1 samplesOut=0</pre>
+<p>The refused endpoint shows the plugin's reason, and <code>samplesIn=0</code> on <code>tank1/setpoint</code> is the
+no-echo check. A test asserts on what the API says, never on the broker's log. In a real bridge the device is the
+protocol's peer, started in the test's <code>--INIT--</code> section - corMqttBridge's tests start mosquitto.</p>
+
+<h2 id="ci">CI</h2>
+<p><code>.github/workflows/ci.yml</code> runs on pull requests in the cor stack's CI image
+(<code>quay.io/seamware/coraine-ci</code>, a pinned tag - a TODO says to move it with coraine's). The repositories are
+siblings, as on a workstation: the bridge in <code>stack/bridge</code>, corLibs and coraine beside it. The steps:
+<code>./bootstrap.sh</code> in corLibs, <code>make contract</code> (first, so a broken contract is named as such),
+<code>make BUILD=release</code> then a debug build, <code>make di</code> in coraine, then <code>make test</code> with
+<code>CORTEST=../corLibs/bin/corTest</code>. A failing run keeps the tests' <code>.out</code>, <code>.diff</code> and
+<code>.stderr</code> files and the broker's log.</p>
+
+<h2 id="more">Bridges to read</h2>
+<ul class="g-cards">
+  <li><a href="#docs/mqtt-bridge"><b>MQTT</b><span>a library's own network thread, notifications to <code>mqtt://</code>, no echo on MQTT 3.1.1</span></a></li>
+  <li><a href="#docs/modbus-bridge"><b>Modbus</b><span>polling, a write queue, <code>channelInfo</code> for a register's type and scale</span></a></li>
+  <li><a href="#docs/dds"><b>DDS and ROS 2</b><span>C++, services and actions, discovered endpoints</span></a></li>
+  <li><a href="#docs/ckan-bridge"><b>CKAN</b><span>inbound only, no <code>publish</code>; DataChannels of records</span></a></li>
+  <li><a href="#docs/api-corbridge"><b>corBridge API</b><span>every struct, slot, enum and helper of the contract</span></a></li>
+  <li><a href="#docs/plugin-architecture"><b>Plugin architecture</b><span>how plugins are found, loaded and checked</span></a></li>
+</ul>
+<p>The broker's own <code>src/plugins/bridge/loopback</code> has no transport and fills in every entry point, services
+and actions included - the tests' instrument. Repositories:
+<a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>,
+<a href="https://github.com/SEAMWARE/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>.</p>
+</article>

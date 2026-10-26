@@ -1,0 +1,260 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-cortree.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corTree - the tree</h1>
+<p class="lead">The in-memory tree every part of coraine works on: the node, <code>CorNode</code>, and the functions
+that build, edit, search, clone, sort and free a tree of them. It parses and renders nothing - JSON in and out is
+<a href="#docs/lib-corjson">corJson</a>; the binary cor format (<code>corTreeBin.h</code>) is another producer and
+consumer of the same tree.</p>
+
+<h2 id="node">The node</h2>
+<pre>typedef struct CorNode
+{
+  char*            name;     // NULL or "" for an array item
+  struct CorNode*  next;     // the next sibling
+  CorValueType     type;     // CorString, CorInt, CorFloat, CorBoolean, CorNull, CorObject, CorArray
+  unsigned char    flags;    // for the users of the library - opaque to corTree
+  unsigned char    kind;     // what an object is, for the users of the library - opaque to corTree
+  uint16_t         termId;   // for the users of the library - opaque to corTree
+  CorValue         value;    // b, i, f, s - or, for a container, head and tail. LAST
+} CorNode;</pre>
+<p>A tree is nodes linked by <code>next</code>: a container (<code>CorObject</code>, <code>CorArray</code>) holds the
+first and the last of its children in <code>value.head</code> and <code>value.tail</code>, and each child points to
+the next. A child does not know its parent. An array's items have no name; an object's members are kept in the
+order they were added - corTree never reorders a container unless asked (<a href="#docs/lib-cortree/sort">Sorting</a>).</p>
+<table class="gtable">
+  <tr><th>Type</th><th>Value</th></tr>
+  <tr><td><code>CorString</code></td><td><code>value.s</code>, a <code>char*</code></td></tr>
+  <tr><td><code>CorInt</code></td><td><code>value.i</code>, a <code>long long</code></td></tr>
+  <tr><td><code>CorFloat</code></td><td><code>value.f</code>, a <code>double</code></td></tr>
+  <tr><td><code>CorBoolean</code></td><td><code>value.b</code></td></tr>
+  <tr><td><code>CorNull</code></td><td>none</td></tr>
+  <tr><td><code>CorObject</code>, <code>CorArray</code></td><td><code>value.head</code>, <code>value.tail</code> - <code>NULL</code> for an empty one</td></tr>
+</table>
+<p><code>CorNone</code> (0) is no type: a node is never built with it. <code>corTreeValueType(type)</code> names a
+type, <code>corTreeValue(nodeP, buf, bufLen)</code> gives a node's value as text.</p>
+
+<h3 id="flags">flags, kind, termId</h3>
+<p>Three fields corTree carries and never reads: they belong to the code that uses the tree. In coraine,
+<code>termId</code> is which NGSI-LD core term a name is (0: none), <code>kind</code> what an object is - an
+attribute's type (0: a plain object) - and the cor format writes both instead of the strings they stand for
+(<a href="#docs/cor-protocol">cor://</a>). <code>flags</code> is bits for any user.</p>
+<div class="g-callout warn">
+<p><b>Every builder zeroes all three, and <code>corTreeClone</code> copies all three.</b> Code that builds nodes
+without the builders - a parser, a database reader - must do the same, or what a node is taken for depends on which
+code path made it.</p>
+</div>
+
+<h2 id="layout">The layout - 40 bytes, and 32</h2>
+<figure class="g-fig">
+<svg viewBox="0 0 880 190" role="img" aria-label="The 40 bytes of a CorNode: name at 0, next at 8, type at 16, flags at 20, kind at 21, termId at 22, value at 24 and value.tail at 32; a scalar node in the tree heap ends at 32">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <rect x="40"  y="40" width="160" height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="200" y="40" width="160" height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="360" y="40" width="80"  height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="440" y="40" width="20"  height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="460" y="40" width="20"  height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="480" y="40" width="40"  height="56" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <rect x="520" y="40" width="160" height="56" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <rect x="680" y="40" width="160" height="56" style="fill: none; stroke: var(--accent-2); stroke-width: 2; stroke-dasharray: 5 4;"/>
+
+    <text x="120" y="73" text-anchor="middle" style="fill: var(--text); font-family: var(--mono);">name</text>
+    <text x="280" y="73" text-anchor="middle" style="fill: var(--text); font-family: var(--mono);">next</text>
+    <text x="400" y="73" text-anchor="middle" style="fill: var(--text); font-family: var(--mono);">type</text>
+    <text x="450" y="110" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">flags</text>
+    <text x="470" y="126" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">kind</text>
+    <text x="500" y="110" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">termId</text>
+    <text x="600" y="66" text-anchor="middle" style="fill: var(--accent-2); font-family: var(--mono);">value</text>
+    <text x="600" y="84" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">b · i · f · s · head</text>
+    <text x="760" y="66" text-anchor="middle" style="fill: var(--accent-2); font-family: var(--mono);">value.tail</text>
+    <text x="760" y="84" text-anchor="middle" style="fill: var(--muted); font-size: 11px;">a container's only</text>
+
+    <g style="fill: var(--dim); font-family: var(--mono); font-size: 11px;">
+      <text x="40"  y="32">0</text><text x="200" y="32">8</text><text x="360" y="32">16</text>
+      <text x="520" y="32">24</text><text x="680" y="32">32</text><text x="828" y="32">40</text>
+    </g>
+
+    <line x1="40" y1="150" x2="680" y2="150" style="stroke: var(--ok); stroke-width: 2;"/>
+    <text x="360" y="170" text-anchor="middle" style="fill: var(--ok); font-size: 12px;">a scalar in the tree heap - 32 bytes</text>
+    <line x1="40" y1="182" x2="840" y2="182" style="stroke: var(--line); stroke-width: 2;"/>
+  </g>
+</svg>
+<figcaption>A <code>CorNode</code> on a 64-bit machine. <code>CorNode.h</code> asserts the size (40), that
+<code>value</code> is at 24 and <code>value.tail</code> at 32.</figcaption>
+</figure>
+<p>This is the <b>prefix layout</b>: <code>value</code> is last, and its last 8 bytes, <code>value.tail</code>, are a
+container's only. A node that is not a container can therefore be allocated without them - 32 bytes - and the trees
+that live on are: <code>corTreeClone(NULL, ...)</code>, the clone into the <a href="#docs/lib-cortree/heap">tree
+heap</a>, allocates every scalar so. Every builder allocates 40.</p>
+<div class="g-callout warn">
+<p><b>A 32-byte node is never made a container in place, and never copied whole.</b> <code>*a = *b</code> from a
+32-byte node reads 8 bytes it does not have; turning it into an object writes <code>value.tail</code> past its end.
+<code>corTreeNodeCopy(toP, fromP)</code> copies the bytes <code>fromP</code> has (shallow: a container's copy shares
+its children). A change of size is a new node, put where the old one was - <code>corTreeChildReplace</code>.</p>
+</div>
+
+<h3 id="layout-number">The layout's number</h3>
+<p>The layout has a number, <code>corNodeLayout</code> - 2 - which every object built with <code>CorNode.h</code>
+carries (a weak, exported symbol), and every object built with it also references <code>corNodeLayout2</code>, which
+only a corTree with this layout defines. A plugin built against another layout than its broker is refused either way,
+instead of reading every node at the wrong offsets: a broker refuses a plugin with another number
+(<a href="#docs/lib-corplugin/layout">corPlugin</a>), and a broker older than layout 2 fails the plugin's
+<code>dlopen</code> with <code>undefined symbol: corNodeLayout2</code>
+(<a href="#docs/plugin-architecture/cornode-layout">Plugin architecture</a>). A change of the layout is a new number
+and a new symbol name.</p>
+
+<h2 id="build">Building a tree</h2>
+<pre>CorNode* corTreeObject(CorAlloc* kaP, const char* name);
+CorNode* corTreeArray(CorAlloc* kaP, const char* name);
+CorNode* corTreeString(CorAlloc* kaP, const char* name, const char* value);
+CorNode* corTreeInteger(CorAlloc* kaP, const char* name, long long value);
+CorNode* corTreeFloat(CorAlloc* kaP, const char* name, double value);
+CorNode* corTreeBoolean(CorAlloc* kaP, const char* name, bool value);
+CorNode* corTreeNull(CorAlloc* kaP, const char* name);
+
+void     corTreeChildAdd(CorNode* container, CorNode* child);</pre>
+<p>Each builder allocates one block: the node, then its name, then - a string's - its value, both copied in. The
+first argument is where the block comes from:</p>
+<table class="gtable">
+  <tr><th><code>kaP</code></th><th>The block</th><th>Freed</th></tr>
+  <tr><td>a <code>CorAlloc*</code> (<a href="#docs/lib-coralloc">corAlloc</a>)</td><td>carved from the allocator's buffers</td><td>with the allocator, all at once - never node by node</td></tr>
+  <tr><td><code>NULL</code></td><td>the <a href="#docs/lib-cortree/heap">tree heap</a></td><td>node by node, <code>corTreeFree</code></td></tr>
+</table>
+<p>In coraine a request's trees - its parsed body, its response - are built in the request's allocator,
+<code>corRest.kallocP</code>, and go with it. This is <code>GET /admin/config</code>'s response, one object per
+option:</p>
+<pre>CorAlloc* allocP = corRest.kallocP;
+CorNode*  root   = corTreeObject(allocP, NULL);
+CorNode*  optsP  = corTreeArray(allocP, "options");
+
+CorNode* oP = corTreeObject(allocP, NULL);                   <span class="c">// an array item: no name</span>
+corTreeChildAdd(oP, corTreeString(allocP, "name", aP-&gt;longName));
+corTreeChildAdd(oP, corTreeString(allocP, "type", typeName(aP-&gt;type)));
+if (aP-&gt;secret)
+  corTreeChildAdd(oP, corTreeBoolean(allocP, "secret", true));
+corTreeChildAdd(optsP, oP);
+
+corTreeChildAdd(root, optsP);
+corRest.out.responseTree = root;</pre>
+<p>A builder returns <code>NULL</code> when it gets no memory. <code>corTreeString</code> of more than 16 KiB that
+gets none returns a string node <code>"too big string"</code> instead.</p>
+
+<h3 id="edit">Adding, removing, moving</h3>
+<table class="gtable">
+  <tr><th>Function</th><th>What it does</th></tr>
+  <tr><td><code>corTreeChildAdd</code></td><td>appends, in O(1) through <code>value.tail</code></td></tr>
+  <tr><td><code>corTreeChildPrepend</code></td><td>puts it first</td></tr>
+  <tr><td><code>corTreeChildAddSorted</code>, <code>...SortedReverse</code></td><td>inserts it by name, ascending or descending (<code>strcmp</code> order)</td></tr>
+  <tr><td><code>corTreeChildRemove(container, child)</code></td><td>unlinks it and returns it - <code>NULL</code> when it is not a child of <code>container</code>. The node's memory is untouched: it belongs to its allocator, or is the caller's to <code>corTreeFree</code>.</td></tr>
+  <tr><td><code>corTreeNodeDecouple(parent, node, prev)</code></td><td>unlinks it when the caller already has the previous sibling (<code>NULL</code>: it is the first) - no search</td></tr>
+  <tr><td><code>corTreeChildMove(from, to, child)</code></td><td>removes it from <code>from</code> and appends it to <code>to</code>; a child not in <code>from</code> is left alone</td></tr>
+  <tr><td><code>corTreeChildReplace(container, outP, inP)</code></td><td>puts <code>inP</code> where <code>outP</code> was; <code>outP</code> is unlinked, not freed</td></tr>
+  <tr><td><code>corTreeChildAddOrReplace(container, name, nodeP)</code></td><td>appends <code>nodeP</code>, or - when the object has a member of that name - copies <code>nodeP</code>'s type and value into that member</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b><code>corTreeChildAdd</code> is not a move.</b> It sets <code>child-&gt;next</code> to <code>NULL</code>: a node
+still in another container cuts that list short after it, and leaves the other container's <code>tail</code> pointing
+into this one. Unlink it first, or use <code>corTreeChildMove</code>. A node is in one container at a time.</p>
+</div>
+
+<h2 id="find">Finding a node</h2>
+<pre>CorNode* corTreeLookup(CorNode* container, const char* name);
+CorNode* corTreeNavigate(CorNode* treeP, const char** pathCompV, CorNode** parentPP, bool* onlyLastMissingP);
+int      corTreeChildCount(CorNode* containerP);</pre>
+<ul>
+  <li><b><code>corTreeLookup</code></b> - the first member of an object with that name; <code>NULL</code> for none,
+  and always for an array. It walks the members: O(n).</li>
+  <li><b><code>corTreeNavigate</code></b> - a path of member names, ending with <code>NULL</code>, looked up level by
+  level. <code>*parentPP</code> gets the object the last lookup was made in, and <code>*onlyLastMissingP</code> says,
+  on a miss, whether only the last name was missing - where a new member would go. Both may be <code>NULL</code>.</li>
+  <li><b>In an array</b> of strings: <code>corTreeStringValueLookupInArray(arrayP, value)</code> (every item must be
+  a string), <code>corTreeStringSiblingFind(itemP, value)</code> from an item on.</li>
+</ul>
+<pre>const char* path[] = { "location", "value", "type", NULL };
+CorNode*    parentP;
+bool        onlyLastMissing;
+CorNode*    typeP = corTreeNavigate(entityP, path, &amp;parentP, &amp;onlyLastMissing);
+
+for (CorNode* attrP = entityP-&gt;value.head; attrP != NULL; attrP = attrP-&gt;next)   <span class="c">// every member</span>
+  ...</pre>
+
+<h2 id="clone">Cloning</h2>
+<pre>CorNode* corTreeClone(CorAlloc* kaP, CorNode* nodeP);</pre>
+<p>A deep copy of a node and everything under it, with <code>flags</code>, <code>kind</code> and
+<code>termId</code>; the clone has no <code>next</code>. Into an allocator, every node is a builder's - 40 bytes.
+Into the tree heap (<code>kaP</code> <code>NULL</code>), a scalar is 32 bytes. This is how a request's tree becomes
+one that outlives the request - a Snapshot's filter, a subscription patched into the cache:</p>
+<pre>CorNode* clone = corTreeClone(NULL, fP);   <span class="c">// long-lived: the request's allocator goes with the request</span></pre>
+<p><code>corTreeCloneMarked(kaP, nodeP, mask, fn, ctx)</code> clones the same way, except that a container whose
+<code>flags</code> have a bit of <code>mask</code>, or that has a <code>kind</code>, is cloned without them and
+<code>fn(kaP, copyP, origP, ctx)</code> is called on its clone, after its children - for a user that keeps something
+in a mark the clone must get back as members, in the clone's own pass.</p>
+
+<h2 id="heap">The tree heap</h2>
+<p>The trees that live on - corDB's entities, the subscription, registration and snapshot caches - are built with no
+allocator (<code>NULL</code>) and live in the tree heap, <code>corTreeHeap.c</code>:</p>
+<ul>
+  <li><b>One block per node</b> - the node, its name and a string value - as with <code>malloc</code>, but 8-byte
+  aligned and with no header: blocks of one size (8 to 1024 bytes, in steps of 8) carved from 16 KiB pages that each
+  hold one size.</li>
+  <li><b>A free reads nothing in the node.</b> It finds the size by the page the address is in, so a node whose name
+  or value was changed after it was built is freed as what it was allocated as. A freed block goes on its size's free
+  list and is the next one of that size handed out; pages are not given back to the system.</li>
+  <li><b>Addresses, not RAM.</b> At the first allocation the heap reserves 64 GiB of addresses (half of that, and so
+  on, down to 256 MiB, where less can be had), <code>MAP_NORESERVE</code>: what is resident is what is used. The
+  untouched part is kept out of a core dump.</li>
+  <li><b>Threads:</b> a mutex per size.</li>
+</ul>
+<table class="gtable">
+  <tr><th>Then the heap is <code>malloc</code></th><th>Why</th></tr>
+  <tr><td>a block over 1024 bytes</td><td>a long string's node</td></tr>
+  <tr><td>a build with AddressSanitizer</td><td>ASan sees a block's bounds only in <code>malloc</code>'s</td></tr>
+  <tr><td><code>COR_TREE_HEAP=malloc</code> in the environment</td><td>valgrind, likewise - coraine's <code>corTest -vt</code> sets it</td></tr>
+  <tr><td>no address range could be reserved, or the range is full</td><td>a warning, then <code>malloc</code></td></tr>
+</table>
+<p><code>corTreeHeapFree</code> tells a heap block from a <code>malloc</code>'d one by its address.
+<code>corTreeHeapBytes()</code> is the bytes of the pages handed out - in use, free blocks and page tails.</p>
+<p>What it is worth, measured: 100 000 entities of perfRun's larger store (24 nodes each), <code>corDB</code> in RAM,
+release builds, loaded in batches of 500, the broker's RSS after the load (2026-10-23, A B B A, within 0.2 %):
+270 MiB with <code>malloc</code> and 40-byte nodes, 240 MiB in the tree heap with 40-byte nodes, 231 MiB with 32-byte
+scalars - <code>-14.5 %</code> - with the load time the same in all three (<a href="#docs/performance">Performance</a>).</p>
+
+<h2 id="free">Freeing</h2>
+<pre>void corTreeFree(CorNode* nodeP);</pre>
+<p>Frees a node and everything under it, block by block. It is for trees in the tree heap - built or cloned with
+<code>NULL</code>. A tree in an allocator is never freed node by node: it goes when the allocator is reset.</p>
+<div class="g-callout warn">
+<p><b>Unlink before freeing.</b> <code>corTreeFree</code> does not take the node out of its container - a member freed
+in place leaves its container pointing at freed memory. <code>corTreeChildRemove</code> it first. And a heap tree
+must not have an allocator's node grafted into it (or the reverse): <code>corTreeFree</code> would hand that node to
+<code>free()</code>.</p>
+</div>
+<pre>corTreeChildRemove(cacheP, oldP);   <span class="c">// out of the tree first</span>
+corTreeFree(oldP);</pre>
+
+<h2 id="sort">Sorting</h2>
+<table class="gtable">
+  <tr><th>Function</th><th>Orders</th></tr>
+  <tr><td><code>corTreeSort(nodeP)</code></td><td>every object's members by name, all the way down - the items of an array are left in their order (objects inside them are sorted)</td></tr>
+  <tr><td><code>corTreeArraySort(arrayP)</code></td><td>an array's items, of any type, by <code>corTreeNodeCompare</code> (type, then name, then value; a container member by member), arrays deeper down too - after <code>corTreeSort</code> on the way in, so two items with the same content compare equal</td></tr>
+  <tr><td><code>corTreeStringArraySort(arrayP)</code></td><td>an array of strings, by value</td></tr>
+  <tr><td><code>corTreeStringArraySortedInsert(arrayP, itemP)</code></td><td>inserts a string into a sorted array of strings</td></tr>
+</table>
+<p>The order of an array is part of its value in JSON: <code>corTreeArraySort</code> is for arrays whose order carries
+no meaning - a result list, a set of errors.</p>
+
+<h2 id="traces">Trace levels</h2>
+<p>With <a href="#docs/lib-corlog">corLog</a>: <code>55</code> allocation, <code>64</code> building,
+<code>65</code> freeing, <code>66</code> lookups - <code>coraine -t 64-66</code> on a debug build.</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-cortree"><b>corTree API</b><span>every header and entry - CorNode, the builders, corTreeClone, corTreeHeap, corTreeBin, ...</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener"><b>SEAMWARE/corTree</b><span>the repository - a sibling checkout: <code>-I..</code> and <code>../corTree/libcorTree.a</code></span></a></li>
+  <li><a href="#docs/lib-corjson"><b>corJson</b><span>JSON text into a tree, a tree into JSON text</span></a></li>
+</ul>
+<p>corTree depends on <a href="#docs/lib-coralloc">corAlloc</a>, <a href="#docs/lib-corlog">corLog</a> and
+<a href="#docs/lib-corbase">corBase</a>. Everything above it uses it: corJson, <a href="#docs/lib-corjsonld">corJsonld</a>,
+<a href="#docs/lib-corngsild">corNgsild</a>, <a href="#docs/lib-cordb">corDB</a>, <a href="#docs/lib-correst">corRest</a>,
+the broker and every plugin.</p>
+</article>

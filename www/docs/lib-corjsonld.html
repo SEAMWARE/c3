@@ -1,0 +1,274 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corjsonld.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corJsonld</h1>
+<p class="lead">The JSON-LD layer of the broker: it parses <code>@context</code>s, keeps them in a cache, downloads
+the ones it has not seen through a callback, and expands and compacts the names and values of a parsed tree - term
+by term or a whole body in one pass. It never opens a socket, and it knows NGSI-LD only as far as the core context
+goes: the NGSI-LD rules sit above it, in <a href="#docs/lib-corngsild">corNgsild</a>.</p>
+
+<h2 id="model">The model</h2>
+<table class="gtable">
+  <tr><th>Thing</th><th>What it is</th></tr>
+  <tr><td><code>CorLdItem</code></td><td>one term: its short <code>name</code>, its expanded <code>id</code>, its <code>@type</code> (<code>"@id"</code>, <code>"@vocab"</code>, <code>"@json"</code>, a datatype, or NULL), its parsed <code>@container</code> (a bit of <code>CorLdContainer</code>), the <code>KJF_*</code> <code>flags</code> and, for a core term, the caller's <code>termId</code></td></tr>
+  <tr><td><code>CorLdContext</code></td><td>one parsed <code>@context</code>: a name table (expansion) and an IRI table (compaction), its <code>@vocab</code>, or - for an array <code>@context</code> - its child contexts. Plus what the cache needs: <code>url</code>, <code>id</code>, the raw <code>body</code>, its <code>kind</code> (<code>CorLdKindImplicit</code>, <code>CorLdKindCached</code>, <code>CorLdKindHosted</code> - NGSI-LD § 5.13.1), timestamps</td></tr>
+  <tr><td>the core context</td><td>the NGSI-LD core context v1.9, compiled in (<code>corLdCoreContextBody.h</code>, <code>CORLD_CORE_CONTEXT_URL</code>). It always takes part in an expansion, and it wins over every user context</td></tr>
+  <tr><td>the cache</td><td>one per process: every context downloaded, hosted or minted, found by URL or id</td></tr>
+</table>
+<p>Everything works on <a href="#docs/lib-cortree">corTree</a>'s <code>CorNode</code> trees, as
+<a href="#docs/lib-corjson">corJson</a> parses them, and allocates from a <a href="#docs/lib-coralloc">corAlloc</a>
+arena the caller passes in. The umbrella header <code>corJsonld/corJsonld.h</code> includes the rest.</p>
+
+<h2 id="init">Starting it</h2>
+<pre>int corLdInit(CorAlloc* kaP, const char* coreContextUrl, CorLdDownloadFunction downloadFn, CorLdErrorFunction errorFn);
+
+typedef char* (*CorLdDownloadFunction)(const char* url, int* statusCodeP);
+typedef void  (*CorLdErrorFunction)(int status, const char* title, const char* detail);</pre>
+<table class="g-opts">
+  <tr><th>Argument</th><th></th></tr>
+  <tr><td>kaP</td><td>the cache's allocator, for the life of the process: every cached context - downloaded, hosted, the core - lives in it. Several threads allocate into it at once, so it must be thread-safe (<code>corAllocThreadSafe</code>). coraine's is a 64 KiB static buffer with 256 KiB blocks</td></tr>
+  <tr><td>coreContextUrl</td><td>NULL or <code>CORLD_CORE_CONTEXT_URL</code>: the compiled-in core. Any other URL is downloaded through <code>downloadFn</code>. coraine passes NULL</td></tr>
+  <tr><td>downloadFn</td><td>fetches a remote <code>@context</code>: returns a <code>malloc</code>'d body (the library frees it) and sets <code>*statusCodeP</code>; anything but 200 is a failure. NULL: inline contexts only</td></tr>
+  <tr><td>errorFn</td><td>told why a context it could fetch cannot be used, as an HTTP status, a title and a detail (<a href="#docs/lib-corjsonld/errors">below</a>). May be NULL</td></tr>
+</table>
+<p>It returns 0, or -1 - also when the core context declares no <code>@vocab</code>: without one, a name no context
+defines could not be expanded at all, so it refuses to start. A second call is a no-op;
+<code>corLdCleanup()</code> resets the library's state.</p>
+<p>A broker that adds terms of its own to the core, or numbers the core terms, does it right after:</p>
+<pre>corLdInit(&amp;contextAlloc, NULL, startupContextDownload, startupContextError);
+corLdCoreTermsAdd(termV, &amp;contextAlloc);                        // { name, type } ..., { NULL, NULL }
+corLdCoreTermIdsSet(nameV, count, &amp;contextAlloc, &amp;missing);     // once, after every corLdCoreTermsAdd</pre>
+<p>This is coraine's order (<code>src/lib/startup/startupCoreContext.c</code>): <code>corLdInit</code>, the terms of
+its bridge payloads and of its NGSI-LD extensions, then corNgsild's <code>ldCoreTermIdsInit</code>, which calls
+<code>corLdCoreTermIdsSet</code> with the <code>CorTerm</code> names (<a href="#docs/lib-corjsonld/core">the core context</a>).</p>
+
+<h2 id="contexts">Parsing a context</h2>
+<pre>CorLdContext* corLdContextFromTree(CorNode* contextNode, CorAlloc* kaP, const char* baseUrl);
+CorLdContext* corLdContextFromObject(CorNode* objectNode, CorAlloc* kaP, const char* url);
+CorLdContext* corLdContextFromUrl(const char* url, CorAlloc* kaP);</pre>
+<p><code>corLdContextFromTree</code> takes the VALUE of an <code>@context</code> member - a string, an object or an
+array of them. A string is a URL: resolved against <code>baseUrl</code> when it is relative
+(<code>corLdUrlResolve</code>, RFC 3986 § 5; NULL for a context that arrived inline, which leaves it as it is), then
+fetched with <code>corLdContextFromUrl</code>. An array becomes a context of child contexts, searched last to first:
+a later definition wins. An element that cannot be had fails the whole array - NULL.</p>
+<table class="gtable">
+  <tr><th>In a context object</th><th>What happens</th></tr>
+  <tr><td><code>"t": "iri"</code>, <code>"t": { "@id", "@type", "@container" }</code></td><td>a term; a term object without <code>@id</code> maps to its own name; a <code>prefix:suffix</code> id is expanded with the context's own prefixes</td></tr>
+  <tr><td><code>@vocab</code></td><td>kept on the context - but only the core context's <code>@vocab</code> is used to expand (<a href="#docs/lib-corjsonld/expanding">below</a>)</td></tr>
+  <tr><td><code>@version</code>, <code>@protected</code></td><td>skipped</td></tr>
+  <tr><td><code>@import</code></td><td>NULL, and <code>errorFn(501, ...)</code> - not implemented</td></tr>
+  <tr><td>a term with an <code>@context</code> of its own (a scoped context)</td><td>NULL, and <code>errorFn(400, "Scoped Context Not Allowed", ...)</code> - except in the core context, which has one (<code>ngsildproof</code>)</td></tr>
+</table>
+
+<h2 id="cache">The cache and downloads</h2>
+<p><code>corLdContextFromUrl</code> looks in the cache first. A miss is downloaded, parsed into the cache's
+allocator (the caller's <code>kaP</code> holds only the parse tree), marked <code>CorLdKindCached</code>, its body
+kept for <code>GET /jsonldContexts/{id}</code>, and inserted. A downloaded <code>@context</code> whose
+<code>@context</code> is a string is followed to that URL.</p>
+<table class="g-opts">
+  <tr><th>Rule</th><th></th></tr>
+  <tr><td>the key</td><td>the id or the URL, compared without the scheme: <code>http://h/x</code> and <code>https://h/x</code> are one entry, the first one seen</td></tr>
+  <tr><td>size</td><td>100 entries; past that the entry used longest ago is dropped (LRU on <code>usedAt</code>, refreshed by every lookup)</td></tr>
+  <tr><td>memory</td><td>never freed: <code>corLdCacheRemove</code> and the reaper unlink an entry, its memory stays in the allocator</td></tr>
+  <tr><td>older core contexts</td><td><code>.../ngsi-ld-core-context.jsonld</code> and <code>...-v&lt;N&gt;.&lt;M&gt;.jsonld</code> other than the configured one are not downloaded: they are cached as a stub with <code>ignored</code> set, which every lookup skips - the broker's own core stands. <code>corLdIsCoreContextUrl</code> says true for all of them</td></tr>
+  <tr><td>one download per URL</td><td>up to 16 URLs (<code>CORLD_MAX_DOWNLOADING</code>) are tracked while they download. A second asker for one of them waits for it - 150 polls of the cache, 20 ms apart, 3 s in all - and gets NULL if it has not landed. Past 16 in flight, a download is not tracked and may happen twice</td></tr>
+  <tr><td>a cycle</td><td>the asker that is itself downloading the URL - an array <code>@context</code> that leads back to itself - gets NULL at once, with <code>errorFn(400, "Cyclic @context", url)</code></td></tr>
+  <tr><td>volatile contexts</td><td><code>volatileCtx</code>, <code>expiresAt</code>: a context the broker mints so a Link header can name an inline body by URL. Not dropped when fetched; <code>corLdCacheReapVolatile(now)</code> unlinks those past <code>expiresAt</code> (corNgsild runs it every second, <code>ldContextHost.h</code>)</td></tr>
+</table>
+<p>The rest of the cache API - <code>corLdCacheLookup</code>, <code>corLdCacheInsert</code>,
+<code>corLdCacheRemove</code>, <code>corLdCacheSnapshot</code> (the entries in insertion order, pointers into the
+cache, not copies) and <code>corLdIdGenerate</code> (a Hosted context's id,
+<code>urn:ngsi-ld:Context:&lt;counter&gt;-&lt;epochSeconds&gt;</code>, unique within one run) - is what the
+broker's <code>/jsonldContexts</code> endpoints are built on.</p>
+
+<h3 id="errors">Failures</h3>
+<p><code>corLdContextFromUrl</code> answers NULL for every failure. The ones that are not "could not be retrieved" -
+a cycle (400), a scoped context (400), <code>@import</code> (501) - also go to <code>errorFn</code>, so the caller
+can tell them apart. coraine's turns them into ProblemDetails (400 <code>BadRequestData</code>, 501 a type of its
+own); a NULL with no call is answered by coraine as 504 <code>LdContextNotAvailable</code>.</p>
+
+<h2 id="expanding">Expansion</h2>
+<pre>char* corLdExpand(CorLdContext* contextP, const char* name, CorAlloc* kaP, CorLdItem** itemPP, bool* coreContextP);</pre>
+<p>One name, in this order - the first step that answers wins:</p>
+<table class="gtable">
+  <tr><th>#</th><th>The name</th><th>Becomes</th></tr>
+  <tr><td>1</td><td>already an IRI (<code>urn:</code>, <code>http://</code>, <code>https://</code>) or an <code>@</code>-name</td><td>itself - unless it is a core term's IRI: then the term's short name (<code>@id</code> and <code>@type</code> are the IRIs of <code>id</code> and <code>type</code>)</td></tr>
+  <tr><td>2</td><td><code>prefix:suffix</code></td><td>the prefix's IRI + suffix, the user context's prefixes first, then the core's; a core term's IRI again becomes its short name</td></tr>
+  <tr><td>3</td><td>a term of the core context</td><td>its short name - the core wins: a user context cannot redefine <code>type</code>, <code>value</code>, <code>observedAt</code>, ...</td></tr>
+  <tr><td>4</td><td>a term of the user context</td><td>its IRI</td></tr>
+  <tr><td>5</td><td>anything else</td><td>the core <code>@vocab</code> + the name: <code>speed</code> is <code>https://uri.etsi.org/ngsi-ld/default-context/speed</code>. A user context's <code>@vocab</code> is not used</td></tr>
+</table>
+<p><code>*itemPP</code> gets the matched <code>CorLdItem</code> (NULL when no item answered), <code>*coreContextP</code>
+true when the core answered; both may be NULL. Before step 5 the name goes through the vocab-expand check, if one
+is set (<a href="#docs/lib-corjsonld/callbacks">callbacks</a>): rejected, the answer is NULL. <code>corLdExpandValueKey</code> is the
+same without that check - for member names inside a compound value, a language map's tags, a q trailing path.</p>
+
+<h3 id="tree">A whole body</h3>
+<pre>CorLdContext* corLdExpandTree(CorNode* treeP, CorLdContext* userContextP, CorAlloc* kaP);
+CorLdContext* corLdExpandEntityTree(CorNode* treeP, CorLdContext* userContextP, CorAlloc* kaP);</pre>
+<p>Renames every member of the tree in place and returns the context it used. A body's own <code>@context</code>
+(the root of an object, each element of an array) is parsed, used for its subtree instead of
+<code>userContextP</code>, and removed from the tree. NULL <code>userContextP</code> is the core context. On the
+way:</p>
+<ul>
+  <li>a member whose term is <code>@type: @vocab</code> has its string values expanded too
+  (<code>watchedAttributes</code>, <code>propertyNames</code>, <code>valueType</code>, ...); <code>type</code>'s
+  values are expanded; <code>@type: @id</code> values are left alone</li>
+  <li>a scalar value of a term with a datatype <code>@type</code>, and the <code>@value</code> of a value object
+  <code>{"@value", "@type"}</code> outside an Attribute's value, go to the value-check callback</li>
+  <li>nothing is expanded inside an <code>@language</code> or <code>@index</code> container's keys, a
+  <code>json</code> member, a term typed <code>@json</code>, or a JSON literal <code>{"@type": "@json", ...}</code>;
+  an <code>@index</code> map's values are expanded</li>
+  <li>a member name starting with <code>@</code> that is not a JSON-LD 1.1 keyword (<code>corLdKeywordIs</code>)
+  goes to the keyword-check callback, which may stop the expansion</li>
+  <li>a node already stamped with a core <code>termId</code> (by a parser hook) is not looked up again</li>
+</ul>
+<p><code>corLdExpandEntityTree</code> also does JSON-LD array reduction: a one-element array becomes its element,
+unless its term keeps arrays (<code>@list</code>, <code>@set</code>, <code>@language</code>, <code>@json</code>).
+It is for entity data only - an API object (Subscription, Registration) keeps its arrays.</p>
+
+<h2 id="compacting">Compaction</h2>
+<pre>const char* corLdCompact(CorLdContext* contextP, const char* iri);
+void        corLdCompactTree(CorNode* treeP);                            // with the core context
+void        corLdCompactTreeWith(CorNode* treeP, CorLdContext* ctxP);   // with this one</pre>
+<table class="gtable">
+  <tr><th>#</th><th><code>corLdCompact</code> tries</th></tr>
+  <tr><td>1</td><td>not an IRI: returned as it is</td></tr>
+  <tr><td>2</td><td>a term of the user context with this IRI: its name</td></tr>
+  <tr><td>3</td><td>a core term with this IRI: its name</td></tr>
+  <tr><td>4</td><td>starts with the core <code>@vocab</code>: the rest - unless that name is a term of another IRI</td></tr>
+  <tr><td>5</td><td>only when 4 was refused for that reason: <code>prefix:rest</code>, the longest prefix of the user or core context</td></tr>
+  <tr><td>6</td><td>the IRI, unchanged</td></tr>
+</table>
+<p>The tree functions mirror the expansion: names, <code>type</code> values, <code>@vocab</code>-typed values, the
+same opaque containers. The answer is a pointer into the IRI, the item, or a new string allocated from
+<code>corRest.kalloc</code> (step 5) - see <a href="#docs/lib-corjsonld/pitfalls">pitfalls</a>.</p>
+
+<h2 id="core">The core context</h2>
+<p>Every core term is stored, matched and rendered by its <b>short name</b>: at init the core context's ids are
+rewritten to their names (keyword ids - <code>id</code> is <code>@id</code>, <code>type</code> is
+<code>@type</code> - are kept), so <code>corLdExpand("observedAt")</code> answers <code>"observedAt"</code> with no
+extra work. Its <code>@vocab</code> is <code>https://uri.etsi.org/ngsi-ld/default-context/</code>, in
+<code>corLdCoreVocab</code> / <code>corLdCoreVocabLen</code>.</p>
+<p>The rewrite leaves the working copy without its own IRIs, so the library parses the core a second time and
+keeps that one as it is: <code>corLdCorePristine()</code>. Anything that needs a real core IRI reads it there.</p>
+<table class="g-opts">
+  <tr><th>Function</th><th></th></tr>
+  <tr><td>corLdCoreContext()</td><td>the working core context</td></tr>
+  <tr><td>corLdCoreLookup(name)</td><td>the core item a name denotes - short name, IRI, <code>ngsi-ld:</code> compact IRI, <code>@id</code>/<code>@type</code> - or NULL; no allocation. For a parser that must know at once whether a member is a core term</td></tr>
+  <tr><td>corLdCoreItemByIri(iri)</td><td>the core item with that expanded IRI, or NULL</td></tr>
+  <tr><td>corLdCoreItemById(termId)</td><td>the core item with that <code>termId</code> - an array index; NULL for 0, out of range, or before <code>corLdCoreTermIdsSet</code></td></tr>
+  <tr><td>corLdCorePrefixes(&amp;n)</td><td>the core's prefix terms (<code>ngsi-ld</code>, <code>geojson</code>), with their IRIs</td></tr>
+  <tr><td>corLdCoreTermsAdd(termV, kaP)</td><td>makes terms of the caller's own payloads core terms - short, never expanded, never overridden. A term the core has is left as it is. Returns the number added, -1 on error</td></tr>
+  <tr><td>corLdCoreTermIdsSet(nameV, count, kaP, &amp;missing)</td><td><code>nameV[id]</code> is the name of term <code>id</code> (1 &lt;= id &lt; count, at most 0x10000). Stamps each core item and its pristine twin. A core term left without an id is -1, its name in <code>*missing</code>: the table does not match the core</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>A term added with <code>corLdCoreTermsAdd</code> shadows that name in every vocabulary a client loads</b> -
+the core overrides every other context. Pick names that the well-known vocabularies (Smart Data Models, schema.org,
+SOSA/SSN, SAREF) do not use.</p>
+</div>
+
+<h2 id="flags">The flag bits it sets</h2>
+<p>At init each core item gets its <code>KJF_*</code> bits (<code>corLdExpand.h</code>); the expander ORs the
+matched item's bits onto the node (<code>CorNode.flags</code>) and copies its <code>termId</code> - so the layer
+above tells a structural member from a sub-attribute with a bit test.</p>
+<table class="g-opts">
+  <tr><th>Bits</th><th>Set on</th></tr>
+  <tr><td>KJF_CORE_TERM 0x01</td><td>every core term - and a name expanded with a core prefix that names no term</td></tr>
+  <tr><td>KJF_ATTR_TERM 0x02</td><td>the members of an Attribute that are not sub-attributes: the seven value keys, <code>type</code>, <code>observedAt</code>, <code>expiresAt</code>, <code>unitCode</code>, <code>datasetId</code>, <code>valueType</code>, <code>objectType</code></td></tr>
+  <tr><td>KJF_VK_* bits 4-7</td><td>which value key, read with <code>KJF_VK_ID(flags)</code>: 1 <code>value</code>, 2 <code>object</code>, 3 <code>languageMap</code>, 4 <code>vocab</code>, 5 <code>valueList</code>, 6 <code>objectList</code>, 7 <code>json</code>; 0 none</td></tr>
+</table>
+<p>A user term's item has no bits and <code>termId</code> 0 - the node keeps whatever a parser stamped.</p>
+
+<h2 id="callbacks">Callbacks</h2>
+<table class="g-opts">
+  <tr><th>Setter</th><th>Called</th></tr>
+  <tr><td>corLdSetVocabExpandCheck(fn)</td><td><code>bool fn(const char* shortName)</code> before a name is <code>@vocab</code>-expanded; false: <code>corLdExpand</code> answers NULL. corNgsild's checks the NGSI-LD name grammar</td></tr>
+  <tr><td>corLdSetKeywordCheck(fn)</td><td><code>bool fn(const char* name)</code> for an <code>@</code>-name that is no keyword; false stops that object's expansion - the callback raises the error</td></tr>
+  <tr><td>corLdSetValueCheck(fn)</td><td><code>bool fn(const char* term, const char* datatype, CorNode* valueP)</code> once per scalar value of a datatype-typed term; NGSI-LD <code>DateTime</code> arrives as <code>xsd:dateTime</code></td></tr>
+  <tr><td>corLdSetVocabValueSuffix(fn)</td><td><code>int fn(const char* term, const char* value)</code>: where an <code>@vocab</code> value stops being a term - the rest is kept verbatim on the way in and out (corNgsild's: the <code>@datasetId</code> of a <code>watchedAttributes</code> entry). -1: none</td></tr>
+  <tr><td>corLdConcurrencySet(owner, sleep)</td><td>who is asking for a download and how to wait - <a href="#docs/lib-corjsonld/concurrency">next</a></td></tr>
+</table>
+<p>They are plain globals: set them once, at startup, before the first request. corNgsild's <code>ldInit()</code>
+sets the first four.</p>
+
+<h2 id="concurrency">Concurrency</h2>
+<p>The cache is guarded by one mutex, held only for a lookup, an insert or a removal - never across a download or
+a parse. A download is owned by whoever started it: another asker waits, the same asker again is a cycle. By
+default the asker is the thread (<code>pthread_self</code>) and the wait is <code>usleep</code>. An application
+that runs several requests on one thread says otherwise:</p>
+<pre>typedef uintptr_t (*CorLdOwnerFunction)(void);
+typedef void      (*CorLdSleepFunction)(int ms);
+void corLdConcurrencySet(CorLdOwnerFunction ownerFn, CorLdSleepFunction sleepFn);   // NULL: the default</pre>
+<p>coraine's (<code>src/app/coraine/coraine.c</code>), so that a <a href="#docs/coroutines">coroutine</a> waiting for
+another's download yields instead of stopping its loop:</p>
+<pre>static uintptr_t contextOwner(void)
+{
+  CorCo* coP = corCoCurrent();
+
+  return (coP != NULL) ? (uintptr_t) coP : (uintptr_t) pthread_self();
+}
+
+static void contextSleep(int ms)
+{
+  corRestWaitFd(-1, 0, ms, NULL);   // no descriptor: a timer - a yield in a coroutine, poll() elsewhere
+}
+
+corLdConcurrencySet(contextOwner, contextSleep);   // before corLdInit, before the first request</pre>
+
+<h2 id="example">An example</h2>
+<pre>#include "corAlloc/corAlloc.h"           // CorAlloc, corAllocBufferInit
+#include "corJson/corJsonCreate.h"       // CorJson, corJsonCreate
+#include "corJson/corJsonParse.h"        // corJsonParse
+#include "corTree/corTreeLookup.h"       // corTreeLookup
+#include "corJsonld/corJsonld.h"
+
+int main(void)
+{
+  static char buf[65536];
+  CorAlloc    ka;
+
+  corAllocBufferInit(&amp;ka, buf, sizeof(buf), 65536, NULL, "jsonld");
+  if (corLdInit(&amp;ka, NULL, NULL, NULL) != 0)            // the embedded core; inline contexts only
+    return 1;
+
+  char     json[]   = "{ \"@context\": { \"temperature\": \"https://example.org/temperature\" } }";
+  CorJson  corJson;
+  CorJson* corJsonP = corJsonCreate(&amp;corJson, &amp;ka);
+  CorNode* docP     = corJsonParse(corJsonP, json);       // destructive: parses json in place
+
+  CorLdContext* ctxP = corLdContextFromTree(corTreeLookup(docP, "@context"), &amp;ka, NULL);
+
+  char*       iri   = corLdExpand(ctxP, "temperature", &amp;ka, NULL, NULL);   // "https://example.org/temperature"
+  char*       other = corLdExpand(ctxP, "speed", &amp;ka, NULL, NULL);         // ".../default-context/speed"
+  const char* name  = corLdCompact(ctxP, iri);                               // "temperature"
+
+  corLdCleanup();
+  return 0;
+}</pre>
+<p>It links with <code>libcorJsonld.a</code> and the libraries below it - and with corRest, whose
+<code>corRest.kalloc</code> <code>corLdCompact</code> refers to.</p>
+
+<h2 id="pitfalls">Rules and pitfalls</h2>
+<ul>
+  <li><b>Pass the value of <code>@context</code></b> to <code>corLdContextFromTree</code>, not the document that holds it.</li>
+  <li><b>The cache allocator is shared</b> and must be thread-safe; the <code>kaP</code> of the other calls only holds what lives as long as the call's result is used (an expanded name, a parse tree).</li>
+  <li><b><code>corLdCompact</code>'s compact-IRI form</b> (step 5) is allocated from <code>corRest.kalloc</code>, the calling thread's corRest arena: a thread that is not corRest's sets one up first.</li>
+  <li><b>Never read a core IRI off a working-copy item</b> - its <code>id</code> is its name. Ask <code>corLdCorePristine()</code> or <code>corLdCoreItemByIri</code>.</li>
+  <li><b>A cache entry is never freed</b>; a pointer from <code>corLdCacheSnapshot</code> stays valid until the entry is evicted.</li>
+  <li><b>Trace levels</b> are 150-156 (<code>corLdTraceLevels.h</code>: init, parse, expand, compact, cache, download, prefix).</li>
+</ul>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corjsonld"><b>corJsonld API</b><span>every header and entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener"><b>SEAMWARE/corJsonld</b><span>the repository</span></a></li>
+  <li><a href="#docs/lib-corngsild"><b>corNgsild</b><span>what uses it: the NGSI-LD rules on top of the expansion</span></a></li>
+</ul>
+<p>Depends on <a href="#docs/lib-coralloc">corAlloc</a>, <a href="#docs/lib-cortree">corTree</a>,
+<a href="#docs/lib-corjson">corJson</a>, <a href="#docs/lib-corbase">corBase</a>,
+<a href="#docs/lib-corhash">corHash</a> (the name and IRI tables), <a href="#docs/lib-corlog">corLog</a>,
+<a href="#docs/lib-correst">corRest</a> (for <code>corRest.kalloc</code>) and pthreads. Used by
+<a href="#docs/lib-corngsild">corNgsild</a>, whose request hooks expand every NGSI-LD body and compact every
+response, and by coraine itself - its startup, its <code>/jsonldContexts</code> endpoints, its bridges.</p>
+</article>

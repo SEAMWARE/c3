@@ -1,0 +1,119 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corprom.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corProm - Prometheus metrics</h1>
+<p class="lead">Counters, gauges and histograms for a server whose request path must not allocate, block or take a
+lock: an update is one atomic operation on a fixed-point <code>int64_t</code> (a histogram: one per bucket it falls in,
+and two more). Rendering happens only when the metrics are asked for - as the Prometheus text format, or as a
+<a href="#docs/lib-cortree">corTree</a>.</p>
+
+<h2 id="metrics">The three kinds</h2>
+<pre>CorPromMetric* corPromCounterCreate(const char* name, const char* help);
+CorPromMetric* corPromGaugeCreate(const char* name, const char* help);
+CorPromMetric* corPromHistogramCreate(const char* name, const char* help, double* buckets, int bucketCount);</pre>
+<table class="gtable">
+  <tr><th>Kind</th><th>Updated by</th><th>Kept as</th></tr>
+  <tr><td>counter</td><td><code>corPromCounterInc(m)</code>, <code>corPromCounterAdd(m, int64_t n)</code></td><td>the value × 1000</td></tr>
+  <tr><td>gauge</td><td><code>corPromGaugeSet(m, double v)</code>, <code>corPromGaugeAdd</code>, <code>corPromGaugeSub</code></td><td>the value × 1000, truncated - a thousandth is the smallest step</td></tr>
+  <tr><td>histogram</td><td><code>corPromHistogramObserve(m, double v)</code></td><td>a count per bucket, the number of observations, their sum in billionths (rounded) - 0.2 ms adds 200 000</td></tr>
+</table>
+<ul>
+  <li><b>A histogram's buckets</b> are the upper bounds given, in ascending order; a <code>+Inf</code> bucket is added.
+  They are cumulative, as Prometheus defines them: an observation counts in every bucket whose bound is at or above
+  it. The array is copied.</li>
+  <li><b>An update of the wrong kind</b> - <code>corPromCounterInc</code> on a gauge - or of <code>NULL</code> does
+  nothing.</li>
+  <li><b>Every metric is global</b>, in one list in the order created, kept for the life of the process: the name
+  and help are copied, nothing is freed. <code>corPromLookup(name)</code> finds one by name. A metric has no labels.</li>
+</ul>
+<div class="g-callout warn">
+<p><b>Create the metrics before the threads start.</b> The updates are atomic and lock-free; creating a metric
+appends to the list with no lock, and a second metric of the same name is not refused - both are rendered. coraine
+creates all of its metrics once, at start-up, and keeps the pointers.</p>
+</div>
+<p>coraine's own, from <code>src/lib/metrics/metrics.c</code>:</p>
+<pre>requestLatency = corPromHistogramCreate("ngsild_request_latency_seconds",
+                                        "End-to-end request latency - service-routine processing time (seconds)",
+                                        requestLatencyBuckets,
+                                        sizeof(requestLatencyBuckets) / sizeof(requestLatencyBuckets[0]));
+...
+corPromCounterInc(errors5xx);
+corPromHistogramObserve(batchItemCount, (double) n);
+corPromGaugeSet(gTenants, (double) tenants);</pre>
+
+<h2 id="render">Rendering</h2>
+<pre>int corPromRenderSize(void);
+int corPromRender(char* buf, int bufLen);</pre>
+<p>The Prometheus text exposition format - <code># HELP</code> (when there is a help text), <code># TYPE</code>, the
+value lines - for every metric, in the order created:</p>
+<pre>CorPromMetric* reqs = corPromCounterCreate("requests_total", "Requests served");
+CorPromMetric* conn = corPromGaugeCreate("connections", "Open connections");
+double         b[]  = { 0.001, 0.01, 0.1, 1 };
+CorPromMetric* lat  = corPromHistogramCreate("latency_seconds", "Request latency", b, 4);
+
+corPromCounterInc(reqs);  corPromCounterInc(reqs);  corPromCounterAdd(reqs, 5);
+corPromGaugeAdd(conn, 3); corPromGaugeSub(conn, 0.5);
+corPromHistogramObserve(lat, 0.004); corPromHistogramObserve(lat, 0.2); corPromHistogramObserve(lat, 7);
+
+int   size = corPromRenderSize();
+char* text = malloc(size + 1);
+corPromRender(text, size + 1);</pre>
+<pre><span class="o"># HELP requests_total Requests served
+# TYPE requests_total counter
+requests_total 7
+# HELP connections Open connections
+# TYPE connections gauge
+connections 2
+# HELP latency_seconds Request latency
+# TYPE latency_seconds histogram
+latency_seconds_bucket{le="0.001"} 0
+latency_seconds_bucket{le="0.01"} 1
+latency_seconds_bucket{le="0.1"} 1
+latency_seconds_bucket{le="1"} 2
+latency_seconds_bucket{le="+Inf"} 3
+latency_seconds_sum 7.204000000
+latency_seconds_count 3</span></pre>
+<div class="g-callout warn">
+<p><b>The buffer is <code>corPromRenderSize() + 1</code>, and so is <code>bufLen</code>.</b> The size does not count
+the terminating zero, and <code>corPromRender</code> writes one. With a buffer of exactly the size, the last byte -
+the newline that ends the last metric - is lost, and the return value is the same as had it fitted. With a smaller
+one it returns the size it needed. It returns the bytes written, without the zero.</p>
+</div>
+<ul>
+  <li><b>A counter and a gauge are written as whole numbers</b> - the stored value divided by 1000, truncated: the
+  gauge above, 2.5, is written <code>2</code>. A histogram's sum has 9 decimals, a bucket bound is <code>%g</code>.</li>
+  <li><b>Each value is read atomically, not all of them together</b>: a render while observations are made may
+  show a histogram whose buckets and count are a few observations apart. The size and the render are two passes,
+  too - a metric created in between does not fit.</li>
+</ul>
+
+<h3 id="tree">As a tree</h3>
+<pre>CorNode* corPromMetrics(CorAlloc* kaP);</pre>
+<p>The same metrics as an array of objects, built in <code>kaP</code> (<code>NULL</code>: the tree heap,
+<code>corTreeFree</code> it) - each with <code>name</code>, <code>type</code>, <code>help</code>, and a
+<code>value</code>, or a histogram's <code>buckets</code> (<code>le</code>, <code>count</code>), <code>sum</code> and
+<code>count</code>. Here a counter's and a gauge's value is a float, with its thousandths:</p>
+<pre><span class="o">[{"name":"requests_total","type":"counter","help":"Requests served","value":7},
+ {"name":"connections","type":"gauge","help":"Open connections","value":2.5},
+ {"name":"latency_seconds","type":"histogram","help":"Request latency",
+  "buckets":[{"le":0.001,"count":0},{"le":0.01,"count":1},{"le":0.1,"count":1},{"le":1,"count":2},{"le":"+Inf","count":3}],
+  "sum":7.204,"count":3}]</span></pre>
+
+<h2 id="coraine">In coraine</h2>
+<p>The admin plugin serves the text format at <code>GET /admin/metrics</code>
+(<a href="#docs/administration/admin">Administration</a>), <code>text/plain; version=0.0.4</code>: request counters
+per operation, 4xx and 5xx errors, notifications sent and failed, the cache sizes, the memory budget, SSE streams,
+distributed-operation forwards, the request latency and batch sizes as histograms. The gauges of tenants, caches,
+memory and SSE are counted and set just before each render. The declared indexes' series (<code>ngsild_index_*</code>)
+are written after corProm's text, by coraine itself: they carry labels, which corProm's metrics have not
+(<a href="#docs/database-indexes">Database indexes</a>).</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corprom"><b>corProm API</b><span>the one header, entry by entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><b>SEAMWARE/corProm</b><span>the repository - a sibling checkout: <code>-I..</code> and <code>../corProm/libcorProm.a</code>; <code>make di</code></span></a></li>
+</ul>
+<p>corProm depends on <a href="#docs/lib-cortree">corTree</a> (for <code>corPromMetrics</code>) and
+<a href="#docs/lib-coralloc">corAlloc</a>'s header. It is used by coraine's <code>src/lib/metrics</code> and the admin
+plugin.</p>
+</article>

@@ -1,0 +1,175 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corbase.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corBase</h1>
+<p class="lead">The library every other library of the stack stands on: the library log through which a library
+writes into its executable's log, the coroutines and their event-loop waits, and the small helpers - strings,
+files, time, the process's CPU and memory limits - that would otherwise be copied into each library.</p>
+
+<h2 id="parts">What is in it</h2>
+<p>One function, or one small family, per header, included as <code>"corBase/&lt;header&gt;.h"</code>:</p>
+<table class="g-opts">
+  <tr><th>Header</th><th>What it is for</th></tr>
+  <tr><td>corLibLog.h, corBaseInit.h</td><td>the library log - <code>COR_LIB_*</code> and the executable's log function (<a href="#docs/lib-corbase/library-log">below</a>)</td></tr>
+  <tr><td>corCo.h, corCoLoop.h</td><td>coroutines, and their waits on an epoll loop (<a href="#docs/lib-corbase/coroutines">below</a>)</td></tr>
+  <tr><td>corCpuCount.h</td><td>the CPUs this process may run on: its affinity mask intersected with the cgroup CPU quota, never less than 1</td></tr>
+  <tr><td>corMemoryLimit.h</td><td>the memory limit the process lives under, in bytes, 0 for none: the smallest <code>memory.max</code> from its cgroup up to the root (v2), <code>memory.limit_in_bytes</code> (v1)</td></tr>
+  <tr><td>corDaemonize.h</td><td>detach from the terminal: fork (the parent exits 0), <code>setsid</code>, <code>chdir("/")</code>, the standard descriptors on <code>/dev/null</code>. Before the first thread is created</td></tr>
+  <tr><td>corFileRead.h</td><td>a whole file into a <code>malloc</code>ed, NUL-terminated buffer, sized with <code>stat()</code>; 0, or 1-4 on an error, which it logs</td></tr>
+  <tr><td>corFileReadInto.h</td><td>a small file into the caller's buffer, until EOF - for <code>/proc</code> and <code>/sys</code>, whose files report a size of 0 or 4096; no allocation, no log, -1 on an error</td></tr>
+  <tr><td>corTime.h</td><td><code>corTimeGet</code> (<code>CLOCK_REALTIME</code>), <code>corTimeDiff</code>, <code>corTimeAccumulate</code> - <code>timespec</code>s, and optionally the seconds as a <code>float</code></td></tr>
+  <tr><td>corTimeIso.h</td><td>epoch nanoseconds as ISO 8601 UTC, 0-9 fraction digits (truncated), trailing zeros dropped on request; no libc time or <code>printf</code> call. <code>buf</code> holds 31 bytes</td></tr>
+  <tr><td>corCrc32c.h</td><td>CRC-32C, with the CPU's instruction where there is one (SSE4.2, the ARMv8 CRC extension), a table where not - the same value either way</td></tr>
+  <tr><td>corFloatTrim.h</td><td>a <code>double</code> as text without trailing zeros, at most 9 decimals; the shortest <code>%g</code> that reads back exactly for a value fixed point cannot hold. The buffer holds 31 bytes</td></tr>
+  <tr><td>corSizeText.h</td><td>a byte count as <code>"512 B"</code>, <code>"64 KiB"</code>, <code>"4096 MiB"</code> - whole units, rounded down, no GiB</td></tr>
+  <tr><td>corUriPasswordMask.h</td><td>a URI with its password as <code>***</code>, for a log line or an error</td></tr>
+  <tr><td>corHeaderIsCredential.h</td><td>is an HTTP header a credential (<code>Authorization</code>, <code>Cookie</code>, ...), in any case - no allocation, callable from a signal handler</td></tr>
+  <tr><td>corStringSplit.h, corStringSort.h, corStringReplace.h, corStringArrayJoin.h, corStringArrayLookup.h, corStringInArray.h, corStrEq.h, corCharCount.h, corCharChecksum.h, corFileSuffixExtract.h, corProgName.h</td><td>string helpers</td></tr>
+  <tr><td>corMacros.h</td><td><code>COR_VEC_SIZE</code>, <code>COR_MAX</code>, <code>COR_MIN</code>, <code>COR_FT</code> (<code>"true"</code>/<code>"false"</code>), <code>COR_SET</code> (<code>"set"</code>/<code>"unset"</code>)</td></tr>
+  <tr><td>CorErrorStack.h</td><td>a stack of errors, each with file, line, function, code, title, where and detail, printed with <code>corErrorFlushToScreen</code></td></tr>
+</table>
+
+<h2 id="library-log">The library log</h2>
+<p>A library cannot know where its executable logs - a file, which one, in what format - so it does not log
+itself: it hands every line to a function the executable gives it.</p>
+<pre>typedef void (*CorLibLogFunction)(const char* fileName, int lineNo, const char* functionName,
+                                  char type, int aux, const char* format, ...);
+
+void corBaseInit(CorLibLogFunction logFunction);
+void corBaseTraceLevelsSet(const unsigned int* levelV, unsigned int words);</pre>
+<p>The signature is <a href="#docs/lib-corlog">corLog</a>'s <code>corLogOut</code>. <code>type</code> is
+<code>'E'</code>, <code>'W'</code>, <code>'I'</code>, <code>'V'</code>, <code>'T'</code> or <code>'X'</code>;
+<code>aux</code> the trace level of a <code>'T'</code>, the exit code of an <code>'X'</code>, -1 otherwise. An
+executable that logs with corLog wires it up once its log is open:</p>
+<pre>corBaseInit(corLogOut);
+corBaseTraceLevelsSet(corLogTraceLevels, sizeof(corLogTraceLevels) / sizeof(corLogTraceLevels[0]));</pre>
+<p>In the library:</p>
+<table class="g-opts">
+  <tr><th>Macro</th><th></th></tr>
+  <tr><td>COR_LIB_E(fmt, ...)</td><td>error</td></tr>
+  <tr><td>COR_LIB_W(fmt, ...)</td><td>warning</td></tr>
+  <tr><td>COR_LIB_I(fmt, ...)</td><td>info</td></tr>
+  <tr><td>COR_LIB_V(fmt, ...)</td><td>verbose</td></tr>
+  <tr><td>COR_LIB_T(level, fmt, ...)</td><td>trace, at a trace level - a debug build only</td></tr>
+  <tr><td>COR_LIB_X(code, fmt, ...)</td><td>an <code>'X'</code> line, then <code>exit(code)</code></td></tr>
+  <tr><td>COR_LIB_RE(ret, fmt, ...)</td><td>error, then <code>return ret;</code></td></tr>
+  <tr><td>COR_LIB_RVE(fmt, ...)</td><td>error, then <code>return;</code></td></tr>
+</table>
+<pre>#include "corBase/corLibLog.h"
+
+#define MyLibTraceOpen  500                        // a level of this library's own range
+
+int fileOpen(const char* path)
+{
+  int fd = open(path, O_RDONLY);
+
+  if (fd == -1)
+    COR_LIB_RE(-1, "open(%s): %s", path, strerror(errno));
+
+  COR_LIB_T(MyLibTraceOpen, "%s: fd %d", path, fd);
+  return fd;
+}</pre>
+<ul>
+  <li><b>Before <code>corBaseInit</code></b> a line goes to <code>corLibLogFallback</code>: an error, a warning
+  or an exit is written to stderr as <code>E: file[line]: function: message</code> - option parsing runs before
+  any log file exists - and everything else is dropped.</li>
+  <li><b>What is written</b> is the executable's decision: the log function tests its own switches
+  (<code>corLogOut</code> drops a <code>V</code> line when verbose is off).</li>
+  <li><b>A trace that is off</b> is decided inline once <code>corBaseTraceLevelsSet</code> has handed corBase the
+  executable's trace-level bitmask - read in place, so a level changed at run time is seen at once. Without it
+  every <code>COR_LIB_T</code> is a call into the log function, which then says no.</li>
+  <li><b>In a release build</b> - no <code>-DCOR_T_ON</code> - <code>COR_LIB_T</code> is compiled away, its
+  arguments still type-checked. An object compiled with <code>COR_T_ON</code> carries the string
+  <code>COR_T_ON:traces-compiled-in</code> (<a href="#docs/lib-corlog/release">corLog - release builds</a>).</li>
+  <li><b>The trace levels</b> are the executable's number space, shared by every library: each takes a range of
+  its own (<a href="#docs/lib-corlog/numbering">the ranges in use</a>).</li>
+</ul>
+
+<h2 id="coroutines">Coroutines</h2>
+<p><code>corCo</code> runs a function on a stack of its own that can stop half way and be continued later, on the
+same thread. The switch is corBase's own - the callee-saved registers and the stack pointer, in assembly, for
+x86-64 and aarch64; any other architecture does not compile. Each stack is 256 KiB of address space,
+<code>MAP_NORESERVE</code>, with a guard page below it; a finished coroutine's stack goes back to a pool of its
+thread's (up to 256 kept) and the next coroutine takes it.</p>
+<pre>static void counter(void* arg)
+{
+  int n = *(int*) arg;
+
+  for (int i = 1; i &lt;= n; i++)
+  {
+    printf("step %d\n", i);
+    corCoYield();                                  // back to the resumer
+  }
+}
+
+static void counterRun(void)
+{
+  int    n   = 3;
+  CorCo* coP = corCoCreate(counter, &amp;n);
+
+  if (coP == NULL)
+    return;
+
+  while (corCoResume(coP) == false)                // true once counter has returned -
+    printf("yielded\n");                           // its stack is back in the pool then
+}</pre>
+<table class="g-opts">
+  <tr><th>Call</th><th></th></tr>
+  <tr><td>corCoCreate(fn, arg)</td><td>a coroutine that runs <code>fn(arg)</code> when first resumed; <code>NULL</code> when out of memory</td></tr>
+  <tr><td>corCoResume(coP)</td><td>runs it until it yields or returns; true when it has finished - <code>coP</code> is gone then</td></tr>
+  <tr><td>corCoYield()</td><td>back to whoever resumed it; nothing outside a coroutine</td></tr>
+  <tr><td>corCoDestroy(coP)</td><td>one that will never be resumed: its stack back to the pool, nothing on it unwound</td></tr>
+  <tr><td>corCoCurrent(), corCoUserDataSet/corCoUserData</td><td>the running coroutine; one pointer for the caller</td></tr>
+</table>
+<p><code>corCoLoop</code> puts coroutines on a thread's epoll loop: a coroutine that needs a descriptor ready calls
+<code>corCoLoopWait(fd, events, timeoutMs, &amp;revents)</code> - it registers the descriptor and yields, and the
+loop resumes it when the descriptor is ready or the time is up. Outside a coroutine of a loop it is
+<code>poll()</code>. The loop's side is <code>corCoLoopInit</code> once, <code>corCoLoopTimeoutMs</code> for its
+<code>epoll_wait</code>, <code>corCoLoopEvent</code> for each event and <code>corCoLoopExpire</code> after them;
+<code>corCoLoopPark</code>/<code>corCoLoopWake</code> let a coroutine wait for another, <code>corCoBlocking</code>
+runs a call that blocks in another library on a thread of its own, and <code>corCoLoopCancel</code> ends every
+wait when the loop stops.</p>
+<div class="g-callout warn">
+<p><b>A coroutine belongs to its thread</b> - it is resumed there only - and <b>never yields with a lock
+held</b>: another coroutine of the thread that wants the lock waits for ever, since the holder cannot run.
+<code>corCoBlocking</code>'s function runs on another thread and must not touch the caller's thread-bound
+state.</p>
+</div>
+<p>How coraine schedules requests with them: <a href="#docs/coroutines">Coroutines</a>.</p>
+
+<h2 id="strings">Strings, in place</h2>
+<p>The string helpers allocate nothing; several write into their input.</p>
+<ul>
+  <li><code>corStringSplit(s, d, sVec, sVecLen)</code> replaces each delimiter in <code>s</code> by a 0 and points
+  <code>sVec</code> into <code>s</code>: <code>s</code> must be writable, and is changed. It returns the number of
+  items, stopping at <code>sVecLen</code>; an empty or <code>NULL</code> string has 0.</li>
+  <li><code>corStringSort</code> sorts a string's characters in place.</li>
+  <li><code>corStringReplace</code> and <code>corStringArrayJoin</code> write into the caller's buffer and stop
+  when it is full - the result is cut, NUL-terminated.</li>
+  <li><code>corProgName(argv[0])</code> returns a pointer into its argument, after the last <code>/</code>.</li>
+  <li><code>corFileSuffixExtract(name, len, destructive)</code>: destructive, the <code>.</code> becomes a 0 and the
+  pointer is into <code>name</code>; else a <code>strdup</code>, the caller's to free.</li>
+</ul>
+<pre>char  list[] = "220-226,403";
+char* itemV[8];
+int   items  = corStringSplit(list, ',', itemV, 8);   // 2: "220-226", "403"</pre>
+
+<h2 id="building">Building</h2>
+<pre>make                  # BUILD=debug (with -DCOR_T_ON): libcorBase.a, libcorBase.so, obj/debug/corBaseTest, the tools
+make BUILD=release    # without COR_T_ON
+make install          # the same, and the tools into bin/
+make arm64-test       # the smoke test built for aarch64, run under QEMU</pre>
+<p>Consumers compile with <code>-I..</code> and link <code>../corBase/libcorBase.a</code> from the checkout. The
+tools - <code>atoh</code>, <code>atoi</code>, <code>htoa</code>, <code>htoi</code>, <code>itoh</code> - are small
+hex, ASCII and integer converters.</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corbase"><b>corBase API</b><span>every header and entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener"><b>SEAMWARE/corBase</b><span>the repository</span></a></li>
+  <li><a href="#docs/cor-libs"><b>The cor libraries</b><span>the stack it is the bottom of</span></a></li>
+</ul>
+<p>It depends on the C library, pthreads, <code>libm</code> and <code>librt</code> only. Every other library of
+the stack uses it - at least for <code>COR_LIB_*</code> - and coraine uses it directly: its log wiring, its
+daemon mode, its CPU and memory budgets, the coroutines of its HTTP and cor:// servers.</p>
+</article>
