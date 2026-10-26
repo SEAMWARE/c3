@@ -191,7 +191,7 @@ with the switches set and the <code>GET /build</code> output.</p>
 cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP library</span></pre>
 <table class="gtable">
   <tr><th></th><th>libmicrohttpd (<code>mhd</code>)</th><th>corHttp (<code>builtin</code>)</th></tr>
-  <tr><td>Model</td><td>a thread per connection</td><td>edge-triggered epoll loops sharing one port; loop 0 accepts and deals connections out in turn</td></tr>
+  <tr><td>Model</td><td>an internal epoll thread pool (<code>MHD_USE_EPOLL</code>, <code>MHD_OPTION_THREAD_POOL_SIZE</code>)</td><td>edge-triggered epoll loops sharing one port; loop 0 accepts and deals connections out in turn</td></tr>
   <tr><td>Dependencies</td><td>libmicrohttpd 1.0.10 and GnuTLS behind it: nine libraries, 7.29 MiB</td><td>corAlloc and libc - 12 KiB of corHttp, <b>-7.3 MiB</b> against libmicrohttpd</td></tr>
   <tr><td><code>--httpLoops</code></td><td>accepted, ignored</td><td>the number of loops; <code>0</code> (the default): one per core, at most four</td></tr>
   <tr><td><code>POLICY_API</code></td><td>yes</td><td>no - its port is a second listener, and corHttp has one</td></tr>

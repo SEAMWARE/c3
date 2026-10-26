@@ -483,6 +483,33 @@
       "title": "The control center",
       "items": [
         {
+          "id": "c3",
+          "title": "c³ - the coraine Control Center",
+          "desc": "the coraine Control Center: Compile, Operate, Explore (graph, map, live values), the Documentation page; starting it, what it needs, where it keeps its state",
+          "from": [
+            {
+              "repo": "c3",
+              "path": "README.md",
+              "at": "d28a6eb4"
+            },
+            {
+              "repo": "c3",
+              "path": "doc",
+              "at": "d28a6eb4"
+            },
+            {
+              "repo": "c3",
+              "path": "makefile",
+              "at": "d28a6eb4"
+            },
+            {
+              "repo": "c3",
+              "path": "src",
+              "at": "d28a6eb4"
+            }
+          ]
+        },
+        {
           "repo": "c3",
           "desc": "c³ - build, run, explore and configure coraine brokers"
         }
@@ -492,6 +519,68 @@
       "title": "Bridges, protocols and agents",
       "privateGroup": "bridges",
       "items": [
+        {
+          "id": "writing-a-bridge",
+          "title": "Writing a bridge",
+          "desc": "the bridge plugin contract, and starting one from corBridgeTemplate",
+          "from": [
+            {
+              "repo": "corBridge",
+              "path": "README.md",
+              "at": "103ed182"
+            },
+            {
+              "repo": "corBridge",
+              "path": "*.h",
+              "at": "103ed182"
+            },
+            {
+              "repo": "corBridge",
+              "path": "corBridge.c",
+              "at": "103ed182"
+            },
+            {
+              "repo": "corBridge",
+              "path": "makefile",
+              "at": "103ed182"
+            },
+            {
+              "repo": "corBridgeTemplate",
+              "path": "README.md",
+              "at": "0b8a9e37"
+            },
+            {
+              "repo": "corBridgeTemplate",
+              "path": "rename.sh",
+              "at": "0b8a9e37"
+            },
+            {
+              "repo": "corBridgeTemplate",
+              "path": "makefile",
+              "at": "0b8a9e37"
+            },
+            {
+              "repo": "corBridgeTemplate",
+              "path": "src/*.c",
+              "at": "0b8a9e37"
+            },
+            {
+              "repo": "corBridgeTemplate",
+              "path": "src/*.h",
+              "at": "0b8a9e37"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/bridge-channels.md",
+              "at": "282865e2"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/plugin-architecture.md",
+              "at": "282865e2"
+            }
+          ]
+        },
         {
           "repo": "corBridge",
           "desc": "the contract every bridge plugin implements - the seam to non-NGSI-LD transports"
@@ -515,6 +604,38 @@
         {
           "repo": "corOpcuaBridge",
           "desc": "OPC UA: Variables as Channels, Objects as AssetChannels"
+        },
+        {
+          "id": "ckan-bridge",
+          "title": "The CKAN bridge",
+          "desc": "a CKAN portal's DataStore resources read into entities",
+          "from": [
+            {
+              "repo": "corCkanBridge",
+              "path": "README.md",
+              "at": "8b84a8fa"
+            },
+            {
+              "repo": "corCkanBridge",
+              "path": "src/*.c",
+              "at": "8b84a8fa"
+            },
+            {
+              "repo": "corCkanBridge",
+              "path": "src/*.h",
+              "at": "8b84a8fa"
+            },
+            {
+              "repo": "corCkanBridge",
+              "path": "makefile",
+              "at": "8b84a8fa"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/bridge-channels.md",
+              "at": "282865e2"
+            }
+          ]
         },
         {
           "repo": "corCkanBridge",
@@ -554,56 +675,459 @@
       "title": "Libraries",
       "items": [
         {
+          "id": "lib-corbase",
+          "title": "corBase",
+          "desc": "basic utilities, the library log and coroutines",
+          "from": [
+            {
+              "repo": "corBase",
+              "path": "README.md",
+              "at": "7bd25c74"
+            },
+            {
+              "repo": "corBase",
+              "path": "*.h",
+              "at": "7bd25c74"
+            },
+            {
+              "repo": "corBase",
+              "path": "*.c",
+              "at": "7bd25c74"
+            },
+            {
+              "repo": "corBase",
+              "path": "makefile",
+              "at": "7bd25c74"
+            }
+          ]
+        },
+        {
           "repo": "corBase",
           "desc": "basic utilities: strings, time, files, coroutines"
+        },
+        {
+          "id": "lib-corlog",
+          "title": "corLog",
+          "desc": "logging and trace levels",
+          "from": [
+            {
+              "repo": "corLog",
+              "path": "README.md",
+              "at": "48290cf4"
+            },
+            {
+              "repo": "corLog",
+              "path": "*.h",
+              "at": "48290cf4"
+            },
+            {
+              "repo": "corLog",
+              "path": "*.c",
+              "at": "48290cf4"
+            },
+            {
+              "repo": "corLog",
+              "path": "makefile",
+              "at": "48290cf4"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "2fa6186e"
+            }
+          ]
         },
         {
           "repo": "corLog",
           "desc": "logging and trace levels"
         },
         {
+          "id": "lib-coralloc",
+          "title": "corAlloc",
+          "desc": "the arena allocator",
+          "from": [
+            {
+              "repo": "corAlloc",
+              "path": "README.md",
+              "at": "c3282375"
+            },
+            {
+              "repo": "corAlloc",
+              "path": "*.h",
+              "at": "c3282375"
+            },
+            {
+              "repo": "corAlloc",
+              "path": "*.c",
+              "at": "c3282375"
+            },
+            {
+              "repo": "corAlloc",
+              "path": "makefile",
+              "at": "c3282375"
+            }
+          ]
+        },
+        {
           "repo": "corAlloc",
           "desc": "request arenas - fast allocation, freed at once"
+        },
+        {
+          "id": "lib-corargs",
+          "title": "corArgs - command-line options",
+          "desc": "typed, range-checked options from the command line, the environment and defaults",
+          "from": [
+            {
+              "repo": "corArgs",
+              "path": "README.md",
+              "at": "143cfb50"
+            },
+            {
+              "repo": "corArgs",
+              "path": "*.h",
+              "at": "143cfb50"
+            },
+            {
+              "repo": "corArgs",
+              "path": "*.c",
+              "at": "143cfb50"
+            },
+            {
+              "repo": "corArgs",
+              "path": "makefile",
+              "at": "143cfb50"
+            }
+          ]
         },
         {
           "repo": "corArgs",
           "desc": "command-line options and environment variables"
         },
         {
+          "id": "lib-corhash",
+          "title": "corHash",
+          "desc": "chained hash tables",
+          "from": [
+            {
+              "repo": "corHash",
+              "path": "README.md",
+              "at": "d25d65b0"
+            },
+            {
+              "repo": "corHash",
+              "path": "corHash.h",
+              "at": "d25d65b0"
+            },
+            {
+              "repo": "corHash",
+              "path": "corHash.c",
+              "at": "d25d65b0"
+            }
+          ]
+        },
+        {
           "repo": "corHash",
           "desc": "hash tables"
+        },
+        {
+          "id": "lib-cortree",
+          "title": "corTree - the tree",
+          "desc": "the CorNode tree: building, navigating, cloning, the tree heap, freeing",
+          "from": [
+            {
+              "repo": "corTree",
+              "path": "README.md",
+              "at": "1a67f867"
+            },
+            {
+              "repo": "corTree",
+              "path": "*.h",
+              "at": "1a67f867"
+            },
+            {
+              "repo": "corTree",
+              "path": "*.c",
+              "at": "1a67f867"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/performance.md",
+              "at": "282865e2"
+            }
+          ]
         },
         {
           "repo": "corTree",
           "desc": "the in-memory tree (CorNode) every JSON document becomes"
         },
         {
+          "id": "lib-corjson",
+          "title": "corJson - JSON in and out of a tree",
+          "desc": "parsing JSON into a tree, rendering it, the corJson tool",
+          "from": [
+            {
+              "repo": "corJson",
+              "path": "README.md",
+              "at": "aaea0f05"
+            },
+            {
+              "repo": "corJson",
+              "path": "*.h",
+              "at": "aaea0f05"
+            },
+            {
+              "repo": "corJson",
+              "path": "*.c",
+              "at": "aaea0f05"
+            }
+          ]
+        },
+        {
           "repo": "corJson",
           "desc": "the JSON parser and renderer"
+        },
+        {
+          "id": "lib-corjsonld",
+          "title": "corJsonld",
+          "desc": "@context parsing, the context cache and downloads, expansion and compaction, the core context and the flag bits it sets",
+          "from": [
+            {
+              "repo": "corJsonld",
+              "path": "README.md",
+              "at": "c7bfcded"
+            },
+            {
+              "repo": "corJsonld",
+              "path": "*.h",
+              "at": "c7bfcded"
+            },
+            {
+              "repo": "corJsonld",
+              "path": "*.c",
+              "at": "c7bfcded"
+            },
+            {
+              "repo": "corJsonld",
+              "path": "makefile",
+              "at": "c7bfcded"
+            }
+          ]
         },
         {
           "repo": "corJsonld",
           "desc": "JSON-LD: @context handling, expansion and compaction"
         },
         {
+          "id": "lib-corngsild",
+          "title": "corNgsild",
+          "desc": "the NGSI-LD library: checking, core-term ids, representations, q and the other languages, subscriptions, notifications, registrations, distributed operations; the headers by area",
+          "from": [
+            {
+              "repo": "corNgsild",
+              "path": "README.md",
+              "at": "8c311780"
+            },
+            {
+              "repo": "corNgsild",
+              "path": "*.h",
+              "at": "8c311780"
+            },
+            {
+              "repo": "corNgsild",
+              "path": "*.c",
+              "at": "8c311780"
+            },
+            {
+              "repo": "corNgsild",
+              "path": "makefile",
+              "at": "8c311780"
+            }
+          ]
+        },
+        {
           "repo": "corNgsild",
           "desc": "NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations"
+        },
+        {
+          "id": "lib-cordb",
+          "title": "corDB - the in-process store",
+          "desc": "the in-process store: indexes, locking, the durable log, history and timepoint",
+          "from": [
+            {
+              "repo": "corDB",
+              "path": "README.md",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "corDB",
+              "path": "doc/persistence.md",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "corDB",
+              "path": "doc/troe.md",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "corDB",
+              "path": "*.h",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "corDB",
+              "path": "*.c",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "corDB",
+              "path": "makefile",
+              "at": "173c7c79"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "2fa6186e"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/installation.md",
+              "at": "2fa6186e"
+            }
+          ]
         },
         {
           "repo": "corDB",
           "desc": "the in-process NGSI-LD store, persistent with --dbDir, and its history"
         },
         {
+          "id": "lib-corprom",
+          "title": "corProm - Prometheus metrics",
+          "desc": "lock-free counters, gauges and histograms, rendered for Prometheus",
+          "from": [
+            {
+              "repo": "corProm",
+              "path": "README.md",
+              "at": "57836cbf"
+            },
+            {
+              "repo": "corProm",
+              "path": "corProm.h",
+              "at": "57836cbf"
+            },
+            {
+              "repo": "corProm",
+              "path": "corProm.c",
+              "at": "57836cbf"
+            }
+          ]
+        },
+        {
           "repo": "corProm",
           "desc": "Prometheus metrics"
+        },
+        {
+          "id": "lib-corplugin",
+          "title": "corPlugin - loading plugins",
+          "desc": "resolving, opening and checking plugins, the CorNode layout check",
+          "from": [
+            {
+              "repo": "corPlugin",
+              "path": "README.md",
+              "at": "a73241dd"
+            },
+            {
+              "repo": "corPlugin",
+              "path": "corPlugin.h",
+              "at": "a73241dd"
+            },
+            {
+              "repo": "corPlugin",
+              "path": "corPlugin.c",
+              "at": "a73241dd"
+            },
+            {
+              "repo": "corTree",
+              "path": "CorNode.h",
+              "at": "1a67f867"
+            },
+            {
+              "repo": "corTree",
+              "path": "CorNode.c",
+              "at": "1a67f867"
+            }
+          ]
         },
         {
           "repo": "corPlugin",
           "desc": "the plugin loader"
         },
         {
+          "id": "lib-corhttp",
+          "title": "corHttp - the built-in HTTP server",
+          "desc": "the built-in HTTP/1.1 server: zero copy, loops, suspend/resume, streams, upgrade",
+          "from": [
+            {
+              "repo": "corHttp",
+              "path": "README.md",
+              "at": "8a36fc6b"
+            },
+            {
+              "repo": "corHttp",
+              "path": "CorHttp.h",
+              "at": "8a36fc6b"
+            },
+            {
+              "repo": "corHttp",
+              "path": "*.c",
+              "at": "8a36fc6b"
+            },
+            {
+              "repo": "corHttp",
+              "path": "makefile",
+              "at": "8a36fc6b"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "2fa6186e"
+            }
+          ]
+        },
+        {
           "repo": "corHttp",
           "desc": "the built-in HTTP server"
+        },
+        {
+          "id": "lib-correst",
+          "title": "corRest - the REST layer",
+          "desc": "the REST layer: services, the request pipeline and hooks, workers and coroutines, the HTTP and cor:// clients",
+          "from": [
+            {
+              "repo": "corRest",
+              "path": "README.md",
+              "at": "78e26efe"
+            },
+            {
+              "repo": "corRest",
+              "path": "*.h",
+              "at": "78e26efe"
+            },
+            {
+              "repo": "corRest",
+              "path": "*.c",
+              "at": "78e26efe"
+            },
+            {
+              "repo": "corRest",
+              "path": "makefile",
+              "at": "78e26efe"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "2fa6186e"
+            }
+          ]
         },
         {
           "repo": "corRest",
@@ -612,9 +1136,261 @@
       ]
     },
     {
+      "title": "API reference",
+      "items": [
+        {
+          "id": "api-corbase",
+          "about": "The small things every library of the stack needs and none should write again: strings, files, time, the CPU count and the memory limit, daemonizing, checksums, the error stack, coroutines (<code>corCo</code>) and parking a coroutine in an event loop (<code>corCoLoop</code>) - and the library log macros (<code>COR_LIB_*</code>), through which a library logs without depending on corLog.",
+          "title": "corBase API",
+          "desc": "basic utilities - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corBase",
+              "path": "*.h",
+              "at": "7bd25c74"
+            }
+          ]
+        },
+        {
+          "id": "api-corlog",
+          "about": "The log of every program of the stack. Lines are classed (<code>F</code> <code>T</code> <code>V</code> <code>I</code> <code>W</code> <code>E</code> <code>X</code>), and traces are numbered: each library owns a range of trace levels, switched on with <code>--traceLevels</code> or <code>/admin/log</code> while the broker runs. The level is tested inline, so a trace that is off costs a load and a branch and its arguments are never evaluated; a release build compiles the traces out.",
+          "title": "corLog API",
+          "desc": "logging and trace levels - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corLog",
+              "path": "*.h",
+              "at": "48290cf4"
+            }
+          ]
+        },
+        {
+          "id": "api-coralloc",
+          "about": "Memory for work that ends all at once - a request, a parse, a notification: an arena hands out zeroed, aligned pieces of a buffer by moving a pointer, and a reset gives all of it back in one go. No <code>free</code> per object, no leak of a forgotten one. Every request of the broker has its arena.",
+          "title": "corAlloc API",
+          "desc": "request arenas - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corAlloc",
+              "path": "*.h",
+              "at": "c3282375"
+            }
+          ]
+        },
+        {
+          "id": "api-corargs",
+          "about": "The command line of every program of the stack, from one table: each option's name, short name, type, range, default, environment variable and help. corArgs parses the command line and the environment against it, refuses a value of the wrong type or out of range, and prints <code>-u</code> / <code>-U</code> from the same table - so the help cannot disagree with what is accepted.",
+          "title": "corArgs API",
+          "desc": "command-line options and environment variables - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corArgs",
+              "path": "*.h",
+              "at": "143cfb50"
+            }
+          ]
+        },
+        {
+          "id": "api-corhash",
+          "about": "Hash tables for the stack: chained, with the hash and compare functions the caller supplies, their items allocated from a corAlloc arena.",
+          "title": "corHash API",
+          "desc": "hash tables - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corHash",
+              "path": "*.h",
+              "at": "d25d65b0"
+            }
+          ]
+        },
+        {
+          "id": "api-cortree",
+          "about": "One shape for data, all through the stack. A request body is parsed into a tree of <code>CorNode</code>s; the NGSI-LD library checks, expands and renders that same tree; a database plugin is handed trees to store and hands trees back from every read - what it keeps them as is its own business (corDB keeps the trees themselves, MongoDB gets BSON); the response is rendered from a tree, and cor:// sends a tree to another broker in binary (<code>corTreeBin</code>) without ever turning it into JSON text. No layer converts data for the next one, which makes corTree the API every plugin - a database plugin above all - is written against. The library builds, navigates, edits, clones and sorts trees, and keeps the ones that outlive a request in the tree heap. A node is 40 bytes, a scalar node 32; four of those bytes (<code>flags</code>, <code>kind</code>, <code>termId</code>) belong to the code that uses the tree, for what it knows about a node - an attribute's type, a core term - so that it need not keep it beside the tree.",
+          "title": "corTree API",
+          "desc": "the CorNode tree - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corTree",
+              "path": "*.h",
+              "at": "1a67f867"
+            }
+          ]
+        },
+        {
+          "id": "api-corjson",
+          "about": "JSON text into a corTree, and a corTree back out as JSON - compact or indented. The parser is the way every JSON body enters the broker; the renderers are the way every JSON response leaves it. With it comes <code>corJson</code>, the command-line tool.",
+          "title": "corJson API",
+          "desc": "the JSON parser and renderers - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corJson",
+              "path": "*.h",
+              "at": "aaea0f05"
+            }
+          ]
+        },
+        {
+          "id": "api-corjsonld",
+          "about": "JSON-LD as NGSI-LD needs it: @context documents parsed, downloaded and cached; the terms of a corTree expanded to IRIs by a context and compacted back; the core context and its vocabulary.",
+          "title": "corJsonld API",
+          "desc": "JSON-LD @context handling - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corJsonld",
+              "path": "*.h",
+              "at": "c7bfcded"
+            }
+          ]
+        },
+        {
+          "id": "api-corngsild",
+          "about": "NGSI-LD semantics, on corTrees: payloads checked and attribute types detected, the core terms as an enum, the representations rendered (normalized, concise, simplified), <code>q</code>, <code>geoQ</code> and <code>scopeQ</code>, the subscription and registration caches, notifications, distributed operations. The broker's NGSI-LD behaviour lives here; the broker itself wires it to an HTTP server and a store.",
+          "title": "corNgsild API",
+          "desc": "NGSI-LD semantics - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corNgsild",
+              "path": "*.h",
+              "at": "8c311780"
+            }
+          ]
+        },
+        {
+          "id": "api-cordb",
+          "about": "The NGSI-LD store inside the broker, as a database plugin: <code>corDB.so</code> keeps the current state in memory as corTrees - persistent on disk with <code>--dbDir</code> - with its own history (<code>--troe corDB</code>) and Timepoint; <code>ramDB.so</code> is the same store in memory only. No database server.",
+          "title": "corDB API",
+          "desc": "the in-process store - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corDB",
+              "path": "*.h",
+              "at": "173c7c79"
+            }
+          ]
+        },
+        {
+          "id": "api-corprom",
+          "about": "Prometheus metrics: counters, gauges and histograms, updated with atomics on the hot path and rendered in the Prometheus text format only when they are scraped.",
+          "title": "corProm API",
+          "desc": "Prometheus metrics - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corProm",
+              "path": "*.h",
+              "at": "57836cbf"
+            }
+          ]
+        },
+        {
+          "id": "api-corplugin",
+          "about": "The plugin loader: a plugin named on the command line is resolved to a shared library in the plugin directory, loaded, and its registration function called - and a plugin built for another CorNode layout is refused instead of reading every node at the wrong offsets.",
+          "title": "corPlugin API",
+          "desc": "the plugin loader - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corPlugin",
+              "path": "*.h",
+              "at": "a73241dd"
+            }
+          ]
+        },
+        {
+          "id": "api-corhttp",
+          "about": "An HTTP/1.1 server and nothing else: a request is parsed in place in its connection's read buffer - nothing copied - and handed to one callback with its method, path, query, headers and body. It is coraine's built-in HTTP server (<code>COR_HTTP_SERVER=builtin</code>), in place of libmicrohttpd.",
+          "title": "corHttp API",
+          "desc": "the built-in HTTP server - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corHttp",
+              "path": "*.h",
+              "at": "8a36fc6b"
+            }
+          ]
+        },
+        {
+          "id": "api-correst",
+          "about": "The REST layer between the HTTP server and the broker's services: a service table that routes each request to its service routine, the per-request state, the worker pools - and the clients the broker sends with - its own HTTP client, on sockets and OpenSSL, and the cor:// client - for notifications and distributed operations.",
+          "title": "corRest API",
+          "desc": "the REST layer and its clients - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corRest",
+              "path": "*.h",
+              "at": "78e26efe"
+            }
+          ]
+        },
+        {
+          "id": "api-corbridge",
+          "about": "The contract a bridge plugin implements - the seam between NGSI-LD and a transport that is not NGSI-LD: the entry points the broker calls to start a bridge, hand it its Channels and write to them, and the callbacks it gives the bridge for what arrives (samples, replies, goal events).",
+          "title": "corBridge API",
+          "desc": "the bridge plugin contract - every header, generated",
+          "generated": "tools/apiRef.py",
+          "from": [
+            {
+              "repo": "corBridge",
+              "path": "*.h",
+              "at": "103ed182"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "Tools and integrations",
       "privateGroup": "tools",
       "items": [
+        {
+          "id": "cor-libs",
+          "title": "corLibs - the umbrella",
+          "desc": "bootstrapping and building the whole stack, the pins and the lists",
+          "from": [
+            {
+              "repo": "corLibs",
+              "path": "README.md",
+              "at": "af621e6f"
+            },
+            {
+              "repo": "corLibs",
+              "path": "bootstrap.sh",
+              "at": "af621e6f"
+            },
+            {
+              "repo": "corLibs",
+              "path": "makefile",
+              "at": "af621e6f"
+            },
+            {
+              "repo": "corLibs",
+              "path": "iter.sh",
+              "at": "af621e6f"
+            },
+            {
+              "repo": "corLibs",
+              "path": "docker",
+              "at": "af621e6f"
+            },
+            {
+              "repo": "corLibs",
+              "path": "tools/mhd",
+              "at": "af621e6f"
+            }
+          ]
+        },
         {
           "repo": "corLibs",
           "desc": "the umbrella that builds every library"
@@ -624,12 +1400,98 @@
           "desc": "the functional test harness"
         },
         {
+          "id": "cor-tools",
+          "title": "corTools",
+          "desc": "corRequest, corTestClient and corMongoDrop: the stack's command-line tools",
+          "from": [
+            {
+              "repo": "corTools",
+              "path": "README.md",
+              "at": "b9cdbc12"
+            },
+            {
+              "repo": "corTools",
+              "path": "makefile",
+              "at": "b9cdbc12"
+            },
+            {
+              "repo": "corTools",
+              "path": "*.c",
+              "at": "b9cdbc12"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/testing.md",
+              "at": "282865e2"
+            }
+          ]
+        },
+        {
           "repo": "corTools",
           "desc": "test and benchmark tools"
         },
         {
+          "id": "apisix-plugin",
+          "title": "The NGSI-LD plugin for APISIX",
+          "desc": "ngsild-pep: fdsc.so's access decision in the APISIX gateway, in front of any NGSI-LD broker",
+          "from": [
+            {
+              "repo": "corApisixNgsild",
+              "path": "README.md",
+              "at": "089e6362"
+            },
+            {
+              "repo": "corApisixNgsild",
+              "path": "lua",
+              "at": "089e6362"
+            },
+            {
+              "repo": "corApisixNgsild",
+              "path": "src",
+              "at": "089e6362"
+            },
+            {
+              "repo": "corApisixNgsild",
+              "path": "makefile",
+              "at": "089e6362"
+            },
+            {
+              "repo": "corApisixNgsild",
+              "path": "test",
+              "at": "089e6362"
+            },
+            {
+              "repo": "coraine",
+              "path": "src/plugins/auth/fdsc/fdsc.c",
+              "at": "282865e2"
+            }
+          ]
+        },
+        {
           "repo": "corApisixNgsild",
           "desc": "an APISIX plugin: coraine's NGSI-LD access decision, for any NGSI-LD broker"
+        },
+        {
+          "id": "cormcp",
+          "title": "corMcp - an MCP server for NGSI-LD brokers",
+          "desc": "read-only MCP tools that give an AI model access to any NGSI-LD broker",
+          "from": [
+            {
+              "repo": "corMcp",
+              "path": "README.md",
+              "at": "dfcafd6b"
+            },
+            {
+              "repo": "corMcp",
+              "path": "makefile",
+              "at": "dfcafd6b"
+            },
+            {
+              "repo": "corMcp",
+              "path": "src",
+              "at": "dfcafd6b"
+            }
+          ]
         },
         {
           "repo": "corMcp",

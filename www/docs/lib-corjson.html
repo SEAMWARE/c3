@@ -1,0 +1,181 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corjson.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corJson - JSON in and out of a tree</h1>
+<p class="lead">The JSON parser that turns text into a <a href="#docs/lib-cortree">corTree</a>, the renderers that turn
+a tree back into text, and the <code>corJson</code> command-line tool built on them. Every request body coraine reads
+over HTTP and every JSON response it sends goes through it.</p>
+
+<h2 id="parse">Parsing</h2>
+<pre>CorJson* corJsonCreate(CorJson* corJsonP, CorAlloc* kaP);
+CorNode* corJsonParse(CorJson* corJsonP, char* json);</pre>
+<p>A <code>CorJson</code> is the parser's state and its rendering settings, over an allocator
+(<a href="#docs/lib-coralloc">corAlloc</a>). <code>corJsonCreate</code> zeroes the struct it is given (or
+<code>calloc</code>s one for <code>NULL</code>) and sets the defaults; with no allocator it makes one of its own, an
+8 KiB <code>malloc</code>. One <code>CorJson</code> per thread: it holds the parse in progress. This is how coraine
+reads a bridge configuration file:</p>
+<pre>char      kallocBuffer[8192];
+CorAlloc  kalloc;
+CorJson   corJson;
+
+corAllocBufferInit(&amp;kalloc, kallocBuffer, sizeof(kallocBuffer), 8 * 1024, NULL, "bridge config");
+
+CorJson* corJsonP = corJsonCreate(&amp;corJson, &amp;kalloc);
+CorNode* treeP    = corJsonParse(corJsonP, buf);
+
+if (treeP == NULL)
+  printf("line %d, position %d: %s\n", corJsonP-&gt;lineNo, corJsonP-&gt;errorPos, corJsonP-&gt;errorString);
+...
+corAllocBufferReset(&amp;kalloc, false);      <span class="c">// the tree goes with the allocator</span></pre>
+
+<h3 id="in-place">In place</h3>
+<div class="g-callout warn">
+<p><b>The text is parsed in place, and the tree points into it.</b> A string is unescaped where it is and terminated
+there; a node's <code>name</code> and a string's <code>value.s</code> are pointers into <code>json</code>. The buffer is
+changed, must be writable (not a string literal), and must live as long as the tree. Parse a copy when the text is
+needed again - coraine passes <code>corAllocStrdup(&amp;corRest.kalloc, text)</code>.</p>
+</div>
+<p>The nodes come from the <code>CorJson</code>'s allocator, 40 bytes each, zeroed - <code>flags</code>,
+<code>kind</code> and <code>termId</code> included. Such a tree is never freed node by node: it goes when the allocator
+is reset. A tree that must live on is cloned into the tree heap, which copies the strings out of the buffer as well:</p>
+<pre>CorNode* parsed = corJsonParse(corRest.corJsonP, buf);
+if (parsed == NULL)
+  COR_X(1, "contextSourceExtras: '%s' is not valid JSON", path);
+
+ldContextSourceExtras = corTreeClone(NULL, parsed);   <span class="c">// buf and the allocator may go now</span></pre>
+<p>The returned node is the document's top level - an object, an array, or a scalar - named
+<code>"toplevel object"</code>, <code>"toplevel array"</code> or <code>"toplevel value"</code>.</p>
+
+<h3 id="accepted">What it accepts</h3>
+<table class="gtable">
+  <tr><th>Input</th><th>Result</th></tr>
+  <tr><td>a number with no fraction and no exponent</td><td><code>CorInt</code>, a <code>long long</code></td></tr>
+  <tr><td>a number with a fraction</td><td><code>CorFloat</code>; the first 12 decimals are kept, the rest read and dropped</td></tr>
+  <tr><td>a positive exponent whose result fits a <code>long long</code> (<code>5e3</code>)</td><td><code>CorInt</code> (5000)</td></tr>
+  <tr><td>any other exponent (<code>5e-3</code>, <code>5e30</code>, <code>1.5e3</code>)</td><td><code>CorFloat</code>, by <code>strtod_l</code> in the C locale - correctly rounded, whatever the process's locale</td></tr>
+  <tr><td><code>\"</code>, <code>\\</code>, <code>\/</code>, <code>\b</code>, <code>\f</code>, <code>\n</code>, <code>\r</code>, <code>\t</code>, <code>\uXXXX</code> and surrogate pairs</td><td>unescaped to UTF-8</td></tr>
+  <tr><td>a leading <code>+</code> (<code>+5</code>), a fraction with no digits (<code>1.</code>)</td><td>accepted: 5, 1</td></tr>
+</table>
+<p>Refused, with an error: a leading zero (<code>01</code>), a hex number, an exponent with no digits, a raw tab or
+newline inside a string or a name, an unknown escape, a lone surrogate, a trailing comma (<code>[1,]</code>,
+<code>{"a":1,}</code>), a double comma, a missing colon, an unterminated string, anything after the document.</p>
+<div class="g-callout warn">
+<p><b>Limits that are not checked.</b> An integer of more than 19 digits overflows silently -
+<code>12345678901234567890123</code> is read as <code>4807115922877859019</code>. A float beyond the range of a
+<code>double</code> (<code>1e400</code>) is infinity, and is rendered as <code>inf</code>.</p>
+</div>
+<p><b>Nesting is limited to 100 levels</b> of objects and arrays: the parser recurses once per level, and so does
+every walk of a tree after it. A deeper document is refused - <code>JSON Parse Error: nested deeper than 100
+levels</code>, status <code>CorJsonMaxDepthExceeded</code> - even when it is valid JSON.</p>
+
+<h3 id="errors">Errors</h3>
+<p>On an error <code>corJsonParse</code> returns <code>NULL</code> and the <code>CorJson</code> says why:
+<code>errorString</code> (<code>JSON Parse Error: expecting comma or end of array</code>), <code>errorPos</code> (the
+offset in the buffer), <code>lineNo</code> and <code>status</code> - the kind of failure:
+<code>CorJsonMaxDepthExceeded</code>, <code>CorJsonAllocError</code>, else <code>CorJsonParseError</code>
+(<code>CorJsonOk</code> after a parse that succeeded). An <code>errorF</code> callback, if set
+(<code>corJsonConfig(corJsonP, CorJsonConfigErrorFunction, (char*) fn)</code>), is called once, with the line, the
+position, the text and the rest of the buffer. The parse stops at the first error.</p>
+
+<h3 id="hooks">Hooks</h3>
+<table class="gtable">
+  <tr><th>Field</th><th>Called</th></tr>
+  <tr><td><code>keyF</code></td><td>for each object member, the moment its name is final - unescaped, terminated, the node linked into its container - and before its value is parsed: <code>bool keyF(CorJson*, CorNode* containerP, CorNode* nodeP, int depth)</code>. It may stamp the node (<code>flags</code>, <code>termId</code>) or point <code>nodeP-&gt;name</code> elsewhere; <code>false</code> refuses the name and fails the parse. <code>depth</code> counts the enclosing containers: a top-level object's members are at 1, those of the objects in a top-level array at 2. <code>keyDataP</code> is the hook's own state. corNgsild sets it to classify the NGSI-LD core terms of a request body as it is parsed - no second walk of the tree.</td></tr>
+  <tr><td><code>addF</code></td><td>to add a member to its object - <code>NULL</code> appends; <code>corJsonConfig(..., CorJsonConfigSorted, NULL)</code> sets <code>corTreeChildAddSorted</code> (<code>CorJsonConfigSortedReverse</code>: descending). Array items are always appended.</td></tr>
+  <tr><td><code>saxF</code></td><td>for each event of the parse - start, end, object and array start and end, each value - with the name, the value and whether it is in an array (<code>CorJsonConfigSaxFunction</code>)</td></tr>
+</table>
+<p><code>corJsonReset(corJsonP)</code> clears the state of the last parse, the hooks and the rendering settings, for a
+<code>CorJson</code> that is used again.</p>
+
+<h2 id="render">Rendering</h2>
+<pre>int  corJsonFastRenderSize(CorNode* nodeP);
+void corJsonFastRender(CorNode* nodeP, char* buf);
+
+int  corJsonRenderSize(CorJson* corJsonP, CorNode* nodeP);
+void corJsonRender(CorJson* corJsonP, CorNode* nodeP, char* buf);</pre>
+<table class="gtable">
+  <tr><th>Renderer</th><th>Output</th></tr>
+  <tr><td><code>corJsonFastRender</code></td><td>compact - no whitespace at all - and needs no <code>CorJson</code></td></tr>
+  <tr><td><code>corJsonRender</code></td><td>laid out by the <code>CorJson</code>'s settings - two spaces per level, a newline after each member, a space after the colon by default - and ends with a newline</td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>The renderers take no buffer size.</b> They write as much as the tree needs: size the buffer first with the
+matching <code>...RenderSize</code> function, plus one for the terminating zero, as coraine does:</p>
+<pre>char* text = (char*) malloc(corJsonFastRenderSize(treeP) + 1);
+corJsonFastRender(treeP, text);</pre>
+</div>
+<ul>
+  <li><b>A string</b> is escaped: <code>"</code>, <code>\</code>, the control characters (<code>\n</code>,
+  <code>\t</code>, ..., the rest as <code>\u00XX</code>); every other byte, UTF-8 included, is written as it is.</li>
+  <li><b>An integer</b> is written in full, up to 19 digits and a sign.</li>
+  <li><b>A float</b> is written with at most 9 decimals, trailing zeros removed (<code>1.50</code> is
+  <code>1.5</code>, <code>2.0</code> is <code>2</code>, <code>0.1234567890123</code> is <code>0.123456789</code>); one whose
+  integer part is 1e21 or more, or one too small for 9 decimals, as the shortest <code>%g</code> form that reads back
+  exactly (<code>1e+30</code>).</li>
+  <li><b>A scalar on its own</b> renders without its <code>next</code>: the value alone.</li>
+  <li><b>The order</b> is the tree's - insertion order. A sorted rendering is a sorted tree:
+  <a href="#docs/lib-cortree/sort"><code>corTreeSort</code></a>, or a parse with <code>CorJsonConfigSorted</code>.</li>
+</ul>
+
+<h3 id="config">The layout settings</h3>
+<p><code>corJsonConfig(corJsonP, item, value)</code>, before <code>corJsonRender</code>:</p>
+<table class="g-opts">
+  <tr><th>Item</th><th>Effect</th></tr>
+  <tr><td>CorJsonConfigMinimized</td><td>no newlines, no indentation, no spaces</td></tr>
+  <tr><td>CorJsonConfigDefault</td><td>back to the defaults</td></tr>
+  <tr><td>CorJsonConfigIndentStep</td><td>spaces per level, as text (<code>"4"</code>); <code>CorJsonAlreadyConfigured</code> once a render has used the indentation</td></tr>
+  <tr><td>CorJsonConfigNewlineString</td><td>the newline string (<code>""</code>: one line)</td></tr>
+  <tr><td>CorJsonConfigSpaceBeforeColon, CorJsonConfigNoSpaceAfterColon</td><td>around the colon</td></tr>
+  <tr><td>CorJsonConfigObjectStartOnNewLine, CorJsonConfigArrayStartOnNewLine</td><td>the opening bracket on a line of its own</td></tr>
+  <tr><td>CorJsonConfigArraysOnOneLine, CorJsonConfigObjectsOnOneLine</td><td>each on one line</td></tr>
+  <tr><td>CorJsonConfigShortArraysOnOneLine, CorJsonConfigShortObjectsOnOneLine</td><td>on one line when it holds no container and renders in 80 characters or fewer - <code>CorJsonConfigShortArrayMaxLen</code>, <code>CorJsonConfigShortObjectMaxLen</code> change the 80</td></tr>
+</table>
+<p>The indentation strings are allocated in the <code>CorJson</code>'s allocator at the first indented render.</p>
+
+<h2 id="tool">The corJson tool</h2>
+<p><code>corJson</code> reads one JSON document - a file, or stdin - and prints it, parsed and rendered again:</p>
+<pre>corJson file.json              <span class="c"># two spaces per level</span>
+corJson -sort file.json        <span class="c"># object members in alphabetical order</span>
+corJson -min &lt; file.json       <span class="c"># compact, from stdin</span>
+corJson -i 4 -saol file.json   <span class="c"># four spaces, short arrays on one line</span>
+corJson -bin file.json         <span class="c"># through the cor binary format and back - the output must be the same</span>
+corJson -u                     <span class="c"># every option</span></pre>
+<table class="g-opts">
+  <tr><th>Option</th><th></th></tr>
+  <tr><td>-sort, -rsort</td><td>object members in alphabetical order, or the reverse - array items keep their order</td></tr>
+  <tr><td>-min, -ol</td><td>no whitespace at all; one line</td></tr>
+  <tr><td>-i &lt;n&gt;</td><td>spaces per level</td></tr>
+  <tr><td>-sbc, -nsac</td><td>a space before the colon; none after it</td></tr>
+  <tr><td>-onl, -anl</td><td>an object's, an array's opening bracket on a new line</td></tr>
+  <tr><td>-aol, -ool, -saol, -sool</td><td>arrays, objects, short arrays, short objects on one line; <code>-saml &lt;len&gt;</code>, <code>-soml &lt;len&gt;</code> what is short (80)</td></tr>
+  <tr><td>-o &lt;file&gt;, -sr</td><td>the output to a file; to stderr</td></tr>
+  <tr><td>-bin, -binStats</td><td>a round trip through the cor format (<a href="#docs/cor-protocol">cor://</a>) - <code>-binStats</code> also prints the compact JSON's size and the cor size to stderr</td></tr>
+  <tr><td>-saxTest</td><td>a log line per SAX event, and no output</td></tr>
+  <tr><td>-t, -T, -v, -V</td><td>trace levels and verbose mode, of the tool and of the libraries</td></tr>
+</table>
+<p>A document that does not parse is said on stderr with its source (<code>pipe</code> for stdin), line, reason and
+position, and the exit code is 10:</p>
+<pre><span class="o">$ echo '[1,2' | corJson
+kjson: pipe[1]: JSON Parse Error: expecting comma or end of array (offending buffer position: 6)</span></pre>
+<p>The tool's input is at most 64 MiB. A second file name is refused. <code>-u</code> exits 1.</p>
+<div class="g-callout">
+<p><b>coraine's functional tests need it.</b> corTest pipes every response body through <code>corJson -sort</code>
+before comparing it with the expected one - member order is insertion order and none of a test's business - so the
+tool must be on <code>PATH</code>, or <code>CORJSON</code> must point at it (<a href="#docs/testing">Testing</a>).</p>
+</div>
+
+<h2 id="traces">Trace levels</h2>
+<p>With <a href="#docs/lib-corlog">corLog</a>: <code>50</code>-<code>54</code> parsing (values, objects, arrays,
+allocation) and <code>56</code>-<code>63</code> rendering - corTree has 55 and 64-66.</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corjson"><b>corJson API</b><span>every header and entry - CorJson, the hooks, corJsonParse, the renderers, corJsonConfig</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener"><b>SEAMWARE/corJson</b><span>the repository - <code>make di</code> builds libcorJson.a, libcorJson.so and bin/corJson</span></a></li>
+  <li><a href="#docs/lib-cortree"><b>corTree</b><span>the tree the parser builds and the renderers read</span></a></li>
+</ul>
+<p>corJson depends on <a href="#docs/lib-cortree">corTree</a>, <a href="#docs/lib-coralloc">corAlloc</a>,
+<a href="#docs/lib-corlog">corLog</a> and <a href="#docs/lib-corbase">corBase</a>. It is used by
+<a href="#docs/lib-correst">corRest</a> (request bodies in, responses out), <a href="#docs/lib-corngsild">corNgsild</a>
+(the key hook), <a href="#docs/lib-corjsonld">corJsonld</a>, the broker, its bridges and plugins.</p>
+</article>

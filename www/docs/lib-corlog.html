@@ -1,0 +1,175 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corlog.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corLog</h1>
+<p class="lead">The log of an executable: error, warning, info, verbose and FIXME lines, and 3200 numbered trace
+levels, written one line at a time to a file, to stdout or to both. coraine logs with it, and every library of
+the stack reaches it through corBase's library log.</p>
+
+<h2 id="macros">The macros</h2>
+<p>One header, <code>corLog/corLog.h</code>, declares everything. A line is written by a macro that captures the
+file, the line and the function, and takes a <code>printf</code> format:</p>
+<table class="g-opts">
+  <tr><th>Macro</th><th>Writes</th></tr>
+  <tr><td>COR_E(fmt, ...)</td><td>an <code>E</code> line - always</td></tr>
+  <tr><td>COR_W(fmt, ...)</td><td>a <code>W</code> line - always</td></tr>
+  <tr><td>COR_I(fmt, ...)</td><td>an <code>I</code> line, when <code>corLogInfo</code> is true</td></tr>
+  <tr><td>COR_V(fmt, ...)</td><td>a <code>V</code> line, when <code>corLogVerbose</code> is true</td></tr>
+  <tr><td>COR_F(fmt, ...)</td><td>an <code>F</code> (FIXME) line, when <code>corLogFixme</code> is true</td></tr>
+  <tr><td>COR_T(level, fmt, ...)</td><td>a <code>T</code> line, when trace level <code>level</code> is on - in a debug build only (<a href="#docs/lib-corlog/release">below</a>)</td></tr>
+  <tr><td>COR_X(code, fmt, ...)</td><td>an <code>X</code> line, then <code>exit(code)</code></td></tr>
+  <tr><td>COR_RE(ret, fmt, ...)</td><td>an <code>E</code> line, then <code>return ret;</code></td></tr>
+  <tr><td>COR_RVE(fmt, ...)</td><td>an <code>E</code> line, then <code>return;</code> (a void function)</td></tr>
+</table>
+<p><code>COR_E</code>, <code>COR_W</code>, <code>COR_X</code>, <code>COR_I</code>, <code>COR_V</code>,
+<code>COR_F</code> and <code>COR_T</code> are expressions; <code>COR_RE</code> and <code>COR_RVE</code> are
+statements (<code>do { ... } while (0)</code>). <code>COR_I</code>, <code>COR_V</code>, <code>COR_F</code> and
+<code>COR_T</code> test their switch inline and call <code>corLogOut</code> only for a line that is written: a
+line that is off costs a load and a branch, and its arguments are not evaluated.</p>
+<pre>#include "corLog/corLog.h"
+
+static int configRead(const char* path)
+{
+  int fd = open(path, O_RDONLY);
+
+  if (fd == -1)
+    COR_RE(-1, "open(%s): %s", path, strerror(errno));
+
+  COR_V("reading %s", path);
+  COR_T(400, "fd %d", fd);
+
+  return fd;
+}</pre>
+
+<h2 id="init">Starting the log</h2>
+<pre>int corLogInit(const char* progName, const char* logDir, bool logToScreen, const char* logLevel,
+               const char* traceLevels, bool verbose, bool fixme);</pre>
+<table class="gtable">
+  <tr><th>Argument</th><th>What it does</th></tr>
+  <tr><td><code>logDir</code></td><td>non-empty: the log is the file <code>&lt;logDir&gt;/&lt;progName&gt;.log</code>; a file of that name is renamed <code>&lt;progName&gt;.log.old</code> first. The file is opened <code>O_APPEND</code>, so a file truncated under the process (logrotate's <code>copytruncate</code>) is written from its new start. <code>NULL</code> or <code>""</code>: the log is stdout</td></tr>
+  <tr><td><code>logToScreen</code></td><td>with a file, every line goes to stdout as well</td></tr>
+  <tr><td><code>logLevel</code></td><td><code>"ERR"</code>, <code>"WARN"</code>, <code>"INFO"</code>, <code>"VERBOSE"</code>, <code>"TRACE"</code> - a ladder: <code>INFO</code> and above turn <code>corLogInfo</code> on, <code>VERBOSE</code> and above <code>corLogVerbose</code>. Any other string: an error on stderr, and <code>-1</code>. <code>NULL</code>: neither</td></tr>
+  <tr><td><code>traceLevels</code></td><td>the trace levels to turn on, <code>"5,10,15-20"</code>. A non-NULL value - an empty string too - also sets the ladder to <code>TRACE</code>, so <code>corLogInfo</code> and <code>corLogVerbose</code> are both turned on</td></tr>
+  <tr><td><code>verbose</code></td><td>true turns <code>corLogVerbose</code> on, whatever the level</td></tr>
+  <tr><td><code>fixme</code></td><td><code>corLogFixme</code> - the <code>F</code> lines</td></tr>
+</table>
+<p>It returns 0, or -1 when the file cannot be opened (said on stderr) or the level is not one of the five. The
+switches are plain globals (<code>corLogInfo</code>, <code>corLogVerbose</code>, <code>corLogFixme</code>) and
+can be set after it. coraine passes <code>logLevel</code> <code>NULL</code> and then sets
+<code>corLogInfo</code> and <code>corLogVerbose</code> both to its <code>--verbose</code>, so that a trace level
+turns on the trace lines and nothing else (<code>src/lib/startup/startupLog.c</code>):</p>
+<pre>if (corLogInit(progName, logDir, logToStdout, NULL, traceLevels, corArgsBuiltinVerbose, false) != 0)
+  exit(1);
+
+corBaseInit(corLogOut);                                            // the libraries' lines into this log
+corBaseTraceLevelsSet(corLogTraceLevels, sizeof(corLogTraceLevels) / sizeof(corLogTraceLevels[0]));
+
+corLogInfo    = corArgsBuiltinVerbose;
+corLogVerbose = corArgsBuiltinVerbose;</pre>
+<div class="g-callout warn">
+<p><b>Before <code>corLogInit</code> nothing is written</b> - not even an <code>E</code> or a <code>W</code>:
+<code>corLogOut</code> returns. The one exception is <code>COR_X</code>: its message goes to stderr as
+<code>X: &lt;message&gt;</code> and the process exits with its code. A library line before the log is up is
+handled by corBase instead, which writes errors and warnings to stderr
+(<a href="#docs/lib-corbase/library-log">corBase - the library log</a>).</p>
+</div>
+
+<h2 id="format">A log line</h2>
+<pre>&lt;type&gt;: &lt;seconds&gt;.&lt;ms&gt;: &lt;file&gt;[&lt;line&gt;]: &lt;function&gt;: &lt;message&gt;</pre>
+<pre>I: 000000.020: coraine.c[2280]: main: coraine running on port 1026
+T: 000000.000: seCoreTerms.c[72]: seCoreTermsAdd: 27 Service Execution terms added to the core context (T-403)</pre>
+<ul>
+  <li>the time is since <code>corLogInit</code>, seconds (six digits) and milliseconds, from
+  <code>CLOCK_REALTIME</code></li>
+  <li>the file is the source file's name without its directory</li>
+  <li>a trace line ends with its level, <code>(T-403)</code></li>
+  <li>a message longer than 1023 bytes is formatted again into a buffer of its size; if that allocation fails, the
+  line is the first 1023 bytes</li>
+</ul>
+
+<h2 id="trace-levels">Trace levels</h2>
+<p>A trace level is a number from 0 to 3199: a bitmask of 100 32-bit words, <code>corLogTraceLevels</code>. A
+level outside it is never on, and setting it does nothing.</p>
+<table class="g-opts">
+  <tr><th>Function</th><th>What it does</th></tr>
+  <tr><td>corLogTraceLevelSet(s, replace)</td><td>turns on the levels of <code>s</code> - a comma-separated list of levels and ranges, <code>"220-226,403"</code>. <code>replace</code> true clears every level first; false adds</td></tr>
+  <tr><td>corLogTraceLevelReset(s)</td><td>turns off the levels of <code>s</code></td></tr>
+  <tr><td>corLogTraceLevelSetOne(n)<br>corLogTraceLevelResetOne(n)</td><td>one level on, off</td></tr>
+  <tr><td>corLogTraceLevelCheck(n)</td><td>is level <code>n</code> on</td></tr>
+  <tr><td>corLogTraceLevelGet()</td><td>the levels that are on, as ranges - <code>"1-2,5-8"</code>. A static buffer: not to be freed, overwritten by the next call</td></tr>
+</table>
+<p>A list is read up to 511 bytes; a longer one is cut after its last complete item. Each item is read with
+<code>atoi</code>: a range is <code>from-to</code>, both ends included.</p>
+
+<h3 id="numbering">How the numbers are shared</h3>
+<p>The trace levels are the executable's one number space: a library's <code>COR_LIB_T</code> lines are tested
+against the same bitmask (corBase's <code>corBaseTraceLevelsSet</code>). So each part of the stack takes its own
+range, and names its levels in a header of its own:</p>
+<table class="gtable">
+  <tr><th>Levels</th><th>Code</th><th>Defined in</th></tr>
+  <tr><td>50-66</td><td>corJson (50-54, 56-63), corTree (55, 64-66)</td><td><code>corJsonTraceLevels.h</code>, <code>corTreeTraceLevels.h</code></td></tr>
+  <tr><td>100-116</td><td>corRest</td><td><code>corRestTraceLevels.h</code></td></tr>
+  <tr><td>150-156</td><td>corJsonld</td><td><code>corLdTraceLevels.h</code></td></tr>
+  <tr><td>200-240</td><td>corNgsild - forwarding 220-226, notifications 230-239</td><td><code>ldTraceLevels.h</code></td></tr>
+  <tr><td>300-303</td><td>corAlloc</td><td><code>CorAllocTraceLevel.h</code></td></tr>
+  <tr><td>400-404</td><td>coraine itself</td><td><code>src/app/coraine/coraineTraceLevels.h</code></td></tr>
+</table>
+<p>A new library picks a range nobody uses and defines its levels as an <code>enum</code> or
+<code>#define</code>s starting there.</p>
+
+<h3 id="switching">Switching them on</h3>
+<p>In coraine, at start, with <code>--traceLevels</code> (<code>-t</code>) - <a href="#docs/options/traceLevels">Options</a>:</p>
+<pre>coraine -db corDB -t 220-226,403</pre>
+<p>On a running broker, with the <code>admin</code> API plugin (<code>--apiPlugins admin</code>), through
+<code>/admin/log</code>. The parameters are <code>traceLevels</code>, <code>verbose</code> and <code>info</code>
+(<code>on</code>/<code>off</code>, <code>true</code>/<code>false</code>, <code>1</code>/<code>0</code>):</p>
+<table class="gtable">
+  <tr><th>Request</th><th><code>traceLevels</code></th></tr>
+  <tr><td><code>PUT /admin/log</code></td><td>replaces the levels that are on</td></tr>
+  <tr><td><code>POST</code> / <code>PATCH /admin/log</code></td><td>adds to them</td></tr>
+  <tr><td><code>DELETE /admin/log</code></td><td>turns them off</td></tr>
+</table>
+<pre>curl -X POST 'http://localhost:1026/admin/log?traceLevels=1,2,5-8&amp;verbose=on'
+{
+  "info": false,
+  "traceLevels": "1-2,5-8",
+  "traces": true,
+  "verbose": true
+}</pre>
+<p>Every request answers with the state after it. <code>traces</code> says whether this build has traces compiled
+in.</p>
+
+<h2 id="threads">Threads</h2>
+<p>Each line is formatted on the caller's stack and written with one <code>writev</code> under one mutex
+(<code>corLogMutex</code>) - to the file, and to stdout with <code>logToScreen</code> - so lines of different
+threads never interleave. The switches and the trace-level bitmask are read without a lock: a change made at run
+time (<code>/admin/log</code>) is seen by the next line tested. The functions that change them take no lock
+either.</p>
+
+<h2 id="release">What a release build keeps</h2>
+<p><code>COR_T</code> exists in a build compiled with <code>-DCOR_T_ON</code>, and nowhere else. Without it a
+trace is compiled away - no code, no format string, no test - but it stays an expression whose arguments are
+type-checked and count as used, so a variable only a trace reads still compiles under <code>-Werror</code>, and a
+broken trace fails the release build too. corBase's <code>COR_LIB_T</code> works the same way.
+<code>COR_E</code>, <code>COR_W</code>, <code>COR_X</code>, <code>COR_I</code>, <code>COR_V</code> and
+<code>COR_F</code> are in every build.</p>
+<ul>
+  <li>corLog's makefile builds <code>BUILD=debug</code> by default, which adds <code>-DCOR_T_ON</code>;
+  <code>make BUILD=release</code> builds without it.</li>
+  <li>Every object compiled with <code>COR_T_ON</code> carries the string
+  <code>COR_T_ON:traces-compiled-in</code>; coraine's makefile fails a release link whose broker or plugins hold
+  it.</li>
+  <li>A release coraine accepts <code>--traceLevels</code>, turns nothing on, and says so at start with a
+  <code>W</code> line (<code>this broker is a release build, its traces are compiled out</code>).
+  <a href="#docs/building">Building</a> lists which builds have traces.</li>
+</ul>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corlog"><b>corLog API</b><span>every header and entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener"><b>SEAMWARE/corLog</b><span>the repository</span></a></li>
+  <li><a href="#docs/lib-corbase"><b>corBase</b><span>what it depends on: the time functions, <code>COR_VEC_SIZE</code>; and pthreads</span></a></li>
+</ul>
+<p>Used by coraine and its plugins directly (<code>COR_E</code>, ...), and by every library of the stack through
+corBase's <code>COR_LIB_*</code>, once the executable has called <code>corBaseInit(corLogOut)</code>.</p>
+</article>

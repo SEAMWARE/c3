@@ -1,0 +1,301 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-correst.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corRest - the REST layer</h1>
+<p class="lead">corRest turns HTTP requests into calls of service routines and their trees back into responses: a
+flat service table, a per-request state, a pipeline of hooks the application fills, a worker pool and coroutines for
+the requests that wait. It also carries the broker's clients - HTTP and HTTPS, a parallel multi-client, and cor://.
+It is the transport layer under coraine and has no NGSI-LD dependency of its own.</p>
+
+<figure class="g-fig">
+<svg viewBox="0 0 880 250" role="img" aria-label="An HTTP backend - libmicrohttpd or corHttp - or the cor:// server, or a WebSocket through corRestRunJson, feeds the request state; the pipeline runs the hooks and the service routine; the response goes back through the same transport; the clients go out to other servers">
+  <g style="font-family: var(--sans); font-size: 13px;">
+    <rect x="20" y="20" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="120" y="45" text-anchor="middle" style="fill: var(--accent-2);">HTTP: mhd or corHttp</text>
+    <rect x="20" y="75" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="120" y="100" text-anchor="middle" style="fill: var(--accent-2);">cor:// server</text>
+    <rect x="20" y="130" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="120" y="155" text-anchor="middle" style="fill: var(--accent-2);">corRestRunJson</text>
+
+    <rect x="290" y="20" width="300" height="150" rx="10" style="fill: none; stroke: var(--accent-2); stroke-width: 2;"/>
+    <text x="440" y="46" text-anchor="middle" style="fill: var(--accent-2); font-weight: 600;">the pipeline</text>
+    <text x="440" y="72" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">CorRestState corRest: in, out, allocator</text>
+    <text x="440" y="94" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">route lookup · admit · parse · params</text>
+    <text x="440" y="116" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">preService · payloadCheck</text>
+    <text x="440" y="138" text-anchor="middle" style="fill: var(--ok); font-size: 12px;">the service routine</text>
+    <text x="440" y="160" text-anchor="middle" style="fill: var(--muted); font-size: 12px;">render · respond · post-response</text>
+
+    <line x1="220" y1="40"  x2="290" y2="70"  style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="220" y1="95"  x2="290" y2="95"  style="stroke: var(--line); stroke-width: 1.5;"/>
+    <line x1="220" y1="150" x2="290" y2="120" style="stroke: var(--line); stroke-width: 1.5;"/>
+
+    <rect x="660" y="20" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="760" y="45" text-anchor="middle" style="fill: var(--accent-2);">HTTP client, multi</text>
+    <rect x="660" y="75" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="760" y="100" text-anchor="middle" style="fill: var(--accent-2);">cor:// client</text>
+    <rect x="660" y="130" width="200" height="40" rx="8" style="fill: none; stroke: var(--line); stroke-width: 1.5;"/>
+    <text x="760" y="155" text-anchor="middle" style="fill: var(--accent-2);">in-process forward</text>
+    <line x1="590" y1="95" x2="660" y2="40"  style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+    <line x1="590" y1="95" x2="660" y2="95"  style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+    <line x1="590" y1="95" x2="660" y2="150" style="stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4;"/>
+
+    <text x="20" y="215" style="fill: var(--muted); font-size: 12px;">every wait of a client - a socket, a name to resolve - goes through corRestWaitFd: poll() on a thread, a yield in a coroutine</text>
+  </g>
+</svg>
+<figcaption>Three ways in, one pipeline, three ways out. A service routine is the same function whichever
+transport its request came on.</figcaption>
+</figure>
+
+<h2 id="services">Services and routes</h2>
+<p>An application hands corRest a flat array of <code>CorRestServiceSimplified</code> - a verb, a URL pattern, a
+routine, the URL parameters it accepts, and optionally a body validator and option bits. <code>corRestInit()</code>
+splits it into one vector per verb and prepares each pattern for matching.</p>
+<pre>#include "corRest/corRest.h"
+#include "corTree/corTreeBuilder.h"
+
+#define P_TYPE   (1ULL &lt;&lt; 0)
+#define P_LIMIT  (1ULL &lt;&lt; 1)
+
+static CorRestParam paramV[] = { { "type", P_TYPE }, { "limit", P_LIMIT }, { NULL, 0 } };
+
+static bool thingGet(void)
+{
+  const char* id    = corRest.in.wildcard[0];                <span class="c">// the '*' of the pattern</span>
+  const char* limit = NULL;
+
+  for (int i = 0; i &lt; corRest.in.uriParamCount; i++)
+    if (corRest.in.uriParamV[i].bit == P_LIMIT)
+      limit = corRest.in.uriParamV[i].value;
+
+  if (strcmp(id, "urn:none") == 0)
+  {
+    corRestProblem(404, COR_REST_ERROR_NOT_FOUND, "Not Found", "no thing '%s'", id);
+    return false;
+  }
+
+  corRest.out.responseTree = corTreeObject(corRest.kallocP, NULL);   <span class="c">// rendered to JSON by corRest</span>
+  corTreeChildAdd(corRest.out.responseTree, corTreeString(corRest.kallocP, "id", id));
+  if (limit != NULL)
+    corTreeChildAdd(corRest.out.responseTree, corTreeString(corRest.kallocP, "limit", limit));
+  corRestOutHeaderAdd("Cache-Control", "no-store");
+  return true;
+}
+
+static CorRestServiceSimplified serviceV[] =
+{
+  { CorVerbGet, "/things/*", thingGet, P_TYPE | P_LIMIT },
+  { CorVerbGet, "/files/**", fileGet,  0                },
+};
+
+int main(void)
+{
+  corRestParamInit(paramV);                                   <span class="c">// before corRestInit</span>
+  if (corRestInit(serviceV, sizeof(serviceV) / sizeof(serviceV[0]), 1026, 4) != 0)
+    return 1;
+  pause();                                                    <span class="c">// the servers run on threads of their own</span>
+  corRestStop();
+}</pre>
+<table class="gtable">
+  <tr><th>Rule</th><th></th></tr>
+  <tr><td>wildcards</td><td><code>*</code> is one path segment - an id in URL form (<code>https://...</code>) included; a last <code>**</code> is greedy, the rest of the path. At most three, read in <code>corRest.in.wildcard[]</code>. Patterns are matched by character sums and pre-computed offsets, not <code>strcmp</code> on every route.</td></tr>
+  <tr><td>HEAD, OPTIONS</td><td>every GET also serves HEAD (the body suppressed); every path gets an OPTIONS with its <code>Allow</code></td></tr>
+  <tr><td>404, 405</td><td>a path no route matches is a 404; a path registered for other verbs a 405 with <code>Allow</code>; an empty segment (<code>//</code>) a 400; a method that is no HTTP method a 400</td></tr>
+  <tr><td>URL parameters</td><td>registered with <code>corRestParamInit</code> / <code>corRestParamAdd</code>, each a name and a bit. A parameter not in the route's <code>supportedParams</code> is a 400 InvalidRequest; <code>~0</code> accepts any. Each parameter carries its bit, and <code>corRest.in.uriParamMask</code> is their OR. <code>?pretty=N</code> is taken out before the check and indents the JSON.</td></tr>
+  <tr><td>a second listener</td><td><code>corRestListen(host, port, serviceV, n)</code>: plain HTTP, routes of its own, <code>corRest.listener</code> 1 - libmicrohttpd only</td></tr>
+</table>
+<p><code>corRestPrepare()</code> + <code>corRestStart()</code> are <code>corRestInit()</code> in two steps: between them,
+<code>corRestRunJson()</code> runs requests through the services and no client can - start-up work clients must not see
+half done goes there.</p>
+
+<h2 id="state">The request - <code>corRest</code></h2>
+<p>A service routine takes no argument: it reads and writes <code>corRest</code>, the <code>CorRestState</code> of the
+request bound to the running thread. <code>corRest</code> is a macro over a thread-local pointer,
+<code>corRestP</code>, which the backend binds to the request's state - so a request handed to a worker, or a
+coroutine that yields and resumes, keeps its own state.</p>
+<table class="g-opts">
+  <tr><th>Member</th><th></th></tr>
+  <tr><td>corRest.in</td><td>verb, <code>urlPath</code>, the raw query, <code>wildcard[]</code>, <code>uriParamV</code>, <code>httpHeaderV</code> (<code>corRestInHeader(name)</code>, without case), the payload and its parsed <code>requestTree</code>, <code>contentMime</code>, <code>accept</code></td></tr>
+  <tr><td>corRest.out</td><td><code>httpStatusCode</code> (200 by default), <code>responseTree</code> or a ready <code>payload</code>, <code>headerV</code> (<code>corRestOutHeaderAdd</code>), the problem details</td></tr>
+  <tr><td>corRest.kallocP</td><td>the request's allocator - an 8 KiB inline buffer, then chunks - bulk-freed when the request is over. Every tree of the request is built in it.</td></tr>
+  <tr><td>corRest.userData</td><td>the application's state per request, made and freed by <code>corRestSetUserDataHooks</code></td></tr>
+</table>
+<p><b>Errors</b> are RFC 9457 problem details: <code>corRestProblem(status, type, title, fmt, ...)</code> sets them and
+logs the error with the caller's file and line; corRest builds the body - <code>type</code>, <code>title</code>,
+<code>status</code>, <code>detail</code>, and <code>out.problemExtras</code>' members. A routine that sets a problem and
+no status is answered 500. A problem found under the routine after it has its answer - a store that cannot keep a
+write, found as its lock is released - is raised with <code>corRestProblemLate(status, type, title, fmt, ...)</code>:
+after the routine returns it replaces the answer - the status and the problem - and drops the body, a stream and the
+headers the routine added. The first late problem of a request is the one answered; each is logged.</p>
+
+<h2 id="pipeline">The pipeline and its hooks</h2>
+<p><code>corRestProcessRequest()</code> runs a request in this order. Each step is the library's, or a hook the
+application sets; an unset hook does nothing.</p>
+<ol>
+  <li><b>pre-dispatch hook</b> - reset the application's per-request state.</li>
+  <li>the answers decided before the body: 411 (a POST, PUT or PATCH without <code>Content-Length</code>), 413 (a
+  <code>Content-Length</code> over <code>corRestSetMaxRequestSize</code>, 2 MiB by default), an upgrade refused.</li>
+  <li>the route, looked up in the verb's vector.</li>
+  <li><b>admit hook</b> (<code>corRestSetAdmitHook</code>) - is the request let in at all, before any 404, 405 or 415:
+  an auth plugin's place. Not asked for an in-process forward.</li>
+  <li>415 - a POST, PUT or PATCH body that is not <code>application/json</code> or <code>application/ld+json</code>
+  (PATCH also <code>application/merge-patch+json</code>).</li>
+  <li><b>pre-parse hook</b>, the JSON parse (corJson) into <code>in.requestTree</code>, <b>parse hook</b>. A body that
+  arrived as a tree (cor://) is not parsed; the key hook the pre-parse hook set is replayed over it.</li>
+  <li>404, 405 - here, so that an unknown path costs no more.</li>
+  <li>the URL parameters, each checked and passed to the <b>param hook</b>.</li>
+  <li><b>pre-service hook</b> - tenant resolution and the like; false skips the routine.</li>
+  <li>a POST, PUT or PATCH under <code>/ngsi-ld/</code> (or with an <code>ldOp</code>) without a valid JSON body: 400.</li>
+  <li>the route's <code>payloadCheck</code>, then <b>the service routine</b>.</li>
+  <li><b>render hook</b> - always, so that an Accept that cannot be met answers 406 over an earlier error; then the
+  problem body and the JSON render (<code>?pretty</code> indents).</li>
+  <li>the response is sent; then the <b>post-response hook</b> - a write's notifications - and the arena is released.</li>
+</ol>
+<p>Hooks that decide <b>where</b> a request runs: <code>corRestSetInlineHook</code>,
+<code>corRestSetCoroutineHook</code>, <code>corRestSetFinishInlineHook</code>, <code>corRestSetFinishCoroutineHook</code>
+(<a href="#docs/lib-correst/threads">below</a>). Others: <code>corRestSetServiceInitHook</code> (once per route at init -
+corNgsild caches per-route checks of the wildcards), <code>corRestSetUpgradeHook</code>, <code>corRestCorsConfig</code>,
+<code>corRestSetPrettySpaces</code>. <code>corRestPreDispatchHookGet()</code> and <code>corRestPayloadRenderHookGet()</code>
+return the hook in place, for a second one to chain on.</p>
+<p>In coraine, <a href="#docs/lib-corngsild">corNgsild</a> sets the pre-dispatch, parse, render and param hooks and the
+user-data hooks; the broker sets the pre-service, post-response, service-init and the four placement hooks, and chains its own on the pre-dispatch and render hooks; an auth
+plugin's <code>authenticate</code> runs in the admit hook.</p>
+
+<h2 id="threads">Where a request runs - workers, async, coroutines</h2>
+<p>The application says what can wait; corRest decides where that runs. <code>corRestInit(..., poolSize)</code> starts
+<code>poolSize</code> workers - one queue per event loop of the backend, so a request stays on one loop's threads end
+to end - <b>before</b> the HTTP server, so no connection is accepted while the pool is down.</p>
+<table class="gtable">
+  <tr><th>The request</th><th>corHttp (<code>builtin</code>)</th><th>libmicrohttpd (<code>mhd</code>)</th></tr>
+  <tr><td>the inline hook says it waits on nothing</td><td>on its loop</td><td>on the I/O thread</td></tr>
+  <tr><td>it can wait, and the coroutine hook allows it</td><td>a coroutine of its loop - at most 1024 per loop</td><td>-</td></tr>
+  <tr><td>it can wait, otherwise</td><td>suspended, handed to a worker, resumed on its loop</td><td>suspended, handed to a worker</td></tr>
+  <tr><td>the post-response phase</td><td>inline (finish-inline hook), else a coroutine (finish-coroutine hook), else a worker</td><td>the I/O thread that completed the request</td></tr>
+</table>
+<p>No hook keeps the safe choice: every request to a worker, no coroutines. <code>corRestDispatchCounts()</code> counts
+the requests run inline and handed off. coraine's pool size, with <code>--connectionPoolSize</code> 0 (the default): one per CPU for a store
+that never waits (corDB, ramDB) and no distributed operations, else 32.</p>
+<div class="g-callout warn">
+<p><b>A coroutine yields only where corRest waits.</b> Every wait of corRest's clients is
+<code>corRestWaitFd(fd, events, timeoutMs, &amp;revents)</code> - <code>poll()</code> on a worker, a yield to the loop's epoll
+in a coroutine - and a host name is resolved by <code>corRestResolve()</code> on a thread of its own while the coroutine
+waits. A wait inside another library (a database driver's, a condition variable) stops the whole loop: that is why
+the coroutine hook is the application's. And no lock may be held across a wait - another coroutine of the same
+thread that wants it would wait for ever. <a href="#docs/coroutines">Coroutines</a>.</p>
+</div>
+
+<h2 id="client">The HTTP client</h2>
+<p>A client of its own, on sockets and OpenSSL: keep-alive pooling per host, TLS, redirects, timeouts, an HTTP proxy.
+One <code>corRestClientInit(maxIdleConns, idleTimeoutSec, userAgent)</code> per process.</p>
+<pre>CorRestClientRequest  req;
+CorRestClientResponse resp;
+
+corRestClientRequestInit(&amp;req, CorVerbGet, "https://cs.example.org/ngsi-ld/v1/entities/urn:E1", corRest.kallocP);
+corRestClientRequestHeader(&amp;req, "Accept", "application/json");
+corRestClientRequestTimeout(&amp;req, 1000, 3000);              <span class="c">// connect, whole request - ms</span>
+
+if (corRestClientSend(&amp;req, &amp;resp) != CORR_OK)
+  COR_W("%s: %s", req.url, resp.errorDetail);                <span class="c">// CORR_ERR_CONNECT, _TIMEOUT, _TLS, ...</span>
+else
+  use(resp.statusCode, resp.body, corRestClientResponseHeader(&amp;resp, "Content-Type"));
+
+corRestClientResponseCleanup(&amp;resp);</pre>
+<ul>
+  <li><b>The response is its own copy</b> - status text, headers, body (zero-terminated) - in the request's allocator,
+  valid after the connection went back to the pool. Without an allocator it is malloc'd and freed by
+  <code>corRestClientResponseCleanup</code>.</li>
+  <li><b>Defaults:</b> connect 5000 ms; the request <code>corRestClientDefaultRequestTimeoutMs</code> (5000; coraine's
+  <code>--distOpTimeout</code> - its notifications and <code>@context</code> downloads set 10 s of their own); up to 5 redirects (301, 302, 307, 308).</li>
+  <li><b>Addresses:</b> every address the name resolves to is tried in turn - <code>localhost</code> often resolves
+  <code>::1</code> first while a listener is IPv4 only.</li>
+  <li><b>TLS:</b> <code>corRestClientTlsInsecureSet(true)</code> accepts a certificate that does not verify (coraine's
+  <code>--insecureNotif</code>).</li>
+  <li><b>Proxy</b> (<code>COR_WITH_CLIENT_PROXY</code>, on by default): none until <code>corRestClientProxyFromEnv()</code>
+  (<code>https_proxy</code>, <code>http_proxy</code>, <code>no_proxy</code>, lower case first) or
+  <code>corRestClientProxySet()</code>. <code>https</code> goes through a <code>CONNECT</code> tunnel, <code>http</code> to the
+  proxy with the absolute URI; a user and password are sent as <code>Proxy-Authorization: Basic</code>.</li>
+</ul>
+
+<h3 id="multi">Many requests at once</h3>
+<p>The multi engine sends N requests on non-blocking sockets and collects them together - one epoll, one deadline -
+for a fan-out: corNgsild's distributed operations use it.</p>
+<pre>CorRestClientMulti* mP = corRestClientMultiCreate(n);
+corRestClientMultiMaxResponse(mP, 16 * 1024 * 1024);          <span class="c">// a body past it: CORR_ERR_TOO_LARGE, not read</span>
+
+for (int i = 0; i &lt; n; i++)
+  corRestClientMultiAdd(mP, CorVerbGet, urlV[i], headerV, headers, NULL, 0, corRest.kallocP, NULL);
+
+corRestClientMultiPerform(mP, 5000);                          <span class="c">// returns how many are done</span>
+
+for (int i = 0; i &lt; n; i++)
+{
+  CorRestClientResponse* rP = corRestClientMultiResponse(mP, i);
+  if (rP-&gt;error == CORR_OK)
+    merge(rP-&gt;statusCode, rP-&gt;body);
+}
+
+corRestClientMultiDestroy(mP);</pre>
+
+<h2 id="cor">cor://</h2>
+<p>The broker's API over the cor binary format (<a href="#docs/cor-protocol">The cor format and cor://</a>): the same
+requests and the same service routines, but a request's body arrives as the tree the routine works on and the
+response leaves as the tree it built - no JSON parse or render on either side (<code>corRest.out.noRender</code>).
+A frame is a 16-byte header (magic, type, a correlation id, the length) and one tree; a connection opens with
+HELLO / HELLO_ACK, which compare the two ends' core-term tables - <code>corRestCorInit(codecP, namespaceV,
+namespaces, termCount)</code> sets them.</p>
+<table class="g-opts">
+  <tr><th>Side</th><th></th></tr>
+  <tr><td>corRestCorListen(port, loops)</td><td>the server: event loops, a listener dealing connections out in turn. A connection is armed once and multiplexed - the loop decodes every request frame as it comes, runs it inline or as a coroutine, and queues each response as it finishes. A request that can wait and does not run as a coroutine (the hook says no, or the loop is at its cap) moves its connection to a thread of its own.</td></tr>
+  <tr><td>corRestCorSend(...)</td><td>one request, blocking (yielding in a coroutine); false on a transport failure - an HTTP error status is a response</td></tr>
+  <tr><td>corRestCorStart / corRestCorWait</td><td>a fan-out: every request started, then each waited for - in flight at once on the thread's connection to each peer. Every call started is waited for, once, on the thread that started it.</td></tr>
+</table>
+<pre>CorRestCorResponse resp;
+const char*        error = NULL;
+
+if (corRestCorSend("cor://broker2:1027", CorVerbGet, "/ngsi-ld/v1/entities/urn:E1?options=keyValues",
+                   NULL, 0, NULL, NULL, 3000, corRest.kallocP, &amp;resp, &amp;error) == false)
+  COR_W("cor://broker2:1027: %s", error);
+else
+  use(resp.status, resp.bodyTree);                            <span class="c">// the peer's tree, in corRest.kallocP</span></pre>
+
+<h2 id="other">Other ways in and out</h2>
+<table class="g-opts">
+  <tr><th>Call</th><th></th></tr>
+  <tr><td>corRestRunJson(verb, path, headerV, n, body, len, respond, ctx)</td><td>one request from a transport that is not HTTP - a WebSocket message - run on the calling thread from start to finish; the response to <code>respond</code> before the post-response phase, so the client sees a subscription's 201 before its first notification. Never on a loop of corRest's: it blocks.</td></tr>
+  <tr><td>corRestProcessInProcess(...)</td><td>a forward to the broker's own endpoint run directly on a fresh inner state, no socket; depth-limited</td></tr>
+  <tr><td>corRestStreamResponse(openFn, ctx)</td><td>a response whose body is written over time - server-sent events: status and headers as usual, then <code>corRestStreamWrite</code> from any thread and <code>corRestStreamEnd</code> once. A client 16 MiB behind (<code>COR_REST_STREAM_PENDING_MAX</code>) is cut. Both HTTP servers; <code>corRestStreamPossible()</code> says false for an in-process, WebSocket or cor:// request. <code>COR_WITH_STREAM=0</code> leaves it out.</td></tr>
+  <tr><td>corRestSetUpgradeHook(fn)</td><td>a request with an <code>Upgrade</code> header: the hook accepts it (the 101 and the handshake headers in <code>corRest.out</code>, and the function that takes the socket) or refuses it with a problem. Both servers.</td></tr>
+</table>
+
+<h2 id="backends">The HTTP backends</h2>
+<p>Two, exactly one in a build: <code>make COR_HTTP_SERVER=mhd</code> (libmicrohttpd, the default) or
+<code>COR_HTTP_SERVER=builtin</code> (<a href="#docs/lib-corhttp">corHttp</a>). The service table, the pipeline, the
+worker pool and the response headers - their set and their order - are one implementation for both. What differs:
+TLS and a second listener are libmicrohttpd's only; event loops (<code>corRestHttpLoopsSet</code>, coraine's
+<code>--httpLoops</code>), coroutines and the inline post-response phase are corHttp's only; libmicrohttpd's memory per
+connection is <code>corRestConnectionMemorySet</code>. A build asked for TLS without it refuses to start.</p>
+
+<h2 id="build">Building</h2>
+<pre>make                              <span class="c"># libcorRest.a and .so, and the test server corRestTest</span>
+make COR_HTTP_SERVER=builtin      <span class="c"># corHttp instead of libmicrohttpd</span>
+make di                           <span class="c"># debug + install</span>
+make clientLifetimeTest           <span class="c"># a client response's lifetime, under AddressSanitizer</span>
+make COR_WITH_CLIENT_PROXY=0      <span class="c"># without the client's proxy</span></pre>
+<p>Sibling repositories, linked as <code>../&lt;lib&gt;/lib&lt;lib&gt;.a</code>; the system libraries are OpenSSL
+(<code>ssl</code>, <code>crypto</code>), pthread, libm, and libmicrohttpd in an <code>mhd</code> build.
+<code>test/funcTests/</code> runs a handful of cases against <code>corRestTest</code>; the rest is tested through coraine's
+functional suite.</p>
+
+<h2 id="reference">Reference</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-correst"><b>corRest API</b><span>every header: the state, the services, the hooks, the clients, cor://</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener"><b>SEAMWARE/corRest</b><span>the repository</span></a></li>
+  <li><a href="#docs/coroutines"><b>Coroutines</b><span>which requests run where, and the waits that yield</span></a></li>
+  <li><a href="#docs/cor-protocol"><b>The cor format and cor://</b><span>the frame, the codec, multiplexing</span></a></li>
+</ul>
+<p><b>Depends on</b> <a href="#docs/lib-coralloc">corAlloc</a>, <a href="#docs/lib-cortree">corTree</a>,
+<a href="#docs/lib-corjson">corJson</a>, <a href="#docs/lib-corbase">corBase</a> (coroutines, the library log),
+<a href="#docs/lib-corlog">corLog</a>, OpenSSL, and <a href="#docs/lib-corhttp">corHttp</a> or libmicrohttpd.
+<b>Used by</b> <a href="#docs/lib-corngsild">corNgsild</a> (its hooks, distributed operations) and coraine - its
+HTTP and cor:// ports, forwarding, notifications, <code>@context</code> downloads, the WebSocket transport and
+server-sent events - and by coraine's test tools.</p>
+</article>

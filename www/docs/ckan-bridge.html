@@ -1,0 +1,174 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/ckan-bridge.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>The CKAN bridge</h1>
+<p class="lead"><code>ckan.so</code>, loaded with <code>--bridges ckan</code>, reads the DataStore resources of a
+<a href="https://ckan.org" target="_blank" rel="noopener">CKAN</a> portal - the open-data portal software behind many
+city and government data sites - and hands each row to the broker, where a DataChannel makes it into entities.</p>
+
+<pre>CKAN portal  --datastore_search--&gt;  ckan.so  --(resource id, row, time)--&gt;  broker  --DataChannel--&gt;  entities</pre>
+<p>The bridge knows nothing about entities: it carries <code>(endpoint, json, time)</code> - the resource id, one row as
+a JSON object, the row's time. Which entities a row becomes - which column is the id, which are Properties, which two
+make a <code>location</code>, which one names another entity - is the DataChannel's mapping, in the broker.</p>
+
+<h2 id="datachannels">Rows into entities: DataChannels</h2>
+<p>A Channel ties one endpoint to one attribute of one entity. A <b>DataChannel</b> ties one endpoint to the entities
+its records make: each record (a row - one JSON object, one member per column) becomes one or more entities, the id
+taken from a column. It names no entity and claims no attribute, and has its own listing,
+<code>GET /ngsi-ld/v1/dataChannels</code> (and <code>/{id}</code>, the id
+<code>urn:ngsi-ld:DataChannel:ckan:&lt;resource id&gt;</code>). DataChannels are the broker's feature
+<code>COR_FEATURE_DATA_CHANNELS</code>; without it, a <code>dataChannels</code> section is warned about and ignored and
+<code>GET /dataChannels</code> answers <code>501</code>.</p>
+<p>The CKAN bridge carries DataChannels only: a resource is read, and nothing is written to the portal. A channel
+handed over as a service or an action, or with any direction but inbound, is refused (<code>BRIDGE_UNSUPPORTED</code>)
+and stays dormant with the bridge's reason.</p>
+
+<h2 id="example">An example: Boston's bike stations</h2>
+<p>data.boston.gov publishes its Blue Bike stations as a DataStore resource (licence ODC PDDL). This file makes each
+row a <code>BikeStation</code>, with a Relationship to a <code>District</code> made from the same row:</p>
+<pre>{ "ckan": {
+    "server": { "url": "https://data.boston.gov", "timeoutMs": 30000 },
+    "ngsild": {
+      "defaultEntity": false,
+      "dataChannels": {
+        "44c931aa-4577-4caa-a8f2-ed1e38263e70": {
+          "channelInfo": [ { "key": "mode",     "value": "once" },
+                           { "key": "pageSize", "value": "100"  } ],
+          "entities": [
+            { "type": "BikeStation", "id": "urn:ngsi-ld:BikeStation:{Number}",
+              "attributes": {
+                "name":       { "column": "Name" },
+                "totalDocks": { "column": "Total_docks", "as": "number" },
+                "public":     { "column": "Public_", "as": "boolean" },
+                "location":   { "point": { "longitude": "Longitude", "latitude": "Latitude" } },
+                "inDistrict": { "relationship": "urn:ngsi-ld:District:{District}" } } },
+            { "type": "District", "id": "urn:ngsi-ld:District:{District}",
+              "attributes": { "name": { "column": "District" } } } ] } } } } }</pre>
+<pre>coraine --database corDB --bridges ckan --bridgeConfig bridges.json
+curl 'http://localhost:1026/ngsi-ld/v1/entities?type=BikeStation&amp;limit=1'
+curl http://localhost:1026/ngsi-ld/v1/dataChannels</pre>
+<p>Read on 2026-10-09, the resource had 572 rows: 572 <code>BikeStation</code>s and 13 <code>District</code>s.</p>
+
+<h2 id="once">Mode once</h2>
+<p>When the broker has started and handed the bridge its DataChannels, each resource is read whole, on the bridge's
+own reader thread, in the order the DataChannels were added: page after page of
+<code>/api/3/action/datastore_search?resource_id=&lt;id&gt;&amp;limit=&lt;pageSize&gt;&amp;offset=&lt;n&gt;&amp;sort=_id</code>,
+every row handed to the broker, until a page comes back shorter than <code>pageSize</code> or the offset reaches the
+answer's <code>total</code>. The resource is then done. A restart reads it again; the broker's write is an upsert, so
+the same rows leave the same entities. A row deleted at the source leaves its entities in the broker.</p>
+<table class="gtable">
+  <tr><td>HTTP(S)</td><td>the broker's own client (corRest, resolved from the running broker) - nothing is linked into
+  the plugin</td></tr>
+  <tr><td>The portal at start</td><td>not contacted before the broker is up: a portal that is down does not keep the broker
+  from starting</td></tr>
+  <tr><td>Failures</td><td>a portal that cannot be reached, a timeout or a 5xx is tried again after 1 s, then after 3 s;
+  a 4xx is the answer. A resource that cannot be read leaves its DataChannel <code>dormant</code>, with the portal's
+  reason as its <code>statusReason</code> - <code>the portal answered 404 - Not Found Error: Not found: Resource "..."
+  was not found.</code></td></tr>
+  <tr><td>The API key</td><td>sent as the <code>Authorization</code> header, and nowhere else - not in a log line, not on
+  <code>GET /ngsi-ld/v1/dataChannels</code></td></tr>
+</table>
+<p><code>poll</code> (follow the dataset's activity stream, then read the new rows) and <code>push</code> (a webhook)
+are reserved mode names; a DataChannel naming one is refused with <code>mode 'poll' is not built yet - 'once' is</code>.
+Both are on the <a href="#docs/roadmap">roadmap</a>.</p>
+
+<h2 id="config">Configuration</h2>
+<p>One <code>--bridgeConfig</code> file serves every bridge, one member per alias. <code>server</code> is this plugin's;
+the <code>ngsild</code> section is the broker's, and its <code>dataChannels</code> make the DataChannels, one per
+resource.</p>
+
+<h3 id="server"><code>server</code> - the portal</h3>
+<table class="g-opts">
+  <tr><th>Member</th><th>What it is</th></tr>
+  <tr><td>url</td><td>mandatory: the portal, <code>https://...</code> or <code>http://...</code></td></tr>
+  <tr><td>apiKey</td><td>a CKAN API token, sent as <code>Authorization</code> - for a private resource</td></tr>
+  <tr><td>apiKeyEnv</td><td>the name of an environment variable holding the token, instead of <code>apiKey</code> - one
+  or the other, not both</td></tr>
+  <tr><td>timeoutMs</td><td>one HTTP request, 100-600000, default 30000</td></tr>
+</table>
+<p>A missing or wrong <code>url</code>, both key members, or a <code>timeoutMs</code> out of range fails the bridge's
+<code>init</code>, and the broker does not start. Another member is warned about and ignored.</p>
+
+<h3 id="channelinfo"><code>channelInfo</code> - how to read one resource</h3>
+<table class="g-opts">
+  <tr><th>Key</th><th>What it is</th></tr>
+  <tr><td>mode</td><td><code>once</code> - the default and the one built</td></tr>
+  <tr><td>pageSize</td><td>rows per <code>datastore_search</code> call, 1-32000, default 100</td></tr>
+  <tr><td>timeColumn</td><td>the column holding each row's time, ISO 8601: <code>2026-10-09T12:00:00Z</code>,
+  <code>2026-10-09T12:00:00.250+02:00</code>, <code>2026-10-09 12:00:00</code> (no zone: UTC), <code>2026-10-09</code>
+  (midnight UTC)</td></tr>
+</table>
+<p>The row's time becomes <code>observedAt</code> on every attribute the row writes. Without a <code>timeColumn</code>,
+or for a row whose value there is not a date-time, the row has no time and its attributes no <code>observedAt</code>
+(a value that is not a date-time is warned about once per read). An API key in <code>channelInfo</code>
+(<code>apiKey</code>, <code>Authorization</code>) is refused - <code>channelInfo</code> is shown on
+<code>GET /ngsi-ld/v1/dataChannels</code> - and so is any other key; the DataChannel is then dormant and says why.</p>
+
+<h3 id="mapping"><code>dataChannels</code> - the mapping</h3>
+<p>The member's name is the endpoint: the resource id, a UUID or a DataStore alias (letters, digits, <code>.</code>,
+<code>_</code>, <code>-</code>). <code>entities</code> lists what each row makes. The mapping is the broker's, the same
+for every bridge that carries DataChannels:</p>
+<table class="gtable">
+  <tr><td><code>id</code></td><td>a template: <code>{Column}</code> is the column's value. A row with no value in a column
+  the id names makes no entity of that kind; the others it names are still made.</td></tr>
+  <tr><td><code>idEncoding</code></td><td>how a value goes into an id or a Relationship's object: <code>merge</code> (the
+  default - each character outside <code>[A-Za-z0-9._-]</code> becomes <code>_</code>, <code>South Boston</code> &#8594;
+  <code>South_Boston</code>, so values that differ only there name one entity) or <code>percent</code> (each such byte
+  becomes <code>%XX</code>, <code>South%20Boston</code>: two values never name one entity)</td></tr>
+  <tr><td><code>{ "column": ... }</code></td><td>a Property; <code>"as"</code> converts the value: <code>number</code>,
+  <code>integer</code>, <code>float</code>, <code>boolean</code> (<code>yes</code>/<code>true</code>/<code>y</code>/<code>1</code>,
+  <code>no</code>/<code>false</code>/<code>n</code>/<code>0</code>), <code>string</code>, <code>datetime</code>,
+  <code>json</code>; <code>"unitCode"</code> beside it</td></tr>
+  <tr><td><code>{ "point": { "longitude", "latitude" } }</code></td><td>a GeoProperty Point from two columns;
+  <code>{ "geo": ... }</code> one from a single column</td></tr>
+  <tr><td><code>{ "relationship": &lt;template&gt; }</code></td><td>a Relationship</td></tr>
+  <tr><td><code>{ "value": &lt;JSON&gt; }</code></td><td>a Property whose value is always that</td></tr>
+</table>
+<p>An absent, null or empty column, or a value that does not convert, leaves that attribute out. All the entities of one
+row are written as one batch upsert with <code>options=update</code>: created when they are not there, their mapped
+attributes replaced, other attributes left alone - with the checks, notifications and temporal events of
+<code>POST /entityOperations/upsert</code>. A row that makes no entity is not taken (<code>recordsRefused</code>), and
+the read goes on. The full mapping - <code>scope</code>, <code>otherColumns</code>, the other attribute kinds - is in
+coraine's <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/bridge-channels.md#datachannels" target="_blank" rel="noopener">DataChannels</a>.</p>
+
+<h2 id="status">What a DataChannel shows</h2>
+<p><code>GET /ngsi-ld/v1/dataChannels</code> lists each one with its bridge, its endpoint, its <code>channelInfo</code>,
+the mapping as the file wrote it (<code>recordEntities</code>), <code>status</code> and <code>statusReason</code>, and the
+counters <code>recordsIn</code> (rows that wrote an entity), <code>recordsRefused</code> and
+<code>entitiesWritten</code>. The reason a resource is not read reaches <code>statusReason</code> through
+<code>channelStatusIn</code> (bridge ABI 12, the broker's <code>COR_FEATURE_CHANNEL_STATUS_IN</code>); with a broker or
+headers without it, only the log says why.</p>
+
+<h2 id="build">Building</h2>
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>,
+built as <a href="#docs/writing-a-bridge/build">every bridge from the template</a> is. It needs no library of its own:
+<code>-lpthread</code>, and the Cor-Libs and corRest from the broker that loads it.</p>
+<pre>make                  <span class="c"># ckan.so, debug (traces compiled in)</span>
+make BUILD=release
+make contract         <span class="c"># does src/ckanRegister.c still satisfy BridgeDriver.h?</span>
+make install          <span class="c"># to /opt/seamware/plugins/bridge (PLUGIN_DIR=...)</span></pre>
+<p>The corLibs umbrella clones it and does not build it; <a href="#docs/building/coraine-build">coraine-build</a>
+<code>--bridges ckan</code> does. It needs a broker with DataChannels.</p>
+
+<h2 id="tests">Tests</h2>
+<p><code>make test</code> runs without the internet: <code>test/funcTests/tools/ckanMock.py</code> is the portal (port
+19027), answering from <code>test/funcTests/fixtures/</code> - three recorded pages of the bike stations (rows 1-50),
+the portal's answer for a resource it does not have, and <code>edge-cases.json</code>, written for the tests. The broker
+runs on port 19026 with ramDB; <code>CKAN_BROKER</code>, <code>CKAN_PORT</code>, <code>CKAN_MOCK_PORT</code> and
+<code>CKAN_TEST_DIR</code> override (<a href="#docs/writing-a-bridge/tests">as the template's</a>).</p>
+<table class="gtable">
+  <tr><th>Test</th><th>What it checks</th></tr>
+  <tr><td><code>ckan_records</code></td><td>50 rows in three pages of 20 - 50 BikeStations (Properties, location,
+  Relationship) and 2 Districts; the API key sent, and shown nowhere</td></tr>
+  <tr><td><code>ckan_record_edges</code></td><td>empty, null and unreadable columns: what each row still makes; a row that
+  makes nothing is not taken</td></tr>
+  <tr><td><code>ckan_channel_status</code></td><td>a resource the portal does not have, a 503 then the rows, a refused
+  <code>channelInfo</code>: dormant with the reason, the broker up</td></tr>
+  <tr><td><code>ckan_record_time</code></td><td>the <code>timeColumn</code> as <code>observedAt</code>; a value that is not a
+  date-time, or null: no <code>observedAt</code>, one warning</td></tr>
+  <tr><td><code>ckan_portal_unreachable</code></td><td>nothing listening: the broker starts, the DataChannel goes dormant
+  after three tries</td></tr>
+</table>
+<p class="muted">Other bridges: <a href="#docs/mqtt-bridge">MQTT</a>, <a href="#docs/modbus-bridge">Modbus</a>,
+<a href="#docs/dds">DDS and ROS 2</a>. Writing one: <a href="#docs/writing-a-bridge">Writing a bridge</a>.</p>
+</article>

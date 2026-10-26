@@ -1,0 +1,132 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corplugin.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corPlugin - loading plugins</h1>
+<p class="lead">A small loader over <code>dlopen</code> and <code>dlsym</code>: it turns a plugin's short name into
+the path of a <code>.so</code> under a base directory, opens it, finds its register symbol, refuses one built against
+another tree-node layout, and closes every handle at shutdown. coraine loads its database, history, API, transport,
+auth and bridge plugins through it; the library itself knows none of those kinds.</p>
+
+<h2 id="base">The base directory</h2>
+<pre>const char* corPluginSetBaseDir(const char* defaultDir, const char* envVarName);
+const char* corPluginBaseDir(void);</pre>
+<p>Called once, at start-up, before the other functions: the base directory is the environment variable's value
+when it is set, else <code>defaultDir</code>. Neither string is copied. coraine and <code>coraine-import</code>:</p>
+<pre>corPluginSetBaseDir("/opt/seamware/plugins", "SEAMWARE_PLUGIN_DIR");</pre>
+<p><code>coraine -u</code> ends with the directory it uses (<code>Plugins are loaded from /opt/seamware/plugins</code>),
+and <code>GET /build</code> reports it.</p>
+
+<h2 id="resolve">From a name to a path</h2>
+<pre>void corPluginResolve(const char* baseDir, const char* category, const char* subcategory,
+                      const char* name, char* pathOut, int pathSize);</pre>
+<table class="gtable">
+  <tr><th>Call</th><th>Path</th></tr>
+  <tr><td><code>corPluginResolve(base, "db", "currentState", "mongoc", ...)</code></td><td><code>&lt;base&gt;/db/currentState/mongoc.so</code></td></tr>
+  <tr><td><code>corPluginResolve(base, "bridge", NULL, "mqtt", ...)</code></td><td><code>&lt;base&gt;/bridge/mqtt.so</code></td></tr>
+  <tr><td>a name with a <code>/</code> in it - <code>../corDB/obj/debug/corDB.so</code></td><td>the name itself: the base directory is skipped</td></tr>
+</table>
+<p>It only builds the string - nothing is looked up. The path form is how a freshly built plugin is loaded straight
+from its build tree:</p>
+<pre>coraine --database ../corDB/obj/debug/corDB.so</pre>
+<p>The directories coraine uses, kind by kind, are in <a href="#docs/plugin-architecture/where">Plugin
+architecture</a>.</p>
+
+<h2 id="open">Opening a plugin</h2>
+<pre>void* corPluginOpen(const char* path, const char* symbolName, char* errorBuf, int errorBufSize);</pre>
+<ol>
+  <li>A <code>path</code> that does not exist: <code>NULL</code>, <code>not found</code>.</li>
+  <li><code>dlopen(path, RTLD_NOW)</code> - every undefined symbol of the <code>.so</code> is resolved now, against
+  its own libraries and the host's exported symbols; one that is missing fails here, with the
+  <code>dlerror()</code> text, not at the first call.</li>
+  <li><code>dlsym</code> of <code>symbolName</code> - missing: the handle is closed, <code>NULL</code>.</li>
+  <li><b>The layout check</b> (<a href="#docs/lib-corplugin/layout">below</a>) - refused: the handle is closed,
+  <code>NULL</code>, and <code>corPluginRefused()</code> is <code>true</code> from then on.</li>
+  <li>The symbol is returned. The caller casts it and calls it - corPlugin never calls into a plugin.</li>
+</ol>
+<p>On every failure <code>errorBuf</code> (which may be <code>NULL</code>) holds the reason. This is coraine's DB
+plugin, from <code>src/lib/plugin/pluginLoader.c</code>:</p>
+<pre>#include "corPlugin/corPlugin.h"
+
+char path[512];
+corPluginResolve(corPluginBaseDir(), "db", "currentState", shortName, path, sizeof(path));
+
+char openErr[512];
+DbRegisterFunc registerFunc = (DbRegisterFunc) corPluginOpen(path, "dbRegister", openErr, sizeof(openErr));
+if (registerFunc == NULL)
+{
+  snprintf(errorBuf, errorBufSize, "DB plugin '%s' (%s): %s", shortName, path, openErr);
+  return -1;
+}
+
+registerFunc(&amp;db);                 <span class="c">// the plugin fills the driver struct</span></pre>
+<p>A DB or TRoE plugin has a second check of coraine's own between the open and the register call, its interface
+stamp (<a href="#docs/plugin-architecture/db-stamp">Plugin architecture</a>). The kinds, their register symbols
+and their driver structs are coraine's, not this library's.</p>
+
+<h3 id="close">Closing</h3>
+<p><code>corPluginCloseAll()</code> <code>dlclose</code>s every handle <code>corPluginOpen</code> returned a symbol for -
+coraine calls it at shutdown, after the DB plugin's <code>close</code>. Up to 32 handles are tracked; a 33rd plugin
+opens and works, and is not closed by it.</p>
+
+<h2 id="layout">The layout check</h2>
+<p>A plugin reads and builds the host's tree nodes by their fields - every kind does. Built against another
+<a href="#docs/lib-cortree/layout"><code>CorNode</code> layout</a>, it would read every node at the wrong offsets.
+Every object compiled with corTree's <code>CorNode.h</code> carries the layout's number, <code>corNodeLayout</code>
+(2), as an exported weak symbol - a plugin built with <code>-fvisibility=hidden</code> too. After the
+<code>dlsym</code>, <code>corPluginOpen</code> looks up <code>corNodeLayout</code> in the handle and compares it with
+the host's own:</p>
+<table class="gtable">
+  <tr><th>The plugin</th><th>Result</th></tr>
+  <tr><td>carries the host's number</td><td>opened</td></tr>
+  <tr><td>carries another number</td><td>refused - <code>plugin: CorNode layout &lt;n&gt;</code></td></tr>
+  <tr><td>carries none - built before the number existed</td><td>refused - <code>plugin: CorNode layout 1, or older - it has no corNodeLayout</code></td></tr>
+  <tr><td>its <code>corNodeLayout</code> is found only in one of its dependencies</td><td>refused as carrying none: the number counted is the one in the same object as the register symbol (<code>dladdr</code>), not one a library it links brings along</td></tr>
+</table>
+<pre><span class="o">bridge plugin 'mqtt' (/opt/seamware/plugins/bridge/mqtt.so): refused - built against another tree-node layout than this broker (plugin: CorNode layout 1, or older - it has no corNodeLayout; broker: CorNode layout 2). It would read every node at the wrong offsets and crash the broker. Rebuild the plugin against this broker's Cor-Libs</span></pre>
+<p>The other direction - a plugin built against layout 2 in a host from before it - never reaches this check: every
+object built with <code>CorNode.h</code> references <code>corNodeLayout2</code>, which only a corTree with that
+layout defines, so the <code>dlopen</code> fails, <code>undefined symbol: corNodeLayout2</code>.</p>
+<ul>
+  <li><b>The plugin has been opened</b> when it is refused: its initialisers (constructors) have run. Its register
+  function has not.</li>
+  <li><b><code>corPluginRefused()</code></b> lets the host stop on the refusal itself. coraine exits 1 right after
+  loading the plugins - before parsing the command line, which without the refused plugin's options would report
+  one of them as unknown, and the refusal would not be the last thing said.</li>
+  <li>The check is always compiled in; it has no switch.</li>
+</ul>
+
+<h2 id="host-symbols">What a plugin resolves from the host</h2>
+<p>A plugin that calls the host's libraries does not link them. The host is linked to export its symbols
+(<code>-rdynamic</code>, CMake <code>ENABLE_EXPORTS</code>) with those libraries linked whole
+(<code>--whole-archive</code>), so none is dropped; <code>RTLD_NOW</code> binds the plugin to them at the open. coraine
+is linked that way, and its plugins call corLog, corAlloc, corTree, corJson, corNgsild, ... from the running broker.</p>
+<div class="g-callout warn">
+<p><b>Such a plugin depends on the host's build</b>, not only on the struct it fills. A symbol the host lacks fails
+the open. A function whose signature, or a type whose layout, differs between the headers the plugin was built
+against and the host's is not detected - except the tree node's, above. So a plugin is built against the same sources
+as the host that loads it; a contract version a host defines for its own structs (coraine's
+<code>BRIDGE_ABI_VERSION</code>, <code>TRANSPORT_ABI_VERSION</code>) covers those structs only
+(<a href="#docs/plugin-architecture/compat">Built for this broker</a>).</p>
+</div>
+
+<h2 id="names">Listing what is installed</h2>
+<pre>const char* corPluginScanNames(const char* dirPath, char sep, char* buf, int bufSize);
+void        corPluginArgUpdate(const char* argLongName, const char* subDir);</pre>
+<p><code>corPluginScanNames</code> lists the <code>*.so</code> of a directory, the suffix stripped, sorted, joined by
+<code>sep</code> - <code>"corDB|mongoc|ramDB"</code>; <code>NULL</code> when the directory is missing or holds none.
+At most 32 names of under 64 characters are taken. Sorted, so two identical installations print the same usage.</p>
+<p><code>corPluginArgUpdate</code> makes such a list the description of a <a href="#docs/lib-corargs">corArgs</a>
+option - the names under <code>&lt;base&gt;/&lt;subDir&gt;</code>, after <code>corArgsInit</code>. coraine does it for
+<code>--database</code> (<code>db/currentState</code>), <code>--troe</code>, <code>--apiPlugins</code>,
+<code>--bridges</code> and <code>--auth</code>, so <code>coraine -u</code> shows what can be loaded. At most 8 options;
+a directory with no plugin leaves the description as it was.</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corplugin"><b>corPlugin API</b><span>the one header, entry by entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><b>SEAMWARE/corPlugin</b><span>the repository - <code>make</code> builds libcorPlugin.a and .so; consumers link the archive</span></a></li>
+  <li><a href="#docs/plugin-architecture"><b>Plugin architecture</b><span>coraine's six plugin kinds, where they live, how they are loaded and checked</span></a></li>
+</ul>
+<p>corPlugin depends on <a href="#docs/lib-corargs">corArgs</a> (for <code>corPluginArgUpdate</code>),
+<a href="#docs/lib-cortree">corTree</a>'s <code>CorNode.h</code> (the layout number), and <code>libdl</code>. It is used by coraine and <code>coraine-import</code>.</p>
+</article>

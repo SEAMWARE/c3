@@ -1,0 +1,272 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-corargs.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corArgs - command-line options</h1>
+<p class="lead">A program declares its options in one table - name, type, default, limits, description - and
+corArgs fills the variables from the defaults, the environment and the command line, checks every value against
+its type and its limits, and prints the usage. coraine, <code>coraine-import</code> and every plugin's own options
+go through it.</p>
+
+<h2 id="table">The option table</h2>
+<p>An option is a <code>CorArg</code>; a table is a vector of them ending with <code>CORARGS_END</code>. Every field
+that is not a name or a pointer to the variable is a <code>void*</code> holding the value itself - the
+<code>_vp</code> macro is the cast. This is coraine's own <code>--port</code>:</p>
+<pre>#include "corArgs/corArgs.h"
+
+unsigned short port = 0;
+
+static CorArg kargV[] =
+{
+  { "--port", "-p", CorArgUShort, _vp &amp;port, CorArgOpt, _vp 1026, _vp 1, _vp 65535, "TCP port to listen on" },
+  ...
+  CORARGS_END
+};</pre>
+<table class="gtable">
+  <tr><th>Field</th><th>What it is</th></tr>
+  <tr><td><code>longName</code>, <code>shortName</code></td><td><code>"--port"</code>, <code>"-p"</code> - matched as whole words. A short name may be longer than one letter (<code>-db</code>, <code>-corPort</code>); only a one-letter Bool can be part of a <a href="#docs/lib-corargs/switch-groups">group</a>. Either may be <code>NULL</code>, not both.</td></tr>
+  <tr><td><code>type</code></td><td>the variable's type - the table below. corArgs stores through a pointer of that type, so the variable must be exactly it: a <code>CorArgBool</code>'s is a <code>bool</code>, a <code>CorArgUShort</code>'s an <code>unsigned short</code>.</td></tr>
+  <tr><td><code>valueP</code></td><td>the variable; <code>NULL</code> is refused</td></tr>
+  <tr><td><code>sort</code></td><td><code>CorArgOpt</code> (optional), <code>CorArgReq</code> (required - <a href="#docs/lib-corargs/errors">refused</a> when neither the command line nor the environment sets it), <code>CorArgHid</code> (hidden: accepted, never listed by <code>-u</code> or <code>-U</code>)</td></tr>
+  <tr><td><code>def</code></td><td>the default, written into the variable by <code>corArgsInit</code> - a number cast to the pointer, a string as the pointer itself</td></tr>
+  <tr><td><code>min</code>, <code>max</code></td><td>the limits of an integer option; <code>CORARGS_NL</code> is no limit</td></tr>
+  <tr><td><code>description</code></td><td>the usage text; <code>NULL</code> is refused</td></tr>
+</table>
+<table class="gtable">
+  <tr><th>Type</th><th>Variable</th><th>Also named</th></tr>
+  <tr><td><code>CorArgBool</code></td><td><code>bool</code></td><td></td></tr>
+  <tr><td><code>CorArgChar</code>, <code>CorArgUChar</code></td><td><code>char</code>, <code>unsigned char</code></td><td><code>CorArgInt8</code>, <code>CorArgUInt8</code></td></tr>
+  <tr><td><code>CorArgShort</code>, <code>CorArgUShort</code></td><td><code>short</code>, <code>unsigned short</code></td><td><code>CorArgInt16</code>, <code>CorArgUInt16</code></td></tr>
+  <tr><td><code>CorArgInt</code>, <code>CorArgUInt</code></td><td><code>int</code>, <code>unsigned int</code></td><td><code>CorArgInt32</code>, <code>CorArgUInt32</code></td></tr>
+  <tr><td><code>CorArgLong</code>, <code>CorArgULong</code></td><td><code>long long</code>, <code>unsigned long long</code></td><td><code>CorArgInt64</code>, <code>CorArgUInt64</code></td></tr>
+  <tr><td><code>CorArgFloat</code></td><td><code>float</code></td><td></td></tr>
+  <tr><td><code>CorArgString</code></td><td><code>char*</code> - pointed at the argument, not copied</td><td></td></tr>
+</table>
+<p>An integer is decimal, or hexadecimal (<code>0x1F</code>, <code>H'1F</code>), octal (<code>O'17</code>) or binary
+(<code>B'101</code>). The whole text must be the number: <code>12x</code> is refused, not read as 12.</p>
+<div class="g-callout warn">
+<p><b>Limits are pointers too.</b> <code>NULL</code> as <code>min</code> is the number 0, not "no limit": an
+<code>int</code> option with <code>min</code> <code>NULL</code> refuses <code>-1</code>. Write
+<code>CORARGS_NL</code> for no limit. The limits are checked for the integer types only - a
+<code>CorArgFloat</code> or a <code>CorArgString</code> takes any value, and a <code>CorArgFloat</code>'s default is a
+whole number (it is converted from the pointer as an integer).</p>
+</div>
+
+<h3 id="table-checked">What <code>corArgsInit</code> checks</h3>
+<p>Before anything is set, the table itself: an option with no name, a name used twice or taken by a builtin
+(<code>--usage</code>, <code>-u</code>, <code>--Usage</code>, <code>-U</code>, <code>--verbose</code>, <code>-v</code>),
+a limit or a default outside the type's range (256 for a <code>CorArgUChar</code>), <code>min</code> above
+<code>max</code>, a default outside <code>min</code>-<code>max</code> when both are set, a <code>NULL</code>
+<code>valueP</code> or <code>description</code>, a type or sort out of its enum. Each is
+<code>CorArgsBadParam</code> or <code>CorArgsNameTaken</code>, and nothing is set.</p>
+
+<h2 id="flow">Init, add, parse</h2>
+<pre>CorArgsStatus corArgsInit(const char* progName, CorArg* kargV, const char* prefix);
+CorArgsStatus corArgsAdd(CorArg* kargV);
+CorArgsStatus corArgsParse(int argC, char* argV[]);</pre>
+<ol>
+  <li><b><code>corArgsInit</code></b> checks the table, builds the option list - the builtins first, then the table -
+  writes every default into its variable and then every value the environment holds.</li>
+  <li><b><code>corArgsAdd</code></b>, any number of times between the two, appends a table: its defaults and its
+  environment values are applied the same way. The table is not copied and must stay valid. This is how coraine adds
+  a plugin's options - it loads the plugins between <code>corArgsInit</code> and <code>corArgsParse</code>, so
+  <code>coraine --database corDB -u</code> lists corDB's options (<a href="#docs/plugin-architecture/loading">Plugin
+  architecture</a>).</li>
+  <li><b><code>corArgsParse</code></b> reads the command line: an option there overrides its default and its
+  environment value.</li>
+</ol>
+<p>The order of precedence is: the command line, then the environment, then the default. Each option remembers
+where its value came from (<code>CorArgInfo.from</code>: <code>CorArgFromDefaultValue</code>,
+<code>CorArgFromEnvVar</code>, <code>CorArgFromShortOption</code>, <code>CorArgFromLongOption</code>).</p>
+<p>The option list is <code>corArgInfoV</code> (<code>corArgs/corArgsInit.h</code>), a <code>CorArgInfo</code> per
+option ending with a <code>CorArgEnd</code> type - the names, the type, the variable, the default, the limits, where the value came from,
+the environment variable's name and whether it is secret. coraine's <code>GET /admin/config</code> lists every option
+from it, and its crash report masks the secret ones.</p>
+
+<h3 id="example">A whole program</h3>
+<pre>#include &lt;stdio.h&gt;
+#include &lt;stdbool.h&gt;
+#include "corArgs/corArgs.h"
+
+static unsigned short port    = 0;
+static char*          host    = NULL;
+static int            timeout = 0;
+static bool           dryRun  = false;
+static bool           keep    = false;
+
+static CorArg argV[] =
+{
+  { "--port",    "-p", CorArgUShort, _vp &amp;port,    CorArgOpt, _vp 8080,        _vp 1,     _vp 65535, "TCP port to listen on" },
+  { "--host",    "-H", CorArgString, _vp &amp;host,    CorArgOpt, _vp "localhost", NULL,      NULL,      "host to listen on" },
+  CORARGS_END
+};
+
+static CorArg runArgV[] =
+{
+  CORARGS_SEPARATOR("run options:"),
+  { "--timeout", "-t", CorArgInt,    _vp &amp;timeout, CorArgOpt, _vp 30,          _vp 1,     _vp 300,   "request timeout in seconds" },
+  { "--dryRun",  "-n", CorArgBool,   _vp &amp;dryRun,  CorArgOpt, _vp false,       _vp false, _vp true,  "say what would be done, do nothing" },
+  { "--keep",    "-k", CorArgBool,   _vp &amp;keep,    CorArgOpt, _vp false,       _vp false, _vp true,  "keep the temporary files" },
+  CORARGS_END
+};
+
+int main(int argC, char* argV2[])
+{
+  CorArgsStatus ks;
+
+  if ((ks = corArgsInit("myserver", argV, "MYSERVER")) != CorArgsOk)  { printf("init: %s\n",  corArgsStatus(ks)); return 1; }
+  if ((ks = corArgsAdd(runArgV)) != CorArgsOk)                         { printf("add: %s\n",   corArgsStatus(ks)); return 1; }
+  if ((ks = corArgsParse(argC, argV2)) != CorArgsOk)                   { printf("parse: %s\n", corArgsStatus(ks)); return 1; }
+
+  printf("port %u host %s timeout %d dryRun %d keep %d verbose %d\n",
+         port, host, timeout, dryRun, keep, corArgsBuiltinVerbose);
+  return 0;
+}</pre>
+<pre>gcc -I.. -o myserver myserver.c ../corArgs/libcorArgs.a ../corBase/libcorBase.a</pre>
+<p>The libraries are sibling checkouts: a consumer compiles with <code>-I..</code> and links
+<code>../corArgs/libcorArgs.a</code> - <code>make</code> leaves the archive there, and <code>make install</code> copies
+nothing. The only dependency is <a href="#docs/lib-corbase">corBase</a>.</p>
+
+<h2 id="usage">-u and -U</h2>
+<p>Three options are built in: <code>--usage</code>/<code>-u</code> (the usage), <code>--Usage</code>/<code>-U</code>
+(one row per option) and <code>--verbose</code>/<code>-v</code>, a Bool read through
+<code>corArgsBuiltinVerbose</code> - coraine turns its info and verbose log lines on with it. There is no
+<code>--debug</code>: the trace levels of <a href="#docs/lib-corlog">corLog</a> are what shows more.</p>
+<pre><span class="o">$ ./myserver -u
+Usage: myserver  [--usage/-u (usage)]
+                 [--Usage/-U (extended usage)]
+                 [--verbose/-v (verbose mode)]
+                 [--port/-p &lt;TCP port to listen on&gt;]
+                 [--host/-H &lt;host to listen on&gt;]
+
+                 run options:
+                 [--timeout/-t &lt;request timeout in seconds&gt;]
+                 [--dryRun/-n (say what would be done, do nothing)]
+                 [--keep/-k (keep the temporary files)]</span></pre>
+<p>An optional option is in <code>[brackets]</code>, a required one is not; a Bool's description is in
+<code>(parentheses)</code>, a value's in <code>&lt;angle brackets&gt;</code>. <code>-U</code> lists the long name, the
+short name, the environment variable, the sort, the type and the default (<code>-</code> for none,
+<code>(secret)</code> for a <a href="#docs/lib-corargs/secret">secret</a> option that has one):</p>
+<pre><span class="o">$ ./myserver -U
+  --usage   (-u)                  Optional   Bool     false
+  --Usage   (-U)                  Optional   Bool     false
+  --verbose (-v) MYSERVER_VERBOSE Optional   Bool     false
+  --port    (-p) MYSERVER_PORT    Optional   UShort   8080
+  --host    (-H) MYSERVER_HOST    Optional   String   localhost
+  --timeout (-t) MYSERVER_TIMEOUT Optional   Int      30
+  --dryRun  (-n) MYSERVER_DRYRUN  Optional   Bool     false
+  --keep    (-k) MYSERVER_KEEP    Optional   Bool     false</span></pre>
+<ul>
+  <li><b>Anywhere on the command line, before anything else.</b> <code>corArgsParse</code> looks for
+  <code>-u</code> and <code>-U</code> first, walking the arguments as the parse does (a value is skipped, so
+  <code>--host -u</code> is a host name), and prints the list before any option is set - so
+  <code>./myserver -u -p 0</code>, or a bad value in the environment, still prints it.</li>
+  <li><b>Then it exits</b>, with code 0. <code>corArgsConfig(CorArgsExitOnUsageExitCode, "2")</code> changes the
+  code; <code>corArgsConfig(CorArgsExitOnUsage, "no")</code> makes <code>corArgsParse</code> print the list after
+  the parse and return.</li>
+  <li><b>A separator</b> - <code>CORARGS_SEPARATOR("title")</code> - is a heading line in the <code>-u</code> list
+  and nothing in <code>-U</code>. It is accepted in a table given to <code>corArgsAdd</code>; in the table of
+  <code>corArgsInit</code> it is refused as an option without a name. coraine puts one before each plugin's options:
+  <code>bridge (mqtt) plugin options:</code>.</li>
+</ul>
+
+<h2 id="switch-groups">Switch groups</h2>
+<p>One-letter Bool options can be given together, as in <code>ls -ltr</code>: <code>./myserver -nk</code> is
+<code>-n -k</code>, <code>-nv</code> is <code>--dryRun --verbose</code>, and <code>-nu</code> asks for the usage.</p>
+<ul>
+  <li>Every letter of the group must be the whole short name of a <code>CorArgBool</code>. A short name that only
+  begins with the letter (<code>-db</code>) or an option that takes a value is not one: a group with such a letter
+  is <code>unrecognized option</code>.</li>
+  <li>A letter twice is refused, and the program exits 1: <code>myserver: repeated boolean option: -n</code>.</li>
+  <li>An argument is a group only when it matches no option by name first - <code>-db</code> is coraine's
+  <code>--database</code>, never <code>-d -b</code>.</li>
+</ul>
+
+<h2 id="environment">The environment</h2>
+<p>Every option except the action options can be set from an environment variable. Its name is the prefix given to
+<code>corArgsInit</code>, then the option's long name (the short name if it has none) without the leading
+<code>-</code>, upper-cased, every character other than a letter, a digit or <code>_</code> turned into
+<code>_</code>: with the prefix <code>MYSERVER</code> or <code>MYSERVER_</code>, <code>--port</code> is
+<code>MYSERVER_PORT</code> and <code>--no-browser</code> <code>MYSERVER_NO_BROWSER</code>. coraine's prefix is
+<code>CORAINE</code>: <code>CORAINE_PORT</code>, <code>CORAINE_DBDIR</code> (a plugin's option, added by
+<code>corArgsAdd</code>). <code>-U</code> lists every name.</p>
+<pre>MYSERVER_PORT=7000 MYSERVER_DRYRUN=on ./myserver
+<span class="o">port 7000 host localhost timeout 30 dryRun 1 keep 0 verbose 0</span></pre>
+<ul>
+  <li><b>The action options have none</b> - <code>--usage</code>, <code>--Usage</code> and a program's own
+  <code>--version</code>: they do something and exit, and a variable left in the environment would make every
+  start do it. They are listed by <code>-U</code> with an empty variable column, and are never required.</li>
+  <li><b>A value is checked as the command line's is</b> - type, range and limits; a number that is not one is
+  refused, not read as 0.</li>
+  <li><b>The first refused value stops the reading</b>, and is said by <code>corArgsParse</code> - after its
+  <code>-u</code>/<code>-U</code> check, so <code>MYSERVER_PORT=0 ./myserver -u</code> prints the usage - which then
+  returns its status:</li>
+</ul>
+<pre><span class="o">$ MYSERVER_TIMEOUT=500 ./myserver
+myserver: value 500 for option '--timeout' exceeds its upper limit. Allowed range: 1-300
+myserver: (from the environment variable MYSERVER_TIMEOUT)
+parse: int out of max limit</span></pre>
+
+<h3 id="env-bool">A Bool's values</h3>
+<table class="gtable">
+  <tr><th>Value</th><th>The option is</th></tr>
+  <tr><td><code>true</code>, <code>True</code>, <code>TRUE</code>, <code>on</code>, <code>On</code>, <code>ON</code></td><td>on</td></tr>
+  <tr><td><code>false</code>, <code>False</code>, <code>FALSE</code>, <code>off</code>, <code>Off</code>, <code>OFF</code></td><td>off</td></tr>
+  <tr><td>anything else - <code>yes</code>, <code>1</code>, <code>tRuE</code>, an empty value</td><td>refused: the program does not start</td></tr>
+</table>
+<pre><span class="o">$ MYSERVER_DRYRUN=yes ./myserver
+myserver: MYSERVER_DRYRUN=yes: not a Bool - on: true, True, TRUE, on, On, ON; off: false, False, FALSE, off, Off, OFF
+parse: invalid value</span></pre>
+<p>On the command line a Bool takes no value: present is on. A Bool whose default is <code>true</code> can be turned
+off only through its environment variable.</p>
+
+<h2 id="peek">Reading one option early - corArgsPeek</h2>
+<pre>char* corArgsPeek(int argC, char* argV[], CorArg* kargV, char* optLongName);</pre>
+<p>The value of one option on the command line, before <code>corArgsInit</code> or <code>corArgsParse</code>:
+<code>optLongName</code> (a long or a short name) is looked up in <code>kargV</code> and the builtins, and
+<code>argV</code> searched for either of its names. It returns the argument after it, <code>"SET"</code> for a Bool,
+<code>NULL</code> when the option is not there. It reads <code>argV</code> and nothing else - not the environment.</p>
+<p>coraine uses it twice: <code>--version</code> is answered before <code>corArgsInit</code>, so a broken
+installation can still say what it is; and the plugin options (<code>--database</code>, <code>--troe</code>,
+<code>--apiPlugins</code>, <code>--bridges</code>, <code>--auth</code>) are peeked between
+<code>corArgsInit</code> and <code>corArgsParse</code> to know which plugins to load - falling back to the variable
+<code>corArgsInit</code> filled from the environment:</p>
+<pre>char* dbPeek = corArgsPeek(argC, argV, kargV, "--database");</pre>
+
+<h2 id="secret">Secret options</h2>
+<pre>bool corArgsSecret(const char* longName);</pre>
+<p>Marks an option, after it is declared, as one whose value is never shown - a password, a URI that may hold one.
+<code>-U</code> shows its default as <code>(secret)</code>; coraine's <code>GET /admin/config</code> shows
+<code>***</code> and the crash report masks it. coraine's mongoc plugin marks <code>--dbPwd</code> and
+<code>--dbURI</code>, the timescale plugin <code>--troePwd</code>. <code>false</code>: no option has that long
+name.</p>
+
+<h2 id="errors">How errors are reported</h2>
+<p>A function returns a <code>CorArgsStatus</code> - <code>CorArgsOk</code> or what went wrong
+(<code>CorArgsValueMissing</code>, <code>CorArgsInvalidValue</code>, <code>CorArgsOutOfBounds</code>,
+<code>CorArgsIntOutOfMaxLimit</code>, <code>CorArgsNameTaken</code>, ...); <code>corArgsStatus(ks)</code> is its text.
+Beside the status:</p>
+<table class="gtable">
+  <tr><th>What</th><th>Where it is said</th><th>Then</th></tr>
+  <tr><td>a value refused - not a number, out of the type's range, out of the limits, missing</td><td>stdout, with the program's name: <code>myserver: value 0 for option '--port' is inferior to its lower limit. Allowed range: 1-65535</code></td><td><code>corArgsParse</code> returns the status</td></tr>
+  <tr><td>an unrecognized option</td><td>stdout, <code>myserver: unrecognized option: -x</code>, and the usage</td><td>exit 1, inside <code>corArgsParse</code></td></tr>
+  <tr><td>a required option not set</td><td>stdout, <code>myserver: missing required option: --file</code>, and the usage</td><td>exit 1, inside <code>corArgsParse</code></td></tr>
+  <tr><td>a letter twice in a group</td><td>stdout, <code>myserver: repeated boolean option: -n</code></td><td>exit 1, inside <code>corArgsParse</code></td></tr>
+  <tr><td>a fault of the table, a value refused on the command line</td><td>the error list, and a line on stderr through corBase's library log (<code>E: corArgsParse.c[&lt;line&gt;]: corArgsParse: CorArgs Error ...</code>)</td><td>the status is returned</td></tr>
+</table>
+<p>The error list is <code>corArgsErrorGet()</code>, newest first - each <code>CorArgsError</code> with the file,
+line and function that pushed it, the option's name, <code>errno</code>, the status and a description:</p>
+<pre>for (CorArgsError* eP = corArgsErrorGet(); eP != NULL; eP = eP-&gt;next)
+  fprintf(stderr, "%s[%d] %s: %s - %s\n", eP-&gt;fileName, eP-&gt;lineNo, eP-&gt;funcName, eP-&gt;optionName, eP-&gt;description);</pre>
+<p>A refused value of the environment is said and returned, not pushed. coraine stops on any status that is not
+<code>CorArgsOk</code>: <code>corArgsParse failed: invalid value</code>, exit 1.</p>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-corargs"><b>corArgs API</b><span>every header and entry - CorArg, CorArgInfo, the statuses, corArgsInit, corArgsParse, ...</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><b>SEAMWARE/corArgs</b><span>the repository - <code>make</code>, <code>make envTest</code>, <code>make parseTest</code></span></a></li>
+  <li><a href="#docs/options"><b>coraine's options</b><span>the table this library parses, option by option</span></a></li>
+</ul>
+<p>corArgs depends on <a href="#docs/lib-corbase">corBase</a> (the library log, <code>COR_VEC_SIZE</code>,
+<code>corStringSort</code>). It is used by coraine and <code>coraine-import</code>, and by every plugin that brings
+options (<code>DbDriver.args</code> and the other drivers' <code>args</code>).</p>
+</article>

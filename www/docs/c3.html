@@ -1,0 +1,366 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/c3.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>c³ - the coraine Control Center</h1>
+<p class="lead">One application for everything around a coraine broker: build it for a deployment, start and watch
+it, explore its entities as a graph and on a map, and read its documentation. A small backend in C serves the pages
+on this machine and does the work; the browser window is the interface.</p>
+
+<h2 id="parts">The parts</h2>
+<p>The bar at the top has a page for each part:</p>
+<ul class="g-cards">
+  <li><a href="#compile">Compile<span>a broker built by coraine-build: the features compiled in or out, the optimisation, the HTTP server - its output followed live, the builds kept</span></a></li>
+  <li><a href="#run">Operate<span>brokers started and stopped, natively or in a container, with MongoDB, PostgreSQL/TimescaleDB and Mosquitto; their logs, configuration, metrics and log levels</span></a></li>
+  <li><a href="#connect">Explore<span>a live connection to a broker: entities as boxes, Relationships as arrows, the entities on a map - online or offline - and their values as they change</span></a></li>
+  <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component's repository</span></a></li>
+</ul>
+<p><b>Configure</b> - the mapping tools (DDS topics, services and actions to entities and attributes; then OPC UA, and
+the column mapping for the CKAN and CSV bridges) - is not built yet; it is greyed in the bar
+(<a href="#docs/roadmap/short">Roadmap</a>). The <b>AI Assist</b> button in the header says what is planned; nothing
+of it is built.</p>
+
+<h2 id="start">Starting it</h2>
+<p>c³ builds against the Cor-Libs as coraine does - sibling checkouts, each built with <code>make</code> in it
+(<code>COR_LIBS=&lt;dir&gt;</code> for checkouts elsewhere). It needs <code>gcc</code>, <code>make</code>, OpenSSL
+(<code>libssl-dev</code>) and zlib (<code>zlib1g-dev</code>, for the map files), and a browser.</p>
+<pre>mkdir seamware &amp;&amp; cd seamware
+for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest c3; do
+  git clone https://github.com/SEAMWARE/$r
+done
+for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest; do make -C $r; done
+cd c3
+make                  <span class="c"># ./c3</span>
+./c3                  <span class="c"># opens the application; Ctrl-C stops it</span></pre>
+<p><code>make install</code> (<code>PREFIX=/usr/local</code>, <code>DESTDIR</code> for packaging) installs
+<code>bin/c3</code> and <code>share/c3/www</code>; <code>make run ARGS="--port 7901 --no-browser"</code> builds and
+runs from the checkout.</p>
+
+<h3 id="options">The c3 command</h3>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--port, -p &lt;port&gt;<span class="env">C3_PORT</span></td><td>the backend's TCP port - default 7900</td></tr>
+  <tr><td>--config, -c &lt;file&gt;<span class="env">C3_CONFIG</span></td><td>the configuration file - default
+  <code>$XDG_CONFIG_HOME/c3/c3.json</code>, else <code>~/.config/c3/c3.json</code></td></tr>
+  <tr><td>--no-browser, -nb<span class="env">C3_NO_BROWSER</span></td><td>serve only, and print the URL</td></tr>
+  <tr><td>--www, -w &lt;dir&gt;<span class="env">C3_WWW</span></td><td>the pages - default <code>www</code> beside the
+  binary, else <code>../share/c3/www</code></td></tr>
+  <tr><td>--planet, -pl &lt;url&gt;<span class="env">C3_PLANET</span></td><td>the Protomaps planet
+  (<code>.pmtiles</code>) map areas are extracted from - default: the newest daily build at
+  <code>build.protomaps.com</code></td></tr>
+  <tr><td>--coraine-build, -cb &lt;path&gt;<span class="env">C3_CORAINE_BUILD</span></td><td>the script Compile runs -
+  default: <code>coraine-build</code> in <code>$PATH</code> (the <code>coraine-dev</code> package), else the coraine
+  clone's, beside the Cor-Libs c³ was built against</td></tr>
+  <tr><td>--source, -src &lt;path&gt;<span class="env">C3_SOURCE</span></td><td>the coraine source Compile builds
+  from, a tarball or a directory of clones - default: the tarball <code>coraine-dev</code> installs, else the
+  clones</td></tr>
+  <tr><td>--token-file, -tf &lt;file&gt;<span class="env">C3_TOKEN_FILE</span></td><td>a file holding the access token
+  sent to every broker that has none of its own, read again whenever it changes - default:
+  <code>$C3_TOKEN</code></td></tr>
+</table>
+</div>
+
+<h3 id="window">The window</h3>
+<ul>
+  <li><b>Chrome or Chromium</b> in <code>$PATH</code> (<code>google-chrome</code>, <code>google-chrome-stable</code>,
+  <code>chromium</code>, <code>chromium-browser</code>; on macOS also in <code>/Applications</code>): an application
+  window of its own, full-screen, with a profile of its own in <code>$XDG_STATE_HOME/c3/chrome</code>
+  (<code>~/.local/state/c3/chrome</code>). Its minimise and close buttons are in c³'s header; closing the window
+  leaves c³ running.</li>
+  <li>Otherwise the default browser: <code>xdg-open</code>, <code>open</code> on macOS.</li>
+  <li><b>No screen</b> (Linux, no <code>$DISPLAY</code> and no <code>$WAYLAND_DISPLAY</code>): the URL is printed, with
+  the <code>ssh -L</code> line to reach it from another machine.</li>
+</ul>
+<p>The backend answers <b>this machine only</b>: a connection from another address is a 403, and so is a request whose
+<code>Host</code> is not <code>localhost</code>, <code>127.0.0.1</code> or <code>[::1]</code>. From another machine:
+<code>ssh -L 7900:localhost:7900 &lt;host&gt;</code>. A second <code>c3</code> on a port where one runs opens the
+running one and exits; any other program on the port is an error.</p>
+<p>Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the environment's proxies
+(<code>https_proxy</code>, <code>http_proxy</code>, <code>no_proxy</code>); a broker on this machine wants
+<code>no_proxy=127.0.0.1,localhost</code>. A private CA's certificate: <code>SSL_CERT_FILE</code>.</p>
+
+<h3 id="needs">What each part needs</h3>
+<table class="gtable">
+  <tr><th>Part</th><th>Needs</th></tr>
+  <tr><td>Explore</td><td>a running NGSI-LD broker - coraine (<a href="#docs/installation">Installation</a>) or any
+  other; for live values without the broker's WebSocket transport, a broker that can reach c³'s port</td></tr>
+  <tr><td>Compile</td><td>the <code>coraine-dev</code> package (its <code>coraine-build</code> and source tarball) - or,
+  without it, the git clones c³ was built against, with coraine beside the Cor-Libs. For profile training and tuning:
+  <code>curl</code>, <code>wrk</code>, <code>python3</code></td></tr>
+  <tr><td>Operate</td><td>an installed <code>coraine</code> or a build of Compile's for a native broker; Docker or Podman
+  for a broker in a container and for the services</td></tr>
+  <tr><td>Documentation</td><td>nothing - the pages are part of c³</td></tr>
+</table>
+<p>What is missing greys the part that needs it, with what to install.</p>
+
+<!-- ======================================================================= -->
+<h2 id="compile">Compile - a broker built for a deployment</h2>
+<p>A front-end to <code>coraine-build</code>: c³ builds nothing itself. Every build is the command the page shows, run
+by the backend - the same build as on the command line (<a href="#docs/building">Building from source</a>).</p>
+<ul>
+  <li><b>Features</b> - from <code>coraine-build --list-features --json</code>, never a copy: each switch with its
+  default and description; one changed from its default is marked, one whose requirements are off is greyed with what
+  it needs. MONGOC is the <b>Stores</b> choice (corDB only, or corDB + mongoc).</li>
+  <li><b>Optimisation</b> - Release, Profile-guided (<code>--pgo</code>), Tuned for a workload (<code>--tune
+  &lt;file&gt;</code>, the workload by its absolute path), Debug (traces compiled in)
+  (<a href="#docs/extreme-performance">Extreme performance</a>).</li>
+  <li><b>HTTP server</b> - libmicrohttpd (the default) or coraine's own (<code>--http-server builtin</code>; not with
+  the training modes).</li>
+  <li><b>Executable</b> - the broker's file name (<code>--name</code>, default <code>coraine</code>); Operate starts it
+  by that name.</li>
+  <li><b>Target</b> - shown greyed: <code>coraine-build</code> builds for the host.</li>
+  <li><b>The command</b> - the exact <code>argv</code> for the choice, one option a line; only the switches that differ
+  from their defaults are passed. <b>Build</b> starts it.</li>
+  <li><b>Following a build</b> - its output line by line, and a bar over the phases <code>coraine-build</code>
+  announces (<code>build</code>, <code>install</code>, <code>bridges</code>, <code>check</code>, <code>done</code>;
+  <code>tools</code> and <code>train</code> for the training modes). <b>Cancel</b>: SIGTERM to the build's process
+  group, SIGKILL 5 s later. One build at a time; no make, gcc or training broker outlives a build, nor c³.</li>
+  <li><b>The result</b> - the size of <code>install/</code> and of the broker, its <code>--version</code> with the
+  features as the built broker reports them, the directory, the whole log. <b>Run it</b> opens Operate with that
+  build.</li>
+  <li><b>Builds kept</b> (newest first, a click opens one, <b>Delete</b> removes it) and <b>presets</b> - a choice
+  saved under a name.</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="operate">Operate - brokers and their services</h2>
+<p>Brokers started and stopped on this machine, from:</p>
+<table class="gtable">
+  <tr><th>From</th><th>Runs</th></tr>
+  <tr><td>the installed <code>coraine</code> (<code>$PATH</code>)</td><td>natively</td></tr>
+  <tr><td>a build of Compile's</td><td>natively, with its <code>install/env</code> - and for a tuned build its
+  <code>install/etc/tune.env</code>, as the image's entry point applies it</td></tr>
+  <tr><td>an image, <code>quay.io/seamware/coraine:&lt;tag&gt;</code></td><td>in a container - the tag picked from the
+  images here and the tags published on quay.io, or typed; pulled at the start when it is not here</td></tr>
+</table>
+<p><b>The form</b> - one of three sets, then each option as wanted:</p>
+<table class="gtable">
+  <tr><th>Set</th><th>Store</th><th>History</th><th>Services (containers)</th></tr>
+  <tr><td>corDB alone</td><td>corDB, on disk</td><td>corDB</td><td>-</td></tr>
+  <tr><td>mongoc + timescale</td><td>mongoc</td><td>timescale</td><td>MongoDB (<code>mongo:8.2</code>), PostgreSQL +
+  TimescaleDB (<code>timescale/timescaledb-ha:pg16</code>)</td></tr>
+  <tr><td>with MQTT</td><td>corDB, on disk</td><td>corDB</td><td>Mosquitto (<code>eclipse-mosquitto:2</code>), and the
+  mqtt bridge</td></tr>
+</table>
+<ul>
+  <li>The store and its <b>keep it on disk</b> (<code>--dbDir</code>), the history (<code>--troe</code> none, corDB or
+  timescale), the port and health port, the grace period (seconds from SIGTERM to SIGKILL), the WebSocket transport,
+  the admin API, distributed operations, <code>-v</code>.</li>
+  <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
+  configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS defaults, the CKAN datasets
+  ticked, an OPC UA server and its channels (native brokers).</li>
+  <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
+  its <code>--version</code>.</li>
+  <li>The command, exactly as it will run, and the services it starts first.</li>
+</ul>
+<p><b>Services</b> are containers of c³'s own, <code>c3-&lt;set&gt;-&lt;service&gt;</code>, shared by the brokers of
+the set, each with a volume, on the network <code>c3</code>, published on <code>127.0.0.1</code> on the service's port
++ 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is taken). Each broker has its
+own database in them (<code>--dbName c3_&lt;name&gt;</code>, <code>--troeName c3_&lt;name&gt;_h</code>). They start
+before the broker that needs them, waited for until they answer, and stop when nothing c³ started uses them; their
+volume stays until <b>Delete data</b>. c³ creates only <code>c3-*</code> containers and volumes and the network
+<code>c3</code>, all labelled <code>c3=run</code>, and touches nothing else.</p>
+<p><b>Starting and stopping.</b> A started broker joins Explore's list (<code>http://localhost:&lt;port&gt;</code>). A
+native broker runs in a session of its own, its output appended to its log; it does not need c³ - when c³ stops, the
+brokers keep running, and the next c³ attaches to them (by pid and the process's start time). <b>Stop</b> sends SIGTERM
+- corDB syncs its log and writes its snapshots - and SIGKILL when the grace period is over; a container:
+<code>docker stop -t &lt;grace&gt;</code>, then <code>docker rm</code>.</p>
+<p><b>What a running broker shows</b>, every 2 s its status (<code>GET /ready</code> on its health port, else
+<code>GET /version</code>) and, with the admin API:</p>
+<ul>
+  <li><b>The log</b>, live (server-sent events), the run before kept as <code>broker.log.1</code>.</li>
+  <li><b>Configuration and build</b> - what it is built with (<code>GET /build</code>) and every option it runs with,
+  where each came from (<code>GET /admin/config</code>), a secret masked by the broker.</li>
+  <li><b>Metrics</b> - <code>/admin/metrics</code> as charts over the last 10 minutes, read every 5 s: requests per
+  second, errors, latency (mean and 95th percentile), notifications, subscriptions, memory; the busiest operations
+  (<a href="#docs/administration">Administration</a>).</li>
+  <li><b>Log and trace levels</b> - verbose and info, and a tick box per trace level, grouped by library, its tooltip
+  what it traces - set live through <code>/admin/log</code>. Traces exist in debug builds only; on a release build
+  the tick boxes are greyed.</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="explore">Explore - the graph and the map</h2>
+<p>A broker's URL and <b>Connect</b>. The next start connects to the last broker by itself, with the types picked last
+time. The examples in c³'s repository fill a broker to try it on:</p>
+<pre>coraine -db corDB -p 1090 --transports ws &amp;            <span class="c"># a broker in RAM, with its WebSocket transport</span>
+examples/factory.sh http://localhost:1090              <span class="c"># 25 entities: Relationships, locations, areas, routes</span>
+examples/live.sh http://localhost:1090 &amp;               <span class="c"># ... its robots at work: values change every 0.5 s</span>
+examples/ckan-bikes.sh http://localhost:1090           <span class="c"># open data: Boston's bike stations and districts</span></pre>
+
+<h3 id="connecting">Connecting</h3>
+<ul>
+  <li><b>The tenant</b> - the field beside the URL (<code>NGSILD-Tenant</code>; empty, the default one), kept per
+  broker, offered again with those used before and, from coraine with its admin API, <code>GET
+  /admin/tenants</code>.</li>
+  <li><b>Local only</b> - every query with <code>local=true</code>: the broker's own entities, without those of its
+  Context Source Registrations.</li>
+  <li><b>The access token</b> (<b>Token</b>) - sent as <code>Authorization: Bearer</code> on every request, over HTTP and
+  in each message on the broker's WebSocket. In this order: a <b>login</b> to the broker's OpenID provider (the
+  authorization code flow with PKCE, a public client that allows <code>http://&lt;c³&gt;/api/oidc/callback</code>); a
+  <b>credential login</b> for a Data Space Connector - a Verifiable Credential obtained from the consumer's Keycloak
+  (OID4VCI), presented to the verifier, its access token sent; a token typed in (with <b>Remember it on this
+  machine</b>); <code>--token-file</code>; <code>$C3_TOKEN</code>. Tokens stay in the backend - never in the page, never
+  in <code>c3.json</code>; a login's tokens are in memory only and renewed before they expire. A 401 shows the broker's
+  reason, and <b>Log in…</b> when the broker says where its tokens come from (coraine's
+  <code>/.well-known/oauth-protected-resource</code>) (<a href="#docs/authorization">Authorization</a>).</li>
+  <li><b>Discovery</b> - before any entity is loaded: <code>GET /types?details=true</code>, <code>GET /types/{type}</code>
+  per type (its count and its attributes' kinds), <code>GET /attributes?details=true</code>. The panel lists the types
+  with their counts, each one's attributes, and the Relationships between types.</li>
+  <li><b>Choosing what to see</b> - <b>Load</b> loads the types ticked (<code>GET /entities?type=A,B</code>, every page,
+  up to 2000 entities; past that a notice says how many there are). A broker of 300 entities or fewer is loaded whole on
+  a first connect.</li>
+</ul>
+<p>The browser never talks to a broker: the backend proxies each request, so the broker needs no CORS. The proxy
+forwards the NGSI-LD API, <code>/version</code>, <code>/build</code> and coraine's admin reads; its writes are the
+entities and <code>PUT /admin/log</code> only, and only from c³'s own page.</p>
+
+<h3 id="graph">The graph</h3>
+<ul>
+  <li>An entity is a box (its type, the end of its id, its first two Properties); a Relationship to another loaded
+  entity is an arrow. A type's colour comes from its place in the broker's sorted list of types - the same broker, the
+  same colours.</li>
+  <li>The layout is deterministic: the same entities and Relationships give the same picture, whatever order the broker
+  sent them in. Every arrow points up; entities with no Relationship go in a grid below.</li>
+  <li>The wheel zooms, a drag moves the view or a box; <b>Fit</b> and <code>0</code> show everything.</li>
+  <li>A click shows an entity's attributes - kinds, values, <code>unitCode</code>, <code>observedAt</code>,
+  <code>datasetId</code>, sub-attributes - and its JSON; a Relationship's target is a link.</li>
+  <li><b>An entity's menu</b> (right-click, or Shift+F10): <b>With linked entities</b> (<code>join=inline&amp;joinLevel=1,
+  2, 3</code>: one box holding the entities its Relationships point to), <b>Neighbourhood</b> (the entities one
+  Relationship away, out or in), <b>Follow</b>, <b>Hide type</b>, <b>Copy id</b>, <b>Show JSON</b>, <b>Edit…</b>,
+  <b>Replace…</b> (<code>PUT</code>), <b>Delete entity…</b>.</li>
+  <li><b>The editor</b> - the entity as rows, an input per attribute kind (a value with its JSON type, a Relationship's
+  target - or <i>pick in graph</i> -, a Point's coordinates - or <i>pick on map</i> -, a LanguageProperty's languages,
+  ...), sub-attributes, instances by <code>datasetId</code>. <b>The request</b> at the bottom shows what Save sends: one
+  merge, <code>PATCH /entities/{id}</code>, with <code>"urn:ngsi-ld:null"</code> for what was deleted. A right-click
+  where there is no entity creates one (<code>POST /entities</code>). The broker's errors - a 401, a 403, a 400's
+  detail, a 207's attributes not updated - show in the editor.</li>
+</ul>
+
+<h3 id="map">The map</h3>
+<p><b>Graph / Map</b> switches the view, kept per broker. On the map, every loaded entity with a GeoProperty
+(<code>location</code> first, then any other): a Point as a marker, a LineString as a line, a Polygon as an area, in the
+type's colour; Relationships as lines with an arrowhead at the target - all, or the selected entity's only.</p>
+<ul>
+  <li><b>Colour by</b> <code>type</code>, or a Relationship (<code>inDistrict →</code>): each target and the entities
+  pointing at it in one colour, with a legend.</li>
+  <li><b>Icons</b> for the kinds c³ knows by their type's name - a bus, a stop, a streetlight, an air quality or weather
+  station, a traffic sensor, a person - coloured by state (a broken <code>status</code> red, an
+  <code>airQualityLevel</code> on its scale, a <code>powerState</code>); any other type a dot.</li>
+  <li><b>Movement</b> - a Point a live change moves glides to its new place, its lines following (not with
+  <code>prefers-reduced-motion</code>).</li>
+  <li>A right-click opens the entity's menu, with <b>Show in the graph</b>; <b>Create entity here…</b> where there is
+  none.</li>
+</ul>
+<p><b>The base map</b> is OpenStreetMap data drawn with MapLibre GL JS in c³'s dark style: online, OpenFreeMap's vector
+tiles; offline, the areas downloaded.</p>
+
+<h3 id="offline-maps">Offline map areas</h3>
+<p><b>Download this area</b>, on the map's bar:</p>
+<ol>
+  <li><b>The size first</b> - the area in view, the level of detail (10, 12, 13, 14 or 15; each level adds about four
+  times the tiles) and its size, exact before anything is downloaded: the backend reads the planet's directories for
+  the tiles of that box. An area of more than 1 000 000 tiles is refused.</li>
+  <li><b>The extract</b> - the backend extracts the tiles from the newest Protomaps planet build (read with HTTP Range
+  requests, never downloaded whole) into one PMTiles file, <code>$XDG_DATA_HOME/c3/maps/&lt;id&gt;.pmtiles</code>;
+  the first time, the label fonts too. Progress and <b>Cancel</b>; one download at a time.</li>
+  <li><b>Drawn from the file</b> - inside the area, down to its level, also with no network.</li>
+  <li><b>The list</b> - each area's name, size, level, date and planet build, <b>Show</b> and <b>Delete</b>.</li>
+</ol>
+<p>Offline means the downloaded areas: outside them the map is empty. Making an area needs the network once.</p>
+
+<h3 id="live">Live values</h3>
+<p>When an attribute of a loaded entity changes in the broker, its box and its marker change, the rows that changed
+marked; an entity created appears, one deleted disappears; nothing is reloaded. <b>Live · WebSocket</b> or <b>Live ·
+HTTP</b> says how the changes arrive:</p>
+<ul>
+  <li><b>The broker's WebSocket transport</b> (<code>coraine --transports ws</code>,
+  <a href="#docs/websocket">WebSocket</a>) - tried first: the backend opens <code>/ngsi-ld/v1/ws</code>, creates one
+  subscription over it, and the notifications come back on the same socket. The broker deletes the subscription when
+  the socket closes, also when c³ is killed.</li>
+  <li><b>An HTTP subscription</b> notifying the backend (<code>http://127.0.0.1:&lt;port&gt;/api/notify/&lt;session&gt;</code>)
+  - any NGSI-LD broker that can reach it. A subscription left by a c³ that was killed is deleted by the next start on
+  that port.</li>
+</ul>
+<p>The subscription (named <code>c3-live:&lt;port&gt;</code>) watches the types loaded, every attribute and every kind
+of change; it is replaced when the picks change and deleted when the page closes. The changes are applied every 250 ms;
+when the broker goes away, the page watches again until it is back.</p>
+<ul>
+  <li><b>Alarms</b> - alert rules per broker: a title, a severity, an entity type and a <code>q</code>, each a
+  subscription of its own. A match raises an alarm - a toast, a row, the entity ringed on the map until
+  acknowledged - cleared when the live values no longer match (for the simple forms of <code>q</code>; otherwise by
+  hand).</li>
+  <li><b>History</b> - each numeric Property of the selected entity over the last 10 minutes as a sparkline, from the
+  temporal API (<code>GET /temporal/entities/{id}?timerel=after...</code>), then grown from the live values. A broker
+  without history shows the live values from the moment the entity was selected.</li>
+  <li><b>Named demos</b> - a name instead of a URL (<code>CDMAD</code>, built in; others under <code>demos</code> in
+  <code>c3.json</code>): c³ fetches the demo's descriptor - its broker, tenant, view, the types to load, its alert
+  rules - and connects.</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="documentation">The Documentation page</h2>
+<p>These guides: the list (<code>#docs</code>), a guide (<code>#docs/&lt;guide&gt;</code>) and a section of it
+(<code>#docs/&lt;guide&gt;/&lt;section&gt;</code>), with <b>On this page</b>, the previous and next guide, and search
+across every guide's sections. The pages are part of c³ and served by its backend, so they work offline. Every
+component's repository is listed too; with the <code>gh</code> command logged in, the private SEAMWARE repositories the
+user can read are added (<code>gh repo list</code>, asked as the user).</p>
+<p>The same pages are the website <a href="https://seamware.github.io/docs/" target="_blank"
+rel="noopener">seamware.github.io/docs</a> (<code>make site</code>, in <code>build/site</code>); there a link to a
+page of c³ itself - <a href="#compile">Compile</a>, <a href="#run">Operate</a>, <a href="#connect">Explore</a> - is
+the page's name, marked as being in c³.</p>
+
+<!-- ======================================================================= -->
+<h2 id="state">Where it keeps its state</h2>
+<p><b>The configuration file</b>, <code>c3.json</code> (<code>$XDG_CONFIG_HOME/c3/</code>, else
+<code>~/.config/c3/</code>, or <code>--config</code>) - written by the backend as the user works, never by the page:</p>
+<table class="gtable">
+  <tr><th>Member</th><th>What it holds</th></tr>
+  <tr><td><code>brokers</code></td><td>the brokers connected to (the 50 most recent), each with Explore's choices: the
+  tenant and those used, the types picked per tenant, graph or map, the map's view, colour by, the alert rules, the
+  login's issuer, client id and scope</td></tr>
+  <tr><td><code>demos</code></td><td>named demos and their descriptors' URLs</td></tr>
+  <tr><td><code>maps.areas</code></td><td>the map areas downloaded</td></tr>
+  <tr><td><code>compile</code></td><td>Compile's current choice and the presets</td></tr>
+  <tr><td><code>run.brokers</code></td><td>the brokers Operate started, with their options</td></tr>
+  <tr><td><code>ui.lastPage</code></td><td>the page shown last</td></tr>
+</table>
+<p>It is written whole to <code>c3.json.tmp</code> and renamed over <code>c3.json</code> (mode 600, the directory
+700). Members this version does not know are kept; a file that is not a JSON object is moved to
+<code>c3.json.broken</code>; a file of a newer <code>version</code> is read and never written. No access token is in
+it: a remembered one is in <code>secrets.json</code> beside it (mode 600 - a file others can read is not used).</p>
+<p><b>The data directory</b>, <code>$XDG_DATA_HOME/c3/</code> (else <code>~/.local/share/c3/</code>) - here the
+directories are the truth, not the configuration:</p>
+<pre>builds/&lt;name&gt;/           coraine-build's directory: the source, the build tree, install/ (the result)
+builds/&lt;name&gt;.json       the build's record: options, command, phases, exit status, sizes, --version
+builds/&lt;name&gt;.log        everything coraine-build wrote
+run/&lt;name&gt;/broker.log    a broker's output and c3's lines about it; broker.log.1 the run before
+run/&lt;name&gt;/state.json   a native broker that runs: its pid and the process's start time
+run/&lt;name&gt;/data/        --dbDir of a native corDB
+run/&lt;name&gt;/bridges.json the bridge configuration c3 writes
+run/services/&lt;container&gt;.log
+maps/&lt;id&gt;.pmtiles       a downloaded map area
+maps/fonts/             the label fonts</pre>
+<p>Chrome's profile for c³'s window is in <code>$XDG_STATE_HOME/c3/chrome</code>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="built-on">How it is built</h2>
+<p>The backend is one C binary, <code>c3</code>, on coraine's own libraries: <a href="#docs/lib-corhttp">corHttp</a>
+(the HTTP server - the pages, the API, the page's WebSocket, files and server-sent event streams),
+<a href="#docs/lib-correst">corRest</a> (the HTTP client of the proxy and the map downloads),
+<a href="#docs/lib-corjson">corJson</a> and <a href="#docs/lib-cortree">corTree</a> (the configuration and the API's
+bodies), <a href="#docs/lib-corargs">corArgs</a> (the command line), and corAlloc, corBase, corLog under them; zlib and
+OpenSSL. A proxied request leaves the event loop and is sent on a thread of its own: a slow or absent broker holds up
+nothing else (timeout 15 s, the largest answer 64 MiB).</p>
+<p>The frontend is plain JavaScript modules, HTML and CSS - no build step, no framework, nothing from a CDN. The map's
+libraries (MapLibre GL JS, pmtiles, @protomaps/basemaps) are copied as published into <code>www/vendor/</code>, each
+with its licence.</p>
+
+<h2 id="more">More</h2>
+<ul class="g-cards">
+  <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener">c3<span>the backend, the pages, the examples, the API in full</span></a></li>
+  <li><a href="https://seamware.github.io/c3-demos/" target="_blank" rel="noopener">c³ demos<span>the factory floor, Boston's bike stations and Madrid, to run on your machine</span></a></li>
+  <li><a href="#docs/building">Building from source<span>what Compile drives: coraine-build and the feature switches</span></a></li>
+  <li><a href="#docs/roadmap">Roadmap<span>Configure and what else is planned</span></a></li>
+</ul>
+</article>

@@ -1,0 +1,160 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/lib-coralloc.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corAlloc</h1>
+<p class="lead">An arena allocator: memory is handed out from a buffer by moving a pointer, nothing is freed one
+allocation at a time, and everything an arena gave out goes at once. A request's parse tree, its rendered
+response, a downloaded document - all of it lives in a <code>CorAlloc</code> and is dropped with it.</p>
+
+<h2 id="model">The model</h2>
+<p>A <code>CorAlloc</code> starts on a buffer the caller gives it - usually a <code>char</code> array on the
+stack or inside a struct. When that is used up it <code>malloc</code>s blocks of <code>allocSize</code> bytes and
+goes on from them; every block is kept in a list, and a reset frees the list.</p>
+<figure class="g-fig">
+<svg viewBox="0 0 640 150" role="img" aria-label="The initial buffer, then a chain of malloc'ed blocks, each starting with a list header">
+  <g font-family="sans-serif" font-size="12" fill="currentColor">
+    <rect x="10" y="20" width="180" height="40" rx="6" fill="none" stroke="currentColor"/>
+    <text x="100" y="45" text-anchor="middle">initial buffer (the caller's)</text>
+    <rect x="230" y="20" width="180" height="40" rx="6" fill="none" stroke="currentColor"/>
+    <rect x="230" y="20" width="34" height="40" rx="6" fill="currentColor" fill-opacity="0.15" stroke="currentColor"/>
+    <text x="337" y="45" text-anchor="middle">block: allocSize</text>
+    <rect x="450" y="20" width="180" height="40" rx="6" fill="none" stroke="currentColor"/>
+    <rect x="450" y="20" width="34" height="40" rx="6" fill="currentColor" fill-opacity="0.15" stroke="currentColor"/>
+    <text x="557" y="45" text-anchor="middle">block: allocSize</text>
+    <path d="M190 40 H226 M410 40 H446" stroke="currentColor" fill="none"/>
+    <rect x="230" y="90" width="180" height="40" rx="6" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+    <rect x="230" y="90" width="34" height="40" rx="6" fill="currentColor" fill-opacity="0.15" stroke="currentColor"/>
+    <text x="337" y="115" text-anchor="middle">oversized: its own block</text>
+    <text x="10" y="145" font-size="11">shaded: the CorAllocBuffer header (16 bytes on 64-bit) that links each block into allocList</text>
+  </g>
+</svg>
+<figcaption>The initial buffer is never freed by the arena - it is the caller's. The blocks after it, and every
+oversized allocation, are in <code>allocList</code>, and a reset frees them.</figcaption>
+</figure>
+
+<h2 id="init">Setting one up</h2>
+<pre>void corAllocBufferInit(CorAlloc* kaP, char* buf, unsigned long long bufSize,
+                        unsigned long long allocSize, CorAllocErrorHook errorHook, const char* name);</pre>
+<table class="gtable">
+  <tr><th>Argument</th><th></th></tr>
+  <tr><td><code>buf</code>, <code>bufSize</code></td><td>the initial buffer. The first allocation starts at its first 8-aligned byte</td></tr>
+  <tr><td><code>allocSize</code></td><td>the size of each block <code>malloc</code>ed when the buffer is used up. It must be well above the block header (<code>CorAllocBuffer</code>, 16 bytes on a 64-bit machine): 0 breaks the arena the moment the initial buffer is full</td></tr>
+  <tr><td><code>errorHook</code></td><td>called on an allocation failure, or <code>NULL</code></td></tr>
+  <tr><td><code>name</code></td><td>kept as a pointer, not copied - for traces and debugging</td></tr>
+</table>
+<p>Nothing is allocated by the call. Sizes coraine uses: a request's arena is an 8 KiB buffer inside corRest's
+request state with 256 KiB blocks (<code>corRestStateInit.c</code>); a cor:// request's a 64 KiB block
+size; small one-off arenas - an OIDC discovery document, a JWK Set - a stack buffer with 8-16 KiB blocks.</p>
+
+<h2 id="allocating">Allocating</h2>
+<table class="g-opts">
+  <tr><th>Function</th><th>What it returns</th></tr>
+  <tr><td>corAlloc(kaP, size)</td><td><code>size</code> bytes, <b>zeroed</b>, 8-aligned; <code>NULL</code> on failure or when <code>kaP</code> is <code>NULL</code></td></tr>
+  <tr><td>corAllocStrdup(kaP, s)</td><td>a copy of <code>s</code> in the arena; <code>NULL</code> when <code>s</code> is</td></tr>
+  <tr><td>corAllocRealloc(kaP, p, oldSize, newSize)</td><td>a new allocation of <code>newSize</code> with the first <code>min(oldSize, newSize)</code> bytes of <code>p</code> copied in. The old one stays where it is, until the arena goes</td></tr>
+</table>
+<p>What a call does, in order:</p>
+<ol>
+  <li>the size is rounded up to a multiple of 8, so every pointer handed out is 8-aligned;</li>
+  <li>a size of <code>allocSize - sizeof(CorAllocBuffer)</code> or more gets a block of its own (<code>calloc</code>), linked into the
+  list; the current block is left as it is, and the next small allocation goes on from it;</li>
+  <li>a size that fits in what is left of the current block is taken from it, and that part
+  <code>memset</code> to 0;</li>
+  <li>else a new block is <code>malloc</code>ed and the allocation is its first; what was left of the previous
+  block is not used again.</li>
+</ol>
+<p>A failed <code>malloc</code> is retried every 100 µs, up to 100 times; then corAlloc logs an error
+(<code>COR_LIB_E</code>), calls the error hook with <code>CorAllocAllocError</code> and returns
+<code>NULL</code>.</p>
+<pre>#include "corAlloc/corAlloc.h"
+
+typedef struct Item { char* name; struct Item* next; } Item;
+
+static int itemsCount(const char** nameV, int names)
+{
+  CorAlloc ka;
+  char     buf[4096];
+  Item*    first = NULL;
+  int      n     = 0;
+
+  corAllocBufferInit(&amp;ka, buf, sizeof(buf), 16 * 1024, NULL, "items");
+
+  for (int ix = 0; ix &lt; names; ix++)
+  {
+    Item* itemP = (Item*) corAlloc(&amp;ka, sizeof(Item));   // zeroed: next is NULL
+
+    if (itemP == NULL)
+      break;
+
+    itemP-&gt;name = corAllocStrdup(&amp;ka, nameV[ix]);
+    itemP-&gt;next = first;
+    first       = itemP;
+    ++n;
+  }
+
+  corAllocBufferReset(&amp;ka, false);                     // every Item and name, every block - gone
+  return n;
+}</pre>
+<p class="muted">coraine's one-off arenas have this shape - an OIDC discovery document, for one, is fetched,
+parsed by <a href="#docs/lib-corjson">corJson</a> into a tree in a 4 KiB stack arena with 16 KiB blocks, read,
+and dropped (<code>src/plugins/auth/oidc/oidc.c</code>).</p>
+
+<h2 id="reset">Reset and teardown</h2>
+<pre>void corAllocBufferReset(CorAlloc* kaP, bool reuse);</pre>
+<p>Both forms free every block of the list - the <code>malloc</code>ed ones and the oversized ones. What they do
+after that differs, and the difference matters:</p>
+<table class="gtable">
+  <tr><th></th><th><code>reuse = true</code> - <b>reset</b></th><th><code>reuse = false</code> - <b>teardown</b></th></tr>
+  <tr><td>the blocks</td><td>freed</td><td>freed</td></tr>
+  <tr><td>the initial buffer</td><td><code>memset</code> to 0, all of it (<code>bufSize</code> bytes)</td><td>untouched</td></tr>
+  <tr><td>the <code>CorAlloc</code></td><td>initialised again (<code>corAllocBufferInit</code> with its own arguments): an empty arena, ready for the next cycle</td><td>left as it was: <code>allocList</code> still points at the freed blocks, the allocation pointer into the last one</td></tr>
+  <tr><td>after it</td><td>allocate again</td><td>do not use the <code>CorAlloc</code> again - neither allocate nor reset it - until it has been through <code>corAllocBufferInit</code></td></tr>
+</table>
+<div class="g-callout warn">
+<p><b>In a loop, reset with <code>true</code>.</b> A <code>corAllocBufferReset(kaP, false)</code> followed by
+another reset of the same arena frees the same blocks twice - a double free that shows only once a cycle has
+outgrown the initial buffer. Teardown is for the end of an arena's life: a function's local arena on its way
+out, a thread's at its end. coraine's per-thread arenas that serve one cycle after another (the periodic
+notifications, the bridge samples, the high-availability events) reset with <code>true</code>; its one-off
+arenas end with <code>false</code>.</p>
+</div>
+<p>A reset with <code>true</code> also turns thread safety off: <code>corAllocBufferInit</code> sets
+<code>threadSafe</code> to false, so an arena made thread-safe has to call <code>corAllocThreadSafe</code>
+again after it.</p>
+
+<h2 id="zeroing">Zeroing</h2>
+<p>Every allocation comes back zeroed - a struct needs no <code>memset</code>. The blocks themselves are
+<code>malloc</code>ed, not <code>calloc</code>ed: each allocation is zeroed as it is handed out, so the part of a
+block no allocation reaches is never written. The oversized blocks are <code>calloc</code>ed. A reset with
+<code>true</code> zeroes the whole initial buffer, whatever was used of it.</p>
+
+<h2 id="threads">Threads</h2>
+<p>An arena is not thread-safe, and nearly every one is one request's or one function's, used by one thread.
+For an arena shared between threads:</p>
+<pre>void corAllocThreadSafe(CorAlloc* kaP);</pre>
+<p>Called once, after <code>corAllocBufferInit</code> and before a second thread can reach the arena: from then
+on every allocation takes the arena's mutex. An arena that is not thread-safe pays one branch. It protects the
+arena only - what the allocations hold is the caller's to protect. coraine has one such arena: the JSON-LD
+context store, into which every thread that downloads or parses an <code>@context</code> allocates
+(<code>src/app/coraine/coraine.c</code>, a 64 KiB static buffer and 256 KiB blocks).</p>
+
+<h2 id="other">The other parts</h2>
+<table class="g-opts">
+  <tr><th>Part</th><th>What it is</th></tr>
+  <tr><td>CorAllocErrorHook</td><td><code>void hook(struct CorAlloc* kaP, CorAllocStatus kas, char* errorString, void* vP)</code> - called on an allocation failure; <code>corAllocStatus(kas)</code> names the status</td></tr>
+  <tr><td>CorAllocTraceLevel</td><td>the library's trace levels, 300-303: init, new buffer, bytes left, alloc (<a href="#docs/lib-corlog/numbering">trace levels</a>)</td></tr>
+  <tr><td>corAllocMem*</td><td>a process-wide memory budget around <code>malloc</code>/<code>free</code>: a limit, a wait (default 5000 ms) for memory when it is reached, statistics. A separate interface - the arena does not use it, and coraine does not call it</td></tr>
+  <tr><td>corAllocInit, CORALLOC_E, ...</td><td>a log function of the library's own and macros for it, compiled only with <code>CORALLOC_LOG_ON</code>. The library's code does not use them: it logs through corBase's <code>COR_LIB_*</code></td></tr>
+</table>
+
+<h2 id="more">API, repository, dependencies</h2>
+<ul class="g-cards">
+  <li><a href="#docs/api-coralloc"><b>corAlloc API</b><span>every header and entry</span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><b>SEAMWARE/corAlloc</b><span>the repository</span></a></li>
+  <li><a href="#docs/lib-corbase"><b>corBase</b><span>what it depends on: the library log; and pthreads</span></a></li>
+</ul>
+<p>Used by nearly everything above it: <a href="#docs/lib-cortree">corTree</a> and
+<a href="#docs/lib-corjson">corJson</a> build their trees in an arena, <a href="#docs/lib-corhash">corHash</a>
+can allocate from one, <a href="#docs/lib-correst">corRest</a> gives every request its own, and coraine and its
+plugins make their own wherever a piece of work needs memory that ends with it.</p>
+</article>

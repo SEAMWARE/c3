@@ -1,0 +1,149 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/cor-tools.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corTools</h1>
+<p class="lead"><a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener">corTools</a> holds three
+command-line programs built on the Cor-Libs: a cor:// client and load generator, the other end of a functional test,
+and a fast MongoDB drop. coraine's functional tests use all three; nothing in them is specific to the tests.</p>
+
+<table class="gtable">
+  <tr><th>Tool</th><th>What it is</th></tr>
+  <tr><td><code>corRequest</code></td><td>a cor:// client - one request, like <code>curl -i</code>; several at once; or
+  load, like <code>wrk</code>, also at a fixed rate and over <code>http://</code></td></tr>
+  <tr><td><code>corTestClient</code></td><td>a notification receiver (HTTP, HTTPS, MQTT), a mock context source with
+  programmed replies, and a host for the broker's bridge plugins - the peer a bridge talks to</td></tr>
+  <tr><td><code>corMongoDrop</code></td><td>drops MongoDB databases or collections over one libmongoc connection; built
+  only where libmongoc is</td></tr>
+</table>
+
+<h2 id="correquest">corRequest</h2>
+<p>A client for the broker's binary API, <a href="#docs/cor-protocol">cor://</a>. It encodes the request with
+corNgsild's codec and sends it with corRest's cor:// client.</p>
+<pre>corRequest --url cor://localhost:2026 --path /ngsi-ld/v1/entities/urn:E1
+corRequest --url cor://localhost:2026 -X POST --path /ngsi-ld/v1/entities \
+           --payload '{"id": "urn:E1", "type": "T", "p": {"value": 1}}'</pre>
+<p>One request prints <code>STATUS &lt;code&gt;</code>, the headers, an empty line and the body as JSON.</p>
+<table class="gtable">
+  <tr><th>Mode</th><th>Selected by</th><th>What it does</th></tr>
+  <tr><td>one request</td><td>the default</td><td>prints the response as above</td></tr>
+  <tr><td>as corCurl</td><td><code>--curl --bodyFile &lt;f&gt; --pretty &lt;n&gt;</code></td><td>the header block exactly as
+  <code>curl -D</code> shows the HTTP server's - status line with its reason phrase, <code>Date</code>, the broker's headers,
+  <code>Content-Length</code> - and the body in <code>&lt;f&gt;</code>. <code>Content-Length</code> is the size the broker
+  would render at <code>--pretty</code> spaces per indent. This is how the functests' <code>corCurl</code> runs a test over
+  cor:// with every expectation unchanged</td></tr>
+  <tr><td>parallel</td><td><code>--paths 'p1|p2|...'</code></td><td>each path sent at once, the answers printed as they come;
+  <code>--sockets 1</code> puts every path on one connection (multiplexed), <code>0</code> a thread and a connection each</td></tr>
+  <tr><td>load</td><td><code>-c &lt;n&gt; --duration &lt;s&gt;</code></td><td><code>n</code> connections, each a thread sending one
+  request after the other for <code>s</code> seconds; prints requests per second and the p50 / p90 / p99 / max
+  latency</td></tr>
+  <tr><td>load at a rate</td><td><code>-c &lt;n&gt; --rate &lt;r&gt;</code></td><td>each connection sends its share of
+  <code>r</code> requests per second on a schedule; a latency counts from when the request was due, so a slow answer
+  delays the requests behind it and they count that delay (as <code>wrk2</code>)</td></tr>
+</table>
+<p>An <code>http://</code> URL loads an HTTP server - load mode only, <code>GET</code> only (keep-alive,
+<code>Content-Length</code> bodies):</p>
+<pre>corRequest --url http://localhost:1026 --path /ngsi-ld/v1/entities/urn:E1 -c 16 --rate 20000 --duration 8</pre>
+<table class="g-opts">
+  <tr><th>Option</th><th>What it is</th></tr>
+  <tr><td>--url</td><td>mandatory: <code>cor://host:port</code> (or <code>http://host:port</code> for load)</td></tr>
+  <tr><td>--path</td><td>path and query, default <code>/ngsi-ld/v1/entities</code></td></tr>
+  <tr><td>--verb, -X</td><td><code>GET</code> (default), <code>POST</code>, <code>PATCH</code>, <code>PUT</code>,
+  <code>DELETE</code></td></tr>
+  <tr><td>--payload / --payloadFile</td><td>the request body, JSON - on the command line, or from a file</td></tr>
+  <tr><td>--header, -H</td><td><code>'Name: value'</code>, several separated by <code>|</code></td></tr>
+  <tr><td>--conns, -c</td><td>load mode: connections, 0-1024 (0: one request)</td></tr>
+  <tr><td>--duration</td><td>load mode: seconds, 1-3600, default 8</td></tr>
+  <tr><td>--rate</td><td>load mode: requests per second in all, 0-10000000 (0: as fast as answered)</td></tr>
+  <tr><td>--paths, --sockets</td><td>parallel mode, above</td></tr>
+  <tr><td>--timeout</td><td>milliseconds, 1-600000, default 30000</td></tr>
+  <tr><td>--curl, --bodyFile, --pretty</td><td>the corCurl form, above</td></tr>
+</table>
+<p>Exit codes: <code>0</code> a response came back (whatever its status), <code>1</code> none did, <code>2</code> bad
+arguments or an unreadable <code>--payloadFile</code>, <code>3</code> the payload is not JSON - a request only HTTP can
+carry. In coraine's functests each broker also listens on cor:// at its HTTP port + 1000, and
+<code>COR_TRANSPORT=cor</code> sends every request it can through <code>corRequest --curl</code>
+(<a href="#docs/testing/run">Running the suite</a>).</p>
+
+<h2 id="cortestclient">corTestClient</h2>
+<p>The far end of a test: whatever the broker sends - a notification, a forwarded request - lands here and is kept until
+a test reads it. It is a corRest server, one thread per connection.</p>
+<pre>corTestClient --port 7701                       <span class="c"># a notification receiver</span>
+corTestClient --port 7702 --status 500          <span class="c"># a receiver that fails every POST</span>
+corTestClient --port 7703 --mqttPort 1883 --mqttTopic 'plant/#'
+curl localhost:7701/dump                         <span class="c"># what arrived since the last dump - and consumed</span></pre>
+<table class="g-opts">
+  <tr><th>Request</th><th>What it does</th></tr>
+  <tr><td>GET /dump</td><td>the requests received since the last dump, as a JSON array (<code>verb</code>, <code>url</code>,
+  <code>payload</code>, ...), and consumes them</td></tr>
+  <tr><td>GET /count</td><td>how many are kept, as a bare integer - no JSON parser needed</td></tr>
+  <tr><td>GET /probeCount</td><td>how many <code>/info/sourceIdentity</code> probes arrived (kept out of the dump)</td></tr>
+  <tr><td>GET /mqttReady</td><td><code>1</code> once the MQTT subscription is acknowledged (or none was asked for),
+  <code>0</code> not yet, <code>-1</code> given up - the log says why</td></tr>
+  <tr><td>GET /die</td><td>exits the process</td></tr>
+  <tr><td>POST /mock/reply</td><td>programs a reply: <code>{ "verb": "POST", "path": "/attrs/", "status": 207, "body": {...} }</code>
+  - matched on the verb and a substring of the path; <code>delayMs</code> sleeps before answering, <code>raw</code> is a
+  body sent verbatim. Kept until <code>DELETE /mock/reply</code></td></tr>
+  <tr><td>POST /mqtt/publish</td><td>puts a message on the MQTT broker: <code>{ "topic": ..., "payload": &lt;JSON&gt; }</code>, or
+  <code>"text"</code> for a payload sent exactly as given - a device on the bus, for the MQTT bridge tests</td></tr>
+  <tr><td>POST /bridge/publish</td><td><code>{ "endpoint": ..., "payload": &lt;JSON&gt; }</code> through a hosted bridge
+  plugin's <code>publish</code> - the bridge with the alias <code>dds</code>, else the first loaded</td></tr>
+  <tr><td>POST /bridge/serviceReply</td><td><code>{ "endpoint": ..., "payload": &lt;JSON&gt; }</code>: what to answer when the
+  broker calls that service</td></tr>
+  <tr><td>anything else</td><td>GET, POST, PATCH, PUT, DELETE on any path: kept for <code>/dump</code>, answered with
+  <code>--status</code> (or a programmed reply)</td></tr>
+</table>
+<table class="g-opts">
+  <tr><th>Option</th><th>What it is</th></tr>
+  <tr><td>--port, -p</td><td>default 7701</td></tr>
+  <tr><td>--status, -s</td><td>the status every kept request is answered with, 100-599, default 200</td></tr>
+  <tr><td>--delay</td><td>milliseconds to sleep before answering - for timeout tests</td></tr>
+  <tr><td>--discard</td><td>requests counted (<code>GET /count</code>), not kept - a benchmark's receiver</td></tr>
+  <tr><td>--traceLevels</td><td>default <code>0-255</code> (the functests read them); <code>""</code> for none</td></tr>
+  <tr><td>--httpsKey, -k / --httpsCertificate, -c</td><td>PEM files: serve HTTPS (both needed)</td></tr>
+  <tr><td>--mqttPort, --mqttTopic, --mqttUser, --mqttPassword, --mqttTls</td><td>subscribe to an MQTT broker (port 0:
+  none; topic default <code>#</code>; TLS accepts a self-signed certificate); the messages are kept as requests are</td></tr>
+  <tr><td>--bridges, -br / --bridgeConfig, -brc</td><td>bridge plugins to host, and the broker's own bridge configuration
+  file</td></tr>
+  <tr><td>--foreground, -fg</td><td>default on</td></tr>
+</table>
+
+<h3 id="bridge-host">Hosting a bridge plugin</h3>
+<p>With <code>--bridges</code>, corTestClient loads the same <code>.so</code> the broker loads - resolved under
+<code>/opt/seamware/plugins/bridge</code> (<code>$SEAMWARE_PLUGIN_DIR</code>), or a path - with the same ABI handshake,
+calls its <code>init</code> with the configuration file, and subscribes to every endpoint the file names. Its
+<code>BridgeBroker</code> fills in <code>sampleIn</code>, <code>logFunction</code> and <code>sampleQualifiedIn</code>: a
+sample is kept for <code>/dump</code> rather than stored. That is what lets a test put a value on a transport and read
+what the broker made of it, and answer a service the broker calls through the plugin's <code>serverIface</code>. The
+contract: <a href="#docs/writing-a-bridge">Writing a bridge</a>.</p>
+
+<h3 id="in-the-functests">In coraine's functests</h3>
+<p><code>corTestFunctions.sh</code> wraps it: <code>ftClientStart [--port P] [--status S] ...</code> starts one, with its pid,
+log (<code>/tmp/corTestClient.&lt;port&gt;.log</code>) and scheme kept per port, so several run at once;
+<code>ftClientDump</code>, <code>ftClientCount</code> and <code>ftClientStop</code> go with it. The binary is
+<code>corLibs/bin/corTestClient</code> - <a href="#docs/testing/write">Writing a test</a>.</p>
+
+<h2 id="cormongodrop">corMongoDrop</h2>
+<pre>corMongoDrop [--host H] [--port P] --db NAME                      <span class="c"># drop the database NAME</span>
+corMongoDrop [--host H] [--port P] --db NAME --collections a,b,c  <span class="c"># those collections of NAME</span>
+corMongoDrop [--host H] [--port P] --prefix P                     <span class="c"># every database named P, or P-...</span>
+corMongoDrop [--host H] [--port P] --prefix P --contains S        <span class="c"># ... whose name also contains S</span></pre>
+<p>The host defaults to <code>localhost</code>, the port to 27017; one of <code>--db</code> and <code>--prefix</code> is
+needed. Exit <code>0</code> when it could talk to the server - a database or collection that does not exist is a no-op,
+not an error - <code>1</code> when it could not, <code>2</code> for bad arguments. The functests drop with it before
+almost every test, and fall back to <code>mongosh</code> where it is not built; the cost of each is in
+<a href="#docs/testing">Testing</a>.</p>
+
+<h2 id="build">Building</h2>
+<p>A sibling of the Cor-Libs, like every repository of the stack (<code>-I..</code>, <code>../&lt;lib&gt;/lib&lt;lib&gt;.a</code>).
+The <a href="#docs/cor-libs">corLibs</a> umbrella builds it after every library and collects the tools into
+<code>corLibs/bin</code>, beside <code>corTest</code>:</p>
+<pre>make -C ../corLibs di                <span class="c"># the whole stack</span>
+make di                              <span class="c"># this repository alone, once the libraries are built</span>
+make COR_HTTP_SERVER=builtin di      <span class="c"># against a corRest built with the builtin HTTP server (corHttp)</span></pre>
+<p>It needs libmicrohttpd (or corHttp, with <code>COR_HTTP_SERVER=builtin</code> - it must be the server corRest was built
+with), OpenSSL and libmosquitto; <code>corMongoDrop</code> needs libmongoc (<code>pkg-config mongoc2</code>) and is skipped,
+with a line saying so, without it. The libraries are linked by path, whole-archived and exported
+(<code>-rdynamic</code>): a bridge plugin corTestClient loads calls into the libraries of its host. <code>BUILD=debug</code>
+(the default) compiles the traces in; <code>EXTRA_CFLAGS</code> adds flags without replacing the defaults. The tools land
+in <code>bin/</code>.</p>
+</article>

@@ -1,0 +1,183 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/cormcp.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>corMcp - an MCP server for NGSI-LD brokers</h1>
+<p class="lead">corMcp gives an AI model read access to an NGSI-LD context broker through the
+<a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a>: the model asks in
+tools - "the vehicles faster than 90 km/h near Sol" - and corMcp makes the NGSI-LD requests,
+<code>GET /entities?type=Vehicle&amp;q=speed&gt;90&amp;georel=...</code>. It works with any NGSI-LD broker over
+HTTP.</p>
+
+<h2 id="how">How it fits</h2>
+<p>The model never runs in corMcp: it runs at its provider, and an MCP host - the application the user talks to,
+Claude Code for example - starts corMcp and passes it the model's tool calls. corMcp turns each call into one NGSI-LD
+request to the broker and gives the answer back, shaped for a model.</p>
+<ul>
+  <li><b>Transport: stdio.</b> One JSON-RPC message a line on stdin, the answers on stdout, the log on stderr.</li>
+  <li><b>One session, one broker.</b> A session is bound to one broker, one tenant, one <code>@context</code> and one
+  token, all chosen when corMcp is started. No tool takes a tenant or an <code>@context</code>: the model cannot reach
+  a tenant the user did not choose. Another tenant is another corMcp, which only the user starts.</li>
+  <li><b>Read-only.</b> Every tool is a <code>GET</code>; each is announced with <code>readOnlyHint: true</code> and
+  <code>openWorldHint: false</code>. Nothing a model asks for changes the broker.</li>
+  <li><b>Any broker.</b> Only the NGSI-LD API (ETSI TS 104 175) at <code>&lt;broker&gt;/ngsi-ld/v1</code>; a tool whose
+  API the broker lacks (a broker with no temporal API) answers the broker's error.</li>
+</ul>
+
+<h2 id="build">Building and installing</h2>
+<p>corMcp is built on the Cor-Libs, as coraine is - sibling checkouts (<code>../corRest</code>,
+<code>../corJson</code>, ...), each built with <code>make</code> in it. It links <code>corRest</code>,
+<code>corJson</code>, <code>corTree</code>, <code>corArgs</code>, <code>corLog</code>, <code>corAlloc</code> and
+<code>corBase</code>, and OpenSSL and zlib.</p>
+<pre>for r in corBase corLog corAlloc corArgs corTree corJson corRest corMcp; do
+  git clone https://github.com/SEAMWARE/$r
+done
+for r in corBase corLog corAlloc corArgs corTree corJson corRest; do make -C $r; done
+cd corMcp
+make                  <span class="c"># ./corMcp</span>
+make install          <span class="c"># /usr/local/bin/corMcp (PREFIX=..., DESTDIR=...)</span></pre>
+<p><code>COR_LIBS=&lt;dir&gt;</code> for Cor-Libs checked out elsewhere; <code>BUILD=debug</code> for
+<code>-g -O0</code>.</p>
+
+<h2 id="options">Options</h2>
+<pre>corMcp --broker http://localhost:1026 [--tenant T] [--context URL] [--token-env VAR] [--limit-max N]</pre>
+<div class="g-scroll">
+<table class="g-opts">
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td>--broker, -b &lt;url&gt;<span class="env">CORMCP_BROKER</span></td><td>the broker's base URL,
+  <code>http://</code> or <code>https://</code>, without <code>/ngsi-ld/v1</code> - required</td></tr>
+  <tr><td>--tenant, -t &lt;tenant&gt;<span class="env">CORMCP_TENANT</span></td><td>the tenant every request goes to
+  (<code>NGSILD-Tenant</code>) - default: the broker's default tenant</td></tr>
+  <tr><td>--context, -ctx &lt;url&gt;<span class="env">CORMCP_CONTEXT</span></td><td>the <code>@context</code> the
+  short names (<code>Vehicle</code>, <code>speed</code>) expand with, sent as <code>Link</code> - default: the core
+  context</td></tr>
+  <tr><td>--token-env, -te &lt;var&gt;<span class="env">CORMCP_TOKEN_ENV</span></td><td>the environment variable that
+  holds a bearer token, sent as <code>Authorization: Bearer</code>. The token itself is never a command-line argument;
+  a variable that is not set stops the start</td></tr>
+  <tr><td>--limit-max, -lm &lt;n&gt;<span class="env">CORMCP_LIMIT_MAX</span></td><td>the largest <code>limit</code> a
+  tool call may ask for, 1 - 1000 (default 100); a larger one is lowered to it</td></tr>
+</table>
+</div>
+<p>Each option can also be set in the environment, by the name beside it; the command line wins.</p>
+
+<h2 id="tools">The tools</h2>
+<div class="g-scroll">
+<table class="gtable">
+  <tr><th>Tool</th><th>NGSI-LD request</th><th>For</th></tr>
+  <tr><td><code>list_types</code></td><td><code>GET /types?details=true</code></td><td>the entity types and their
+  attribute names - where a model starts</td></tr>
+  <tr><td><code>list_attributes</code></td><td><code>GET /attributes?details=true</code>, or with <code>type</code>
+  <code>GET /types/{type}</code></td><td>the attribute names, their kinds (Property, Relationship, GeoProperty, ...)
+  and the types that have each</td></tr>
+  <tr><td><code>query_entities</code></td><td><code>GET /entities</code></td><td>the entities that match: <code>type</code>,
+  <code>ids</code>, <code>idPattern</code>, <code>q</code>, <code>scopeQ</code>, <code>geoQ</code>, <code>csf</code>;
+  <code>pick</code>, <code>omit</code>, <code>datasetId</code>, <code>lang</code>, <code>format</code>;
+  <code>limit</code>, <code>offset</code></td></tr>
+  <tr><td><code>get_entity</code></td><td><code>GET /entities/{id}</code></td><td>one entity by its id - also how a
+  Relationship is followed</td></tr>
+  <tr><td><code>count_entities</code></td><td><code>GET /entities?count=true&amp;limit=0</code></td><td>how many match
+  the same filters - no entities returned</td></tr>
+  <tr><td><code>temporal</code></td><td><code>GET /temporal/entities[/{id}]</code></td><td>history: <code>timerel</code>
+  and <code>timeAt</code> (required), <code>endTimeAt</code>, <code>timeproperty</code>, <code>lastN</code>,
+  <code>attrs</code>; aggregation with <code>aggrMethods</code> and <code>aggrPeriodDuration</code>; one entity by
+  <code>id</code>, or the filters</td></tr>
+  <tr><td><code>list_subscriptions</code></td><td><code>GET /subscriptions</code></td><td>what each subscription
+  watches, where it notifies, its status</td></tr>
+  <tr><td><code>query_registrations</code></td><td><code>GET /csourceRegistrations</code></td><td>which context sources
+  hold which entities - NGSI-LD wants at least one filter (§ 5.10.2.4)</td></tr>
+</table>
+</div>
+<p><code>geoQ</code> is an object - <code>{ "georel": "near;maxDistance==2000", "geometry": "Point", "coordinates":
+[2.2945, 48.8584] }</code>, with an optional <code>geoproperty</code> - sent as the four URL parameters. A list
+argument (<code>type</code>, <code>ids</code>, <code>pick</code>, <code>attrs</code>, ...) is a string or an array of
+strings, joined with commas. Each tool's description - what the model reads - says what it is for and shows the
+NGSI-LD syntax it must write (<code>q</code>'s operators, ranges, regular expressions, sub-attributes); the server's
+<code>instructions</code> at <code>initialize</code> say what an NGSI-LD broker holds and name the session's broker and
+tenant.</p>
+
+<h3 id="results">What a tool returns</h3>
+<ul>
+  <li><b>Concise</b> by default for the entity tools - lossless: sub-attributes, <code>unitCode</code>,
+  <code>observedAt</code>, <code>datasetId</code>, Property and Relationship all kept. <code>format: simplified</code>
+  (<code>options=keyValues</code>, the values alone) or <code>normalized</code> when the model asks. <code>temporal</code>
+  is <code>normalized</code> by default (or <code>temporalValues</code>, <code>concise</code>); with
+  <code>aggrMethods</code>, <code>options=aggregatedValues</code>.</li>
+  <li><code>pick</code> always keeps <code>id</code> and <code>type</code>.</li>
+  <li>A list is <code>{ count, returned, more, &lt;items&gt; }</code>, <code>limit</code> 20 by default; the count is
+  always asked for (<code>count=true</code>), and <code>more</code> says whether to page with
+  <code>offset</code>.</li>
+  <li>A string longer than 1000 characters and an array longer than 100 items are cut, with a marker:
+  <code>…[+513 characters cut]</code>, <code>…[+51 items cut]</code>.</li>
+  <li>The result is <code>structuredContent</code>, and the same JSON, compact, as the text content.</li>
+  <li>A broker error is a tool error (<code>isError</code>) with the broker's status, type, title and detail - text a
+  model can act on. A bad argument too: <code>'limit' must be an integer, 1 or more</code>. A broker that does not
+  answer: <code>the broker at &lt;url&gt; did not answer: ...</code>.</li>
+</ul>
+
+<h2 id="client">Configuring a model client</h2>
+<p>An MCP host starts corMcp as a command with arguments. Claude Code:</p>
+<pre>claude mcp add ngsild -- corMcp --broker http://localhost:1026</pre>
+<p>A host configured with a JSON file of servers takes the same command, arguments and environment - with a tenant
+and a token, for example:</p>
+<pre>{
+  "mcpServers": {
+    "ngsild": {
+      "command": "corMcp",
+      "args": [ "--broker", "https://broker.example.org", "--tenant", "city", "--token-env", "BROKER_TOKEN" ],
+      "env": { "BROKER_TOKEN": "..." }
+    }
+  }
+}</pre>
+<p>The token reaches corMcp through the variable that <code>--token-env</code> names, so it is in no process list.
+The broker decides what the token allows; corMcp only reads.</p>
+
+<h2 id="protocol">The protocol</h2>
+<p>MCP revisions 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05: <code>initialize</code> answers with the client's
+revision when corMcp speaks it, else the newest. Methods: <code>initialize</code>, <code>ping</code>,
+<code>tools/list</code>, <code>tools/call</code>; notifications (<code>notifications/initialized</code>, ...) are
+accepted and not answered. No batches - one JSON-RPC object a message, as MCP has it since 2025-06-18. The JSON-RPC
+errors: <code>-32700</code> (parse), <code>-32600</code> (invalid request), <code>-32601</code> (an unknown method),
+<code>-32602</code> (an unknown tool, a <code>tools/call</code> without a name).</p>
+<p>Every request to the broker carries <code>Accept: application/json</code>, and the session's
+<code>NGSILD-Tenant</code>, <code>Link</code> and <code>Authorization</code> when set; the timeout is 30 s. The log has
+one line per tool call: the tool, its arguments, <code>ok</code> or <code>error</code>, the milliseconds.</p>
+
+<h2 id="session">An example session</h2>
+<p>By hand, as a host would - each line one message on corMcp's stdin:</p>
+<pre>corMcp --broker http://localhost:1026
+<span class="c"># stderr: corMcp 0.1.0 - broker http://localhost:1026, tenant (default), http backend, stdio</span>
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"me","version":"0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_types","arguments":{}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"query_entities","arguments":{"type":"Store","q":"stock&lt;10","pick":["stock"],"limit":5}}}</pre>
+<p>The answer to <code>initialize</code> carries <code>serverInfo</code> (<code>corMcp</code>, 0.1.0), the
+<code>tools</code> capability and the <code>instructions</code>; <code>tools/list</code> the eight tools with their
+input schemas. Call 4 becomes</p>
+<pre>GET /ngsi-ld/v1/entities?type=Store&amp;q=stock%3C10&amp;pick=stock,id,type&amp;options=concise&amp;limit=5&amp;count=true</pre>
+<p>and its result is <code>{ "count": ..., "returned": ..., "more": ..., "entities": [ ... ] }</code>, as
+<code>structuredContent</code> and as text. In a host, the same happens behind a question in plain language: the
+model reads the instructions and the descriptions, calls <code>list_types</code>, then the tool that answers.</p>
+
+<h2 id="tests">Tests and evaluation</h2>
+<pre>BROKER_URL=http://localhost:1026 make test</pre>
+<p>The tests make entities of their own (a type with a per-run suffix), check every tool and the protocol errors, and
+delete the entities. A check the broker cannot pass (a broker with no temporal API) is reported as skipped, with the
+broker's answer.</p>
+<p><code>eval/</code> measures how well a model answers with corMcp's tools - what the descriptions teach it. Two sets
+of fixed data, each in a tenant of its own, and questions in plain language, each asked in a fresh conversation:
+<code>fleet</code> (Madrid: vehicles, depots, parking spots, air-quality stations with a day of history, a
+subscription - 32 questions) and <code>building</code> (Berlin: offices, rooms, HVAC units, energy meters with a day of
+history - 21 questions). No example in the tools' descriptions comes from either set.</p>
+<pre>ANTHROPIC_API_KEY=... python3 eval/run.py --broker http://localhost:1026 [--set fleet,building] [--model M]</pre>
+<p>Each answer is scored right or wrong against answers computed from the data, with the tools a good answer uses and
+the tool calls against a budget; tokens and seconds are recorded, in
+<code>eval/results/&lt;time&gt;-&lt;provider&gt;-&lt;model&gt;[-label].json</code>. <code>--rescore &lt;file&gt;</code>
+scores a run again without calling the model.</p>
+
+<h2 id="more">More</h2>
+<ul class="g-cards">
+  <li><a href="https://github.com/SEAMWARE/corMcp" target="_blank" rel="noopener">corMcp<span>the server, its tests and the evaluation</span></a></li>
+  <li><a href="#docs/api-walkthrough">API walkthrough<span>the NGSI-LD requests the tools make, by hand</span></a></li>
+  <li><a href="#docs/lib-correst">corRest<span>the HTTP client corMcp sends with</span></a></li>
+</ul>
+</article>
