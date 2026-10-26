@@ -37,7 +37,7 @@ and its options are also documented with the plugin. An option of a plugin that 
 <table class="gtable">
   <tr><th>Part</th><th>Options</th></tr>
   <tr><td colspan="2"><b>The broker</b></td></tr>
-  <tr><td><a href="#docs/options" data-scroll="program">The program</a></td><td>12</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="program">The program</a></td><td>11</td></tr>
   <tr><td><a href="#docs/options" data-scroll="listening">Listening</a></td><td>12</td></tr>
   <tr><td><a href="#docs/options" data-scroll="limits">Limits and memory</a></td><td>7</td></tr>
   <tr><td><a href="#docs/options" data-scroll="corhttp">Built-in HTTP server (corHttp)</a></td><td>1</td></tr>
@@ -56,9 +56,17 @@ and its options are also documented with the plugin. An option of a plugin that 
   <tr><td><a href="#docs/options" data-scroll="oidc">oidc</a> - <code>--auth oidc</code></td><td>13</td></tr>
   <tr><td><a href="#docs/options" data-scroll="fdsc">fdsc</a> - <code>--auth fdsc</code></td><td>13</td></tr>
   <tr><td colspan="2"><b>The programs beside the broker</b></td></tr>
-  <tr><td><a href="#docs/options" data-scroll="coraine-import">coraine-import</a></td><td>18 (9 of them mongoc's)</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="coraine-import">coraine-import</a></td><td>17 (9 of them mongoc's)</td></tr>
   <tr><td><a href="#docs/options" data-scroll="coraine-build">coraine-build</a></td><td>13</td></tr>
 </table>
+<p>Each plugin's entries are also in the plugin's own doc, copied from coraine's <code>doc/options.md</code> by
+<code>tools/pluginOptions.sh</code> - an entry is changed there, and CI fails while a copy differs: mongoc's <a
+href="https://github.com/SEAMWARE/coraine/blob/main/src/plugins/currentState/mongoc/README.md" target="_blank"
+rel="noopener">README</a>, corDB's <a href="https://github.com/SEAMWARE/corDB/blob/main/README.md#options"
+target="_blank" rel="noopener">README</a> (written, not checked - another repository), timescale's <a
+href="https://github.com/SEAMWARE/coraine/blob/main/src/plugins/temporal/timescale/README.md" target="_blank"
+rel="noopener">README</a>, oidc's and fdsc's in <a href="#docs/authorization/oidc-options">Authorization - oidc</a> and
+<a href="#docs/authorization/fdsc-options">Authorization - fdsc</a>.</p>
 
 <!-- ======================================================================= -->
 <h2 id="program">The program</h2>
@@ -936,16 +944,16 @@ are not synchronised.</p>
 <p>Refused at start:</p>
 <ul>
   <li><p>a database plugin that cannot report another instance's writes (<code>corDB</code>, <code>ramDB</code>):</p>
-<pre>X: ... haInit: --ha mongo needs a database plugin that can report what another broker instance wrote; the 'corDB' plugin cannot. Point the broker at a shared database, or use '--ha &lt;ip:port&gt;' once the haaux server exists</pre></li>
+<pre>X: ... haInit: -ha mongo needs a database plugin that can report what another broker instance wrote; the 'corDB' plugin cannot. Point the broker at a shared database, or use '-ha &lt;ip:port&gt;' once the haaux server exists</pre></li>
   <li><p>a temporal store inside the process (<code>--troe corDB</code>, <code>--troe ramDB</code>); <code>--troe
 timescale</code> and <code>--troe none</code> are accepted:</p>
-<pre>X: ... haInit: --ha mongo needs a temporal store shared by every broker instance; '--troe corDB' keeps the history inside each broker, ...</pre></li>
+<pre>X: ... haInit: -ha mongo needs a temporal store shared by every broker instance; '--troe corDB' keeps the history inside each broker, ...</pre></li>
   <li>a MongoDB that is not a replica set, or a change stream that cannot be opened (the privileges - <a
 href="#docs/high-availability/requirements">High Availability - Requirements</a>), then <code>X: ... main: unable to
 start the HA channel 'mongo'</code>.</li>
 </ul>
 <p>Any other value is taken as the address of a haaux server, which does not exist yet, and is refused:</p>
-<pre>X: ... haInit: --ha 10.0.0.1:7000: an address means the haaux server, which is not implemented yet. Use '--ha mongo'
+<pre>X: ... haInit: -ha 10.0.0.1:7000: an address means the haaux server, which is not implemented yet. Use '-ha mongo'
 
 coraine --dbURI "mongodb://db1,db2,db3/?replicaSet=rs0" --high-availability mongo</pre>
 
@@ -1391,9 +1399,26 @@ before its response; this option decides when that is <code>fdatasync</code>ed.<
 response does not wait. A broker that dies loses nothing it acknowledged; a machine that dies, at most the last
 interval.</li>
   <li><code>request</code> - the response waits for its record's sync. The writers that arrive during one sync share
-the next (group commit). A write that cannot be logged (a full disk) is answered 503.</li>
+the next (group commit).</li>
   <li><code>none</code> - the log is written, never synced: for tests, benchmarks, a RAM disk.</li>
 </ul>
+<p>With any value, a log that cannot be written <b>pauses</b> the store: a segment that cannot be allocated ahead (a
+full disk, a file-size limit), a record that cannot be put in the log, a failed <code>fdatasync</code>. The flusher
+keeps 8 MiB of the log allocated ahead of its records, so a full disk is found before a write needs the room - unless
+more than 8 MiB is written between two of its runs. While paused, every write is refused before it touches the store:
+503 <code>PersistenceUnavailable</code>, with <code>Retry-After: 5</code> and the detail <code>writes are refused until
+the broker can write its log again (paused for &lt;N&gt; s): &lt;why&gt;</code>; reads are served. A write already
+applied when the log failed is answered 503 as well: <code>the write is in the broker's memory but not in its log
+...</code> or <code>a sync of the log to the disk failed, for this write's record or one before it ...</code> - with
+<code>request</code>, also the writes whose records that sync was for; with <code>interval</code> those were answered
+before the sync, and the broker's log says what they lose. The broker's log names the file and the error in each
+case.</p>
+<p>The pause ends by itself: the snapshotter writes a snapshot of each tenant whose log failed, from memory, once a
+second backing off to once every 16 s; a snapshot rolls the log and drops the files before it. Once one succeeds for
+every such tenant the writes are served again - the writes answered 503 after they were applied are in that snapshot.
+A failure of the history log (<code>--troe corDB</code>) is not repaired: the store stays paused until a restart.
+<a href="#docs/administration/store-paused">Administration - A store that cannot write its log</a> has what is served
+and what is refused while paused, <code>/ready</code> and the metrics.</p>
 <p>Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbSync without --dbDir - the store is in RAM
 only, there is no disk for it to act on</code>.</p>
 <p>An unknown value stops the start - with <code>--dbDir</code> only, as without it the option is not read:
@@ -1984,8 +2009,8 @@ http://127.0.0.1:&lt;port&gt;</code>.</p>
   <tr><th>Plugin</th><td>fdsc</td></tr>
 </table>
 <p>The ODRL policies themselves, instead of a PAP: a JSON array - of ODRL policies, or the PAP's own listing
-(<code>[{"id", "odrl:uid", "odrl": "&lt;the policy as a string&gt;"}]</code>) - or a single policy object. Read again
-every <code>--fdscRefresh</code> seconds. A file that is not JSON leaves the policies in use (none at first: every
+(<code>[{"id", "odrl:uid", "odrl": "&lt;the policy as a string&gt;"}]</code>) - a single policy object, or an object whose <code>@graph</code> holds the policies. Read
+again every <code>--fdscRefresh</code> seconds. A file that is not JSON leaves the policies in use (none at first: every
 request is a 503, <code>the policies are not loaded yet</code>).</p>
 <pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
         --fdscPolicies /etc/coraine/policies.json</pre>

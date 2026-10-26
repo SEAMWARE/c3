@@ -28,7 +28,11 @@ a StatefulSet.</p>
   <tr><td>MALLOC_ARENA_MAX=2</td><td>glibc's per-thread arenas keep freed memory resident. With <code>corDB</code> and libmicrohttpd (2026-10-01), 10&nbsp;000 entities took 67&nbsp;MiB instead of 89, 100&nbsp;000 took 335&nbsp;MiB instead of 376. Its cost in throughput with many threads is not measured, so it is not the image's default</td></tr>
 </table>
 <p><b>Over the budget the broker refuses requests</b> (503 and <code>Retry-After</code>) instead of growing until the
-kernel kills it: over 90&nbsp;% of it writes, over all of it everything but deletes and monitoring. A kill with
+kernel kills it. Two thresholds: over 90&nbsp;% of the budget the writes that grow memory are refused (a
+<code>POST</code>, <code>PUT</code> or <code>PATCH</code>, but not <code>entityOperations/delete</code> nor
+<code>entityOperations/query</code>); over 100&nbsp;% every request but the deletes (<code>DELETE</code>,
+<code>entityOperations/delete</code>) and monitoring (<code>/version</code>, <code>/metrics</code>,
+<code>/admin/*</code>). A kill with
 <code>corDB</code> takes the store's RAM with it, and a persistent store is then loaded again. What counts is the
 broker's anonymous and shared memory - not the <code>corDB</code> log, which is memory-mapped page cache the
 kernel reclaims.</p>
@@ -64,7 +68,7 @@ background: nothing it answers waits for a request or a database.</p>
 <table class="gtable">
   <tr><th></th><th>Answers 503</th></tr>
   <tr><td><code>/live</code></td><td>only when a request has been in flight longer than <code>--healthStallTimeout</code> seconds (default 30) and no request finished in that time - the broker is stuck. <b>Never for memory or a database</b>: a restart cures neither, and empties the caches, drops every connection and, with <code>corDB</code>, loads the whole store again</td></tr>
-  <tr><td><code>/ready</code></td><td>while the store loads at start-up; while the current-state store does not answer its ping; over the hard memory budget; while stuck; from SIGTERM on. Kubernetes takes the pod out of the Service's endpoints until it passes</td></tr>
+  <tr><td><code>/ready</code></td><td>while the store loads at start-up; while the current-state store does not answer its ping; over the hard memory budget; while stuck; while the store is paused (below); from SIGTERM on. Kubernetes takes the pod out of the Service's endpoints until it passes</td></tr>
 </table>
 <ul>
   <li><b>A PostgreSQL that does not answer leaves <code>/ready</code> at 200.</b> Every pod shares the one temporal
@@ -99,6 +103,13 @@ without <code>--apiPlugins admin</code> it answers 404. It is exempt from the me
 <code>/metrics</code>. The memory budget is there as <code>ngsild_memory_budget_bytes</code>,
 <code>ngsild_memory_used_bytes</code>, <code>ngsild_memory_resident_bytes</code> and
 <code>ngsild_requests_refused_memory_total</code>.</p>
+<p>A persistent <code>corDB</code> that cannot write its log (a full volume, a file-size limit, an I/O error)
+pauses: every request but the reads is refused with 503, <code>Retry-After: 5</code> and the error type
+<code>PersistenceUnavailable</code>, before it is parsed. <code>ngsild_store_paused</code> is 1 meanwhile, and
+<code>ngsild_requests_refused_store_paused_total</code> counts the 503s. <code>/ready</code> answers 503 with
+<code>"status": "paused"</code> and a <code>paused</code> member (<code>forS</code>, <code>reason</code>,
+<code>refused</code>), so the pod leaves the Service's endpoints; <code>/live</code> stays 200 - a restart would
+lose what is only in memory.</p>
 
 <h2 id="mongoc">mongoc - a Deployment</h2>
 <p>The store is MongoDB, outside the pod; the broker keeps no state of its own that a restart loses.</p>

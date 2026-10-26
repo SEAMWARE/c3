@@ -8,14 +8,14 @@ the whole answer time at a million. Asking "which index does this query use, and
 it read for the ones it returned" is the first question when a broker with MongoDB or PostgreSQL behind
 it is slow.</p>
 
-<h2>corDB</h2>
+<h2 id="cordb">corDB</h2>
 <p>corDB keeps the entities in the broker's own memory, with its own indexes - the entity id, the
 entity type, and the default order. There is no database to connect to. An index on an attribute's
 values is <b>declared</b>: <code>--dbValueIndexes &lt;its IRI&gt;</code> at start, or <code>POST /admin/indexes</code>
 on a running broker - <a href="#docs/extreme-performance">Extreme performance</a> has what it gains and
 costs.</p>
 
-<h2>MongoDB - what coraine creates itself</h2>
+<h2 id="mongodb-what-coraine-creates-itself">MongoDB - what coraine creates itself</h2>
 <p>The entities are in the collection <code>entities</code> of the broker's database
 (<code>--dbName</code>; a tenant has a database of its own). For every database, at start-up and when a
 tenant is first used:</p>
@@ -31,7 +31,7 @@ tenant is first used:</p>
 alone that older versions created, now a prefix of the second one. Don't give an index of your own that
 name.</p>
 
-<h2>MongoDB - how an entity is stored</h2>
+<h2 id="mongodb-how-an-entity-is-stored">MongoDB - how an entity is stored</h2>
 <p>One document per entity. Each attribute is a top-level field named by its <b>expanded</b> name,
 with every <code>.</code> written as <code>．</code> (U+FF0E, fullwidth full stop - MongoDB reads a dot
 in a field name as a path); inside it one member per instance - <code>@none</code> for the default one,
@@ -45,7 +45,7 @@ the datasetId for the others - and the value in <code>value</code>:</p>
   "createdAt": ..., "modifiedAt": ...
 }</pre>
 
-<h2>MongoDB - does a query use an index?</h2>
+<h2 id="mongodb-does-a-query-use-an-index">MongoDB - does a query use an index?</h2>
 <p>In <code>mongosh</code>, the query the broker sends for <code>GET /ngsi-ld/v1/entities?type=Vehicle&amp;limit=20</code>:</p>
 <pre>use cor
 db.entities.find({ type: "https://uri.etsi.org/ngsi-ld/default-context/Vehicle" })
@@ -56,7 +56,7 @@ job; 100&nbsp;000 against 20 is every entity read for a page. <code>explain()</c
 <code>executionStats</code> names the plan - <code>IXSCAN</code> an index, <code>COLLSCAN</code> every
 document.</p>
 
-<h2>MongoDB - adding an index by hand</h2>
+<h2 id="mongodb-adding-an-index-by-hand">MongoDB - adding an index by hand</h2>
 <pre>db.entities.createIndex({ "https://uri．etsi．org/ngsi-ld/default-context/speed.@none.value": 1 })</pre>
 <ul>
   <li><b>It lasts.</b> An index is part of the database on disk: it survives a restart of MongoDB and of
@@ -78,7 +78,7 @@ document.</p>
   <li><b>Every index costs every write</b> that changes its field - one more structure to update.</li>
 </ul>
 
-<h2>PostgreSQL / TimescaleDB - the temporal history</h2>
+<h2 id="postgresql-timescaledb-the-temporal-history">PostgreSQL / TimescaleDB - the temporal history</h2>
 <p>With <code>--troe timescale</code> the history is in PostgreSQL - a database per tenant - and the
 Temporal API reads it. The broker creates the tables and the indexes its queries are built on (the table
 <code>troe_schema_version</code> records which schema version it has):</p>

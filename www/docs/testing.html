@@ -42,9 +42,14 @@ that dies costs one test, and <code>--fromIx</code> resumes a run where it stopp
   <tr><td>--dryrun</td><td>list the selected tests, run nothing</td></tr>
   <tr><td>--stopOnError</td><td>stop at the first failure</td></tr>
   <tr><td>--maxTries &lt;N&gt;</td><td>retry a failing test up to N times (default 1)</td></tr>
-  <tr><td>--keep / --keepLogs</td><td>keep the output files / only the broker logs, also on success</td></tr>
+  <tr><td>--keep</td><td>keep the per-test output files, also on success</td></tr>
+  <tr><td>--keepLogs</td><td>keep the broker logs of a passing test too - <code>&lt;test&gt;.&lt;role&gt;.log</code> beside it - and nothing else</td></tr>
   <tr><td>-g / --diffTool &lt;path&gt;</td><td>open corDiffGui / another diff tool on a failure</td></tr>
-  <tr><td>-vt</td><td>the main broker under valgrind: a definite or indirect leak, or an error, fails the test</td></tr>
+  <tr><td>-vt | --vt</td><td>the main broker under valgrind: a definite or indirect leak, or an error, fails the test. A
+  test marked <code>SKIP_VALGRIND: on</code> is skipped. Sets <code>COR_VALGRIND=1</code> and
+  <code>COR_TREE_HEAP=malloc</code></td></tr>
+  <tr><td>-v</td><td>verbose: more messages, and <code>--dryrun</code> lists each test with its index and
+  <code>--NAME--</code></td></tr>
 </table>
 </div>
 

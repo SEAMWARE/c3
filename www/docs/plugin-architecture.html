@@ -90,7 +90,7 @@ are not plugins - they are built into corRest.</p>
 <p><b><code>--troe corDB</code> is not a file of its own.</b> The history inside corDB is the corDB current-state
 plugin's own <code>troeRegister</code> - the same store, the same lock, the same log - so it needs
 <code>--database corDB</code>; with another store the broker stops: <code>TRoE 'corDB' keeps the history inside the
-corDB store - it needs --database corDB</code>. Another store's history goes to an external server
+corDB store - it needs --database corDB (not '&lt;store&gt;')</code>. Another store's history goes to an external server
 (<code>timescale</code>).</p>
 </div>
 <div class="g-callout">
@@ -109,10 +109,10 @@ A bridge never answers a request.</p>
   <tr><td><code>corDB</code></td><td>history</td><td>the history inside the corDB store; on disk with <code>--dbDir</code></td></tr>
   <tr><td><code>ramDB</code></td><td>history</td><td>a ring of the most recent TRoE events in RAM, nothing on disk, shown by <code>/admin/troe/dump</code> - dev and test</td></tr>
   <tr><td><code>timescale</code></td><td>history</td><td>TimescaleDB / PostgreSQL (hypertables)</td></tr>
-  <tr><td><code>admin</code></td><td>API</td><td><code>/admin/health</code>, <code>/admin/version</code>, <code>/admin/log</code>, <code>/admin/tenants</code>, <code>/admin/plugins</code>, <code>/admin/bridges/{bridge}/inventory</code>, <code>/admin/config</code> (every option, a secret masked)</td></tr>
+  <tr><td><code>admin</code></td><td>API</td><td><code>/admin/health</code>, <code>/admin/version</code>, <code>/admin/log</code> (GET, PUT, POST, PATCH, DELETE for <code>verbose</code>, <code>info</code> and <code>traceLevels</code>), <code>/admin/tenants</code>, <code>/admin/plugins</code>, <code>/admin/bridges/{bridge}/inventory</code>, <code>/admin/config</code> (every option, a secret masked)</td></tr>
   <tr><td><code>ws</code></td><td>transport</td><td>WebSocket, upgraded from <code>GET /ngsi-ld/v1/ws</code> on the HTTP port</td></tr>
   <tr><td><code>fdsc</code></td><td>auth</td><td>the FIWARE Data Space Connector's tokens and policies, decided as Data Space Connector 10.87.0 decides them; libcrypto</td></tr>
-  <tr><td><code>oidc</code></td><td>auth</td><td>an OpenID provider's access tokens and two roles in them</td></tr>
+  <tr><td><code>oidc</code></td><td>auth</td><td>an OpenID provider's access tokens (Keycloak, ...; RS256/ES256 against its JWK Set) and two roles in them, one reading, one writing - decided per request, no policies; libcrypto</td></tr>
   <tr><td><code>loopback</code></td><td>bridge</td><td>hands back what it is given, from a thread of its own - an arriving value testable with no transport; the reference a new bridge is written against</td></tr>
   <tr><td><code>mqtt</code></td><td>bridge</td><td>libmosquitto: notifications to <code>mqtt://</code> and <code>mqtts://</code> endpoints (TS 104 243) - which need <code>--bridges mqtt</code> - and MQTT topics to attributes, both ways (<a href="#docs/mqtt-bridge">MQTT bridge</a>)</td></tr>
   <tr><td><code>modbus</code></td><td>bridge</td><td>Modbus TCP registers and coils, polled in, attribute writes out; libc only (<a href="#docs/modbus-bridge">Modbus bridge</a>)</td></tr>

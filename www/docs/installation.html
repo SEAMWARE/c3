@@ -142,7 +142,8 @@ coraine --port 1027 --database mongoc --dbHost localhost
 
 <span class="c"># every option, the selected plugins' own included</span>
 coraine --apiPlugins admin --database mongoc -u</pre>
-<p>The broker runs in the foreground and logs to its standard output. The first requests to try:
+<p>The broker runs in the foreground and logs to its standard output; <code>--daemon</code> (<code>-bg</code>) runs it in
+the background with the log in a file (<a href="#docs/administration/running">Foreground or daemon</a>). The first requests to try:
 <a href="#docs/api-walkthrough">API walkthrough</a>.</p>
 
 <!-- ======================================================================= -->
@@ -179,7 +180,8 @@ coraine --apiPlugins admin --database mongoc -u</pre>
   <tr><td>--dbTimeout<span class="env">CORAINE_DBTIMEOUT</span></td><td>30 - seconds a start waits for MongoDB</td></tr>
   <tr><td>--dbValueIndexes<span class="env">CORAINE_DBVALUEINDEXES</span></td><td>none - the declared indexes: the attributes whose <code>q</code> an index serves (<a href="#docs/database-indexes">Database indexes</a>)</td></tr>
 </table>
-<p><code>--dbPwd</code> and <code>--dbURI</code> are secrets: <code>GET /admin/config</code> shows <code>***</code>.</p>
+<p><code>--dbPwd</code> and <code>--dbURI</code> are secrets: <code>GET /admin/config</code> shows <code>***</code>. A
+<code>--dbUser</code> / <code>--dbPwd</code> the server refuses fails the start at once (<code>mongoc: ping failed: Authentication failed.</code>).</p>
 
 <h3 id="cordb">corDB on disk</h3>
 <p>With <b><code>--dbDir &lt;directory&gt;</code></b> corDB survives a restart: every write appends its effect to a log,
@@ -196,6 +198,12 @@ the response. A power cut loses at most the last unsynced interval.</p>
   <tr><td>--dbLockPrefer<span class="env">CORAINE_DBLOCKPREFER</span></td><td><code>reads</code> - <code>reads</code> or <code>writes</code>: whom a tenant's store lock lets in first when both wait (also ramDB)</td></tr>
   <tr><td>--dbValueIndexes<span class="env">CORAINE_DBVALUEINDEXES</span></td><td>none - the declared indexes, as for MongoDB (also ramDB)</td></tr>
 </table>
+<p><code>--dbSync</code>, <code>--dbSyncInterval</code>, <code>--dbSnapshotEvery</code> and <code>--dbCompress</code> act on the disk:
+given without <code>--dbDir</code> - on the command line or in the environment - the broker does not start, and the error
+names the option: <code>corDB: --dbSync without --dbDir - the store is in RAM only, there is no disk for it to act on</code>.</p>
+<p>A log that cannot be written - a full disk, a file-size limit, an I/O error - <b>pauses</b> the store: writes are
+refused with 503 <code>PersistenceUnavailable</code> and reads are served, until a snapshot of each such tenant succeeds
+(<a href="#docs/administration/store-paused">A store that cannot write its log</a>).</p>
 <p>What it costs: <a href="#docs/performance">Performance</a>. How it works:
 <a href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">corDB's persistence</a>.</p>
 
@@ -210,7 +218,7 @@ broker whose content is only ever the latest value (pub/sub, a cache in front of
 <table class="g-opts">
   <tr><th>Option</th><th>Default - what it does</th></tr>
   <tr><td>--troeHost / --troePort<span class="env">CORAINE_TROEHOST, CORAINE_TROEPORT</span></td><td><code>localhost</code> / 5432 - the PostgreSQL server</td></tr>
-  <tr><td>--troeUser / --troePwd<span class="env">CORAINE_TROEUSER, CORAINE_TROEPWD</span></td><td><code>postgres</code> / none. <code>--troePwd</code> is a secret (<code>***</code> in <code>/admin/config</code>)</td></tr>
+  <tr><td>--troeUser / --troePwd<span class="env">CORAINE_TROEUSER, CORAINE_TROEPWD</span></td><td><code>postgres</code> / none (libpq then takes <code>PGPASSWORD</code> or <code>~/.pgpass</code>). <code>--troePwd</code> is a secret (<code>***</code> in <code>/admin/config</code>). The user, the password and <code>--troeName</code> are quoted in the connection string - a space, a <code>'</code> or a <code>\</code> in them is passed as it is</td></tr>
   <tr><td>--troeName<span class="env">CORAINE_TROENAME</span></td><td><code>corh</code> - the default tenant's database, and the prefix of the others</td></tr>
   <tr><td>--troePoolSize<span class="env">CORAINE_TROEPOOLSIZE</span></td><td>10 - connections per tenant for the temporal reads and the Temporal API's writes</td></tr>
   <tr><td>--troeWriters<span class="env">CORAINE_TROEWRITERS</span></td><td>8 - writer threads per tenant, each on its own connection, writing the history of many requests in one transaction. 0: every request writes its own</td></tr>
@@ -247,7 +255,11 @@ written when the database is back - nothing is lost while what is held stays und
   the exit, and a restarted broker waits for the database: with it, an outage of the history is an outage of the
   broker.</li>
   <li><b>A start during an outage</b> waits <code>--troeConnectTimeout</code> seconds, then exits with 1. A database that
-  answers and refuses (a schema version newer than this build, a permission) fails the start at once.</li>
+  answers and refuses (a schema version newer than this build, a permission, the password of <code>--troeUser</code> /
+  <code>--troePwd</code>) fails the start at once, with the server's message:
+  <code>timescale: connection to db 'postgres' refused (--troeUser, --troePwd): ... password authentication failed for user "postgres"</code>.
+  A refused password is told from an absent server by that message, in English: a PostgreSQL whose
+  <code>lc_messages</code> is another language is waited for.</li>
 </ul>
 <p>Every case, the log lines, the connection timeouts and the indexes of the history, measured:
 <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#timescaledb-history---troe-timescale">doc/installation.md</a>.</p>
