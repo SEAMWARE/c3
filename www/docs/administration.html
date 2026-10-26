@@ -135,7 +135,7 @@ stdout is <code>/dev/null</code>. Exit code 1, one line on stderr:
   <li><b>systemd:</b> the package's unit is <code>Type=simple</code> - do not set <code>CORAINE_DAEMON=true</code> there (a
   broker that detaches is a main process that exited, and systemd stops the service). A unit of your own with
   <code>--daemon</code> is <code>Type=forking</code>.</li>
-  <li><b>Environment:</b> <code>CORAINE_DAEMON=true</code> (only <code>true</code>, any case, turns a boolean on),
+  <li><b>Environment:</b> <code>CORAINE_DAEMON=true</code> (a boolean: <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code>, each in lowercase, capitalised or capitals - any other value stops the start),
   <code>CORAINE_LOGTO</code>, <code>CORAINE_LOGDIR</code>.</li>
 </ul>
 <pre>mkdir -p ~/coraine-log ~/coraine-db

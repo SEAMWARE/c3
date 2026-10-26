@@ -21,7 +21,11 @@ an option has no entry there, or an entry has no option.</p>
   name in capitals (<code>--pretty-print</code> is <code>CORAINE_PRETTY_PRINT</code>);</li>
   <li>the default.</li>
 </ul>
-<p>A Bool environment variable is on for <code>true</code> (any case) only. A password-like option
+<p>A Bool environment variable is on for <code>true</code>, <code>True</code>, <code>TRUE</code>, <code>on</code>,
+<code>On</code> or <code>ON</code>, off for <code>false</code>, <code>False</code>, <code>FALSE</code>, <code>off</code>,
+<code>Off</code> or <code>OFF</code>; any other value (<code>yes</code>, <code>1</code>, <code>tRuE</code>, an empty one)
+stops the start, the variable named. A value of the environment that is refused does not keep <code>-u</code>/<code>-U</code>
+from printing the list: <code>CORAINE_PORT=0 coraine -u</code> prints the usage. A password-like option
 (<code>--dbPwd</code>, <code>--troePwd</code>) is best given as its variable: it then appears in no process list.</p>
 <p><b>What a broker runs with.</b> <code>coraine -u</code> lists the options with their descriptions,
 <code>coraine -U</code> with their variable, type and default; a plugin's options are listed when the plugin is named
@@ -122,7 +126,7 @@ does nothing - the broker starts.</p>
 <table class="g-opts">
   <tr><th>Short · variable · type</th><td><code>-v</code> · <code>CORAINE_VERBOSE</code> · Bool</td></tr>
   <tr><th>Default</th><td><code>false</code> (off)</td></tr>
-  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case), off for any other value</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code> (<a href="#docs/options" data-scroll="reading">three spellings each</a>)</td></tr>
   <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
 </table>
 <p>Turns on the <code>V</code> (verbose) and the <code>I</code> (info) lines of the log: the version at start, the
@@ -165,7 +169,7 @@ builds have traces.</p>
 <table class="g-opts">
   <tr><th>Short · variable · type</th><td><code>-fg</code> · <code>CORAINE_FOREGROUND</code> · Bool</td></tr>
   <tr><th>Default</th><td><code>false</code> (off)</td></tr>
-  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case)</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code> (<a href="#docs/options" data-scroll="reading">three spellings each</a>)</td></tr>
   <tr><th>Deprecated</th><td>accepted through 0.7.x, refused from 0.8.0, not listed by <code>-u</code></td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
@@ -180,7 +184,7 @@ other</code>. Drop it from scripts and units: from 0.8.0 the broker does not sta
 <table class="g-opts">
   <tr><th>Short · variable · type</th><td><code>-bg</code> · <code>CORAINE_DAEMON</code> · Bool</td></tr>
   <tr><th>Default</th><td><code>false</code> (the foreground)</td></tr>
-  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case), off for any other value (<code>1</code> included)</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code> (<a href="#docs/options" data-scroll="reading">three spellings each</a>)</td></tr>
   <tr><th>Needs</th><td><code>--logTo file</code></td></tr>
   <tr><th>Excludes</th><td><code>--logTo stdout</code> (the default), <code>--logTo both</code>, <code>--foreground</code></td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
