@@ -1,0 +1,257 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/roadmap.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Roadmap</h1>
+<p class="lead">What coraine has now, and what is planned - short, medium and long term, one line each. coraine is an
+Incubated FIWARE Generic Enabler; the overall roadmap of FIWARE is in the section "Roadmap" of the
+<a href="https://www.fiware.org/developers/catalogue/">FIWARE Catalogue</a>.</p>
+
+<div class="g-callout">
+<p>This roadmap elaborates on proposed new features or tasks which are expected to be added to the product in the
+foreseeable future. There should be no assumption of a commitment to deliver these features on specific dates or in
+the order given. The development team will be doing their best to follow the proposed dates and priorities, but please
+bear in mind that plans to work on a given feature or task may be revised. All information is provided as general
+guidelines only, and this page may be revised to provide newer information at any time.</p>
+</div>
+<p>The roadmap is kept current as work lands, not at release boundaries. Every idea, with what there is to say about
+it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">Ideas</a> - an item's
+<i>more</i> links to it; the day-to-day backlog, with what is deferred by design and why, is
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md#the-backlog-in-detail">the backlog in detail</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="now">Available now</h2>
+<p>Recently built, and documented where it lives:</p>
+<ul>
+  <li><b>An NGSI-LD plugin for APISIX</b> - <code>ngsild-pep</code>
+  (<a href="https://github.com/SEAMWARE/corApisixNgsild">corApisixNgsild</a>): <code>fdsc.so</code>'s own decision in
+  the gateway the FIWARE Data Space Connector already uses, in front of any NGSI-LD broker; on the 64 cases of
+  <code>test/fdscDiff</code> it decides as <code>--auth fdsc</code> does. <code>--fdscNgsild</code> stays in the broker:
+  it needs the stored entity (<a href="#docs/authorization/fdsc-connector">Authorization - Inside a Data Space
+  Connector</a>).</li>
+  <li><b>DDS</b> - topics both ways, services, actions, through the DDS bridge (<a href="#docs/dds">DDS and ROS
+  2</a>).</li>
+  <li><b>MQTT</b> - device topics as Channels, and notifications to <code>mqtt://</code>
+  (<a href="#docs/mqtt-bridge">The MQTT bridge</a>).</li>
+  <li><b>Modbus TCP</b> - registers as Channels (<a href="#docs/modbus-bridge">The Modbus bridge</a>).</li>
+  <li><b><code>cor://</code></b> - the binary protocol for GE-to-GE traffic: forwarding without a JSON parse, many
+  requests in flight on one connection (<a href="#docs/cor-protocol">The cor format and cor://</a>).</li>
+  <li><b>Requests that wait run as coroutines</b> of the event loops, not on worker threads
+  (<a href="#docs/coroutines">Coroutines</a>).</li>
+  <li><b>corDB on disk</b> - <code>--dbDir</code>: an append log synced every 100 ms and snapshots; the store survives
+  a restart, still with no database server (<a href="#docs/installation/cordb">Installation - corDB on disk</a>).</li>
+  <li><b>Temporal history in corDB</b> - <code>--troe corDB</code>: the whole temporal API on the history corDB keeps
+  itself, on disk with the store - no PostgreSQL, no second plugin.</li>
+  <li><b>Service Execution</b> - "do this" in the API, not a write to an attribute: Service Descriptions, executions,
+  synchronous and asynchronous, combined (GR CIM-055). <code>scopeQ</code> - a subscription's scope query, on the
+  target entity's scope - selects the entities of a grouped execution (alone or with the other selectors) and narrows
+  the entities a Service Registration offers its service on. A grouped or combined execution, and a Combined Service
+  Template (created or PATCHed), refuses a member it does not know, at every level (400, naming it). A service name is
+  unique within an entity: a registration (created or PATCHed) whose <code>serviceName</code> another registration of
+  the tenant has, for entities both could select, is refused - 409 naming that registration. Two selectors are taken
+  as disjoint only when that is certain: different types, different ids, an id the other's <code>idPattern</code> does
+  not match, two anchored <code>idPattern</code>s with literal prefixes neither of which starts the other;
+  <code>q</code>, <code>geoQ</code> and <code>scopeQ</code> do not separate. An entity that still has a name twice (an
+  entity of two types, each with a registration of the name) answers an invocation of it with 409 naming the
+  registrations.</li>
+  <li><b>Snapshots, on corDB too</b> - § 5.16 complete: writes and subscriptions on a Snapshot, on both stores.</li>
+  <li><b>The WebSocket transport</b> - subscriptions and notifications over a WebSocket
+  (<a href="#docs/websocket">WebSocket</a>).</li>
+  <li><b>Server-Sent Events</b> - a subscription on <code>urn:ngsi-ld:self</code> made on its own event stream: the
+  <code>201</code> to its <code>POST</code> is <code>text/event-stream</code>, its notifications the events, and it lives
+  as long as the stream (<a href="#docs/sse">Server-Sent Events</a>). Over a WebSocket, <code>urn:ngsi-ld:self</code> is
+  the connection.</li>
+  <li><b>Array reduction of entity data</b> - one-element arrays reduced at the input, by the @context.</li>
+  <li><b><code>make tune</code></b> - the broker built for your workload: the profile trained on it, the allocator and
+  the lock policy measured on it (<a href="#docs/extreme-performance">Extreme performance</a>).</li>
+  <li><b>Subscriptions at scale</b> - a write matched only against the subscriptions that can match it: +32&nbsp;% with
+  1&nbsp;000 subscriptions (<a href="#docs/performance">Performance</a>).</li>
+  <li><b>An NGSI-LD-aware JSON parser</b> - the core terms are an enum, not strings: a compare instead of a
+  <code>strcmp</code> wherever a member is recognised.</li>
+  <li><b>linux/arm64</b> - every image for amd64 and arm64 under one tag (arm64 without the DDS bridge), and the whole
+  functional suite on native ARM runners every night.</li>
+  <li><b>Migrating from Orion-LD</b> - <code>coraine-import</code>, a program of its own on the broker's libraries:
+  entities, subscriptions, registrations and the temporal history, with their ids and system timestamps
+  (<a href="#docs/migration">Migrating a database to coraine</a>). Later, the ETSI neutral export format.</li>
+  <li><b>Debian packages</b> - <code>apt install coraine</code> (and <code>coraine-dev</code>: the exact source and
+  <code>coraine-build</code>) for Ubuntu 26.04, 24.04 and Debian 13, amd64 and arm64, from the signed repository
+  <code>https://seamware.github.io/apt</code> (<a href="#docs/installation/apt">Installation - Install with
+  apt</a>).</li>
+  <li><b>Running on Kubernetes</b> - a memory budget that refuses work instead of being killed for it, a health port
+  answering <code>/live</code> and <code>/ready</code> outside the HTTP queue, and a byte budget per query response -
+  entity, temporal and distributed queries (<a href="#docs/kubernetes">Kubernetes</a>).</li>
+  <li><b>Running outside a container</b> - <code>--daemon</code> to detach, and the log in a file, on stdout or both
+  (<code>--logTo</code>, <code>--logDir</code>); the broker stays in the foreground, logging to stdout, by default.
+  <code>-fg</code> is accepted until 0.8.0 (<a href="#docs/administration/running">Administration - Foreground or
+  daemon</a>).</li>
+  <li><b>Authorization in the broker</b> - <code>--auth</code>: auth plugins, and <code>fdsc.so</code>, the FIWARE Data
+  Space Connector's access tokens and ODRL policies decided inside the broker as the connector decides them - 64 cases
+  against a deployed connector, 0 differences; per entity, per attribute and per tenant with
+  <code>--fdscNgsild</code>, notifications decided for the subscription's owner; the ODRL-PAP's <code>/policy</code> API
+  served by the broker (<code>--policyApiPort</code>) (<a href="#docs/authorization">Authorization</a>).</li>
+  <li><b>The CKAN bridge and DataChannels</b> - a CKAN portal's DataStore resources read into entities
+  (<code>ckan.so</code>, corCkanBridge); a DataChannel makes each record (a row) into the entities its mapping names
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/bridge-channels.md#datachannels">DataChannels</a>). A
+  bridge reports a Channel's status, and why, at any time (<code>channelStatusIn</code>).</li>
+  <li><b>c³, the coraine Control Center - Compile</b> - a broker built for a deployment from a web page: the features
+  in or out, each with its size, the bridges, the build mode (release, PGO, <code>make tune</code>, debug), on
+  <code>coraine-dev</code>'s <code>coraine-build</code>
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>corDB persistence, cheaper writes</b> - a write that updates attributes logs those attributes, not the
+  entity: PATCH +11-13&nbsp;% on disk (<a href="#docs/performance">Performance</a>).</li>
+  <li><b>Declared indexes</b> - an attribute queried often is declared, and the broker keeps an index of its values for
+  <code>q</code>: on corDB and MongoDB (<code>--dbValueIndexes</code>) and on the TimescaleDB history
+  (<code>--troeValueIndexes</code>), in every tenant, a tenant created later included; listed in
+  <code>/admin/indexes</code> and <code>/admin/metrics</code> (<a href="#docs/extreme-performance">Extreme
+  performance</a>).</li>
+  <li><b>A faster TimescaleDB history</b> - TRoE writers and unnested rows (5-11x the history write rate), the history
+  database down without the current state going down (held, retried, then counted as lost), and
+  <code>--troeSync</code> for read-your-writes (<a href="#docs/performance">Performance</a>).</li>
+  <li><b>Timepoint (NGSI-LD v2.1)</b> - an entity, or a query's entities, as they were at a point in time, from the
+  history inside corDB (<a href="#docs/timepoint">Timepoint</a>).</li>
+  <li><b>The stored trees in less RAM</b> - the tree heap and 32-byte scalar nodes: broker RSS -14.5&nbsp;% at
+  100&nbsp;000 entities; a plugin built for another node layout is refused at start, with a message
+  (<a href="#docs/performance/stored-trees">Performance - The stored trees</a>).</li>
+  <li><b>The OPC UA bridge</b> - Variables as attributes, Methods as Service Executions, the server's node tree as the
+  bridge's inventory, SignAndEncrypt with certificates (<code>--bridges opcua</code>,
+  <a href="https://github.com/SEAMWARE/corOpcuaBridge">corOpcuaBridge</a>).</li>
+  <li><b>The FIWARE IoT Agents as bridge plugins - prototypes</b> - JSON, UltraLight 2.0, LwM2M, LoRaWAN, Sigfox and
+  ISOXML, each a public repository of its own (corIota*Bridge); OPC UA is the OPC UA bridge
+  (<a href="#docs/iot-agents">FIWARE IoT Agents</a>).</li>
+  <li><b>What a running broker is</b> - <code>GET /admin/config</code> (every option it runs with, a secret masked),
+  whether its build has traces (<code>/admin/log</code>), a bridge's inventory for a mapping tool
+  (<code>/admin/bridges/{bridge}/inventory</code>) (<a href="#docs/administration/admin">Administration - The admin
+  API</a>).</li>
+  <li><b>c³ - Operate and Connect</b> - brokers started and stopped, natively or in a container, with their services;
+  their logs, log and trace levels, configuration and metrics as charts; the entity editor, and signing in to a
+  broker's security (an OpenID provider, or the Data Space Connector's verifier)
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>The documentation in c³, and as a website</b> - the guides of c³'s Documentation page, written from coraine's
+  documentation for the reader, searchable, offline in c³; the same pages at
+  <a href="https://seamware.github.io/docs/">seamware.github.io/docs</a>.</li>
+  <li><b>EntityMaps the broker creates itself</b> - a distributed query, and a local query paginated past its first
+  page, freezes its set of matching entities on the first page and serves the pages from it (the links carry the
+  map's id); an entity that no longer matches is left out of its page
+  (<a href="#docs/administration/entitymaps">EntityMaps</a>).</li>
+</ul>
+<div class="g-callout">
+<p><b>Bridges and Channels are coraine's own mechanism, not a standard.</b> The concept goes to the ETSI TC DATA
+face-to-face in Athens, 20-22 October 2026, and anything normative will realistically follow in 2027. coraine
+implements its own objects now and adapts to whatever TC DATA settles on.</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2 id="short">Short term</h2>
+<p>Planned for the short term and the next release of the product, in roughly this order:</p>
+<ul>
+  <li><b>Service Execution, following GR CIM-055 as it settles</b> - the status names, the query and discovery
+  parameters.</li>
+  <li><b>WebSocket subscriptions of a crashed instance, under High Availability</b> - each instance's run id and a
+  heartbeat in the shared store, so that any instance deletes the WebSocket subscriptions of a run whose heartbeat
+  stopped - also when a killed pod never comes back. Without <code>--high-availability</code> a broker deletes them
+  when it starts (<a href="#docs/websocket/subscriptions">more</a>).</li>
+  <li><b>Live public transport: a GTFS-realtime bridge, and buses moving in c³</b> - a transit agency's routes (a
+  <code>LineString</code> each), stops and trips from its static GTFS; its vehicles' live positions (GTFS-realtime,
+  Protocol Buffers over HTTP, polled) as <code>Bus</code> entities related to their trip, route and next stop; c³
+  subscribes over its WebSocket and moves each bus on the map as the notifications arrive. First feed: Boston's MBTA,
+  beside the Boston CKAN datasets
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#live-public-transport-gtfs-realtime">more</a>).</li>
+  <li><b>c³ Documentation, the rest</b> - a guide per cor-lib with an API reference from its headers, the pages in
+  <code>coraine-dev</code> for offline use, and a skeleton repository per kind of plugin (<code>c3 new
+  plugin</code>).</li>
+  <li><b>More build diversity, every night</b> - ASan + UBSan, clang, Alpine / musl (<code>-funsigned-char</code>,
+  ARM's <code>char</code>, passed the whole suite).</li>
+  <li><b>corDB history: retention and a selector</b> - history kept for a time or a size, and recording only what it
+  is told to (entities, attributes - subscription-shaped)
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-history-retention-and-a-selector">more</a>).</li>
+  <li><b>More bridges</b> - Kafka, WebSockets, OPC UA on the Bridge/Channel seam
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#more-bridges">more</a>).</li>
+  <li><b>Subordinate subscriptions on registration change</b> - § 10.5.2.4 for <code>PATCH</code> too
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#subordinate-subscriptions-on-registration-change">more</a>).</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="medium">Medium term</h2>
+<p>Proposed for the medium term, typically within the subsequent releases of the next <b>9 months</b>:</p>
+<ul>
+  <li><b>c³ - Configure</b> - the mapping tools in the Control Center: DDS topics, services and actions to entities and
+  attributes, and the same for OPC UA
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>The IoT Agents as cor-agent plugins, released</b> - the six prototypes (JSON, UltraLight, LWM2M, LoRaWAN,
+  Sigfox, ISOXML; OPC UA is the OPC UA bridge) brought to parity with the FIWARE IoT Agents and released; one binary or
+  two tiers (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#the-iot-agents-as-cor-agent-plugins">more</a>).</li>
+  <li><b>The design notes as guides</b> - Service Execution, the Cor Data Space Connector, the IoT Agents as Service
+  Executors and their measures as DataChannel records: today design notes in coraine's documentation, guides once their
+  designs settle.</li>
+  <li><b>A CSV bridge, and CKAN beyond <code>once</code></b> - CSV files as DataChannels, as CKAN resources are; CKAN's
+  <code>poll</code> (the dataset's activity stream) and <code>push</code> (a webhook) modes
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#a-ckan-bridge-and-a-csv-bridge">more</a>).</li>
+  <li><b>NGSIv2 support</b> - the NGSIv2 API as an API plugin beside NGSI-LD, on the same stores: a way off Orion
+  (NGSIv2) for deployments that cannot change their clients at once, and the other half of migrating from Orion
+  together with the NGSIv2 reader for <code>coraine-import</code>
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#transports-as-plugins">more</a>).</li>
+  <li><b>Aligning Bridges and Channels with ETSI</b> - 2027, after the Athens face-to-face
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#aligning-bridges-and-channels-with-etsi">more</a>).</li>
+  <li><b>haaux</b> - high-availability cache sync without a shared database
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#haaux">more</a>).</li>
+  <li><b>Scaling out: sharding by tenant, then by entity type</b> - corDB stays linked into every broker; tenants routed
+  by APISIX on <code>NGSILD-Tenant</code>, types by routing coraines over distributed operations - no load balancer of
+  our own (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#scaling-out-sharding-by-tenant-and-by-entity-type">more</a>).</li>
+  <li><b>HA peer push</b> - with a shared database, the broker that changes a subscription, registration or @context
+  pushes the change to the other brokers itself (cor://) and answers the client once they have it - the window in which
+  an update reaching another broker misses a notification shrinks from the change stream's ~50 ms to a LAN round trip.
+  The cluster's members in a collection of the shared database
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#ha-peer-push-over-a-shared-database">more</a>).</li>
+  <li><b>Bridges and Channels over the API</b> - create, update, delete, persisted
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#bridges-and-channels-over-the-api">more</a>).</li>
+  <li><b>One compound geo index</b> - one index for every GeoProperty, both variants prototyped and measured.</li>
+  <li><b>Hot and cold entity segments</b> - the entities written often apart from the rest (a design note first).</li>
+  <li><b>Our own @context server</b> - the JSON-LD context hosting API (<code>/jsonldContexts</code>) as a small C
+  server on our own libraries, native on every architecture; it replaces the Java <code>wistefan/context-server</code>
+  (amd64 only) in the tests and CI, and can host the contexts a deployment publishes.</li>
+  <li><b>Removing what nobody reads</b> - garbage collection of expired transient Entities, and of the entities a
+  bridge's source no longer has; to be discussed in ETSI first
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md#19-removing-what-nobody-reads">more</a>).</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="long">Long term</h2>
+<p>Proposals for the longer-term evolution of the product. There is no commitment to deliver them in a specific
+timeframe; they are here so that potential contributors can see where the product is heading and may wish to get
+involved.</p>
+<ul>
+  <li><b>corDB standalone</b> - corDB as a server of its own beside the brokers, for high availability (the haaux
+  role), with backups of current state and history
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-standalone---and-as-haaux">more</a>).</li>
+  <li><b>Our own string collation, replacing ICU</b> - root collation without 39&nbsp;MiB of libicu
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#our-own-string-collation-replacing-icu">more</a>).</li>
+  <li><b>Array reduction for API objects</b> - subscriptions, registrations, ... - once the core context has
+  <code>@set</code> for their arrays (entity data is done)
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#array-reduction-in-corjsonld">more</a>).</li>
+  <li><b>Embedded deployment</b> - constrained hardware as a build configuration
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#embedded-deployment">more</a>).</li>
+  <li><b>c³ - Connect</b> - the Control Center connected live to a running broker over its WebSocket transport
+  (queries, then a subscription's notifications): its entities, their relationships as a graph (boxes and arrows, zoom,
+  pan, entities dragged into place), the GeoProperty entities on a map, their values as they change; also as an API
+  plugin of the broker itself
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>A smaller DDS stack for the DDS bridge</b> - for where the bridge has to run: the DDS libraries are today the
+  largest part of a coraine installation (about five times the broker), which is why the arm64 image and the Debian
+  packages come without the DDS bridge, and a device agent on a small board needs far less. A DDS implementation in C,
+  or the subset of the DDS wire protocol (RTPS) the bridge uses - discovery, reliable and best-effort readers and
+  writers, CDR - on the same Bridge/Channel seam; interoperability with every DDS and ROS 2 node is unchanged, it is
+  the wire protocol
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#a-smaller-dds-stack-for-the-dds-bridge">more</a>).</li>
+  <li><b>Cold storage for history in Parquet</b> - older history moved out of the TRoE store into Parquet files (on
+  disk or object storage), compressed and columnar, queried through embedded DuckDB: cheap storage for years of
+  history and fast wide aggregations. Recent history, and its ingest, stay in the hot store. Not for current
+  state.</li>
+  <li><b>Continuous ETSI conformance</b> - 100&nbsp;% kept as the specification evolves
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#continuous-etsi-conformance">more</a>).</li>
+  <li><b>Broader performance regression coverage</b> - more scenarios, nightly
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#broader-performance-regression-coverage">more</a>).</li>
+</ul>
+<p>Everything else - open questions, smaller improvements, proposals to ETSI - is in
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">Ideas</a>; the things not done yet, with what
+there is to say about each, in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md#the-backlog-in-detail">the
+backlog in detail</a>.</p>
+</article>
