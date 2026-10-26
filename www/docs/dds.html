@@ -57,7 +57,7 @@ reads <code>dds.ngsild</code>.</p>
   }
 }</pre>
 <pre>coraine --bridges dds --bridgeConfig /path/to/that.json</pre>
-<p>Services and actions are entries of <code>ngsild.services</code> and <code>ngsild.actions</code>, with the same
+<p>Services and actions are entries of <code>dds.ngsild.services</code> and <code>dds.ngsild.actions</code>, with the same
 <code>entityId</code>, <code>entityType</code> and <code>attribute</code>. A service's DDS types are
 <code>requestType</code> and <code>replyType</code> - by default its name with <code>_Request</code> and
 <code>_Response</code>; they are configured because a service, unlike a topic, cannot be learned by listening.
@@ -74,7 +74,7 @@ An action names its ROS 2 action type once, in <code>type</code>; its DDS types 
 </table>
 
 <h2 id="build">Building the plugin</h2>
-<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corDdsBridge">corDdsBridge</a>, and is
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>, and is
 part of no umbrella build: the DDS stack it links is 21.4&nbsp;MiB across nine libraries (<code>libfastdds</code>
 alone 16&nbsp;MiB), about five times the whole broker. Only a deployment that wants DDS clones and builds it.</p>
 <pre>make            <span class="c"># build</span>
@@ -85,6 +85,14 @@ make contract   <span class="c"># does it still satisfy BridgeDriver.h? needs no
   <li><b>C++, behind a C contract.</b> The DDS Enabler's API is C++ only. The plugin is a C++ shared object that
   exports one C symbol, <code>bridgeRegister</code>; the broker stays C. <code>libstdc++</code> enters the broker's
   process when the plugin is loaded.</li>
+  <li><b>What it fills of the contract</b> (<code>BridgeDriver.h</code> in
+  <a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>): topics -
+  samples in (<code>sampleIn</code> and its qualified / meta forms), <code>publish</code> out; services - a
+  request sent with <code>serviceInvoke</code> / <code>serviceInvokeTracked</code>, its reply back as
+  <code>replyIn</code>; actions - goals sent with <code>actionGoalSend</code>, cancelled with
+  <code>actionGoalCancel</code>, their feedback and result back as goal events. Services and actions the DDS network
+  announces go to the broker as discovered endpoints (<code>endpointDiscoveredIn</code>). Each slot is filled only
+  when the broker's bridge ABI has it (<code>ddsRegister.cpp</code>).</li>
   <li><b>Whether it builds</b> is <code>COR_BRIDGE_DDS</code>: <code>auto</code> (the default - where the Enabler is
   installed, and it says which), <code>ON</code> (a missing dependency is an error), <code>OFF</code>.</li>
 </ul>

@@ -71,7 +71,7 @@ the notification senders and the registration probe read is pinned, and they wai
 <h2 id="servers">The servers</h2>
 <table class="g-opts">
   <tr><th>Server</th><th></th></tr>
-  <tr><td>built-in HTTP<span class="env">--httpLoops</span></td><td>event loops on one port; 0, the default, is one per core, at most 4 (the cores the process may run on - its CPU affinity and cgroup quota). Loop 0 accepts every connection and deals them out in turn, so they are spread evenly - the kernel's <code>SO_REUSEPORT</code> hash splits a handful unevenly. A coroutine's response goes out on its loop's thread.</td></tr>
+  <tr><td>built-in HTTP<span class="env">--httpLoops</span></td><td>event loops on one port, 1-64; 0, the default, is one per core, at most 4 (the cores the process may run on - its CPU affinity and cgroup quota). The cor:// listener (<code>--corPort</code>) takes the same count, at most 16, on either HTTP server. Loop 0 accepts every connection and deals them out in turn, so they are spread evenly - the kernel's <code>SO_REUSEPORT</code> hash splits a handful unevenly. A coroutine's response goes out on its loop's thread.</td></tr>
   <tr><td>cor:// server<span class="env">--corPort</span></td><td>a connection is armed once and multiplexed: the loop reads every frame, starts each request inline or as a coroutine, and queues each response as it finishes</td></tr>
   <tr><td>cor:// client</td><td>one connection per peer per thread, shared by that thread's requests, any number in flight - a distributed operation has every cor:// forward in flight at once (<a href="#docs/cor-protocol">The cor format and cor://</a>)</td></tr>
 </table>

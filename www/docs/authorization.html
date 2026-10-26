@@ -165,21 +165,22 @@ by default).</p>
 <div class="g-scroll">
 <table class="g-opts">
   <tr><th>Option</th><th>What it does</th></tr>
-  <tr><td>--oidcIssuer &lt;url&gt;<span class="env">CORAINE_OIDCISSUER</span></td><td>the provider's issuer, the <code>iss</code> a token must have - required (<code>https://keycloak.example.org/realms/city</code>)</td></tr>
-  <tr><td>--oidcDiscovery &lt;url&gt;<span class="env">CORAINE_OIDCDISCOVERY</span></td><td>the discovery document's URL, when the broker reaches the provider by another name than its issuer's</td></tr>
-  <tr><td>--oidcJwks &lt;url|file&gt;<span class="env">CORAINE_OIDCJWKS</span></td><td>the JWK Set itself, instead of the discovery document - not with <code>--oidcDiscovery</code></td></tr>
+  <tr><td>--oidcIssuer &lt;url&gt;<span class="env">CORAINE_OIDCISSUER</span></td><td>the provider's issuer, the <code>iss</code> a token must have, compared as a string - required (<code>https://keycloak.example.org/realms/city</code>). Without <code>--oidcDiscovery</code> or <code>--oidcJwks</code> the keys are found through <code>&lt;issuer&gt;/.well-known/openid-configuration</code></td></tr>
+  <tr><td>--oidcDiscovery &lt;url&gt;<span class="env">CORAINE_OIDCDISCOVERY</span></td><td>the discovery document's URL, when the broker reaches the provider by another name than its issuer's. Its <code>issuer</code> must be <code>--oidcIssuer</code>, or it is not used. Not with <code>--oidcJwks</code></td></tr>
+  <tr><td>--oidcJwks &lt;url|file&gt;<span class="env">CORAINE_OIDCJWKS</span></td><td>the JWK Set itself, instead of the discovery document - not with <code>--oidcDiscovery</code>; a file is read again every <code>--oidcRefresh</code> seconds</td></tr>
   <tr><td>--oidcAudience &lt;aud&gt;<span class="env">CORAINE_OIDCAUDIENCE</span></td><td>an audience a token must have. Default: not checked - and the broker says so at start-up: a token the provider issued for any of its clients is taken</td></tr>
-  <tr><td>--oidcRolesClaim &lt;path&gt;<span class="env">CORAINE_OIDCROLESCLAIM</span></td><td>the claim holding the roles, dot-separated - default <code>realm_access.roles</code> (Keycloak's realm roles); <code>resource_access.&lt;client&gt;.roles</code>, <code>scope</code>, <code>roles</code>, <code>groups</code></td></tr>
-  <tr><td>--oidcReadRole &lt;role&gt;<span class="env">CORAINE_OIDCREADROLE</span></td><td>the role that reads - default <code>ngsild-read</code></td></tr>
-  <tr><td>--oidcWriteRole &lt;role&gt;<span class="env">CORAINE_OIDCWRITEROLE</span></td><td>the role that reads and writes - default <code>ngsild-write</code></td></tr>
-  <tr><td>--oidcLeeway &lt;s&gt;<span class="env">CORAINE_OIDCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code> - default 60</td></tr>
-  <tr><td>--oidcRefresh &lt;s&gt;<span class="env">CORAINE_OIDCREFRESH</span></td><td>seconds between two fetches of the keys - default 300</td></tr>
-  <tr><td>--oidcTenantsClaim &lt;path&gt;<span class="env">CORAINE_OIDCTENANTSCLAIM</span></td><td>the claim holding the tenants a token may use - default <code>tenants</code></td></tr>
-  <tr><td>--oidcAnyTenant<span class="env">CORAINE_OIDCANYTENANT</span></td><td>no tenant check: a token may use every tenant</td></tr>
-  <tr><td>--oidcOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_OIDCOWNERMAXAGE</span></td><td>seconds a subscription's owner holds - default 86&nbsp;400, a day</td></tr>
-  <tr><td>--oidcAnonymousRead<span class="env">CORAINE_OIDCANONYMOUSREAD</span></td><td>a read without a token is let in, in every tenant; a write without one is still a 401</td></tr>
+  <tr><td>--oidcRolesClaim &lt;path&gt;<span class="env">CORAINE_OIDCROLESCLAIM</span></td><td>the claim holding the roles, dot-separated; an array of strings or a string of space-separated values - default <code>realm_access.roles</code> (Keycloak's realm roles); <code>resource_access.&lt;client&gt;.roles</code>, <code>scope</code>, <code>roles</code>, <code>groups</code>. Not empty</td></tr>
+  <tr><td>--oidcReadRole &lt;role&gt;<span class="env">CORAINE_OIDCREADROLE</span></td><td>the role that reads - default <code>ngsild-read</code>. Not empty</td></tr>
+  <tr><td>--oidcWriteRole &lt;role&gt;<span class="env">CORAINE_OIDCWRITEROLE</span></td><td>the role that reads and writes - default <code>ngsild-write</code>. Not empty</td></tr>
+  <tr><td>--oidcLeeway &lt;s&gt;<span class="env">CORAINE_OIDCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code>, in seconds - default 60, 0-600</td></tr>
+  <tr><td>--oidcRefresh &lt;s&gt;<span class="env">CORAINE_OIDCREFRESH</span></td><td>seconds between two fetches of the keys - default 300, 1-86&nbsp;400</td></tr>
+  <tr><td>--oidcTenantsClaim &lt;path&gt;<span class="env">CORAINE_OIDCTENANTSCLAIM</span></td><td>the claim holding the tenants a token may use, dot-separated - default <code>tenants</code>. <code>default</code> is the default tenant, <code>*</code> every tenant; a token without the claim may use the default tenant only. Not empty</td></tr>
+  <tr><td>--oidcAnyTenant<span class="env">CORAINE_OIDCANYTENANT</span></td><td>no tenant check: a token may use every tenant, and <code>--oidcTenantsClaim</code> is not read</td></tr>
+  <tr><td>--oidcOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_OIDCOWNERMAXAGE</span></td><td>seconds a subscription's owner holds - default 86&nbsp;400 (a day), 1-31&nbsp;536&nbsp;000</td></tr>
+  <tr><td>--oidcAnonymousRead<span class="env">CORAINE_OIDCANONYMOUSREAD</span></td><td>a read without a token is let in, in every tenant; a write without one is still a 401, and a request that sends a token is decided on it</td></tr>
 </table>
 </div>
+<p>Every entry in full - its errors, its example: <a href="#docs/options/oidc">Command-line options - Plugin: oidc</a>.</p>
 
 <h3 id="keycloak">With Keycloak</h3>
 <pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcAudience coraine</pre>
@@ -214,20 +215,21 @@ apart from one decided on purpose.</p>
 <table class="g-opts">
   <tr><th>Option</th><th>What it does</th></tr>
   <tr><td>--fdscDiscovery &lt;url&gt;<span class="env">CORAINE_FDSCDISCOVERY</span></td><td>the verifier's OpenID discovery document - the URL APISIX's <code>openid-connect</code> has as <code>discovery</code> (<code>http://verifier:3000/services/&lt;service&gt;/.well-known/openid-configuration</code>). Its <code>jwks_uri</code> gives the keys, its <code>issuer</code> the <code>iss</code> a token must have</td></tr>
-  <tr><td>--fdscJwks &lt;url|file&gt;<span class="env">CORAINE_FDSCJWKS</span></td><td>the JWK Set itself, instead of <code>--fdscDiscovery</code> - needs <code>--fdscIssuer</code></td></tr>
+  <tr><td>--fdscJwks &lt;url|file&gt;<span class="env">CORAINE_FDSCJWKS</span></td><td>the JWK Set itself, instead of <code>--fdscDiscovery</code> - needs <code>--fdscIssuer</code>; with both, <code>--fdscJwks</code> is used</td></tr>
   <tr><td>--fdscIssuer &lt;iss&gt;<span class="env">CORAINE_FDSCISSUER</span></td><td>the issuer a token must have - default: the discovery document's</td></tr>
-  <tr><td>--fdscAudience &lt;aud&gt;<span class="env">CORAINE_FDSCAUDIENCE</span></td><td>an audience a token must have - default: not checked, as APISIX does not check it</td></tr>
-  <tr><td>--fdscLeeway &lt;s&gt;<span class="env">CORAINE_FDSCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code> - default 120, what APISIX allows</td></tr>
-  <tr><td>--fdscPap &lt;url&gt;<span class="env">CORAINE_FDSCPAP</span></td><td>the ODRL-PAP's base URL (<code>http://odrl-pap:8080</code>) - the policies are read from its <code>GET /policy</code></td></tr>
-  <tr><td>--fdscPolicies &lt;url|file&gt;<span class="env">CORAINE_FDSCPOLICIES</span></td><td>the policies themselves (the PAP's listing, an array, one policy, or an <code>@graph</code>), instead of <code>--fdscPap</code></td></tr>
-  <tr><td>--fdscOrganization &lt;did&gt;<span class="env">CORAINE_FDSCORGANIZATION</span></td><td>the provider's DID - the PAP's <code>GENERAL_ORGANIZATION_DID</code>; <code>vc:role</code> reads a credential's roles for it</td></tr>
-  <tr><td>--fdscRefresh &lt;s&gt;<span class="env">CORAINE_FDSCREFRESH</span></td><td>seconds between two fetches of keys and policies - default 30</td></tr>
+  <tr><td>--fdscAudience &lt;aud&gt;<span class="env">CORAINE_FDSCAUDIENCE</span></td><td>an audience a token must have - VCVerifier sets <code>aud</code> to the service id. Default: not checked, as APISIX does not check it</td></tr>
+  <tr><td>--fdscLeeway &lt;s&gt;<span class="env">CORAINE_FDSCLEEWAY</span></td><td>clock skew allowed on <code>exp</code> and <code>nbf</code>, in seconds - default 120, what APISIX allows; 0-600</td></tr>
+  <tr><td>--fdscPap &lt;url&gt;<span class="env">CORAINE_FDSCPAP</span></td><td>the ODRL-PAP's base URL (<code>http://odrl-pap:8080</code>) - the policies are read from its <code>GET /policy</code>, page by page, installed only when every page has been read</td></tr>
+  <tr><td>--fdscPolicies &lt;url|file&gt;<span class="env">CORAINE_FDSCPOLICIES</span></td><td>the policies themselves, a URL or a file: a JSON array of ODRL policies or the PAP's own listing, one policy object, or an object whose <code>@graph</code> holds the policies - instead of <code>--fdscPap</code>; with both, <code>--fdscPolicies</code> is used</td></tr>
+  <tr><td>--fdscOrganization &lt;did&gt;<span class="env">CORAINE_FDSCORGANIZATION</span></td><td>the provider's DID - the PAP's <code>GENERAL_ORGANIZATION_DID</code>; <code>vc:role</code> reads a credential's roles for it. Default: the PAP's default, <code>urn:ngsi-ld:organization:0b03975e-7ded-4fbd-9c3b-a5d6550df7e2</code></td></tr>
+  <tr><td>--fdscRefresh &lt;s&gt;<span class="env">CORAINE_FDSCREFRESH</span></td><td>seconds between two fetches of keys and policies - default 30, 1-86&nbsp;400</td></tr>
   <tr><td>--fdscStrippedPath<span class="env">CORAINE_FDSCSTRIPPEDPATH</span></td><td><code>http:path</code> reads the <code>x-stripped-path</code> header, as the connector's Rego does - only behind a gateway that sets it and drops a client's. Default: the request's path</td></tr>
   <tr><td>--fdscAnonymous<span class="env">CORAINE_FDSCANONYMOUS</span></td><td>a request without a token is let in as no one, instead of a 401 - only a <code>vc:any</code> policy can allow it anything</td></tr>
   <tr><td>--fdscNgsild<span class="env">CORAINE_FDSCNGSILD</span></td><td>decide on the entity, as NGSI-LD has it - <b>decisions differ from the connector's</b></td></tr>
-  <tr><td>--fdscOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_FDSCOWNERMAXAGE</span></td><td>with <code>--fdscNgsild</code>: seconds a subscription's owner (its maker's credential) holds. 0 (default): until the credential's own <code>validUntil</code> (VC 1.1: <code>expirationDate</code>)</td></tr>
+  <tr><td>--fdscOwnerMaxAge &lt;s&gt;<span class="env">CORAINE_FDSCOWNERMAXAGE</span></td><td>with <code>--fdscNgsild</code>: seconds a subscription's owner (its maker's credential) holds. 0 (default): until the credential's own <code>validUntil</code> (VC 1.1: <code>expirationDate</code>); 0-31&nbsp;536&nbsp;000</td></tr>
 </table>
 </div>
+<p>Every entry in full - its errors, its example: <a href="#docs/options/fdsc">Command-line options - Plugin: fdsc</a>.</p>
 <p>A source of keys and a source of policies are required; without either the broker does not start.</p>
 
 <h3 id="fdsc-token">The token</h3>

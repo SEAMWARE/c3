@@ -9,10 +9,19 @@ bridge plugins - which makes the tiers a build and configuration choice, not an 
 <div class="g-callout">
 <p><b>Built:</b> the bridges this rests on - <a href="#docs/dds">DDS and ROS 2</a>,
 <a href="#docs/mqtt-bridge">MQTT topics</a>, <a href="#docs/modbus-bridge">Modbus TCP registers</a>.
-<b>Not built:</b> the <i>cor-agent</i> edge build, released bridges for the other device protocols (LWM2M/CoAP,
-OPC-UA, LoRaWAN), and a registration whose endpoint names a bridge (a value read on demand). Tracked in the
-<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md">roadmap</a>. Prototype bridges for each FIWARE IoT Agent's protocol are listed in
-<a href="#docs/iot-agents/bridges">FIWARE IoT Agents</a>.</p>
+<b>Device protocols as bridge plugins:</b> OPC UA -
+<a href="https://github.com/SEAMWARE/corOpcuaBridge" target="_blank" rel="noopener">corOpcuaBridge</a>
+(<code>coraine-build --bridges opcua</code>); the FIWARE IoT Agents' protocols, prototypes not released -
+<a href="https://github.com/SEAMWARE/corIotaLwm2mBridge" target="_blank" rel="noopener">corIotaLwm2mBridge</a> (LwM2M over CoAP),
+<a href="https://github.com/SEAMWARE/corIotaLoraBridge" target="_blank" rel="noopener">corIotaLoraBridge</a> (LoRaWAN: TTN v3, ChirpStack v4),
+<a href="https://github.com/SEAMWARE/corIotaSigfoxBridge" target="_blank" rel="noopener">corIotaSigfoxBridge</a>,
+<a href="https://github.com/SEAMWARE/corIotaUlBridge" target="_blank" rel="noopener">corIotaUlBridge</a> (UltraLight 2.0, over MQTT and HTTP),
+<a href="https://github.com/SEAMWARE/corIotaJsonBridge" target="_blank" rel="noopener">corIotaJsonBridge</a> (JSON),
+<a href="https://github.com/SEAMWARE/corIotaIsoxmlBridge" target="_blank" rel="noopener">corIotaIsoxmlBridge</a> (ISOXML) -
+see <a href="#docs/iot-agents/bridges">FIWARE IoT Agents</a>.
+<b>Not built:</b> the <i>cor-agent</i> edge build, and a registration whose endpoint names a bridge (a value read
+on demand). Tracked in the
+<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/roadmap.md" target="_blank" rel="noopener">roadmap</a>.</p>
 </div>
 
 <h2 id="shapes">Three shapes, one broker</h2>

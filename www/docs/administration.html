@@ -9,7 +9,7 @@ the health probes, and the limits that keep it inside its memory. Installing one
 <!-- ======================================================================= -->
 <h2 id="options">Options</h2>
 <p>Every setting is a command-line option. <b><code>coraine -u</code></b> lists them with a description,
-<b><code>coraine -U</code></b> with each one's environment variable and type. The list depends on the plugins selected - a
+<b><code>coraine -U</code></b> with each one's environment variable, type and default. The list depends on the plugins selected - a
 plugin brings its own (<code>--dbHost</code> comes with <code>mongoc</code>, <code>--dbDir</code> with <code>corDB</code>) - so ask
 with them: <code>coraine --database corDB --troe timescale -u</code>. On a running broker, <code>GET /admin/config</code> has
 every option with its value, its default and where the value came from.</p>
@@ -18,7 +18,11 @@ every option with its value, its default and where the value came from.</p>
 <h3 id="env">Environment variables</h3>
 <p><b>Every</b> option is also an environment variable: <code>CORAINE_</code> + the long option in upper case, <code>-</code>
 becoming <code>_</code> - <code>--maxRequestSize</code> is <code>CORAINE_MAXREQUESTSIZE</code>, <code>--high-precision</code>
-<code>CORAINE_HIGH_PRECISION</code>. A command-line argument overrides the variable. Two more variables move the
+<code>CORAINE_HIGH_PRECISION</code>. A command-line argument overrides the variable. A boolean variable is on for
+<code>true</code>, <code>True</code>, <code>TRUE</code>, <code>on</code>, <code>On</code>, <code>ON</code>, off for <code>false</code>,
+<code>False</code>, <code>FALSE</code>, <code>off</code>, <code>Off</code>, <code>OFF</code>; any other value (<code>yes</code>,
+<code>1</code>, an empty one) stops the start, the variable named. A refused value does not keep <code>-u</code> / <code>-U</code>
+from printing the list. Two more variables move the
 installation's directories:</p>
 <table class="g-opts">
   <tr><th>Variable</th><th>Default - what it does</th></tr>
@@ -63,7 +67,7 @@ installation's directories:</p>
 <h3 id="opts-ngsild">NGSI-LD behaviour</h3>
 <table class="g-opts">
   <tr><th>Option</th><th>Default - what it does</th></tr>
-  <tr><td>--defaultUserContext / -duc<span class="env">CORAINE_DEFAULTUSERCONTEXT</span></td><td>none - a default user <code>@context</code>: a URL or a file, read at start and hosted as <code>/ngsi-ld/v1/jsonldContexts/defaultUserContext</code></td></tr>
+  <tr><td>--defaultUserContext / -duc<span class="env">CORAINE_DEFAULTUSERCONTEXT</span></td><td>none - a default user <code>@context</code>: a URL or a file; a file is read at start and hosted as <code>/ngsi-ld/v1/jsonldContexts/defaultUserContext</code>; a URL is downloaded when first needed, and a request that needs it while it cannot be downloaded - a create, a query, a retrieval - is 504 <code>LdContextNotAvailable</code></td></tr>
   <tr><td>--high-precision / -hp<span class="env">CORAINE_HIGH_PRECISION</span></td><td>off - DateTimes with nanoseconds (9 digits) instead of microseconds (6)</td></tr>
   <tr><td>--notifyValueChangeOnly / -nvco<span class="env">CORAINE_NOTIFYVALUECHANGEONLY</span></td><td>off - notify only when a value changed</td></tr>
   <tr><td>--insecureNotif<span class="env">CORAINE_INSECURENOTIF</span></td><td>off - accept self-signed certificates on TLS notifications and forwards</td></tr>
@@ -73,7 +77,7 @@ installation's directories:</p>
   <tr><td>--asyncSnapshot<span class="env">CORAINE_ASYNCSNAPSHOT</span></td><td>off - run snapshot queries in the background (201 at once, <code>status=preparing</code>)</td></tr>
   <tr><td>--autoEntityMaps<span class="env">CORAINE_AUTOENTITYMAPS</span></td><td><code>distributed</code> - which queries of more than a page get an EntityMap unasked: <code>none</code>, <code>distributed</code>, <code>all</code> (<a href="#docs/administration" data-scroll="entitymaps">EntityMaps</a>)</td></tr>
   <tr><td>--entityMapMemory<span class="env">CORAINE_ENTITYMAPMEMORY</span></td><td>64 - MiB all EntityMaps may hold together (0: no cap, and no automatic maps)</td></tr>
-  <tr><td>--contextSourceExtras / -csx<span class="env">CORAINE_CONTEXTSOURCEEXTRAS</span></td><td><code>$SEAMWARE_ETC_DIR/contextSourceExtras.json</code> - JSON rendered as it is on <code>/info/sourceIdentity</code></td></tr>
+  <tr><td>--contextSourceExtras / -csx<span class="env">CORAINE_CONTEXTSOURCEEXTRAS</span></td><td><code>$SEAMWARE_ETC_DIR/contextSourceExtras.json</code> (<code>/opt/seamware/etc/...</code> without the variable) if it exists - JSON rendered as it is on <code>/info/sourceIdentity</code>. A file named here and missing stops the broker</td></tr>
 </table>
 
 <h3 id="opts-dist">Distributed operations</h3>
@@ -182,7 +186,7 @@ probes are set up on a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
 <table class="gtable">
   <tr><th>Request</th><th>200</th><th>503</th></tr>
   <tr><td><code>GET /live</code></td><td>the broker makes progress</td><td>a request in flight longer than <code>--healthStallTimeout</code> (30 s) with none finishing meanwhile. Never for memory or a database</td></tr>
-  <tr><td><code>GET /ready</code></td><td>the broker serves</td><td>the store still loading; the current-state store not answering its ping; over the memory budget; stuck; stopping (from SIGTERM on)</td></tr>
+  <tr><td><code>GET /ready</code></td><td>the broker serves</td><td>the store still loading; the current-state store not answering its ping; over the memory budget; the store <a href="#docs/administration" data-scroll="store-paused">paused</a>; stuck; stopping (from SIGTERM on)</td></tr>
   <tr><td>anything else</td><td>always</td><td>-</td></tr>
 </table>
 <p>Every answer has the same body, the report - kept current in the background, so a probe measures nothing:</p>
@@ -196,9 +200,10 @@ probes are set up on a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
 }</pre>
 <table class="gtable">
   <tr><th>Member</th><th></th></tr>
-  <tr><td><code>status</code></td><td><code>starting</code>, <code>ok</code>, <code>degraded</code> (the history unreachable or not recording, or over 90&nbsp;% of the memory budget), <code>down</code> (the store unreachable, or stuck), <code>stopping</code></td></tr>
+  <tr><td><code>status</code></td><td><code>starting</code>, <code>ok</code>, <code>degraded</code> (the history unreachable or not recording, or over 90&nbsp;% of the memory budget), <code>down</code> (the store unreachable, or stuck), <code>paused</code> (the store <a href="#docs/administration" data-scroll="store-paused">paused</a>), <code>stopping</code></td></tr>
   <tr><td><code>store</code>, <code>troe</code></td><td>mongoc and timescale are pinged once a second with a 1 s timeout: <code>reachable</code> is an answer within the last 5 s. corDB and none are in the process: reachable once loaded. <code>troe.history</code> (timescale): <code>recording</code>, <code>notRecordingForMs</code>, <code>heldBytes</code>, <code>lostRows</code></td></tr>
   <tr><td><code>memory</code></td><td>the budget in bytes (0: none), what counts against it, the whole resident set, <code>level</code> (<code>ok</code>, <code>soft</code>, <code>hard</code>) and the requests refused for it</td></tr>
+  <tr><td><code>paused</code></td><td>only while the store is paused: <code>forS</code> (seconds since the pause began), <code>reason</code>, and <code>refused</code> (the requests refused for pauses since the start)</td></tr>
   <tr><td><code>requests</code></td><td>in flight, finished, and how long ago the last one finished</td></tr>
 </table>
 <div class="g-callout"><p><code>/ready</code> stays 200 while the TimescaleDB history is down: the broker still serves the current
@@ -226,6 +231,41 @@ before it gets there:</p>
 </ul>
 
 <!-- ======================================================================= -->
+<h2 id="store-paused">A store that cannot write its log</h2>
+<p>A persistent corDB (<code>--dbDir</code>) keeps every write in its log on the disk. When the log cannot be written - the
+disk full, a file-size limit, an I/O error, a failed <code>fdatasync</code> - the store <b>pauses</b>, with any
+<code>--dbSync</code>: every request that writes is refused before it is parsed, so nothing is answered 201 or 204 that a
+restart would lose. Reads are served.</p>
+<table class="gtable">
+  <tr><th>Served while paused</th><th>Refused while paused</th></tr>
+  <tr><td><code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>; <code>POST /ngsi-ld/v1/entityOperations/query</code>,
+  <code>/temporal/entityOperations/query</code>, <code>/temporal/timepoint/entityOperations/query</code>; <code>/admin/log</code></td>
+  <td>every other <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code> - entities, attributes, subscriptions,
+  registrations, batch operations, <code>@context</code>s</td></tr>
+</table>
+<p>A refused request gets <b>503</b>, <code>Retry-After: 5</code> and the error type
+<code>https://coraine.readthedocs.io/errors/PersistenceUnavailable</code>:</p>
+<pre>{
+  "type": "https://coraine.readthedocs.io/errors/PersistenceUnavailable",
+  "title": "Persistence Unavailable",
+  "status": 503,
+  "detail": "writes are refused until the broker can write its log again (paused for 12 s): the log of the default tenant cannot be allocated ahead"
+}</pre>
+<ul>
+  <li>The log is allocated 8&nbsp;MiB ahead of what it holds, off the write path, so a full disk is found before a write
+  needs the room - unless more than 8&nbsp;MiB is written between two runs of the flusher (<code>--dbSyncInterval</code>). A
+  write already applied when the log failed is answered 503 too; it is in memory, and the snapshot below keeps it.</li>
+  <li>While paused, the broker writes a snapshot of each tenant it could not log, from memory - once a second, backing off
+  to once every 16 s. A snapshot rolls the log and drops the files before it. Once that succeeds for every such tenant the
+  pause ends by itself; no restart is needed. A failure of the history log (<code>--troe corDB</code>) is not repaired: the
+  store stays paused until a restart.</li>
+  <li><code>/ready</code> is 503 and the report's <code>status</code> is <code>paused</code>, with a <code>paused</code> member
+  (<a href="#docs/administration" data-scroll="health">Health port</a>); <code>/live</code> stays 200.</li>
+  <li>Metrics: <code>ngsild_store_paused</code> (1 while paused), <code>ngsild_requests_refused_store_paused_total</code>.</li>
+  <li>Only corDB pauses.</li>
+</ul>
+
+<!-- ======================================================================= -->
 <h2 id="request-size">Request size</h2>
 <p>The <b>body</b> is limited by <code>--maxRequestSize</code> (2 MiB; 413 above it). The <b>line and headers</b> must fit
 in <code>--httpConnectionMemory</code> (kB; 4 to 1024; libmicrohttpd only - the built-in server ignores it):</p>
@@ -241,6 +281,10 @@ in <code>--httpConnectionMemory</code> (kB; 4 to 1024; libmicrohttpd only - the 
 (hundreds of ids, a long <code>q</code>) fits in the body of <code>POST /ngsi-ld/v1/entityOperations/query</code>. A
 VCVerifier access token is 1.5-4 kB; 12 kB leaves room for one with every other header. The memory is cleared after
 every request: 12 kB instead of 32 kB is worth 2-3&nbsp;% of a core on small requests.</p>
+<p>A body's <b>nesting</b> is limited too: arrays and objects at most 100 levels deep, the outermost counted as level 1 -
+an entity, its Property, and 98 levels of value. A deeper body is <b>400</b> <code>InvalidRequest</code>, detail
+<code>request body nested deeper than 100 levels</code>: the parser stops at level 101, whatever the body's size. The limit
+is fixed; no option changes it.</p>
 
 <!-- ======================================================================= -->
 <h2 id="response-size">Response size</h2>

@@ -171,9 +171,10 @@ or with sub-attributes - and the load like yours:</p>
 <!-- ======================================================================= -->
 <h2 id="xp-build"><span class="xp-n">3</span>Building it</h2>
 <p>From a source build: the cor-libs as siblings (<code>corLibs/bootstrap.sh</code> clones and builds them),
-then the broker. <code>make tune</code> also needs <code>wrk</code> and <code>python3</code>,
-<code>corTestClient</code> (from <code>corLibs/bin</code>, it counts the notifications), and the allocators it
-compares: <code>apt-get install libjemalloc2 libtcmalloc-minimal4</code>.</p>
+then the broker. <code>make tune</code> also needs what <code>make pgo</code> needs - <code>curl</code>,
+<code>wrk</code> (the load), <code>corRequest</code> and <code>corTestClient</code> (from <code>corLibs/bin</code>;
+<code>corTestClient</code> receives the notifications and counts them) - and <code>python3</code> (the workload
+generator), and the allocators it compares: <code>apt-get install libjemalloc2 libtcmalloc-minimal4</code>.</p>
 <pre>cd coraine
 make tune WORKLOAD=my-workload.json     <span class="c"># ~15 min: the instrumented build, the training, the comparison</span>
 make install_pgo                        <span class="c"># the tuned build -> /usr/local/bin, /opt/seamware</span></pre>

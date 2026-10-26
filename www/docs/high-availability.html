@@ -88,7 +88,7 @@ db.grantRolesToUser("&lt;the coraine user&gt;", [ { role: "coraineHaWatch", db: 
 <p>An instance started with it <b>refuses to start</b> - it does not fall back to running out of step - when the
 database is not a replica set, or the change stream cannot be opened, typically for the
 <a href="#docs/high-availability/privileges">privileges</a>:</p>
-<pre><span class="o">E: ... mongocHaWatchStart: --ha mongo: unable to open the change stream (not authorized on admin to execute command { aggregate: 1, pipeline: [ { $changeStream: { allChangesForCluster: true } } ] ... }). The stream watches the whole deployment ...
+<pre><span class="o">E: ... mongocHaWatchStart: -ha mongo: unable to open the change stream (not authorized on admin to execute command { aggregate: 1, pipeline: [ { $changeStream: { allChangesForCluster: true } } ] ... }). The stream watches the whole deployment ...
 X: ... main: unable to start the HA channel 'mongo'</span></pre>
 <p>On Kubernetes: pods in a crash loop with that message. Grant the role and they start.</p>
 

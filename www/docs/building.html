@@ -67,10 +67,10 @@ show. It is not under <code>/admin</code>: the admin API is itself a feature a b
   <tr><th>Target</th><th>What it does</th></tr>
   <tr><td>make<br>make release</td><td>a release build, in <code>BUILD_RELEASE/</code></td></tr>
   <tr><td>make debug</td><td>a debug build, in <code>BUILD_DEBUG/</code></td></tr>
-  <tr><td>make pgo</td><td>a profile-guided release build, in <code>BUILD_PGO/</code> - <a href="#docs/building/pgo">below</a></td></tr>
-  <tr><td>make tune WORKLOAD=&lt;file&gt;</td><td>profile-guided on a workload of your own - <a href="#docs/building/pgo">below</a></td></tr>
+  <tr><td>make pgo</td><td>a profile-guided release build, in <code>BUILD_PGO/</code>; needs <code>curl</code> and <code>wrk</code> (and corLibs' <code>corRequest</code>, <code>corTestClient</code>) - <a href="#docs/building/pgo">below</a></td></tr>
+  <tr><td>make tune WORKLOAD=&lt;file&gt;</td><td>profile-guided on a workload of your own, then the allocator and <code>--dbLockPrefer</code> measured on it, the result in <code>tune-result.json</code>; needs what <code>make pgo</code> needs, and <code>python3</code> - <a href="#docs/building/pgo">below</a></td></tr>
   <tr><td>make i<br>make di</td><td>release / debug, and install</td></tr>
-  <tr><td>make install_pgo</td><td>install the <code>BUILD_PGO/</code> build</td></tr>
+  <tr><td>make install_pgo</td><td>install the <code>make pgo</code> / <code>make tune</code> build (<code>BUILD_PGO/</code>) as <code>make install</code> does, with the profile-guided <code>corDB.so</code></td></tr>
   <tr><td>make ci<br>make cdi</td><td>clean, then <code>make i</code> / <code>make di</code></td></tr>
   <tr><td>make install</td><td>copy the broker and the plugins to <code>/usr/local/bin</code>, <code>/opt/seamware/plugins</code>, <code>/opt/seamware/etc</code></td></tr>
   <tr><td>make clean</td><td>remove the build trees</td></tr>
@@ -91,7 +91,7 @@ coraine --database corDB</pre>
   <tr><th>Option</th><th>What it does</th></tr>
   <tr><td>&lt;dir&gt;</td><td>where the source is unpacked and built: a new or empty directory, or one an earlier <code>coraine-build</code> unpacked into (the source is then reused). The result is in <code>&lt;dir&gt;/install</code>: <code>bin/coraine</code>, <code>bin/coraine-import</code>, <code>plugins/</code>, <code>etc/</code>, <code>env</code></td></tr>
   <tr><td>--release</td><td>optimised, traces compiled out (<code>--traceLevels</code> is not there), no training - the default</td></tr>
-  <tr><td>--pgo</td><td>profile-guided: built instrumented, trained on the measured request shapes, rebuilt with the profile - what the <code>coraine</code> package and the image hold. A few minutes more; needs <code>curl</code>, <code>wrk</code> and <code>python3</code>; libmicrohttpd only</td></tr>
+  <tr><td>--pgo</td><td>profile-guided: built instrumented, trained on the measured request shapes, rebuilt with the profile - what the <code>coraine</code> package and the image hold. A few minutes more; the training needs <code>curl</code> and <code>wrk</code>, and <code>coraine-build --pgo</code> checks for <code>python3</code> too, which only <code>--tune</code> runs; libmicrohttpd only</td></tr>
   <tr><td>--tune &lt;workload&gt;</td><td>profile-guided, trained on <b>your</b> workload, and the knobs measured on it; the best are kept in <code>&lt;dir&gt;/install/etc/tune.env</code></td></tr>
   <tr><td>--debug</td><td><code>-g</code>, not optimised, traces compiled in (<code>--traceLevels</code> works) - for reproducing a problem report, not for production</td></tr>
   <tr><td>--features &lt;list&gt;</td><td>comma-separated <code>NAME=ON|OFF</code>, the name without <code>COR_FEATURE_</code> - <a href="#docs/building/features">the switches</a></td></tr>
@@ -127,7 +127,7 @@ declined the feature, and the client's move is a different deployment.</p>
 programs and plugins, and the libraries they load that a bare <code>ubuntu:26.04</code> does not have.
 Measured 2026-10-13 on main <code>c44d4b4e</code>, release builds, one switch at a time against the default
 build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so a small switch reads
-0 or 4 KiB.</p>
+0 or 4 KiB. A size in bytes is the switch's code in a release build, as building-details.md gives it.</p>
 <div class="g-scroll">
 <table class="g-opts">
   <tr><th>Switch</th><th>Off</th><th>Size</th></tr>
@@ -136,7 +136,7 @@ build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so 
   <tr><td>REGISTRATIONS</td><td>15 routes answer 501: Context Source Registrations, registration subscriptions, EntityMaps; the forwarding library goes</td><td>-72 KiB</td></tr>
   <tr><td>AUTO_ENTITY_MAP</td><td>no automatic EntityMaps and no <code>--autoEntityMaps</code>: pages by <code>offset</code> / <code>limit</code>, a map only when a client asks</td><td>-4 KiB</td></tr>
   <tr><td>RESPONSE_BUDGET</td><td>no byte budget of a query, no <code>--maxResponseSize</code></td><td>-12 KiB</td></tr>
-  <tr><td>TIMEPOINT</td><td>no timepoint resources (<code>/temporal/timepoint/...</code>) - <a href="#docs/timepoint">Timepoint</a></td><td></td></tr>
+  <tr><td>TIMEPOINT</td><td>the timepoint resources - an entity, and a query, as they were at <code>timeAt</code>, read from the TRoE's history (<code>/ngsi-ld/v1/temporal/timepoint/...</code>) - are not built: the three routes go - <a href="#docs/timepoint">Timepoint</a></td><td>about 2.4 KB</td></tr>
   <tr><td>ICU_COLLATION</td><td><b>off by default.</b> On: <code>orderBy</code> on strings by ICU root collation, and <code>collation=&lt;locale&gt;</code>. Off: ASCII sorts the same; punctuation does not sort before digits, a non-ASCII letter sorts by its bytes, <code>collation=</code> is ignored. Needs <code>libicu-dev</code>, and corNgsild built to match (<code>make -C ../corNgsild COR_WITH_ICU=0 di</code>)</td><td>on: +39.2 MiB, three libraries</td></tr>
   <tr><td colspan="3" class="muted">Snapshots</td></tr>
   <tr><td>SNAPSHOT_WRITE</td><td>a write naming a Snapshot (<code>NGSILD-Snapshot</code>) answers 422 - Snapshots are read-only</td><td>under a page</td></tr>
@@ -147,21 +147,25 @@ build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so 
   <tr><td>GEOQ</td><td>a geo-query answers 501; GeoProperties are stored and served as before; GEOS is not linked. Set with <code>coraine-build</code> (or <code>make COR_WITH_GEOQ=0</code>) - <code>CMAKE_FEATURES</code> refuses it</td><td>-3.19 MiB</td></tr>
   <tr><td colspan="3" class="muted">Security</td></tr>
   <tr><td>AUTH</td><td>no <code>--auth</code>, every request let in; <code>fdsc.so</code> not built; <code>AUTH_OIDC</code> and <code>AUTH_METADATA</code> go with it - <a href="#docs/authorization">Authorization</a></td><td>-113 KiB</td></tr>
-  <tr><td>AUTH_OIDC</td><td><code>oidc.so</code> not built</td><td></td></tr>
-  <tr><td>AUTH_METADATA</td><td>no <code>/.well-known/oauth-protected-resource</code></td><td></td></tr>
+  <tr><td>AUTH_OIDC</td><td><code>oidc.so</code> (an OpenID provider's access tokens, their roles reading or writing - <code>--auth oidc</code>) not built; the broker is the same either way. Off by itself when <code>AUTH</code> is</td><td></td></tr>
+  <tr><td>AUTH_METADATA</td><td>no resource metadata (RFC 9728): no <code>GET /.well-known/oauth-protected-resource</code>, no <code>resource_metadata</code> in a 401. Off by itself when <code>AUTH</code> is</td><td>about 1 KB</td></tr>
   <tr><td>POLICY_API</td><td>no <code>--policyApiPort</code>, no <code>/policy</code> API. Off by itself with the built-in HTTP server</td><td>-9 KiB</td></tr>
   <tr><td colspan="3" class="muted">Beyond NGSI-LD</td></tr>
   <tr><td>SERVICE_EXECUTION</td><td>service registrations, executions and executors (ETSI GR CIM-055): 17 routes answer 501</td><td>-169 KiB</td></tr>
-  <tr><td>ADMIN_CONFIG</td><td><code>GET /admin/config</code> answers 501. Off by itself when <code>ADMIN_API</code> is</td><td></td></tr>
-  <tr><td>BRIDGE_HTTP_LISTEN</td><td>the broker serves no port for a bridge plugin (an IoT Agent's southbound port)</td><td></td></tr>
-  <tr><td>DATA_CHANNELS, ASSET_CHANNELS, CHANNEL_STATUS_IN, CHANNEL_CHECKS, CHANNEL_WRITE_BACK, BRIDGE_INVENTORY</td><td>what a bridge plugin may do through the broker, each on its own - <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/building-details.md">building-details.md</a></td><td></td></tr>
+  <tr><td>DATA_CHANNELS</td><td>no DataChannels: a <code>dataChannels</code> section is warned about and ignored, <code>GET /ngsi-ld/v1/dataChannels</code> answers 501, the CKAN bridge is not offered</td><td>-14,720 bytes</td></tr>
+  <tr><td>CHANNEL_STATUS_IN</td><td>no <code>BridgeBroker.channelStatusIn</code> (bridge ABI 12): a Channel the plugin refuses shows the broker's own reason, not the plugin's</td><td>-576 bytes</td></tr>
+  <tr><td>CHANNEL_CHECKS</td><td>no <code>BridgeDriver.payloadCheck</code> (bridge ABI 13): no client write to a mapped attribute is checked by the bridge plugin, and <code>payloadsRefused</code> is not shown</td><td>-5,821 bytes</td></tr>
+  <tr><td>CHANNEL_WRITE_BACK</td><td>no write-back: <code>"channelDirection": "both"</code> is warned about and the channel skipped. Off by itself only when none of the channel switches it serves is on - <code>requiresAny</code></td><td>-25,048 bytes</td></tr>
+  <tr><td>ADMIN_CONFIG</td><td><code>GET /admin/config</code> answers 501. Off by itself when <code>ADMIN_API</code> is</td><td>-1,528 bytes</td></tr>
+  <tr><td>BRIDGE_INVENTORY</td><td><code>GET /admin/bridges/{bridge}/inventory</code> (bridge ABI 14 <code>BridgeDriver.inventory</code>) answers 501. Off by itself when <code>ADMIN_API</code> is</td><td>-1,361 bytes</td></tr>
+  <tr><td>BRIDGE_HTTP_LISTEN</td><td>no <code>BridgeBroker.httpListen</code> (bridge ABI 16): the broker serves no port for a bridge plugin (an IoT Agent's southbound port, a webhook); a plugin that needs one says so in the log</td><td>-43,616 bytes (libmicrohttpd build, corHttp with it)</td></tr>
   <tr><td colspan="3" class="muted">Protocols</td></tr>
   <tr><td>COR_PROTOCOL</td><td>no <code>--corPort</code>; a <code>cor://</code> registration is not forwarded to. The cor format stays - corDB's log is written in it. Set with <code>coraine-build</code> or <code>make COR_WITH_COR_PROTOCOL=0</code>, not a cmake <code>-D</code> alone - <a href="#docs/cor-protocol">cor://</a></td><td>-24 KiB</td></tr>
   <tr><td>TRANSPORTS</td><td>no <code>--transports</code>, <code>ws.so</code> not built - <a href="#docs/websocket">WebSocket</a></td><td>-38 KiB</td></tr>
-  <tr><td>SSE</td><td>no <code>--sseStreams</code>; a subscription on <code>urn:ngsi-ld:self</code> is a 400 - <a href="#docs/sse">Server-Sent Events</a></td><td></td></tr>
+  <tr><td>SSE</td><td>no <code>--sseStreams</code>; a subscription on <code>urn:ngsi-ld:self</code> is a 400 - <a href="#docs/sse">Server-Sent Events</a>. Off by itself when <code>SUBSCRIPTIONS</code> is</td><td>-9,505 bytes</td></tr>
   <tr><td colspan="3" class="muted">Operations</td></tr>
-  <tr><td>ADMIN_API</td><td><code>admin.so</code> not built; <code>METRICS</code> goes with it</td><td>-40 KiB</td></tr>
-  <tr><td>METRICS</td><td>no <code>/admin/metrics</code>, <code>/metrics</code></td><td>-17 KiB</td></tr>
+  <tr><td>ADMIN_API</td><td><code>admin.so</code> not built; <code>METRICS</code>, <code>ADMIN_CONFIG</code> and <code>BRIDGE_INVENTORY</code> go with it</td><td>-40 KiB</td></tr>
+  <tr><td>METRICS</td><td>no <code>/admin/metrics</code>, <code>/metrics</code>. Off by itself when <code>ADMIN_API</code> is</td><td>-17 KiB</td></tr>
   <tr><td>HEALTH</td><td>no <code>--healthPort</code> - <a href="#docs/kubernetes">Kubernetes</a></td><td>-8 KiB</td></tr>
   <tr><td colspan="3" class="muted">Stores and tools</td></tr>
   <tr><td>MONGOC</td><td><code>mongoc.so</code> not built and its libraries not loaded; run <code>--database corDB</code></td><td>-6.8 MiB</td></tr>
@@ -193,7 +197,7 @@ cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP 
   <tr><th></th><th>libmicrohttpd (<code>mhd</code>)</th><th>corHttp (<code>builtin</code>)</th></tr>
   <tr><td>Model</td><td>an internal epoll thread pool (<code>MHD_USE_EPOLL</code>, <code>MHD_OPTION_THREAD_POOL_SIZE</code>)</td><td>edge-triggered epoll loops sharing one port; loop 0 accepts and deals connections out in turn</td></tr>
   <tr><td>Dependencies</td><td>libmicrohttpd 1.0.10 and GnuTLS behind it: nine libraries, 7.29 MiB</td><td>corAlloc and libc - 12 KiB of corHttp, <b>-7.3 MiB</b> against libmicrohttpd</td></tr>
-  <tr><td><code>--httpLoops</code></td><td>accepted, ignored</td><td>the number of loops; <code>0</code> (the default): one per core, at most four</td></tr>
+  <tr><td><code>--httpLoops</code></td><td>not used by the HTTP server; the cor:// listener's loops (at most 16)</td><td>the number of loops, 1-64; <code>0</code> (the default): one per core, at most four - the cor:// listener's too (at most 16)</td></tr>
   <tr><td><code>POLICY_API</code></td><td>yes</td><td>no - its port is a second listener, and corHttp has one</td></tr>
   <tr><td>Profile-guided, tuned</td><td>yes</td><td>not yet</td></tr>
 </table>
@@ -217,13 +221,13 @@ distribution's <code>libmicrohttpd-dev</code> works as well - but 1.0.4 and 1.0.
 <p><code>make pgo</code> (<code>coraine-build --pgo</code>) builds the broker and its libraries instrumented,
 trains them on <code>test/perf/pgoTrain.sh</code> - perfRun's request shapes on corDB in RAM and on disk with
 history, a write that notifies, the three-broker forwarding chain over HTTP and cor:// - and rebuilds them with
-the profile: +1-10&nbsp;% per core against Release, about 6 minutes, with <code>wrk</code>. The image is built
+the profile: +1-10&nbsp;% per core against Release, about 6 minutes; the training needs <code>curl</code> and <code>wrk</code>. The image is built
 this way.</p>
 <p><code>make tune WORKLOAD=my-workload.json</code> (<code>coraine-build --tune</code>) trains on your workload
 instead, and measures two more knobs on it - the memory allocator (glibc's <code>malloc</code>, jemalloc,
 tcmalloc) and <code>--dbLockPrefer reads|writes</code>. About 15 minutes; it writes
 <code>tune-result.json</code>, and the best settings to <code>etc/tune.env</code> in the install;
-<code>make install_pgo</code> installs the result. What it gains, the workload file, and how to run it:
+it needs <code>python3</code> too. <code>make install_pgo</code> installs the result. What it gains, the workload file, and how to run it:
 <a href="#docs/extreme-performance">Extreme performance</a>.</p>
 <div class="g-callout warn">
 <p><b>Measure on a quiet machine.</b> A browser, a build or a video call running beside the training is
