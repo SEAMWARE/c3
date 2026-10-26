@@ -143,28 +143,16 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
 <h2 id="short">Short term</h2>
 <p>Planned for the short term and the next release of the product, in roughly this order:</p>
 <ul>
-  <li><b>Service Execution, following GR CIM-055 as it settles</b> - the status names, the query and discovery
-  parameters.</li>
+  <li><b>c³ - Configure: the DDS mapping tool</b> - DDS topics, services and actions to entities and attributes, in
+  the Control Center: the mapping file the DDS bridge reads, made from the bridge's inventory
+  (<code>/admin/bridges/{bridge}/inventory</code>) (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
   <li><b>WebSocket subscriptions of a crashed instance, under High Availability</b> - each instance's run id and a
   heartbeat in the shared store, so that any instance deletes the WebSocket subscriptions of a run whose heartbeat
   stopped - also when a killed pod never comes back. Without <code>--high-availability</code> a broker deletes them
   when it starts (<a href="#docs/websocket/subscriptions">more</a>).</li>
-  <li><b>Live public transport: a GTFS-realtime bridge, and buses moving in c³</b> - a transit agency's routes (a
-  <code>LineString</code> each), stops and trips from its static GTFS; its vehicles' live positions (GTFS-realtime,
-  Protocol Buffers over HTTP, polled) as <code>Bus</code> entities related to their trip, route and next stop; c³
-  subscribes over its WebSocket and moves each bus on the map as the notifications arrive. First feed: Boston's MBTA,
-  beside the Boston CKAN datasets
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#live-public-transport-gtfs-realtime">more</a>).</li>
   <li><b>c³ Documentation, the rest</b> - a guide per cor-lib with an API reference from its headers, the pages in
   <code>coraine-dev</code> for offline use, and a skeleton repository per kind of plugin (<code>c3 new
   plugin</code>).</li>
-  <li><b>More build diversity, every night</b> - ASan + UBSan, clang, Alpine / musl (<code>-funsigned-char</code>,
-  ARM's <code>char</code>, passed the whole suite).</li>
-  <li><b>corDB history: retention and a selector</b> - history kept for a time or a size, and recording only what it
-  is told to (entities, attributes - subscription-shaped)
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-history-retention-and-a-selector">more</a>).</li>
-  <li><b>More bridges</b> - Kafka, WebSockets, OPC UA on the Bridge/Channel seam
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#more-bridges">more</a>).</li>
   <li><b>Subordinate subscriptions on registration change</b> - § 10.5.2.4 for <code>PATCH</code> too
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#subordinate-subscriptions-on-registration-change">more</a>).</li>
 </ul>
@@ -173,9 +161,19 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
 <h2 id="medium">Medium term</h2>
 <p>Proposed for the medium term, typically within the subsequent releases of the next <b>9 months</b>:</p>
 <ul>
-  <li><b>c³ - Configure</b> - the mapping tools in the Control Center: DDS topics, services and actions to entities and
-  attributes, and the same for OPC UA
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>c³ - Configure: the OPC UA mapping tool</b> - OPC UA variables, monitored items and methods to entities and
+  attributes, as for DDS (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>Live public transport: a GTFS-realtime bridge, and buses moving in c³</b> - a transit agency's routes (a
+  <code>LineString</code> each), stops and trips from its static GTFS; its vehicles' live positions (GTFS-realtime,
+  Protocol Buffers over HTTP, polled) as <code>Bus</code> entities related to their trip, route and next stop; c³
+  subscribes over its WebSocket and moves each bus on the map as the notifications arrive. First feed: Boston's MBTA,
+  beside the Boston CKAN datasets
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#live-public-transport-gtfs-realtime">more</a>).</li>
+  <li><b>corDB history: retention and a selector</b> - history kept for a time or a size, and recording only what it
+  is told to (entities, attributes - subscription-shaped); after ETSI has decided on it
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-history-retention-and-a-selector">more</a>).</li>
+  <li><b>More bridges</b> - Kafka, one standard binding across the brokers that have one, on the Bridge/Channel seam
+  that carries DDS, MQTT, Modbus, OPC UA and CKAN (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#more-bridges">more</a>).</li>
   <li><b>The IoT Agents as cor-agent plugins, released</b> - the six prototypes (JSON, UltraLight, LWM2M, LoRaWAN,
   Sigfox, ISOXML; OPC UA is the OPC UA bridge) brought to parity with the FIWARE IoT Agents and released; one binary or
   two tiers (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#the-iot-agents-as-cor-agent-plugins">more</a>).</li>
@@ -245,8 +243,18 @@ involved.</p>
   disk or object storage), compressed and columnar, queried through embedded DuckDB: cheap storage for years of
   history and fast wide aggregations. Recent history, and its ingest, stay in the hot store. Not for current
   state.</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h2 id="continuous">Continuous</h2>
+<p>Work that is never finished: kept up as the specifications, the platforms and the code move.</p>
+<ul>
+  <li><b>Service Execution, following GR CIM-055 as it settles</b> - the status names, the query and discovery
+  parameters.</li>
   <li><b>Continuous ETSI conformance</b> - 100&nbsp;% kept as the specification evolves
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#continuous-etsi-conformance">more</a>).</li>
+  <li><b>Build diversity, every night</b> - ASan + UBSan, clang, Alpine / musl (<code>-funsigned-char</code>,
+  ARM's <code>char</code>, passed the whole suite).</li>
   <li><b>Broader performance regression coverage</b> - more scenarios, nightly
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#broader-performance-regression-coverage">more</a>).</li>
 </ul>
