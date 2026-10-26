@@ -1,0 +1,2556 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/options.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>Command-line options</h1>
+<p class="lead">Every option of the broker, of each plugin that adds options, and of the two programs beside it -
+<code>coraine-import</code> and <code>coraine-build</code>: its short form, environment variable, type, default and
+values, where it comes from, what it does, what it needs and excludes, and an example. The running broker, its log and
+its admin API: <a href="#docs/administration">Administration</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 id="reading">Reading an entry</h2>
+<p>Each entry is headed by the long name. The table under it: the short name, the environment variable and the type;
+the default; the values; and where the option comes from - <code>core</code> (the broker itself) or a plugin. Then
+what it does, what it needs and excludes, and an example. The source of this guide is coraine's
+<code>doc/options.md</code>, which the functest <code>options_documented.test</code> holds to the binary: it fails when
+an option has no entry there, or an entry has no option.</p>
+<p><b>Three ways to set an option</b>, the first found wins:</p>
+<ul>
+  <li>the command line - <code>--port 1026</code> or <code>-p 1026</code>;</li>
+  <li>the environment variable - <code>CORAINE_PORT=1026</code>. Every option has one: <code>CORAINE_</code> and the long
+  name in capitals (<code>--pretty-print</code> is <code>CORAINE_PRETTY_PRINT</code>);</li>
+  <li>the default.</li>
+</ul>
+<p>A Bool environment variable is on for <code>true</code> (any case) only. A password-like option
+(<code>--dbPwd</code>, <code>--troePwd</code>) is best given as its variable: it then appears in no process list.</p>
+<p><b>What a broker runs with.</b> <code>coraine -u</code> lists the options with their descriptions,
+<code>coraine -U</code> with their variable, type and default; a plugin's options are listed when the plugin is named
+on the same command line (<code>coraine -u --database corDB --auth oidc</code>). A running broker answers
+<code>GET /admin/config</code> with every option it runs with, a secret masked.</p>
+<p><b>A plugin's options are separate</b> - each plugin has a part of its own below, after the broker's own options,
+and its options are also documented with the plugin. An option of a plugin that is not loaded is an unknown option.</p>
+
+<table class="gtable">
+  <tr><th>Part</th><th>Options</th></tr>
+  <tr><td colspan="2"><b>The broker</b></td></tr>
+  <tr><td><a href="#docs/options" data-scroll="program">The program</a></td><td>12</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="listening">Listening</a></td><td>12</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="limits">Limits and memory</a></td><td>7</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="corhttp">Built-in HTTP server (corHttp)</a></td><td>1</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="mhd">libmicrohttpd HTTP server (the default build)</a></td><td>1</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="contexts">@contexts</a></td><td>2</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="notifications">Subscriptions and notifications</a></td><td>3</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="distributed-ops">Distributed operations</a></td><td>5</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="ha">High availability</a></td><td>1</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="bridge-options">Bridges</a></td><td>5</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="stores">The database and the history - choosing the plugins</a></td><td>4</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="auth-plugin">Choosing the auth plugin</a></td><td>1</td></tr>
+  <tr><td colspan="2"><b>The plugins</b></td></tr>
+  <tr><td><a href="#docs/options" data-scroll="mongoc">mongoc</a> - <code>--database mongoc</code> (the default)</td><td>9</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="cordb">corDB</a> - <code>--database corDB</code> (ramDB: two of them)</td><td>8</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="timescale">timescale</a> - <code>--troe timescale</code></td><td>12</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="oidc">oidc</a> - <code>--auth oidc</code></td><td>13</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="fdsc">fdsc</a> - <code>--auth fdsc</code></td><td>13</td></tr>
+  <tr><td colspan="2"><b>The programs beside the broker</b></td></tr>
+  <tr><td><a href="#docs/options" data-scroll="coraine-import">coraine-import</a></td><td>18 (9 of them mongoc's)</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="coraine-build">coraine-build</a></td><td>13</td></tr>
+</table>
+
+<!-- ======================================================================= -->
+<h2 id="program">The program</h2>
+<p>What the binary says about itself, what it writes to its log, and the few switches that change how every response
+is rendered. The log goes to standard output, one line per message, each line starting with its class: <code>X</code>
+(fatal, the broker exits), <code>E</code> (error), <code>W</code> (warning), <code>I</code> (info), <code>V</code>
+(verbose), <code>D</code> (debug), <code>T</code> (trace). <code>E</code>, <code>W</code> and <code>X</code> lines are
+always written; the others only when switched on. Standard output is the default; <code>--logTo</code> and
+<code>--logDir</code> put the log in a file instead, or as well.</p>
+
+<h3 id="usage"><code>--usage</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-u</code> · no environment variable · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
+</table>
+<p>Prints every option, one per line as <code>[--long/-short &lt;description&gt;]</code>, and exits with 0. A Bool
+option shows its description in <code>( )</code>, an option with a value in <code>&lt; &gt;</code>. The list includes
+the options of the plugins named on the same command line (<code>--database</code>, <code>--troe</code>,
+<code>--apiPlugins</code>, <code>--bridges</code>, <code>--auth</code>), each plugin's under a line of its own
+(<code>Database (corDB) plugin options:</code>), and ends with the plugin directory. Without <code>--database</code>
+the list shows the options of the default store, <code>mongoc</code>. For <code>--apiPlugins</code>,
+<code>--bridges</code> and <code>--auth</code> the description is the list of the plugins installed in the plugin
+directory.</p>
+<p>The other options are checked first: a value out of range ends the program with 1 and its error, not with the
+list.</p>
+<pre>coraine -u -db corDB      <span class="c"># the core options, then "Database (corDB) plugin options:" --dbDir, --dbSync, ...</span></pre>
+
+<h3 id="usage-table"><code>--Usage</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-U</code> · no environment variable · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
+</table>
+<p>Prints every option as a table and exits with 0. The columns: the long name, the short name, the environment
+variable, <code>Optional</code>, the type (<code>Bool</code>, <code>String</code>, <code>Int</code>,
+<code>UInt</code>, <code>UShort</code>), and where the value in force came from (<code>Default Value</code>,
+<code>Short Option</code>, ...). The default value itself is not in the table. As with <code>--usage</code>, the
+plugins named on the same command line add their options.</p>
+<pre>coraine -U -db corDB      <span class="c"># ... --dbDir (-dbDir) CORAINE_DBDIR Optional String Default Value</span></pre>
+
+<h3 id="version"><code>--version</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-V</code> · <code>CORAINE_VERSION</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Prints three lines and exits with 0: the program and its version, <code>features:</code> with every compile-time
+feature of this binary as <code>NAME=1</code> (in the build) or <code>NAME=0</code> (left out), and
+<code>httpServer:</code> with the HTTP server it was built with (<code>mhd</code> - libmicrohttpd, or
+<code>builtin</code> - corHttp). It is answered before any plugin is loaded and before any other option is read, so it
+works on an installation with a broken or missing plugin directory, and nothing else on the command line is
+checked.</p>
+<p>It is read from the command line only: <code>CORAINE_VERSION</code> is listed by <code>-U</code>, and setting it
+does nothing - the broker starts.</p>
+<pre>coraine -V
+<span class="c"># coraine 0.6.0-dev</span>
+<span class="c"># features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 ... ICU_COLLATION=0 ...</span>
+<span class="c"># httpServer: mhd</span></pre>
+
+<h3 id="verbose"><code>--verbose</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-v</code> · <code>CORAINE_VERBOSE</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case), off for any other value</td></tr>
+  <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
+</table>
+<p>Turns on the <code>V</code> (verbose) and the <code>I</code> (info) lines of the log: the version at start, the
+advertised HTTP endpoint and where it came from, the memory budget, the response-size budget, the EntityMap memory,
+the plugins loaded, <code>coraine running on port &lt;port&gt;</code>, and one line per request (<code>Request: GET
+/ngsi-ld/v1/entities/...</code>). Without it a broker that has no error to report writes nothing. With the
+<code>admin</code> API plugin it can be switched at run time (<code>/admin/log</code>).</p>
+<pre>coraine -v -db corDB
+<span class="c"># V: 000000.000: coraine.c[1856]: main: coraine  0.6.0-dev</span>
+<span class="c"># I: 000000.000: coraine.c[1857]: main: Advertised HTTP endpoint: http://192.168.1.138:1026 (auto-detected LAN IP)</span>
+<span class="c"># ...</span>
+<span class="c"># I: 000000.020: coraine.c[2280]: main: coraine running on port 1026</span></pre>
+
+<h3 id="debug"><code>--debug</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-d</code> · <code>CORAINE_DEBUG</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core (the option library, corArgs)</td></tr>
+</table>
+<p>Turns on the <code>D</code> (debug) lines of the log. Neither the broker, its plugins nor its libraries write any
+<code>D</code> line today, so it adds nothing to the log. With the <code>admin</code> API plugin it can be switched at
+run time (<code>/admin/log</code>).</p>
+
+<h3 id="traceLevels"><code>--traceLevels</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-t</code> · <code>CORAINE_TRACELEVELS</code> · String</td></tr>
+  <tr><th>Default</th><td>none - no trace line is written</td></tr>
+  <tr><th>Values</th><td>a comma-separated list of levels and ranges, <code>403</code>, <code>220-226,403</code>; levels 0-3199</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Turns on the <code>T</code> (trace) lines of the levels named. Each line ends with its level, <code>(T-403)</code>.
+A level belongs to the code that writes it:</p>
+<table class="gtable">
+  <tr><th>Levels</th><th>Code</th><th>Defined in</th></tr>
+  <tr><td>50-66</td><td>the JSON parser and tree (corJson, corTree)</td><td><code>corJsonTraceLevels.h</code>, <code>corTreeTraceLevels.h</code></td></tr>
+  <tr><td>100-199</td><td>the REST layer (corRest) and the JSON-LD library (corJsonld, 150 on)</td><td><code>corRestTraceLevels.h</code>, <code>corLdTraceLevels.h</code></td></tr>
+  <tr><td>200-399</td><td>the NGSI-LD library (corNgsild): validation, forwarding (220-226), notifications (230-239), ...</td><td><code>ldTraceLevels.h</code></td></tr>
+  <tr><td>400-404</td><td>the broker: 400 forwarded requests, 401 cache sync between instances (<code>--high-availability</code>), 402 bridges, 403 Service Execution, 404 the SQL of a TRoE entity selector</td><td><code>src/app/coraine/coraineTraceLevels.h</code></td></tr>
+</table>
+<p>Traces exist in a debug build only. A release build has them compiled out: the option is accepted, turns on
+nothing, and the broker says so at start (<code>--traceLevels 403: this broker is a release build, its traces are
+compiled out - nothing to turn on</code>). A trace level turns on the trace lines and nothing else - not the
+<code>V</code> and <code>I</code> lines of <code>--verbose</code>. With the <code>admin</code> API plugin the levels
+can be changed at run time (<code>/admin/log</code>). <a href="#docs/building">Building from source</a> says which
+builds have traces.</p>
+<pre>coraine -db corDB -t 403
+<span class="c"># T: 000000.000: seCoreTerms.c[72]: seCoreTermsAdd: 27 Service Execution terms added to the core context (T-403)</span></pre>
+
+<h3 id="foreground"><code>--foreground</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fg</code> · <code>CORAINE_FOREGROUND</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (off)</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case)</td></tr>
+  <tr><th>Deprecated</th><td>accepted through 0.7.x, refused from 0.8.0, not listed by <code>-u</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Does nothing: the broker runs in the foreground by default. A broker started with it, or with
+<code>CORAINE_FOREGROUND=true</code>, writes one warning line at start and runs as it would without it:</p>
+<pre>W: 000000.000: coraine.c[&lt;line&gt;]: main: -fg: the broker runs in the foreground by default now - the option is refused from 0.8.0</pre>
+<p>With <code>--daemon</code> it is refused at start, exit code 1: <code>coraine: --daemon and -fg contradict each
+other</code>. Drop it from scripts and units: from 0.8.0 the broker does not start with it.</p>
+<pre>coraine -fg -db corDB     <span class="c"># the same as: coraine -db corDB, plus the warning line</span></pre>
+
+<h3 id="daemon"><code>--daemon</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-bg</code> · <code>CORAINE_DAEMON</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (the foreground)</td></tr>
+  <tr><th>Values</th><td>a switch; the environment variable is on for <code>true</code> (any case), off for any other value (<code>1</code> included)</td></tr>
+  <tr><th>Needs</th><td><code>--logTo file</code></td></tr>
+  <tr><th>Excludes</th><td><code>--logTo stdout</code> (the default), <code>--logTo both</code>, <code>--foreground</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Runs the broker in the background: it detaches from the terminal - <code>fork</code> (the command returns 0 at
+once; the child is the broker), <code>setsid</code> (a session of its own, no controlling terminal), <code>chdir
+/</code>, stdin, stdout and stderr on <code>/dev/null</code>. It happens after the options are checked and the log
+file is opened, so a refused combination or a log file that cannot be opened is still said on the terminal; a start-up
+error after it - a port in use, a store that cannot be opened - is in the log file only, and the exit code 0 of the
+command meant detached, not serving. A relative path is relative to <code>/</code> afterwards (<code>--dbDir db</code>
+is <code>/db</code>); <code>--logDir</code> is opened before.</p>
+<p>There is no pid file. The log names the pid, on a line written with or without <code>--verbose</code>: <code>I:
+000000.000: coraine.c[&lt;line&gt;]: main: --daemon: detached, pid 236587</code>. SIGTERM or SIGINT stop it in order,
+as in the foreground; SIGHUP is not handled and ends it without that.</p>
+<p>With <code>--logTo stdout</code> or <code>both</code> it does not start, exit code 1: <code>coraine: --daemon with
+--logTo stdout: a daemon's stdout is /dev/null - use --logTo file</code>. Not for a container (the process that
+detaches is the container's main process) nor for a systemd unit of <code>Type=simple</code> (the package's) - a unit
+of <code>Type=forking</code> runs it. <a href="#docs/administration/running">Administration - Foreground or daemon</a>
+has the whole picture.</p>
+<pre>coraine --daemon --logTo file --logDir ~/coraine-log --database corDB --dbDir ~/coraine-db
+grep -- '--daemon: detached' ~/coraine-log/coraine.log      <span class="c"># the pid</span></pre>
+
+<h3 id="logTo"><code>--logTo</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-logTo</code> · <code>CORAINE_LOGTO</code> · String</td></tr>
+  <tr><th>Default</th><td><code>stdout</code></td></tr>
+  <tr><th>Values</th><td><code>stdout</code>, <code>file</code>, <code>both</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Where the log goes: <code>stdout</code> - standard output, what a terminal, <code>docker logs</code> and the
+journal show; <code>file</code> - the file <code>&lt;logDir&gt;/coraine.log</code> only (<code>--logDir</code>);
+<code>both</code> - each line in the file and on stdout. Any other value is refused at start, exit code 1:
+<code>coraine: --logTo 'syslog' is none of stdout, file, both</code>. With <code>--daemon</code> only
+<code>file</code> is accepted.</p>
+<p>The file is not reopened while the broker runs (no SIGHUP handler); it is written in append mode, so logrotate's
+<code>copytruncate</code> rotates it.</p>
+<pre>coraine -db corDB --logTo both --logDir .      <span class="c"># the log on the terminal and in ./coraine.log</span></pre>
+
+<h3 id="logDir"><code>--logDir</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-logDir</code> · <code>CORAINE_LOGDIR</code> · String</td></tr>
+  <tr><th>Default</th><td><code>/var/log/coraine</code></td></tr>
+  <tr><th>Values</th><td>a directory</td></tr>
+  <tr><th>Needs</th><td><code>--logTo file</code> or <code>both</code> (read only then)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The directory of the log file, <code>&lt;logDir&gt;/coraine.log</code>. It is not created: it must exist and be
+writable by the broker's user, else the broker does not start - exit code 1, and on stderr <code>Unable to open
+'/var/log/coraine/coraine.log' for writing: No such file or directory</code>. A <code>coraine.log</code> already there
+is renamed <code>coraine.log.old</code> (an earlier <code>.old</code> is replaced), and the new file starts empty. The
+file is created <code>0664</code> minus the umask (<code>-rw-r--r--</code> under umask 022).</p>
+<pre>sudo install -d -o coraine -g coraine -m 0755 /var/log/coraine
+coraine -db corDB --logTo file      <span class="c"># the log in /var/log/coraine/coraine.log</span></pre>
+
+<h3 id="pretty-print"><code>--pretty-print</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-pp</code> · <code>CORAINE_PRETTY_PRINT</code> · UInt</td></tr>
+  <tr><th>Default</th><td><code>0</code> (compact JSON)</td></tr>
+  <tr><th>Values</th><td>0-16</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The indentation, in spaces, of every JSON response body. 0 renders it on one line, with no whitespace - the
+smallest and fastest. A request overrides it for its own response with the URL parameter <code>?pretty=N</code>
+(<code>?pretty=0</code>: compact). A value over 16 is refused at start: <code>coraine: value 17 for option
+'--pretty-print' exceeds its upper limit. Allowed range: 0-16</code>.</p>
+<pre>coraine -db corDB -pp 2
+curl 'localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:T:1'            <span class="c"># indented by 2</span>
+curl 'localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:T:1?pretty=0'   <span class="c"># {"id":"urn:ngsi-ld:T:1","type":"T",...}</span></pre>
+
+<h3 id="high-precision"><code>--high-precision</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-hp</code> · <code>CORAINE_HIGH_PRECISION</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (6 fractional digits - microseconds)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Renders the DateTime values <code>createdAt</code>, <code>modifiedAt</code>, <code>observedAt</code> and
+<code>expiresAt</code> with 9 fractional digits (nanoseconds) instead of 6 (microseconds). The broker keeps every
+timestamp to the nanosecond either way; the option changes the rendering only, so it can be turned on or off on an
+existing store. 6 digits is the precision NGSI-LD gives (§ 5.2.2.4). An <code>observedAt</code> a client sent with 9
+digits is answered with 6 without the option and as it was sent with it.</p>
+<pre>coraine -db corDB -hp
+curl 'localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:T:1?options=sysAttrs'
+<span class="c"># ... "createdAt": "2026-10-25T19:46:07.644495761Z" ...   (without -hp: "2026-10-25T19:46:07.644495Z")</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="listening">Listening</h2>
+<p>The ports the broker listens on, and what it says about itself to others. The NGSI-LD API is on
+<code>--port</code>; each of the other ports - cor://, the health probes, the policy API - is off until its option
+gives it a port, and each serves only its own requests. A port that cannot be opened stops the broker at start, with
+exit code 1.</p>
+
+<h3 id="port"><code>--port</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-p</code> · <code>CORAINE_PORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>1026</code></td></tr>
+  <tr><th>Values</th><td>1-65535</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The TCP port of the HTTP server: the NGSI-LD API, <code>/version</code>, the API plugins' paths
+(<code>/admin/...</code>), and the WebSocket upgrade (<code>--transports ws</code>). It listens on every IPv4 address
+of the machine. 1026 is the port NGSI-LD brokers use by convention. A port another process holds stops the broker:
+<code>X: ... main: corRestStart failed on port 1026</code> (libmicrohttpd's own line before it: <code>corRestInit:
+MHD_start_daemon failed on port 1026</code>).</p>
+<pre>coraine -db corDB -p 1027</pre>
+
+<h3 id="httpEndpoint"><code>--httpEndpoint</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-he</code> · <code>CORAINE_HTTPENDPOINT</code> · String</td></tr>
+  <tr><th>Default</th><td><code>http://&lt;the LAN address found&gt;:&lt;port&gt;</code>, else <code>http://localhost:&lt;port&gt;</code></td></tr>
+  <tr><th>Values</th><td>a base URL, <code>http://broker.example.com:1026</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The base URL other hosts reach this broker at. It is not checked or parsed: it is written, as it is, into what the
+broker hands out for others to call back - the <code>Link</code> header of a forwarded request, the notification
+endpoint of the subscriptions it makes at Context Sources (distributed subscriptions, § 5.8.1.4), and the URLs of the
+<code>@context</code> documents it hosts (the default user context of <code>--defaultUserContext</code> among
+them).</p>
+<p>Without it the broker picks an IPv4 address of its own interfaces: an interface that is up, has a carrier, is not
+loopback, not point-to-point (a VPN tunnel) and not a /32 address; preferring physical-looking names
+(<code>en*</code>, <code>eth*</code>, <code>wl*</code>, <code>em*</code>) and private ranges (10/8, 172.16/12,
+192.168/16), and taking container and virtual interfaces (<code>docker*</code>, <code>veth*</code>, <code>br-*</code>,
+<code>tun*</code>, <code>wg*</code>, <code>tailscale*</code>, ...) only when there is nothing else. With no usable
+interface the endpoint is <code>http://localhost:&lt;port&gt;</code>. Behind a proxy, a NAT or a Kubernetes Service,
+the detected address is not the one peers reach: give the option. <code>-v</code> says which endpoint is in force and
+where it came from.</p>
+<p>The authority of the endpoint (<code>host:port</code>) is also the default of <code>--csourceAlias</code>, the name
+the broker gives itself in <code>Via</code> headers.</p>
+<pre>coraine -db corDB -v --httpEndpoint http://broker.example.com:1026
+<span class="c"># I: ... main: Advertised HTTP endpoint: http://broker.example.com:1026 (--httpEndpoint)</span></pre>
+
+<h3 id="corPort"><code>--corPort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-corPort</code> · <code>CORAINE_CORPORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>0</code> (off - no cor:// listener)</td></tr>
+  <tr><th>Values</th><td>0-65535</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_COR_PROTOCOL</code></td></tr>
+</table>
+<p>The TCP port of the cor:// listener: the same API as the HTTP port, in the binary cor format (<a
+href="#docs/cor-protocol">The cor format and cor://</a>). It listens on every address, IPv6 and IPv4, and opens after
+the HTTP port, once every service is registered. It runs <code>--httpLoops</code> event loops (at least 1, at most
+16), on either HTTP server build. A port that cannot be opened stops the broker: <code>cor:// cannot listen on port
+7000: Address already in use</code>, then <code>cannot listen for cor:// on port 7000</code>.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_COR_PROTOCOL=OFF</code> leaves it out, and the option with it.</p>
+<pre>coraine -db corDB -v --corPort 7000
+<span class="c"># V: ... corRestCorListen: cor:// listening on port 7000, 4 event loops</span></pre>
+
+<h3 id="transports"><code>--transports</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-transports</code> · <code>CORAINE_TRANSPORTS</code> · String</td></tr>
+  <tr><th>Default</th><td>none - no transport plugin, <code>GET /ngsi-ld/v1/ws</code> is not upgraded</td></tr>
+  <tr><th>Values</th><td>a comma-separated list of transport plugins, at most 4: <code>ws</code>; a short name or a path to the <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>core (loads <code>&lt;plugin dir&gt;/transport/&lt;name&gt;.so</code>)</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_TRANSPORTS</code></td></tr>
+</table>
+<p>Transport plugins carry the broker's API over another protocol. <code>ws</code> is the WebSocket: the HTTP port
+upgrades <code>GET /ngsi-ld/v1/ws</code> to a WebSocket, which takes every request the HTTP API takes, and the
+subscriptions made over it notify on it (<a href="#docs/websocket">WebSocket</a>). Both HTTP servers serve it. A
+plugin that cannot be loaded or started stops the broker: <code>transport plugin 'nope'
+(/opt/seamware/plugins/transport/nope.so): not found</code>.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_TRANSPORTS=OFF</code> leaves it out, and the option with it.</p>
+<pre>coraine -db corDB --transports ws
+curl -i localhost:1026/ngsi-ld/v1/ws -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+     -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='
+<span class="c"># HTTP/1.1 101 Switching Protocols, then {"metadata":{"connection":"urn:ngsi-ld:WebSocket:446715eee556c76b-1"}}</span></pre>
+
+<h3 id="sseStreams"><code>--sseStreams</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-sseStreams</code> · <code>CORAINE_SSESTREAMS</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>1000</code></td></tr>
+  <tr><th>Values</th><td>0-1000000</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_SSE</code></td></tr>
+</table>
+<p>The most Server-Sent Events streams open at a time. A stream is a subscription made with
+<code>notification.endpoint.uri</code> <code>urn:ngsi-ld:self</code>: its <code>201</code> is the stream, an open
+connection for as long as the subscription lives (<a href="#docs/sse">Server-Sent Events</a>). The create that would
+pass the cap is refused with 503 <code>InternalError</code>, detail <code>the broker serves as many event streams as
+it may (--sseStreams)</code>. 0 refuses every stream. Each open stream is a connection the HTTP server holds; the cap
+keeps their number bounded.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_SSE=OFF</code> leaves event streams out, and the option with them.</p>
+<pre>coraine -db corDB --sseStreams 0
+curl -i -X POST localhost:1026/ngsi-ld/v1/subscriptions -H 'Content-Type: application/json' \
+     -d '{"type":"Subscription","entities":[{"type":"T"}],"notification":{"endpoint":{"uri":"urn:ngsi-ld:self"}}}'
+<span class="c"># HTTP/1.1 503 Service Unavailable</span></pre>
+
+<h3 id="corsOrigin"><code>--corsOrigin</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-corsOrigin</code> · <code>CORAINE_CORSORIGIN</code> · String</td></tr>
+  <tr><th>Default</th><td>none - no CORS headers</td></tr>
+  <tr><th>Values</th><td>an origin, <code>https://app.example.com</code>, or <code>__ALL</code> for any origin (<code>*</code>)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Turns CORS on, for browsers calling the broker from a page of another origin. Every response then has
+<code>Access-Control-Allow-Origin: &lt;the origin&gt;</code> (<code>*</code> for <code>__ALL</code>) and
+<code>Access-Control-Expose-Headers: Location, NGSILD-Results-Count, Link, NGSILD-Tenant, NGSILD-Warning,
+Service-Execution</code>. A preflight (<code>OPTIONS</code>, answered 204 on every path) also has
+<code>Access-Control-Allow-Methods</code> (the methods of the path), <code>Access-Control-Allow-Headers: Content-Type,
+Accept, Link, NGSILD-Tenant, NGSILD-Path, Authorization, Service-Execution</code> and
+<code>Access-Control-Max-Age</code> (<code>--corsMaxAge</code>). The value is one origin; the request's
+<code>Origin</code> header is not compared with it.</p>
+<p>The policy API port (<code>--policyApiPort</code>) sends the same headers.</p>
+<pre>coraine -db corDB --corsOrigin __ALL --corsMaxAge 600
+curl -i -X OPTIONS localhost:1026/ngsi-ld/v1/entities -H 'Origin: http://a.example' -H 'Access-Control-Request-Method: POST'
+<span class="c"># HTTP/1.1 204 No Content</span>
+<span class="c"># Access-Control-Allow-Origin: *</span>
+<span class="c"># Access-Control-Allow-Methods: GET, POST, DELETE, HEAD, OPTIONS</span>
+<span class="c"># Access-Control-Max-Age: 600</span></pre>
+
+<h3 id="corsMaxAge"><code>--corsMaxAge</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-corsMaxAge</code> · <code>CORAINE_CORSMAXAGE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>86400</code> (one day)</td></tr>
+  <tr><th>Values</th><td>0-864000 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The <code>Access-Control-Max-Age</code> of a preflight answer: how many seconds a browser may reuse it before it
+asks again. 0 leaves the header out (the browser's own default applies). It has no effect without
+<code>--corsOrigin</code>.</p>
+
+<h3 id="healthPort"><code>--healthPort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-healthPort</code> · <code>CORAINE_HEALTHPORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>0</code> (off - no health port)</td></tr>
+  <tr><th>Values</th><td>0-65535</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_HEALTH</code></td></tr>
+</table>
+<p>A TCP port for the health probes, served by a thread of its own, outside the HTTP server - a probe never waits
+behind the requests. <code>GET /live</code>: 200 while the broker makes progress, 503 when it is stuck
+(<code>--healthStallTimeout</code>). <code>GET /ready</code>: 200 once the broker serves, 503 while the store loads,
+when the store does not answer, over the memory budget, stuck, or stopping. Every answer carries a JSON report (store,
+TRoE, memory, requests). It listens on every address and opens before the store is loaded, so <code>/live</code>
+answers during a long load. A port that cannot be opened stops the broker: <code>cannot listen for the health probes
+on port 8080</code>. The probes and the report: <a href="#docs/administration/health">Health port</a>; on Kubernetes:
+<a href="#docs/kubernetes/probes">Kubernetes</a>.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_HEALTH=OFF</code> leaves it out, and the option with it.</p>
+<pre>coraine -db corDB --healthPort 8080
+curl localhost:8080/live
+<span class="c"># {"status":"ok","uptime":1,"store":{"plugin":"corDB","loaded":true,"reachable":true},...}</span></pre>
+
+<h3 id="healthStallTimeout"><code>--healthStallTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-healthStallTimeout</code> · <code>CORAINE_HEALTHSTALLTIMEOUT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>30</code></td></tr>
+  <tr><th>Values</th><td>1-3600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_HEALTH</code></td></tr>
+</table>
+<p>How long a request may be in flight, with no request finishing in that time, before <code>GET /live</code> on the
+health port answers 503 (and <code>/ready</code> with it). A broker with nothing to do is never stuck: it takes a
+request in flight. Memory and the database never make <code>/live</code> fail. Set it above the longest request the
+deployment expects - a large query, a forward to a slow Context Source (<code>--distOpTimeout</code>) - or an
+orchestrator restarts a broker that is only busy. It has no effect without <code>--healthPort</code>.</p>
+<pre>coraine -db corDB --healthPort 8080 --healthStallTimeout 120</pre>
+
+<h3 id="policyApiPort"><code>--policyApiPort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-policyApiPort</code> · <code>CORAINE_POLICYAPIPORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>0</code> (off - no policy API)</td></tr>
+  <tr><th>Values</th><td>0-65535</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_POLICY_API</code>, libmicrohttpd builds only</td></tr>
+</table>
+<p>A TCP port serving the ODRL-PAP's <code>/policy</code> API: <code>GET /policy</code> and <code>POST /policy</code>;
+<code>PUT</code>, <code>GET</code> and <code>DELETE /policy/{id}</code>; <code>GET</code> and <code>DELETE
+/policy/odrl/{uid}</code>. The policies are documents of the default tenant's collection <code>odrlPolicies</code> in
+the broker's store, and outlive the broker with a persistent store. <code>fdsc.so</code> reads them as it reads the
+PAP's, with <code>--fdscPap http://127.0.0.1:&lt;port&gt;</code> (<a
+href="#docs/authorization/policy-api">Authorization § 7</a>).</p>
+<p><b>The port has no authentication</b> - as the PAP has none - and the auth plugin is not asked for its requests:
+whoever reaches it can change every policy. <code>--policyApiHost</code> keeps it to this machine by default. The
+NGSI-LD API is not served on it, and <code>/policy</code> is not served on <code>--port</code>.</p>
+<p>It needs a store that holds documents (corDB, ramDB, mongoc), else the broker stops: <code>--policyApiPort: the
+store has no documents (DbDriver.doc*)</code>. A port that cannot be opened stops the broker: <code>cannot serve the
+policy API on 127.0.0.1 port 8090</code>. It is a second HTTP listener, which only libmicrohttpd has: a build with the
+built-in HTTP server leaves the policy API out, and the option with it. <code>-DCOR_FEATURE_POLICY_API=OFF</code>
+leaves it out too.</p>
+<pre>coraine -db corDB --policyApiPort 8090
+curl -i -X POST localhost:8090/policy -H 'Content-Type: application/json' \
+     -d '{"odrl:uid":"https://example.org/p1","@type":"odrl:Policy"}'
+<span class="c"># HTTP/1.1 200 OK, Location: asgzhoiaoz</span>
+curl localhost:8090/policy
+<span class="c"># [{"id":"asgzhoiaoz","odrl:uid":"https://example.org/p1","odrl":"{\"odrl:uid\":...}"}]</span></pre>
+
+<h3 id="policyApiHost"><code>--policyApiHost</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-policyApiHost</code> · <code>CORAINE_POLICYAPIHOST</code> · String</td></tr>
+  <tr><th>Default</th><td><code>127.0.0.1</code> (this machine only)</td></tr>
+  <tr><th>Values</th><td>an IP address or a host name (resolved at start)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_POLICY_API</code>, libmicrohttpd builds only</td></tr>
+</table>
+<p>The address the policy API (<code>--policyApiPort</code>) listens on. The default lets in only processes on the
+same machine - the port has no authentication. In Kubernetes, where the writer of the policies (contract management)
+is another pod, it is an address of the pod, with a Service of its own for the port and a NetworkPolicy that lets in
+only that writer. A name that does not resolve stops the broker: <code>corRestListen: 'no.such.host': Name or service
+not known</code>, then <code>cannot serve the policy API on no.such.host port 8090</code>. It has no effect without
+<code>--policyApiPort</code>.</p>
+<pre>coraine -db corDB --policyApiPort 8090 --policyApiHost 0.0.0.0</pre>
+
+<h3 id="apiPlugins"><code>--apiPlugins</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-api</code> · <code>CORAINE_APIPLUGINS</code> · String</td></tr>
+  <tr><th>Default</th><td>none - no API plugin, no <code>/admin</code> paths</td></tr>
+  <tr><th>Values</th><td>a comma-separated list of API plugins, at most 16: <code>admin</code>; a short name or a path to the <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>core (loads <code>&lt;plugin dir&gt;/api/&lt;name&gt;.so</code>)</td></tr>
+</table>
+<p>API plugins add HTTP paths of their own next to the NGSI-LD API, on <code>--port</code>. <code>admin</code> serves
+<code>/admin/version</code>, <code>/admin/health</code>, <code>/admin/config</code> (every option with its value, its
+default and where it came from, a secret masked), <code>/admin/log</code> (<code>--verbose</code>,
+<code>--debug</code>, <code>--traceLevels</code> at run time), <code>/admin/metrics</code>,
+<code>/admin/tenants</code>, <code>/admin/plugins</code>, <code>/admin/subStats/flush</code>,
+<code>/admin/indexes</code>, <code>/admin/troeIndexes</code>, <code>/admin/troe/dump</code> and
+<code>/admin/bridges/{bridge}/inventory</code> (<a href="#docs/plugin-architecture">Plugin architecture</a>). A plugin
+that cannot be loaded stops the broker, with the usage after the error: <code>API plugin 'nope'
+(/opt/seamware/plugins/api/nope.so): not found</code>. A short name is looked for under the plugin directory
+(<code>/opt/seamware/plugins</code>, moved by <code>SEAMWARE_PLUGIN_DIR</code>); a name with a <code>/</code> is a
+path.</p>
+<pre>coraine -db corDB -api admin
+curl localhost:1026/admin/config
+<span class="c"># {"options":[{"name":"--verbose","short":"-v","type":"bool","value":false,"default":false,"from":"default",...},...]}</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="limits">Limits and memory</h2>
+<p>What a request may cost the broker, and how the broker shares its threads and memory among requests. A limit
+reached answers the request that reached it - 413, 403 <code>TooManyResults</code> or 503 - and the broker goes on
+serving the others.</p>
+
+<h3 id="maxRequestSize"><code>--maxRequestSize</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-mrs</code> · <code>CORAINE_MAXREQUESTSIZE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>2</code> (MiB)</td></tr>
+  <tr><th>Values</th><td>0-4096 (MiB); 0: no cap</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The largest request body, in MiB. A larger one is refused with 413 <code>RequestEntityTooLarge</code> (NGSI-LD §
+6.3.2), detail <code>request body of 1200081 bytes exceeds broker limit of 1048576 bytes</code>, before it is parsed.
+0 removes the cap. The URL and the headers are not part of it: they are bounded by the HTTP server
+(<code>--httpConnectionMemory</code> with libmicrohttpd). <a href="#docs/administration/request-size">Request
+size</a>.</p>
+<pre>coraine -db corDB -mrs 1
+curl -i -X POST localhost:1026/ngsi-ld/v1/entities -H 'Content-Type: application/json' --data-binary @big.json
+<span class="c"># HTTP/1.1 413 Content Too Large</span></pre>
+
+<h3 id="maxResponseSize"><code>--maxResponseSize</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-maxResponseSize</code> · <code>CORAINE_MAXRESPONSESIZE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>-1</code> (1/16 of the memory budget; none without a memory budget)</td></tr>
+  <tr><th>Values</th><td>-1 to 4096 (MiB); 0: no budget</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_RESPONSE_BUDGET</code></td></tr>
+</table>
+<p>The byte budget, in MiB, of an entity query: <code>GET /ngsi-ld/v1/entities</code>, <code>POST
+/ngsi-ld/v1/entityOperations/query</code>, the temporal queries and what Context Sources answer to a forwarded one.
+The store counts each entity as it fetches it and stops before the one that would pass the budget, so a query's memory
+is bounded while it is fetched. The page then ends early, with <code>Link</code> <code>rel="next"</code>; 403
+<code>TooManyResults</code> when the first entity alone is larger than the budget, or when the query needs every match
+at once (<code>orderBy</code>) and they are larger.</p>
+<p>-1, the default, is 1/16 of the memory budget (<code>--memoryLimit</code>, or 85 % of the container's limit): a
+response holds more than its bytes, and several run at once. Outside a container and without
+<code>--memoryLimit</code> there is no budget. <code>-v</code> says which budget is in force. <a
+href="#docs/administration/response-size">Response size</a>.</p>
+<p>In the build by default; <code>-DCOR_FEATURE_RESPONSE_BUDGET=OFF</code> leaves it out, and the option with it.</p>
+<pre>coraine -db corDB -v -mrs 4 --maxResponseSize 1
+<span class="c"># V: ... main: response size budget: 1 MiB (--maxResponseSize)</span>
+curl -i 'localhost:1026/ngsi-ld/v1/entities?type=T&amp;orderBy=id'    <span class="c"># with 1.2 MB of entities of type T</span>
+<span class="c"># HTTP/1.1 403 Forbidden  {"type":"https://uri.etsi.org/ngsi-ld/errors/TooManyResults",...}</span></pre>
+
+<h3 id="memoryLimit"><code>--memoryLimit</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-memoryLimit</code> · <code>CORAINE_MEMORYLIMIT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code> (85 % of the container's memory limit; none outside a container)</td></tr>
+  <tr><th>Values</th><td>0-1048576 (MiB)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The memory budget, in MiB. Over 90 % of it the requests that grow memory (POST, PUT, PATCH) are refused; over all
+of it everything is refused except deletes and monitoring (<code>/version</code>, <code>/metrics</code>,
+<code>/admin/*</code>). A refused request gets 503, <code>Retry-After: 5</code> and the error type
+<code>https://coraine.readthedocs.io/errors/MemoryBudgetExceeded</code>. The memory compared is the process's
+anonymous and shared memory, measured every 100 ms; the executable, the libraries and corDB's memory-mapped log are
+not counted.</p>
+<p>0, the default, takes 85 % of the smallest cgroup memory limit the process lives under (the container's, a
+Kubernetes pod's): the broker turns requests away before the kernel kills it at the limit. Outside a container, with
+no limit, there is no budget and nothing is checked. The budget is also the base of <code>--maxResponseSize</code>'s
+default. <a href="#docs/administration/memory">Memory budget</a>.</p>
+<pre>coraine -db corDB -v --memoryLimit 512
+<span class="c"># V: ... memoryBudgetInit: memory budget: 512 MiB (writes refused above 460 MiB)</span></pre>
+
+<h3 id="connectionPoolSize"><code>--connectionPoolSize</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-cps</code> · <code>CORAINE_CONNECTIONPOOLSIZE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code> (the CPUs the process may run on, for a store that never waits; 32 otherwise)</td></tr>
+  <tr><th>Values</th><td>0-200</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The number of worker threads that run requests. With libmicrohttpd it is also the number of the server's I/O
+threads (its thread pool); with the built-in server it sizes the connection pool, 16 connections per worker and at
+least 1024.</p>
+<p>0 decides from the store: a request that waits - on MongoDB, on TimescaleDB, on a forwarded request - holds its
+worker for the wait, so a store that waits gets 32. A store that never waits (<code>corDB</code> or
+<code>ramDB</code>, with <code>--troe none</code> or <code>corDB</code>, and no <code>--distributed</code>) gets one
+worker per CPU the process may run on (its CPU affinity and cgroup quota, not the host's count): more workers than
+CPUs only take turns on them. <code>/admin/config</code> shows the number in force.</p>
+<pre>coraine -db corDB -cps 4</pre>
+
+<h3 id="noInline"><code>--noInline</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-noInline</code> · <code>CORAINE_NOINLINE</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code> (inline dispatch on, where it applies)</td></tr>
+  <tr><th>Values</th><td>a switch</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Hands every request to a worker thread. By default, with a store that never waits (<code>corDB</code> or
+<code>ramDB</code>, with <code>--troe none</code> or <code>corDB</code>), a request of the
+<code>/ngsi-ld/v1/entities</code> family that waits on nothing - no forward, no wait for a bridge service, its
+<code>@context</code> already cached - runs on the I/O thread that read it, without the two thread switches of the
+hand-off: about twice the throughput for retrieves and small queries (<a href="#docs/performance/per-operation">Where
+a request runs</a>). With any other store nothing runs inline, and the option changes nothing. It is there for
+measurements, and as a way out. Metrics: <code>ngsild_requests_inline_total</code>,
+<code>ngsild_requests_worker_total</code>.</p>
+<pre>coraine -db corDB -v --noInline
+<span class="c"># V: ... inlineDispatchInit: inline dispatch: off (--noInline) - every request is handed to a worker</span></pre>
+
+<h3 id="cooldownMillis"><code>--cooldownMillis</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-cms</code> · <code>CORAINE_COOLDOWNMILLIS</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>30000</code> (30 seconds)</td></tr>
+  <tr><th>Values</th><td>0-86400000 (milliseconds); 0: no default cooldown</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>After a notification to an endpoint fails, how long, in milliseconds, the subscription sends nothing more to it:
+the notifications in that window are dropped, not sent and not queued. It is the default for a subscription or a
+context source subscription that does not give <code>notification.endpoint.cooldown</code> itself (§ 5.2.15), and
+applies to change-driven and periodic notifications alike. 0 leaves a subscription with no cooldown of its own without
+any. A registration's forwards are not affected: they cool down only by the registration's own
+<code>management.cooldown</code>.</p>
+<pre>coraine -db corDB --cooldownMillis 0
+<span class="c"># three changes, the endpoint down: timesSent 3, timesFailed 3 (with the default 30000: 1 and 1)</span></pre>
+
+<h3 id="entityMapMemory"><code>--entityMapMemory</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-entityMapMemory</code> · <code>CORAINE_ENTITYMAPMEMORY</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>64</code> (MiB)</td></tr>
+  <tr><th>Values</th><td>0-65536 (MiB); 0: no cap, and no automatic EntityMaps</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The memory all EntityMaps may hold together, in MiB - an entity id and its sources, about 70 bytes plus the id
+each. When a new map does not fit, the expired maps go first, then the automatic maps used longest ago; a map a client
+asked for is never evicted. An automatic map that still does not fit is not made (the query is paginated without one);
+a map a client asked for (<code>?entityMap=true</code>, <code>POST /ngsi-ld/v1/entityMaps</code>) is refused with 403
+<code>TooManyResults</code>. 0 removes the cap and turns the automatic maps off. Metrics:
+<code>ngsild_entity_map_bytes</code>, <code>ngsild_entity_map_store_size</code>. <a
+href="#docs/administration/entitymaps">EntityMaps</a>.</p>
+<pre>coraine -db corDB -v --entityMapMemory 0
+<span class="c"># V: ... main: EntityMap memory: 0 MiB (no cap, no automatic EntityMaps)</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="corhttp">Built-in HTTP server (corHttp)</h2>
+<p>Options that act on a broker built with the built-in HTTP server (<code>cmake -DCOR_HTTP_SERVER=builtin</code>;
+<code>coraine -V</code> says <code>httpServer: builtin</code>). A build with libmicrohttpd (the default,
+<code>httpServer: mhd</code>) accepts them, so a deployment does not have to know which server its binary carries (<a
+href="#docs/building/http-server">Choosing the HTTP server</a>).</p>
+
+<h3 id="httpLoops"><code>--httpLoops</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-hl</code> · <code>CORAINE_HTTPLOOPS</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code> (one per CPU the process may run on, at most 4)</td></tr>
+  <tr><th>Values</th><td>0-64</td></tr>
+  <tr><th>Plugin</th><td>core (acted on by the built-in HTTP server and by the cor:// listener)</td></tr>
+</table>
+<p>The number of event loops sharing the HTTP port, each on a thread of its own. 0 takes one per CPU the process may
+run on (its CPU affinity and cgroup quota), at most 4: four loops on eight cores scale nearly linearly and keep the
+tail latency under half a millisecond, eight add 16 % throughput for seven times the p99; more loops than CPUs is
+slower than one. A value given is used as it is, up to 64.</p>
+<p>With libmicrohttpd the HTTP server has no loops of the broker's and ignores it. On either build, the cor://
+listener (<code>--corPort</code>) runs this many loops, at most 16. <code>/admin/config</code> shows the number in
+force.</p>
+<pre>coraine -db corDB -hl 1</pre>
+
+<!-- ======================================================================= -->
+<h2 id="mhd">libmicrohttpd HTTP server (the default build)</h2>
+<p>Options that act on a broker built with libmicrohttpd (<code>cmake -DCOR_HTTP_SERVER=mhd</code>, the default;
+<code>coraine -V</code> says <code>httpServer: mhd</code>). A build with the built-in HTTP server accepts them and
+ignores them.</p>
+
+<h3 id="httpConnectionMemory"><code>--httpConnectionMemory</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-hcm</code> · <code>CORAINE_HTTPCONNECTIONMEMORY</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>12</code> (kB)</td></tr>
+  <tr><th>Values</th><td>4-1024 (kB)</td></tr>
+  <tr><th>Plugin</th><td>core (acted on by the libmicrohttpd HTTP server)</td></tr>
+</table>
+<p>The memory libmicrohttpd gives each connection, in kB: a request's line and headers - the method, the URL with its
+query, every header - must fit in it. At 12 kB that is headers up to about 11 kB and a URL up to about 9 kB; at 32 kB
+(libmicrohttpd's own default) more than 20 kB. A request that does not fit is refused by the server itself, before it
+reaches the broker, with its own short HTML body: 431 for its headers, 414 for its URL. The log says so, at most once
+a second: <code>a request was refused with 414 by the HTTP server: its URL exceeds the connection memory (4 kB,
+--httpConnectionMemory) - a long query fits in the body of POST /ngsi-ld/v1/entityOperations/query; or raise
+--httpConnectionMemory</code>.</p>
+<p>The memory is cleared after every request, so it is a cost on every request: 12 kB instead of 32 kB is worth 2-3 %
+of a core on small requests (<a
+href="https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md#the-http-servers-connection-memory">The HTTP
+server's connection memory</a>). A long query fits in the body of <code>POST
+/ngsi-ld/v1/entityOperations/query</code>, which has no URL limit; a large access token (1.5-4 kB) fits in 12 kB with
+the other headers. <a href="#docs/administration/request-size">Request size</a>.</p>
+<pre>coraine -db corDB -hcm 4
+curl -i "localhost:1026/ngsi-ld/v1/entities?id=$(seq -f 'urn:ngsi-ld:T:%05g' -s, 1 300)"
+<span class="c"># HTTP/1.1 414 URI Too Long</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="contexts">@contexts</h2>
+<p>The JSON-LD side of the broker's identity: the @context a request without one of its own is expanded with, and the
+free-form JSON the broker adds to its own description on <code>/ngsi-ld/v1/info/sourceIdentity</code>.</p>
+
+<h3 id="defaultUserContext"><code>--defaultUserContext</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-duc</code> · <code>CORAINE_DEFAULTUSERCONTEXT</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - a request without a user @context is expanded with the core context alone</td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), a file path, or <code>file://&lt;path&gt;</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The @context used wherever no user @context is given: a request without a <code>Link</code> header (and, for
+<code>application/ld+json</code>, without <code>@context</code> in the body), the bridge configuration read at
+startup, a sample arriving on a bridge transport, the auth plugin's expansion of policy terms. The core context still
+sits last in the chain and wins term by term, so the default context only adds terms. A response to a request that
+brought no @context names it in its <code>Link</code> header.</p>
+<p>A URL is kept as given and downloaded the first time it is needed, like any other @context - it is not checked at
+start. A request that needs it while it cannot be downloaded is answered <code>504</code>
+<code>LdContextNotAvailable</code> (<code>unable to retrieve @context from '&lt;url&gt;'</code>).</p>
+<p>A file is read and parsed at start, then hosted by the broker as <code>&lt;advertised
+endpoint&gt;/ngsi-ld/v1/jsonldContexts/defaultUserContext</code> (kind <code>Hosted</code>), and that URL is the
+default. The advertised endpoint is <code>--httpEndpoint</code>, else the auto-detected LAN address. The file must be
+a JSON object with an <code>@context</code> member that is an object or an array. Refused at start:</p>
+<pre>X: ... main: --defaultUserContext: the file '&lt;path&gt;' cannot be read
+X: ... main: --defaultUserContext: '&lt;path&gt;' is not a JSON-LD @context document - a JSON object with "@context" (an object or an array)
+X: ... main: --defaultUserContext: the @context in '&lt;path&gt;' cannot be used</pre>
+<p>The DDS mapping tool's <code>dds-context.jsonld</code> is such a file (<a href="#docs/dds">DDS and ROS 2</a>).</p>
+<pre>coraine --database corDB --defaultUserContext my-context.jsonld
+curl localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Room:1
+<span class="c"># Link: &lt;http://192.168.1.138:1026/ngsi-ld/v1/jsonldContexts/defaultUserContext&gt;; rel="http://www.w3.org/ns/json-ld#context"; ...</span></pre>
+
+<h3 id="contextSourceExtras"><code>--contextSourceExtras</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-csx</code> · <code>CORAINE_CONTEXTSOURCEEXTRAS</code> · String</td></tr>
+  <tr><th>Default</th><td><code>/opt/seamware/etc/contextSourceExtras.json</code> (<code>$SEAMWARE_ETC_DIR/contextSourceExtras.json</code> when <code>SEAMWARE_ETC_DIR</code> is set)</td></tr>
+  <tr><th>Values</th><td>the path of a JSON file, at most 1 MiB</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>A JSON file whose content <code>GET /ngsi-ld/v1/info/sourceIdentity</code> renders as
+<code>contextSourceExtras</code> (NGSI-LD § 5.2.40), verbatim: it is never expanded as JSON-LD. Read once, at start.
+Any JSON value is accepted.</p>
+<p>The default file is the one the installation writes (version, git SHA and build time of the build); when it is
+missing, nothing is rendered and there is no error. A file named with the option must be there and valid - refused at
+start:</p>
+<pre>X: ... contextSourceExtrasLoad: --contextSourceExtras: cannot open '&lt;path&gt;'
+X: ... contextSourceExtrasLoad: contextSourceExtras: '&lt;path&gt;' empty or too large (max 1 MiB)
+X: ... contextSourceExtrasLoad: contextSourceExtras: '&lt;path&gt;' is not valid JSON</pre>
+<p>(The size and JSON checks apply to the default file too.)</p>
+<pre>echo '{"site":"plant-3","operator":"ops@example.org"}' &gt; extras.json
+coraine --database corDB --contextSourceExtras extras.json
+curl localhost:1026/ngsi-ld/v1/info/sourceIdentity
+<span class="c"># {..., "contextSourceExtras":{"site":"plant-3","operator":"ops@example.org"}}</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="notifications">Subscriptions and notifications</h2>
+<p>How notifications are filtered and delivered, and how often the delivery statistics of the subscriptions are
+written to the database.</p>
+
+<h3 id="notifyValueChangeOnly"><code>--notifyValueChangeOnly</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-nvco</code> · <code>CORAINE_NOTIFYVALUECHANGEONLY</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Suppresses the notification of an entity update that changed no attribute value. An update notifies only when an
+attribute was created or deleted, or when the <code>value</code> of an attribute (of any of its datasetId instances,
+or an instance added or removed) differs from what it was. A change to a sub-attribute (<code>unitCode</code>,
+<code>observedAt</code>, ...) or to the timestamps alone does not notify. Creations and deletions always notify. Off
+by default: NGSI-LD notifies every update that matches.</p>
+<pre>coraine --database corDB --notifyValueChangeOnly
+<span class="c"># PATCH {"temperature":21} on a temperature of 21               -&gt; no notification</span>
+<span class="c"># PATCH {"temperature":{"value":21,"unitCode":"CEL"}}            -&gt; no notification</span>
+<span class="c"># PATCH {"temperature":22}                                       -&gt; notification</span></pre>
+
+<h3 id="insecureNotif"><code>--insecureNotif</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-insecureNotif</code> · <code>CORAINE_INSECURENOTIF</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Turns off the certificate verification of the broker's outgoing TLS connections, so an <code>https://</code>
+endpoint with a self-signed (or otherwise unverifiable) certificate is accepted. By default the peer is verified
+against the system CA store, and a notification to such an endpoint fails (the subscription's <code>status</code>
+becomes <code>failed</code>). The setting is process-wide: it covers every outgoing HTTPS request of the broker -
+notifications, requests forwarded to Context Sources, @context downloads - not notifications alone. With
+<code>--bridges mqtt</code> it also accepts the certificate of an <code>mqtts://</code> endpoint (<a
+href="#docs/mqtt-bridge">The MQTT bridge</a>). Meant for endpoints inside a trusted network.</p>
+<pre>coraine --database corDB --insecureNotif</pre>
+
+<h3 id="subStatsFlushInterval"><code>--subStatsFlushInterval</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-ssfi</code> · <code>CORAINE_SUBSTATSFLUSHINTERVAL</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>60</code></td></tr>
+  <tr><th>Values</th><td>0-86400 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The delivery statistics of every subscription (<code>timesSent</code>, <code>timesFailed</code>,
+<code>lastNotification</code>, <code>lastSuccess</code>, <code>lastFailure</code>) are counted in RAM and written to
+the database every this many seconds, for every tenant - the regular subscriptions, the subscriptions on Context
+Source registrations, the periodic ones, and the subscriptions on Snapshots. <code>0</code> writes them only when
+asked: <code>POST /admin/subStats/flush</code> (<code>--apiPlugins admin</code>) does it at any time. A
+<code>GET</code> of a subscription answers from RAM, so it is always current; the interval decides how much of the
+counting a restart loses - the shutdown does not write them.</p>
+<pre>coraine --database corDB --subStatsFlushInterval 10</pre>
+
+<!-- ======================================================================= -->
+<h2 id="distributed-ops">Distributed operations</h2>
+<p>Forwarding to the Context Sources registered with <code>POST /ngsi-ld/v1/csourceRegistrations</code>: whether it
+happens, how long a source is waited for, how the broker names itself to other brokers, how the parts of an entity
+held by several sources are put together, and how such queries are paged. See <a
+href="#docs/administration/response-size">Response size - Distributed queries</a> and <a
+href="#docs/administration/entitymaps">EntityMaps</a>.</p>
+
+<h3 id="distributed"><code>--distributed</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dist</code> · <code>CORAINE_DISTRIBUTED</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Turns forwarding on. With it, every entity operation is matched against the registrations and forwarded to the
+Context Sources that match; <code>GET /types</code> and <code>/attributes</code> are forwarded too; a subscription
+whose entities a registration covers is also created on that source (§ 5.8.1.4), with this broker's advertised
+endpoint as the callback.</p>
+<p>Off by default: the matching costs a registration lookup on every entity operation, and most deployments hold their
+data locally. Without it the Registry API (create, update, delete, query and discover registrations, § 12) works the
+same, and nothing is forwarded - registrations can be made before forwarding is turned on. With it, and at least one
+registration, a request to <code>/ngsi-ld/v1/entities</code> always runs on a worker thread (never inline on the I/O
+thread).</p>
+<pre>coraine --database corDB --distributed
+<span class="c"># a registration of type Room at http://localhost:19622, the Room there:</span>
+<span class="c"># GET /ngsi-ld/v1/entities/urn:ngsi-ld:Room:7  -&gt; 200 (without --distributed: 404)</span></pre>
+
+<h3 id="distOpTimeout"><code>--distOpTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dtmo</code> · <code>CORAINE_DISTOPTIMEOUT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>5000</code></td></tr>
+  <tr><th>Values</th><td>1-600000 (milliseconds)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>How long the broker waits for the answer to a request it forwards to a Context Source whose registration has no
+<code>timeout</code> of its own (§ 5.2.34 - a registration's <code>timeout</code> wins). The forwards of one query run
+in parallel and wait together, for the longest <code>timeout</code> among their registrations, or this value when none
+has one. A source that does not answer in time is left out of the answer, which says so in an
+<code>NGSILD-Warning</code> header. It is also the default of any other outgoing HTTP request that sets no timeout of
+its own. Not covered: notifications (10 s, or the subscription's <code>endpoint.timeout</code>) and @context downloads
+(10 s). The time to connect is a separate 5 s.</p>
+<pre>coraine --database corDB --distributed --distOpTimeout 1000
+<span class="c"># a source that takes 3 s: the query answers after 1 s with its local matches and</span>
+<span class="c"># NGSILD-Warning: 199 127.0.0.1:19632 "No response was received from the registration endpoint within the timeout period"</span></pre>
+
+<h3 id="csourceAlias"><code>--csourceAlias</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-csourceAlias</code> · <code>CORAINE_CSOURCEALIAS</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the authority (<code>host:port</code>) of the advertised endpoint: <code>--httpEndpoint</code>, else the auto-detected LAN address; <code>&lt;program name&gt;:&lt;port&gt;</code> when the endpoint has none</td></tr>
+  <tr><th>Values</th><td>a name, unique per broker</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The broker's <code>contextSourceAlias</code> (§ 5.7.5): the name it adds to the <code>Via</code> header of every
+request it forwards, and finds in the <code>Via</code> header of a request that has already passed through it. It is
+also the <code>contextSourceAlias</code> on <code>GET /ngsi-ld/v1/info/sourceIdentity</code> and the end of its
+<code>id</code> (<code>urn:ngsi-ld:ContextSource:&lt;alias&gt;</code>). With an <code>NGSILD-Tenant</code> it is
+<code>&lt;alias&gt;:&lt;tenant&gt;</code>.</p>
+<p>Loop detection treats a registration whose source answers with this broker's alias as pointing back at this broker,
+and does not forward to it. So the alias must differ between brokers that forward to each other: two brokers with the
+same alias never forward to one another.</p>
+<pre>coraine --database corDB --csourceAlias broker-a
+curl localhost:1026/ngsi-ld/v1/info/sourceIdentity -H 'NGSILD-Tenant: t1'
+<span class="c"># {"id":"urn:ngsi-ld:ContextSource:broker-a:t1", ..., "contextSourceAlias":"broker-a:t1", ...}</span></pre>
+
+<h3 id="noSplitEntities"><code>--noSplitEntities</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-noSplitEntities</code> · <code>CORAINE_NOSPLITENTITIES</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Changes how a distributed query treats an entity held by several sources. By default (split entities, standard
+NGSI-LD) the broker collects the ids of the matches from every source, assembles each entity from all its parts, and
+applies the query's filters to the assembled entity. With <code>--noSplitEntities</code> each entity is taken as lying
+wholly at one source: the query is forwarded as it is, with its <code>offset</code> and <code>limit</code>, the
+answers are merged, and an entity that comes from more than one place is kept once - the first answer that has it, the
+local store first. The URL parameter <code>?splitEntities=true|false</code> decides for one request. Needs
+<code>--distributed</code> to have any effect.</p>
+<pre>coraine --database corDB --distributed --noSplitEntities
+<span class="c"># Room:7 with humidity here and temperature at the source:</span>
+<span class="c">#   default:            [{"id":"urn:ngsi-ld:Room:7", "humidity":..., "temperature":...}]</span>
+<span class="c">#   --noSplitEntities:  [{"id":"urn:ngsi-ld:Room:7", "humidity":...}]</span></pre>
+
+<h3 id="autoEntityMaps"><code>--autoEntityMaps</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-autoEntityMaps</code> · <code>CORAINE_AUTOENTITYMAPS</code> · String</td></tr>
+  <tr><th>Default</th><td><code>distributed</code></td></tr>
+  <tr><th>Values</th><td><code>none</code>, <code>distributed</code>, <code>all</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_AUTO_ENTITY_MAP</code></td></tr>
+</table>
+<p>Which <code>GET /ngsi-ld/v1/entities</code> queries get an EntityMap that the client did not ask for, when their
+first page (<code>offset</code> 0) has more after it. The map's URI comes in <code>NGSILD-EntityMap</code>, and the
+<code>Link</code> <code>rel="next"</code> pages through it.</p>
+<ul>
+  <li><code>distributed</code> - the distributed queries only: the sources are not asked for <code>offset</code> /
+<code>limit</code>, so without a map there is no correct second page.</li>
+  <li><code>all</code> - local queries too. A local query pages in the store already (<code>pageAfter</code>), and a
+map makes its first page cost much more (<a
+href="https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md#what-automatic-entitymaps-cost">Performance</a>).</li>
+  <li><code>none</code> - a map only when the client asks for one (<code>?entityMap=true</code>).</li>
+</ul>
+<p><code>--entityMapMemory 0</code> turns automatic EntityMaps off whatever this says. Any other word is refused at
+start:</p>
+<pre>X: ... main: --autoEntityMaps: '&lt;word&gt;' is none of none, distributed, all</pre>
+<p>The details - what is not mapped, the headers, the sources' own maps - are in <a
+href="#docs/administration/entitymaps">EntityMaps</a>. A build with <code>-DCOR_FEATURE_AUTO_ENTITY_MAP=OFF</code>
+accepts the option and ignores it.</p>
+<pre>coraine --database corDB --autoEntityMaps all
+<span class="c"># GET /ngsi-ld/v1/entities?type=Room&amp;limit=2 with 3 Rooms:</span>
+<span class="c"># NGSILD-EntityMap: /ngsi-ld/v1/entityMaps/urn:ngsi-ld:EntityMap:dd741ef40001</span></pre>
+
+<!-- ======================================================================= -->
+<h2 id="ha">High availability</h2>
+<p>Several broker instances behind a load balancer, sharing one database: each keeps its subscriptions, registrations
+and @contexts cached in RAM, and this keeps those caches in step with what the other instances write. Everything about
+the setup is in <a href="#docs/high-availability">High availability</a>.</p>
+
+<h3 id="high-availability"><code>--high-availability</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-ha</code> · <code>CORAINE_HIGH_AVAILABILITY</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - off: each instance knows only what it wrote itself and what it loaded at start</td></tr>
+  <tr><th>Values</th><td><code>mongo</code> (an <code>&lt;ip:port&gt;</code> is accepted by the parser and refused at start)</td></tr>
+  <tr><th>Plugin</th><td>core (<code>mongo</code> needs the <code>mongoc</code> database plugin)</td></tr>
+</table>
+<p><code>mongo</code>: the instance watches the whole MongoDB deployment with one change stream, opened at start
+before the caches are loaded, and applies every subscription, registration and @context change it reports. Snapshots
+are not synchronised.</p>
+<p>Refused at start:</p>
+<ul>
+  <li><p>a database plugin that cannot report another instance's writes (<code>corDB</code>, <code>ramDB</code>):</p>
+<pre>X: ... haInit: --ha mongo needs a database plugin that can report what another broker instance wrote; the 'corDB' plugin cannot. Point the broker at a shared database, or use '--ha &lt;ip:port&gt;' once the haaux server exists</pre></li>
+  <li><p>a temporal store inside the process (<code>--troe corDB</code>, <code>--troe ramDB</code>); <code>--troe
+timescale</code> and <code>--troe none</code> are accepted:</p>
+<pre>X: ... haInit: --ha mongo needs a temporal store shared by every broker instance; '--troe corDB' keeps the history inside each broker, ...</pre></li>
+  <li>a MongoDB that is not a replica set, or a change stream that cannot be opened (the privileges - <a
+href="#docs/high-availability/requirements">High Availability - Requirements</a>), then <code>X: ... main: unable to
+start the HA channel 'mongo'</code>.</li>
+</ul>
+<p>Any other value is taken as the address of a haaux server, which does not exist yet, and is refused:</p>
+<pre>X: ... haInit: --ha 10.0.0.1:7000: an address means the haaux server, which is not implemented yet. Use '--ha mongo'
+
+coraine --dbURI "mongodb://db1,db2,db3/?replicaSet=rs0" --high-availability mongo</pre>
+
+<!-- ======================================================================= -->
+<h2 id="bridge-options">Bridges</h2>
+<p>Bridges connect the broker to peers that do not speak NGSI-LD (DDS and ROS 2, MQTT, Modbus, CKAN, ...), each one a
+plugin. The options here load them, name their configuration file, and set how a write that calls a service on the
+other side waits for its reply. The configuration file itself is documented with each bridge: <a href="#docs/dds">DDS
+and ROS 2</a>, <a href="#docs/mqtt-bridge">The MQTT bridge</a>, <a href="#docs/modbus-bridge">The Modbus bridge</a>,
+and the bridge repositories (<a href="https://github.com/SEAMWARE/corDdsBridge">corDdsBridge</a>, <a
+href="https://github.com/SEAMWARE/corMqttBridge">corMqttBridge</a>, <a
+href="https://github.com/SEAMWARE/corModbusBridge">corModbusBridge</a>, <a
+href="https://github.com/SEAMWARE/corCkanBridge">corCkanBridge</a>).</p>
+
+<h3 id="bridges"><code>--bridges</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-br</code> · <code>CORAINE_BRIDGES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no bridge is loaded</td></tr>
+  <tr><th>Values</th><td>a comma-separated list of bridge plugins, at most 8 - short names resolve to <code>/opt/seamware/plugins/bridge/&lt;name&gt;.so</code> (<code>$SEAMWARE_PLUGIN_DIR/bridge/&lt;name&gt;.so</code>), a name with a <code>/</code> is a path</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Loads the bridge plugins. <code>coraine -u</code> lists the ones installed (<code>ckan</code>, <code>dds</code>,
+<code>loopback</code>, <code>modbus</code>, <code>mqtt</code>; <code>loopback</code> has no transport and serves the
+tests). A plugin's own options are added to the command line and to <code>coraine -u</code> under <code>Bridge
+(&lt;name&gt;) plugin options:</code>. The transports are opened last in the startup, once everything else is up.
+<code>GET /version</code> lists the loaded bridges under <code>bridges</code>. With <code>mqtt</code>, subscriptions
+can notify <code>mqtt://</code> and <code>mqtts://</code> endpoints. Refused at start - a plugin that is not there, or
+whose <code>init</code> fails:</p>
+<pre>bridge plugin 'nosuch' (/opt/seamware/plugins/bridge/nosuch.so): not found
+X: ... bridgesInit: init failed for bridge plugin '&lt;name&gt;'
+
+coraine --database corDB --bridges dds,mqtt --bridgeConfig /etc/coraine/bridges.json</pre>
+
+<h3 id="bridgeConfig"><code>--bridgeConfig</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-brc</code> · <code>CORAINE_BRIDGECONFIG</code> · String</td></tr>
+  <tr><th>Default</th><td><code>/opt/seamware/etc/bridges.json</code> if it exists (<code>$SEAMWARE_ETC_DIR/bridges.json</code> when <code>SEAMWARE_ETC_DIR</code> is set)</td></tr>
+  <tr><th>Values</th><td>the path of a JSON file, at most 4 MiB</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The bridge configuration file: the Channels (which endpoint of which bridge maps to which entity attribute) and
+each bridge's own settings. It is read at start, and its path is handed to every loaded bridge. A file named with the
+option and missing stops the broker; the default file missing means no Channels from a file, and no error. Without
+<code>--bridges</code> the option is not used at all - not even checked. Refused at start:</p>
+<pre>X: ... channelConfigLoad: --bridgeConfig: cannot read '&lt;path&gt;'
+X: ... channelConfigLoad: the bridge configuration '&lt;path&gt;' is empty or improbably large
+
+coraine --database corDB --bridges dds --bridgeConfig dds.json</pre>
+
+<h3 id="ddsSync"><code>--ddsSync</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-ddsSync</code> · <code>CORAINE_DDSSYNC</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Makes waiting for the reply the default of a write to a service attribute (an attribute that calls a service on a
+bridge: a DDS or ROS 2 service, for one). A waiting write calls the service before the value is stored, waits up to
+<code>--ddsSyncTimeout</code> for the reply, and stores value and reply together. A reply that does not come in time:
+the value is stored, the answer is <code>202</code>, and the reply lands in the attribute when it comes. Without
+waiting, the service is called after the write, the answer is the write's own, and the reply lands later.</p>
+<p>The URL parameter <code>?ddsSync=true</code> or <code>?ddsSync=false</code> decides for one request, whatever this
+option says. Only the three entity PATCH forms act on it, and only for a PATCH of one attribute; every other route
+accepts the parameter and ignores it. Any other value than <code>true</code> / <code>false</code> is <code>400</code>
+(<code>'ddsSync' must be 'true' or 'false'</code>), when the broker has a Channel that writes out. Not DDS-only: it
+applies to the services of every bridge. A waiting request holds a worker thread; <code>--ddsSyncWaitMax</code> caps
+how many do. Action goals do not depend on it: they always wait (see <code>--ddsSyncTimeout</code>).</p>
+<pre>coraine --database corDB --bridges dds --ddsSync
+<span class="c"># PATCH /ngsi-ld/v1/entities/{id}/attrs?ddsSync=false   - this one does not wait</span></pre>
+
+<h3 id="ddsSyncTimeout"><code>--ddsSyncTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-ddsSyncTimeout</code> · <code>CORAINE_DDSSYNCTIMEOUT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code> - the bridge configuration's <code>syncTimeoutMs</code>, else 200</td></tr>
+  <tr><th>Values</th><td>0-600000 (milliseconds)</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>How long a bridge request waits for the other side. A waiting write to a service attribute (<code>--ddsSync</code>,
+<code>?ddsSync=true</code>) waits this long for the reply, then answers <code>202</code> and lets the reply land when
+it comes. A write to an action attribute - on every route, with or without <code>ddsSync</code> - waits this long for
+the goal to be accepted or rejected; not answered in time, nothing is written, the answer is <code>504</code>
+(<code>goalNotAnswered</code>), and the goal is cancelled.</p>
+<p><code>0</code> (the default) takes the <code>syncTimeoutMs</code> of the bridge configuration file (the DDS
+bridge's <code>dds.ngsild.syncTimeoutMs</code>), and 200 when the file has none. A value given here wins over the
+file. <code>GET /admin/config</code> shows the value in use: <code>200</code> by default.</p>
+<pre>coraine --database corDB --bridges dds --ddsSyncTimeout 500</pre>
+
+<h3 id="ddsSyncWaitMax"><code>--ddsSyncWaitMax</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-ddsSyncWaitMax</code> · <code>CORAINE_DDSSYNCWAITMAX</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>8</code></td></tr>
+  <tr><th>Values</th><td>0-200</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The most requests that wait for a service's reply at the same time. A waiting request holds one of the worker
+threads (<code>--connectionPoolSize</code>, 32 by default), so a slow or absent DDS network could otherwise take every
+worker and stop the broker answering. When every slot is taken, the next request calls the service without waiting and
+answers <code>202</code>. <code>0</code>: no request ever waits. The default of 8 is a quarter of the default 32
+workers.</p>
+<pre>coraine --database corDB --bridges dds --ddsSync --ddsSyncWaitMax 16</pre>
+
+<!-- ======================================================================= -->
+<h2 id="stores">The database and the history - choosing the plugins</h2>
+<p>Two plugins hold what the broker stores: the <b>current-state</b> plugin (<code>--database</code>) keeps the
+Entities, Subscriptions, Registrations and Snapshots, and the <b>TRoE</b> plugin (<code>--troe</code>) keeps the
+temporal history. Both are chosen at start and fixed for the life of the process. The options of the chosen plugins
+are added to the command line only when the plugin is loaded: <code>coraine --database corDB -u</code> and
+<code>coraine --troe timescale -u</code> list them. <code>coraine-import</code> takes the same store options, by the
+same names (<a href="#docs/migration">Migrating a database to coraine</a>). Where plugins are found: <a
+href="#docs/plugin-architecture/where">Plugin architecture</a>.</p>
+
+<h3 id="database"><code>--database</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-db</code> · <code>CORAINE_DATABASE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>mongoc</code></td></tr>
+  <tr><th>Values</th><td><code>mongoc</code>, <code>corDB</code>, <code>ramDB</code> (the plugins installed in <code>&lt;plugin dir&gt;/db/currentState/</code>), or a path to a <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The current-state store. A short name is resolved to <code>&lt;plugin
+dir&gt;/db/currentState/&lt;name&gt;.so</code>; the plugin dir is <code>/opt/seamware/plugins</code> unless
+<code>SEAMWARE_PLUGIN_DIR</code> says otherwise. An argument with a <code>/</code> in it is taken as the path of the
+plugin itself. <code>coraine -u</code> lists the short names it finds in the plugin dir.</p>
+<ul>
+  <li><code>mongoc</code> - MongoDB (<a href="#docs/options" data-scroll="mongoc">Plugin: mongoc</a>). The default, so
+a broker started without the option needs a MongoDB server.</li>
+  <li><code>corDB</code> - the store in the broker's own memory, in RAM or also on disk with <code>--dbDir</code> (<a
+href="#docs/options" data-scroll="cordb">Plugin: corDB</a>).</li>
+  <li><code>ramDB</code> - corDB built without the disk: a restart starts empty (<a
+href="#docs/installation/ramdb">ramDB</a>).</li>
+</ul>
+<p>A plugin that is not there stops the start, with the usage after the error:</p>
+<pre>$ coraine --database bogus
+DB plugin 'bogus' (/opt/seamware/plugins/db/currentState/bogus.so): not found</pre>
+<p>An option of another plugin is an unknown option: <code>coraine --database ramDB --dbDir /x</code> answers
+<code>coraine: unrecognized option: --dbDir</code>.</p>
+<pre>coraine --database corDB                      <span class="c"># in RAM, no external service</span>
+coraine --database corDB --dbDir /var/lib/coraine</pre>
+
+<h3 id="troe"><code>--troe</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troe</code> · <code>CORAINE_TROE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>none</code></td></tr>
+  <tr><th>Values</th><td><code>none</code>, <code>timescale</code>, <code>corDB</code>, <code>ramDB</code>, or a path to a <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The temporal history (TRoE - Temporal Representation of Entities): what the Temporal API
+(<code>/ngsi-ld/v1/temporal/...</code>) reads. A short name is resolved to <code>&lt;plugin
+dir&gt;/troe/temporal/&lt;name&gt;.so</code>; <code>corDB</code> is the exception.</p>
+<ul>
+  <li><code>none</code> - no history. The temporal API has nothing to answer from.</li>
+  <li><code>timescale</code> - PostgreSQL, with TimescaleDB when the extension is there, a database per tenant (<a
+href="#docs/options" data-scroll="timescale">Plugin: timescale</a>). Works with any <code>--database</code>.</li>
+  <li><p><code>corDB</code> - the history inside the corDB store: the same lock, the same log, on disk with
+<code>--dbDir</code>. It is not a plugin file of its own: it is the current-state plugin's, so it needs
+<code>--database corDB</code>. With another store the start is refused:</p>
+<pre>$ coraine --database ramDB --troe corDB
+TRoE 'corDB' keeps the history inside the corDB store - it needs --database corDB (not 'ramDB')</pre></li>
+  <li><code>ramDB</code> - a ring of the latest 256 TRoE events in RAM, read through <code>GET
+/admin/troe/dump</code>; a test instrument, not a history the Temporal API serves.</li>
+</ul>
+<p>A plugin that is not there stops the start: <code>TRoE plugin 'bogus'
+(/opt/seamware/plugins/troe/temporal/bogus.so): not found</code>.</p>
+<pre>coraine --database corDB --troe corDB --dbDir /var/lib/coraine   <span class="c"># one process, state + history on disk</span>
+coraine --database corDB --troe timescale --troeHost pg</pre>
+
+<h3 id="troeSync"><code>--troeSync</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeSync</code> · <code>CORAINE_TROESYNC</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>When a request's history is handed to the TRoE plugin. By default after the response is sent: the response does not
+carry the cost, and a temporal read sent right after the response may not see the write yet. With
+<code>--troeSync</code> the history is handed over before the response, once the service routine is done, so a
+temporal read that follows the response sees it. The response still does not wait for the database to commit: with
+<code>timescale</code> the rows are queued for the writers, and a temporal read of the tenant waits for every row
+queued before it.</p>
+<p>It changes nothing with <code>--troe corDB</code> (the store records the history at the write itself, under its
+lock) or <code>--troe none</code>. Cost with <code>timescale</code>: 1-6 % fewer writes a second (<a
+href="#docs/performance/history">Performance</a>).</p>
+<pre>coraine --database corDB --troe timescale --troeSync</pre>
+
+<h3 id="asyncSnapshot"><code>--asyncSnapshot</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-asyncSnapshot</code> · <code>CORAINE_ASYNCSNAPSHOT</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>How <code>POST /ngsi-ld/v1/snapshots</code> runs a Snapshot's <code>snapshotQueries</code> and
+<code>snapshotTemporalQueries</code>. By default inside the request: the <code>201 Created</code> comes once the
+capture is done, and the Snapshot's <code>snapshotStatus</code> is final (<code>success</code>, <code>partial</code>,
+<code>empty</code> or <code>failure</code>). With <code>--asyncSnapshot</code> the capture runs on a thread of its own
+(§ 5.16.1.4: "executed in the background"): the <code>201</code> comes at once, the Snapshot reads
+<code>"snapshotStatus": "preparing"</code> until the capture is done, and the SnapshotNotification is sent from that
+thread. The <code>201</code> has no body either way. Any <code>--database</code>.</p>
+<pre>coraine --database corDB --asyncSnapshot</pre>
+
+<!-- ======================================================================= -->
+<h2 id="auth-plugin">Choosing the auth plugin</h2>
+<p>Without an auth plugin every request is let in. <code>--auth</code> loads one, and from then on the plugin decides,
+for every request, who sent it and whether it may: an HTTP request, a cor:// request, and each message of a transport
+(WebSocket). Not asked: the health port (<code>--healthPort</code>), the policy API port
+(<code>--policyApiPort</code>), an in-process forward and the broker's own requests. A plugin's own options exist only
+when it is loaded: <code>coraine --auth oidc -u</code> and <code>coraine --auth fdsc -u</code> list them. Built with
+<code>COR_FEATURE_AUTH</code> (on by default); off, <code>--auth</code> and both plugins are not in the build. Also
+documented in: <a href="#docs/authorization">Authorization</a>.</p>
+
+<h3 id="auth"><code>--auth</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-auth</code> · <code>CORAINE_AUTH</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no plugin, every request is let in</td></tr>
+  <tr><th>Values</th><td><code>oidc</code>, <code>fdsc</code> (the plugins in <code>&lt;plugin dir&gt;/auth/</code>), or a path to a <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+  <tr><th>Build switch</th><td><code>COR_FEATURE_AUTH</code></td></tr>
+</table>
+<p>The auth plugin. A short name is resolved to <code>&lt;plugin dir&gt;/auth/&lt;name&gt;.so</code>
+(<code>/opt/seamware/plugins</code> unless <code>SEAMWARE_PLUGIN_DIR</code> says otherwise); an argument with a
+<code>/</code> in it is the plugin's path. <code>coraine -u</code> lists the names it finds there.</p>
+<ul>
+  <li><code>oidc</code> - the access tokens of an OpenID provider (Keycloak, Auth0, Entra ID, ...), and two roles in
+them (<a href="#docs/options" data-scroll="oidc">Plugin: oidc</a>).</li>
+  <li><code>fdsc</code> - the FIWARE Data Space Connector's tokens and its ODRL policies (<a href="#docs/options"
+data-scroll="fdsc">Plugin: fdsc</a>).</li>
+</ul>
+<p>The broker fails closed: a plugin that is not there, or whose options its start-up refuses, stops the broker with
+exit code 1 - <code>--auth</code> asks for security, and a broker started without it would be open.</p>
+<pre>$ coraine --auth none
+auth plugin 'none' (/opt/seamware/plugins/auth/none.so): not found
+$ coraine --database corDB --auth oidc
+E: ... authInit: auth plugin 'oidc': no provider: --oidcIssuer (a token's iss is always checked)
+the auth plugin did not start - see the log</pre>
+<p>There is no <code>none</code> value: leaving <code>--auth</code> out is what lets every request in. A plugin option
+without its plugin is an unknown option: <code>coraine --oidcIssuer x</code> answers <code>coraine: unrecognized
+option: --oidcIssuer</code>.</p>
+<p>While a plugin has no keys yet (and <code>fdsc</code>: no policies), it answers 503 rather than let a request in. A
+401 carries <code>WWW-Authenticate: Bearer</code>, with <code>resource_metadata</code> pointing at <code>GET
+/.well-known/oauth-protected-resource</code> - how a client gets a token the plugin takes (<a
+href="#docs/authorization">Authorization</a>, § 2.5).</p>
+<pre>coraine --database corDB --auth oidc --oidcIssuer https://keycloak.example.org/realms/city
+coraine --database corDB --auth /opt/seamware/plugins/auth/oidc.so --oidcIssuer https://keycloak.example.org/realms/city</pre>
+
+<!-- ======================================================================= -->
+<h2 id="mongoc">Plugin: mongoc</h2>
+<p>Loaded by <code>--database mongoc</code> (the default).</p>
+<p>The current state in MongoDB, through the MongoDB C driver (libmongoc v2): a database per tenant,
+<code>&lt;--dbName&gt;</code> for the default tenant and <code>&lt;--dbName&gt;-&lt;tenant&gt;</code> for each other
+one, found again at every start. The hosted JSON-LD @contexts are kept apart, in <code>--globalDb</code>. Every option
+here is the mongoc plugin's own; the options are added to the plain <code>coraine -u</code> because mongoc is the
+default.</p>
+<p>Also documented in: <a href="#docs/installation">Installation</a>, <a href="#docs/installation/upgrading">Storage
+format</a>, <a href="#docs/database-indexes">Database indexes</a>, and <a href="#docs/high-availability">High
+availability</a> for a replica set.</p>
+
+<h3 id="mongoc-dbHost"><code>--dbHost</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbHost</code> · <code>CORAINE_DBHOST</code> · String</td></tr>
+  <tr><th>Default</th><td><code>localhost</code></td></tr>
+  <tr><th>Values</th><td>a host name or IP address</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB server's host. With <code>--dbPort</code> it makes the URI
+<code>mongodb://&lt;dbHost&gt;:&lt;dbPort&gt;</code>. Not used when <code>--dbURI</code> is given.</p>
+<pre>coraine --dbHost mongo --dbPort 27018</pre>
+
+<h3 id="mongoc-dbPort"><code>--dbPort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbPort</code> · <code>CORAINE_DBPORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>27017</code></td></tr>
+  <tr><th>Values</th><td>1-65535</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB server's TCP port, MongoDB's own default. Not used when <code>--dbURI</code> is given.</p>
+
+<h3 id="mongoc-dbUser"><code>--dbUser</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbUser</code> · <code>CORAINE_DBUSER</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no user: the connection is not authenticated</td></tr>
+  <tr><th>Values</th><td>a MongoDB user name</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The user the broker authenticates as. It is used only together with <code>--dbPwd</code>: both given, the URI is
+<code>mongodb://&lt;dbUser&gt;:&lt;dbPwd&gt;@&lt;dbHost&gt;:&lt;dbPort&gt;</code>; a user without a password is
+ignored. MongoDB authenticates it against the <code>admin</code> database (the driver's default); another
+authentication database needs <code>--dbURI</code>. Not used when <code>--dbURI</code> is given.</p>
+<p>The value goes into the URI as it is given, and the driver percent-decodes it: a user name or password with any
+character outside <code>A-Z a-z 0-9 - . _ ~</code> is given percent-encoded (RFC 3986) - <code>@</code> as
+<code>%40</code>, <code>:</code> as <code>%3A</code>, <code>/</code> as <code>%2F</code>, a space as <code>%20</code>,
+<code>%</code> itself as <code>%25</code>. The broker does not encode it: a value that is already encoded would be
+encoded twice. A <code>:</code> or <code>/</code> left as it is stops the start (for a password: <code>mongoc: invalid
+URI ...: Password must not have unescaped chars</code>); an <code>@</code> or a <code>%</code> left as it is gives the
+driver another user, host or password than the one meant - a refused authentication, or a refused URI.</p>
+<pre><span class="c"># the password p@ss:/%</span>
+coraine --dbHost mongo --dbUser coraine --dbPwd 'p%40ss%3A%2F%25'
+<span class="c"># encoding a password in the shell</span>
+python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' 'p@ss:/%'</pre>
+
+<h3 id="mongoc-dbPwd"><code>--dbPwd</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbPwd</code> · <code>CORAINE_DBPWD</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no password: <code>--dbUser</code> is ignored</td></tr>
+  <tr><th>Values</th><td>the password</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The password of <code>--dbUser</code>. A secret: <code>GET /admin/config</code> shows its value as
+<code>"***"</code> and marks the option <code>"secret": true</code> (not set, the value is <code>null</code>). Given
+as the environment variable <code>CORAINE_DBPWD</code>, it is not on the command line, which any user of the machine
+can read (<code>ps</code>); a process's environment is readable by its owner only. The broker's info log
+(<code>-v</code>) prints the connection URI with the password as <code>***</code>.</p>
+<pre>CORAINE_DBUSER=coraine CORAINE_DBPWD="$(cat /run/secrets/mongo)" coraine --dbHost mongo</pre>
+
+<h3 id="mongoc-dbURI"><code>--dbURI</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbURI</code> · <code>CORAINE_DBURI</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the URI is built from <code>--dbHost</code>, <code>--dbPort</code>, <code>--dbUser</code>, <code>--dbPwd</code></td></tr>
+  <tr><th>Values</th><td>a MongoDB connection string (<code>mongodb://...</code>, <code>mongodb+srv://...</code>)</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The whole connection string, passed to the driver as it is: several hosts, a replica set, TLS, an authentication
+database, the driver's options. Given, <code>--dbHost</code>, <code>--dbPort</code>, <code>--dbUser</code> and
+<code>--dbPwd</code> are not used. The database names still come from <code>--dbName</code> and
+<code>--globalDb</code>, not from the URI's path. <code>--high-availability mongo</code> needs a replica set, so a
+<code>--dbURI</code> with <code>replicaSet=</code> (<a href="#docs/high-availability">High availability</a>). A
+secret, as a URI may carry a password: <code>GET /admin/config</code> shows <code>"***"</code>, and the info log
+(<code>-v</code>) prints the URI with its password as <code>***</code>. An invalid URI stops the start: <code>mongoc:
+invalid URI '&lt;uri&gt;': &lt;the driver's reason&gt;</code>.</p>
+<pre>coraine --dbURI "mongodb://coraine:pw@m1,m2,m3/?replicaSet=rs0&amp;authSource=admin" --high-availability mongo</pre>
+
+<h3 id="mongoc-dbName"><code>--dbName</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbName</code> · <code>CORAINE_DBNAME</code> · String</td></tr>
+  <tr><th>Default</th><td><code>cor</code></td></tr>
+  <tr><th>Values</th><td>a MongoDB database name</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The database of the default tenant, and the prefix of the others: tenant <code>t1</code> is in
+<code>&lt;dbName&gt;-t1</code>. At start the broker finds every database named
+<code>&lt;dbName&gt;-&lt;something&gt;</code> and sets each up as a tenant. Two brokers with different
+<code>--dbName</code> share one MongoDB without seeing each other's data. The value may not be that of
+<code>--globalDb</code>; the start is refused:</p>
+<pre>$ coraine --dbName coraine
+E: ... mongoc: 'coraine' is the reserved global database name (used for JSON-LD context persistence); pick another -dbName or change --globalDb</pre>
+
+<h3 id="mongoc-globalDb"><code>--globalDb</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-globalDb</code> · <code>CORAINE_GLOBALDB</code> · String</td></tr>
+  <tr><th>Default</th><td><code>coraine</code></td></tr>
+  <tr><th>Values</th><td>a MongoDB database name, not that of <code>--dbName</code></td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The database for what belongs to no tenant: the JSON-LD @contexts the broker hosts (§ 5.13, collection
+<code>contexts</code>). Kept apart from <code>--dbName</code> so that it outlives tenants and is not taken for one.
+Brokers that share one MongoDB and should not share their hosted @contexts each need their own.</p>
+
+<h3 id="mongoc-dbTimeout"><code>--dbTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbTimeout</code> · <code>CORAINE_DBTIMEOUT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>30</code></td></tr>
+  <tr><th>Values</th><td>1-3600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>How long the driver looks for a server it can use - the server-selection timeout - before an operation fails. At
+start the broker pings the server and does not start if no server is found within it, so a broker started together
+with its MongoDB waits for it up to this long. The same bound applies to every operation while it runs (a server gone,
+an election in a replica set).</p>
+<pre>$ coraine --dbTimeout 1          <span class="c"># no MongoDB running</span>
+E: ... mongoc: ping failed: No suitable servers found: `serverSelectionTimeoutMS` expired: [Failed to connect to target host: localhost:27017]. Topology type: Single</pre>
+
+<h3 id="mongoc-dbValueIndexes"><code>--dbValueIndexes</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbValueIndexes</code> · <code>CORAINE_DBVALUEINDEXES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no declared indexes (the admin API can add some)</td></tr>
+  <tr><th>Values</th><td>attribute IRIs, comma-separated, or a JSON array of <code>{ "attribute", "type"?, "tenant"? }</code>; at most 24</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The attributes whose <code>q</code> value terms an index serves, declared at start. Each declaration is two indexes
+of the <code>entities</code> collection - <code>cor_v_&lt;id&gt;</code> on <code>&lt;attr&gt;.@none.value</code> and
+<code>cor_d_&lt;id&gt;</code> on <code>&lt;attr&gt;.@datasetIds</code>, partial on <code>type</code> when a type is
+declared - in every tenant it covers, a tenant set up later included. A query uses them through the q pre-filter. An
+index named <code>cor_v_*</code> or <code>cor_d_*</code> that no declaration names is dropped at a tenant's setup, so
+a declaration taken out of the option is gone at the next start.</p>
+<p>The attributes and types are expanded (IRIs): the option has no @context. A short name stops the start, naming the
+core @context's IRI of it: <code>mongoc: --dbValueIndexes: 'speed' is not an IRI - the option takes attributes and
+entity types expanded (the core @context's: https://uri.etsi.org/ngsi-ld/default-context/speed)</code>. Any other
+error in it stops the start too. Needs a build with <code>COR_FEATURE_DB_INDEXES</code> and
+<code>COR_FEATURE_Q_PREFILTER</code> (both on by default); without them the option does not exist. What it gains and
+costs, and <code>/admin/indexes</code>: <a href="#docs/database-indexes">Database indexes</a>.</p>
+<pre>coraine --dbValueIndexes https://example.org/speed
+coraine --dbValueIndexes '[{"attribute": "https://example.org/speed", "type": "https://example.org/Vehicle"}]'</pre>
+
+<!-- ======================================================================= -->
+<h2 id="cordb">Plugin: corDB</h2>
+<p>Loaded by <code>--database corDB</code>.</p>
+<p>The current state in the broker's own memory: one store per tenant, a tree of the Entities, Subscriptions and
+Registrations with its indexes, behind a read-write lock. Without <code>--dbDir</code> it is in RAM only and a restart
+starts empty. With <code>--dbDir</code> every write also appends its effect to a memory-mapped log, synced on a timer,
+with a snapshot as the log grows: a clean stop, <code>kill -9</code>, a crash or an OOM kill lose nothing that was
+acknowledged, a machine that dies at most the last sync interval. With <code>--troe corDB</code> the same store keeps
+the history. The plugin lives in the corDB library, which also builds <b>ramDB</b> (<code>--database ramDB</code>):
+the same store without the disk, whose only options are <code>--dbLockPrefer</code> and <code>--dbValueIndexes</code>
+- the disk options are unknown options there, and <code>--troe corDB</code> is refused.</p>
+<p>Also documented in: corDB's <a href="https://github.com/SEAMWARE/corDB#readme">README</a> and <a
+href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">persistence design</a>; <a
+href="#docs/installation/cordb">corDB on disk</a> and its cost in <a
+href="#docs/performance/durable">Performance</a>.</p>
+
+<h3 id="cordb-dbDir"><code>--dbDir</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbDir</code> · <code>CORAINE_DBDIR</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the store is in RAM only, and a restart starts empty</td></tr>
+  <tr><th>Values</th><td>a directory path</td></tr>
+  <tr><th>Plugin</th><td>corDB</td></tr>
+</table>
+<p>The directory the store is kept in, created (with its parents) if missing. Inside: <code>_storageFormat</code> (the
+<a href="#docs/installation/upgrading">storage format</a>, a number as text) and one directory per tenant,
+<code>_</code> for the default one, each with its log segments (<code>log-&lt;N&gt;.cor</code>) and its latest
+snapshot (<code>snap-&lt;N&gt;.cor</code>). At start every tenant directory is loaded - the snapshot, then the log
+after it. A store written by a newer release (a storage format above this build's) stops the start and is left as it
+is. A directory that cannot be created stops the start: <code>corDB: --dbDir '&lt;dir&gt;': &lt;reason&gt;</code>.
+With <code>--troe corDB</code> the history is kept here too. <code>--dbSync</code>, <code>--dbSyncInterval</code>,
+<code>--dbSnapshotEvery</code> and <code>--dbCompress</code> act only with it.</p>
+<pre>coraine --database corDB --dbDir /var/lib/coraine
+<span class="c"># a POST, a stop, a start on the same directory: the Entity is back</span>
+$ ls /var/lib/coraine /var/lib/coraine/_
+/var/lib/coraine:
+_  _storageFormat
+
+/var/lib/coraine/_:
+log-000001.cor  snap-000001.cor</pre>
+
+<h3 id="cordb-dbSync"><code>--dbSync</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbSync</code> · <code>CORAINE_DBSYNC</code> · String</td></tr>
+  <tr><th>Default</th><td><code>interval</code></td></tr>
+  <tr><th>Values</th><td><code>interval</code>, <code>request</code>, <code>none</code></td></tr>
+  <tr><th>Plugin</th><td>corDB</td></tr>
+</table>
+<p>When a write reaches the disk. A write copies its record into the memory-mapped log - the kernel's page cache -
+before its response; this option decides when that is <code>fdatasync</code>ed.</p>
+<ul>
+  <li><code>interval</code> - a flusher thread syncs every tenant's log every <code>--dbSyncInterval</code> ms. The
+response does not wait. A broker that dies loses nothing it acknowledged; a machine that dies, at most the last
+interval.</li>
+  <li><code>request</code> - the response waits for its record's sync. The writers that arrive during one sync share
+the next (group commit). A write that cannot be logged (a full disk) is answered 503.</li>
+  <li><code>none</code> - the log is written, never synced: for tests, benchmarks, a RAM disk.</li>
+</ul>
+<p>Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbSync without --dbDir - the store is in RAM
+only, there is no disk for it to act on</code>.</p>
+<p>An unknown value stops the start - with <code>--dbDir</code> only, as without it the option is not read:
+<code>corDB: --dbSync 'sometimes': interval, request or none</code>.</p>
+<pre>coraine --database corDB --dbDir /var/lib/coraine --dbSync request</pre>
+
+<h3 id="cordb-dbSyncInterval"><code>--dbSyncInterval</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbSyncInterval</code> · <code>CORAINE_DBSYNCINTERVAL</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>100</code></td></tr>
+  <tr><th>Values</th><td>1-60000 (milliseconds)</td></tr>
+  <tr><th>Plugin</th><td>corDB</td></tr>
+</table>
+<p>The time between two rounds of the flusher, which writes and syncs every tenant's log. With <code>--dbSync
+interval</code> it bounds what a machine that dies can lose; with <code>--dbSync request</code> a waiting write starts
+a round at once, and the interval is the longest the log goes unsynced without one. A value out of range stops the
+start: <code>coraine: value 0 for option '--dbSyncInterval' is inferior to its lower limit. Allowed range:
+1-60000</code>. Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbSyncInterval without --dbDir -
+the store is in RAM only, there is no disk for it to act on</code>.</p>
+
+<h3 id="cordb-dbSnapshotEvery"><code>--dbSnapshotEvery</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbSnapshotEvery</code> · <code>CORAINE_DBSNAPSHOTEVERY</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>64</code></td></tr>
+  <tr><th>Values</th><td>1-65536 (MiB)</td></tr>
+  <tr><th>Plugin</th><td>corDB</td></tr>
+</table>
+<p>How much log a tenant writes before it is snapshotted: once it has written this many MiB of log <b>and</b> at least
+as much log as its last snapshot was big, so that the snapshots of a growing store cost in proportion to what is
+written. A snapshot is written on a thread of its own, in slices under the read lock; the log before it is then
+deleted, and a start replays only the log after it. Every tenant is also snapshotted at a clean stop (SIGTERM,
+SIGINT). Smaller: faster starts, more snapshot work while running. Given without <code>--dbDir</code> it stops the
+start: <code>corDB: --dbSnapshotEvery without --dbDir - the store is in RAM only, there is no disk for it to act
+on</code>.</p>
+
+<h3 id="cordb-dbCompress"><code>--dbCompress</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbCompress</code> · <code>CORAINE_DBCOMPRESS</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>corDB</td></tr>
+</table>
+<p>Compresses the snapshots and the finished log and history segments with zstd (level 3), on the snapshot thread; the
+open segment, which writes append to, never. With it a segment rolls at 64 MiB instead of 1 GiB, so a history - which
+no snapshot drops - is mostly compressed segments. A start reads a compressed store with the option or without it, and
+a start with it compresses the finished segments a run without it left. libzstd (<code>libzstd.so.1</code>) is loaded
+only then; missing, the start is refused: <code>corDB: --dbCompress needs libzstd.so.1 (zstd) - not found</code>.
+Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbCompress without --dbDir - the store is in RAM
+only, there is no disk for it to act on</code>. On disk, 100 000 Entities: 74 MB plain, 1.4 MB compressed (<a
+href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md#6a---dbcompress">persistence § 6a</a>).</p>
+<pre>coraine --database corDB --dbDir /var/lib/coraine --dbCompress</pre>
+
+<h3 id="cordb-dbLockPrefer"><code>--dbLockPrefer</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbLockPrefer</code> · <code>CORAINE_DBLOCKPREFER</code> · String</td></tr>
+  <tr><th>Default</th><td><code>reads</code></td></tr>
+  <tr><th>Values</th><td><code>reads</code>, <code>writes</code></td></tr>
+  <tr><th>Plugin</th><td>corDB (and ramDB)</td></tr>
+</table>
+<p>Whom a tenant's store lock lets in first when readers and writers both wait. <code>reads</code> is glibc's default
+read-write lock; <code>writes</code> makes it writer-preferring. Measured: writers first, a bare <code>PATCH</code>
++2-4 %, a <code>PATCH</code> that notifies -3-4 % (the match and the notification read the Entity) (<a
+href="https://github.com/SEAMWARE/coraine/blob/main/doc/performance.md#writes-that-notify-and-which-writer-the-lock-lets-in-first">Performance</a>).
+Another value stops the start: <code>corDB: --dbLockPrefer 'both': reads or writes</code>.</p>
+<pre>coraine --database corDB --dbLockPrefer writes</pre>
+
+<h3 id="cordb-dbValueIndexes"><code>--dbValueIndexes</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbValueIndexes</code> · <code>CORAINE_DBVALUEINDEXES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no declared indexes (the admin API can add some)</td></tr>
+  <tr><th>Values</th><td>attribute IRIs, comma-separated, or a JSON array of <code>{ "attribute", "type"?, "tenant"? }</code>; at most 64</td></tr>
+  <tr><th>Plugin</th><td>corDB (and ramDB)</td></tr>
+</table>
+<p>The attributes whose <code>q</code> value terms an index serves, declared at start. Each declaration is a value
+index in the store of every tenant it covers - the attribute's values, each with its Entity, in order - serving
+<code>==</code>, a range, a list, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>. Not
+on disk: built by the first query that can use it, again after every start; a change of the declarations (the admin
+API) builds every index again. The format, the expanded names, and the start refused for a short name (<code>corDB:
+--dbValueIndexes: 'speed' is not an IRI - ...</code>) are as for mongoc's option of the same name. Needs a build with
+<code>COR_FEATURE_DB_INDEXES</code> (on by default). <a href="#docs/database-indexes">Database indexes</a>, <a
+href="https://github.com/SEAMWARE/corDB#queries-by-value---declared-indexes">corDB's README</a>.</p>
+<pre>coraine --database corDB --dbValueIndexes https://example.org/speed</pre>
+
+<h3 id="cordb-troeInstanceCap"><code>--troeInstanceCap</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeCap</code> · <code>CORAINE_TROEINSTANCECAP</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>1000000</code></td></tr>
+  <tr><th>Values</th><td>1-1000000</td></tr>
+  <tr><th>Plugin</th><td>corDB, with <code>--troe corDB</code></td></tr>
+</table>
+<p>The most instances per Attribute a temporal retrieve or query returns when it has no <code>lastN</code> or
+<code>firstN</code> (§ 6.4.7.3), oldest first. More there: the response is a <code>200</code> with the first page and
+a <code>Link: &lt;...?offsetN=&lt;cap&gt;&gt;; rel="intervalafter"</code> header for the next. The default is a safety
+bound, not a page size. Present only with <code>--troe corDB</code> (timescale has an option of the same name).</p>
+<pre>$ coraine --database corDB --troe corDB --troeInstanceCap 2
+<span class="c"># an Entity created with speed 1, then PATCHed to 2, 3, 4</span>
+$ curl -i localhost:1026/ngsi-ld/v1/temporal/entities/urn:ngsi-ld:T:capx1
+HTTP/1.1 200 OK
+Link: &lt;/ngsi-ld/v1/temporal/entities/urn:ngsi-ld:T:capx1?offsetN=2&gt;;rel="intervalafter";type="application/json"
+
+{"id":"urn:ngsi-ld:T:capx1","type":"T","speed":[{"type":"Property","value":1,...},{"type":"Property","value":2,...}]}</pre>
+
+<!-- ======================================================================= -->
+<h2 id="timescale">Plugin: timescale</h2>
+<p>Loaded by <code>--troe timescale</code>.</p>
+<p>The temporal history in PostgreSQL, with TimescaleDB hypertables when the <code>timescaledb</code> extension is
+installed (plain PostgreSQL otherwise), and PostGIS for geo-queries when it can be created. A database per tenant:
+<code>&lt;--troeName&gt;</code> for the default tenant, <code>&lt;--troeName&gt;_&lt;tenant&gt;</code> for each other
+one (every run of characters outside <code>a-z0-9</code> in the tenant's name becomes one <code>_</code>), each
+created through the <code>postgres</code> database the first time it is needed and migrated to the build's schema. The
+default tenant's is set up at start, before the broker serves. A request's history is queued for the tenant's writer
+threads, which write it in shared transactions; it can be held in memory (8 MiB) while the database is down. Works
+with any <code>--database</code>.</p>
+<p>Also documented in: <a href="#docs/installation/timescale">TimescaleDB history</a> and <a
+href="#docs/installation/db-down">The database down</a> in Installation; its cost in <a
+href="#docs/performance/history">Performance</a>.</p>
+
+<h3 id="timescale-troeHost"><code>--troeHost</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeHost</code> · <code>CORAINE_TROEHOST</code> · String</td></tr>
+  <tr><th>Default</th><td><code>localhost</code></td></tr>
+  <tr><th>Values</th><td>a host name or IP address</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The PostgreSQL server's host (libpq's <code>host=</code>).</p>
+<pre>coraine --database corDB --troe timescale --troeHost pg --troeUser coraine</pre>
+
+<h3 id="timescale-troePort"><code>--troePort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troePort</code> · <code>CORAINE_TROEPORT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>5432</code></td></tr>
+  <tr><th>Values</th><td>1-65535</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The PostgreSQL server's TCP port, PostgreSQL's own default.</p>
+
+<h3 id="timescale-troeUser"><code>--troeUser</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeUser</code> · <code>CORAINE_TROEUSER</code> · String</td></tr>
+  <tr><th>Default</th><td><code>postgres</code></td></tr>
+  <tr><th>Values</th><td>a PostgreSQL role</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The role the broker connects as. It creates a database per tenant (<code>CREATE DATABASE</code>, through the
+<code>postgres</code> database) and the tables and extensions in it, so the role needs those rights.</p>
+
+<h3 id="timescale-troePwd"><code>--troePwd</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troePwd</code> · <code>CORAINE_TROEPWD</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no password in the connection string: libpq takes one from <code>PGPASSWORD</code> or <code>~/.pgpass</code>, if any</td></tr>
+  <tr><th>Values</th><td>the password</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The password of <code>--troeUser</code>. A secret: <code>GET /admin/config</code> shows its value as
+<code>"***"</code> and marks the option <code>"secret": true</code> (not set, the value is <code>null</code>). Given
+as the environment variable <code>CORAINE_TROEPWD</code>, it is not on the command line, which any user of the machine
+can read (<code>ps</code>); a process's environment is readable by its owner only. Leaving it out and giving libpq its
+own <code>PGPASSWORD</code> keeps it out of the broker's options altogether. It goes into the connection string
+unquoted: a password with a space or a <code>'</code> in it is not passed as it is.</p>
+<pre>$ CORAINE_TROEPWD="$(cat /run/secrets/pg)" coraine --database corDB --troe timescale --apiPlugins admin
+$ curl -s localhost:1026/admin/config     <span class="c"># the --troePwd entry:</span>
+{"name": "--troePwd", "short": "-troePwd", "type": "string", "value": "***", "default": null, "from": "env", "env": "CORAINE_TROEPWD", "secret": true, ...}</pre>
+
+<h3 id="timescale-troeName"><code>--troeName</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeName</code> · <code>CORAINE_TROENAME</code> · String</td></tr>
+  <tr><th>Default</th><td><code>corh</code></td></tr>
+  <tr><th>Values</th><td>a PostgreSQL database name</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The database of the default tenant's history, and the prefix of the others: tenant <code>t1</code> is in
+<code>corh_t1</code>. Two brokers with different names share one PostgreSQL without sharing a history. Every broker
+that writes the same history - the instances of a <a href="#docs/high-availability">High availability</a> set,
+<code>coraine-import</code> - uses the same name.</p>
+
+<h3 id="timescale-troePoolSize"><code>--troePoolSize</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troePoolSize</code> · <code>CORAINE_TROEPOOLSIZE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>10</code></td></tr>
+  <tr><th>Values</th><td>1-256</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The connections per tenant for the temporal reads and the Temporal API's writes (the writers have connections of
+their own, <code>--troeWriters</code>). A request that finds none free waits for one, up to 10 s, and then fails. A
+tenant can hold <code>--troePoolSize</code> + <code>--troeWriters</code> connections: PostgreSQL's
+<code>max_connections</code> has to allow that times the tenants, times the brokers.</p>
+
+<h3 id="timescale-troeWriters"><code>--troeWriters</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeWriters</code> · <code>CORAINE_TROEWRITERS</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>8</code></td></tr>
+  <tr><th>Values</th><td>0-64</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The writer threads per tenant, each on a connection of its own, opened the first time it writes. A writer takes
+everything queued - up to 512 requests, 1 MiB - and writes it in one transaction; a second one starts when none is
+writing, or when 8 requests wait. The queue holds 8 MiB; past it a request waits for room. <code>0</code>: no writers
+- every request writes its own history, in a transaction of its own, after its response (before it with
+<code>--troeSync</code>), and nothing is held while the database is down: a request whose history does not go in loses
+it.</p>
+
+<h3 id="timescale-troeConnectTimeout"><code>--troeConnectTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeConnectTimeout</code> · <code>CORAINE_TROECONNECTTIMEOUT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>30</code></td></tr>
+  <tr><th>Values</th><td>0-3600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>How long a start waits for the database, trying once a second; <code>0</code>: one try. A broker started together
+with its PostgreSQL does not fail for starting first. Past it the broker does not start (exit code 1):</p>
+<pre>$ coraine --database corDB --troe timescale --troePort 19659 --troeConnectTimeout 0
+E: ... timescale: connection to db 'postgres' failed: connection to server at "localhost" (127.0.0.1), port 19659 failed: Connection refused
+E: ... timescale: failed to initialise the default-tenant database (0 s, --troeConnectTimeout)</pre>
+<p>A wrong password is retried the same way, until the timeout.</p>
+
+<h3 id="timescale-troeDownExit"><code>--troeDownExit</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeDownExit</code> · <code>CORAINE_TROEDOWNEXIT</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code></td></tr>
+  <tr><th>Values</th><td>0-86400 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>What the broker does when the history database goes down while it serves. <code>0</code>: it keeps serving the
+current state and its subscriptions; the history is held in memory, up to 8 MiB, retried, and written when the
+database is back - past 8 MiB it is lost, and counted. With <code>&lt;s&gt;</code> the broker exits (code 1, at once,
+no clean stop) after <code>&lt;s&gt;</code> seconds of the database down while history is held, or at the first row of
+history that would be lost, whichever comes first. The history held is lost at the exit. A restarted broker waits for
+the database (<code>--troeConnectTimeout</code>), so with an orchestrator that restarts it, an outage of the history
+becomes an outage of the broker. With <code>--troeWriters 0</code> it exits at the first history lost. <a
+href="#docs/installation/db-down">The database down</a>.</p>
+<pre>coraine --database corDB --troe timescale --troeDownExit 30</pre>
+
+<h3 id="timescale-troeSqlIndexes"><code>--troeSqlIndexes</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeSqlIndexes</code> · <code>CORAINE_TROESQLINDEXES</code> · String</td></tr>
+  <tr><th>Default</th><td><code>none</code></td></tr>
+  <tr><th>Values</th><td><code>none</code>, or a comma list of <code>attrObserved</code>, <code>geo</code>, <code>time</code></td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>Indexes of the history beyond the basic ones, for SQL that goes to PostgreSQL directly (a dashboard, a report); the
+Temporal API's queries do not use them. <code>attrObserved</code>: <code>troe_attrs (attr_name, observed_at)</code>;
+<code>geo</code>: GiST on the GeoProperty values; <code>time</code>: <code>troe_attrs (modified_at)</code>. Each costs
+every write. Applied at start: a chosen one is created over every row there is, one not chosen is dropped - every
+broker on the same database should run with the same choice. An unknown name stops the start: <code>timescale:
+--troeSqlIndexes: unknown index 'foo' (the choice: attrObserved, geo, time)</code>. <a
+href="#docs/database-indexes/postgresql-timescaledb-the-temporal-history">The indexes of the history</a>.</p>
+<pre>coraine --database corDB --troe timescale --troeSqlIndexes attrObserved,time</pre>
+
+<h3 id="timescale-troeValueIndexes"><code>--troeValueIndexes</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeValueIndexes</code> · <code>CORAINE_TROEVALUEINDEXES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no declared indexes (the admin API can add some)</td></tr>
+  <tr><th>Values</th><td>attribute IRIs, comma-separated, or a JSON array of <code>{ "attribute", "type"?, "tenant"? }</code>; at most 32</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The attributes whose <code>q</code> value terms an index of the history serves, for temporal queries. Each
+declaration is two partial indexes of <code>troe_attrs</code> (<code>cor_n_&lt;id&gt;</code> on <code>v_number</code>,
+<code>cor_t_&lt;id&gt;</code> on <code>v_text</code>, where <code>attr_name</code> is the attribute, and the type when
+one is declared), in the database of every tenant it covers, applied when a tenant's history is opened; an index
+<code>cor_n_*</code> / <code>cor_t_*</code> that no declaration names is dropped then. Each costs the writes of its
+attribute's history. The format and the rules are those of <code>--dbValueIndexes</code>; a short name stops the
+start: <code>timescale: --troeValueIndexes: 'speed' is not an IRI - ...</code>. Needs
+<code>COR_FEATURE_DB_INDEXES</code> (on by default). <code>/admin/troeIndexes</code>, and indexes made in the
+database: <a href="#docs/database-indexes/postgresql-timescaledb-the-temporal-history">TimescaleDB (the
+history)</a>.</p>
+<pre>coraine --database corDB --troe timescale --troeValueIndexes https://example.org/speed</pre>
+
+<h3 id="timescale-troeInstanceCap"><code>--troeInstanceCap</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troeCap</code> · <code>CORAINE_TROEINSTANCECAP</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>1000000</code></td></tr>
+  <tr><th>Values</th><td>1-1000000</td></tr>
+  <tr><th>Plugin</th><td>timescale</td></tr>
+</table>
+<p>The most instances per Attribute a temporal retrieve or query returns when it has no <code>lastN</code> or
+<code>firstN</code> (§ 6.4.7.3), oldest first; more there, a <code>200</code> with the first page and a <code>Link:
+&lt;...?offsetN=&lt;cap&gt;&gt;; rel="intervalafter"</code> header for the next - as corDB's option of the same name.
+The default is a safety bound, not a page size.</p>
+<pre>coraine --database corDB --troe timescale --troeInstanceCap 1000</pre>
+
+<!-- ======================================================================= -->
+<h2 id="oidc">Plugin: oidc</h2>
+<p>Loaded by <code>--auth oidc</code>.</p>
+<p><code>oidc.so</code> takes the access tokens of an OpenID provider - a JWT the provider signed with RS256 or ES256
+- and decides each request at its admission, on its method and NGSI-LD operation and the token's roles and tenants.
+Two roles: the read role reads (<code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code> and the three query
+operations that are POSTs), the write role reads and writes. No token, or one that does not hold: 401; a token without
+the role or the tenant a request needs: 403. The provider's keys are fetched by a thread of the plugin; until there
+are some, every request is a 503. Built with <code>COR_FEATURE_AUTH_OIDC</code> (on by default). Also documented in:
+<a href="#docs/authorization/oidc-options">Authorization</a>.</p>
+
+<h3 id="oidc-oidcIssuer"><code>--oidcIssuer</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcIssuer</code> · <code>CORAINE_OIDCISSUER</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the broker does not start</td></tr>
+  <tr><th>Values</th><td>the provider's issuer URL</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The provider's issuer: the <code>iss</code> every token must have, compared as a string. Without
+<code>--oidcDiscovery</code> or <code>--oidcJwks</code> the keys are found through
+<code>&lt;issuer&gt;/.well-known/openid-configuration</code> (a trailing <code>/</code> of the issuer is dropped
+first). Required - without it the broker stops at start: <code>auth plugin 'oidc': no provider: --oidcIssuer (a
+token's iss is always checked)</code>.</p>
+<p>A token of another issuer is a 401 with <code>error_description="wrong issuer"</code>. The issuer is what <code>GET
+/.well-known/oauth-protected-resource</code> gives as <code>authorization_servers</code>.</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city</pre>
+
+<h3 id="oidc-oidcDiscovery"><code>--oidcDiscovery</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcDiscovery</code> · <code>CORAINE_OIDCDISCOVERY</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>&lt;--oidcIssuer&gt;/.well-known/openid-configuration</code></td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), or a file (a path, or <code>file://</code>)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The provider's OpenID discovery document, for a broker that reaches the provider by another name than the issuer's
+(inside a cluster: <code>http://keycloak:8080/...</code> while the tokens carry the public name). Its
+<code>jwks_uri</code> gives the keys, and its <code>issuer</code> must be <code>--oidcIssuer</code> (OpenID Connect
+Discovery 1.0 § 4.3): a document of another issuer is not used, the log says so (<code>its issuer is '...', not
+--oidcIssuer's '...'</code>), and with no keys every request is a 503. The <code>jwks_uri</code> in it must be one the
+broker can reach.</p>
+<p>Not with <code>--oidcJwks</code>: the broker stops at start with <code>auth plugin 'oidc': --oidcDiscovery and
+--oidcJwks: one or the other</code>.</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city \
+        --oidcDiscovery http://keycloak:8080/realms/city/.well-known/openid-configuration</pre>
+
+<h3 id="oidc-oidcJwks"><code>--oidcJwks</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcJwks</code> · <code>CORAINE_OIDCJWKS</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the keys come from the discovery document</td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), or a file (a path, or <code>file://</code>)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The provider's JWK Set itself, instead of the discovery document: no discovery document is read.
+<code>--oidcIssuer</code> is still required (the <code>iss</code> of a token is always checked). Not with
+<code>--oidcDiscovery</code>. A JWK Set that cannot be read is in the log (<code>oidc: the provider's keys
+(&lt;where&gt;): cannot open '&lt;file&gt;'</code>), and until it can every request is a 503 (<code>the provider's
+keys are not loaded yet</code>). A file is read again every <code>--oidcRefresh</code> seconds, as a URL is
+fetched.</p>
+<pre>coraine --database corDB --auth oidc --oidcIssuer https://idp.example.org/realms/city --oidcJwks /etc/coraine/jwks.json</pre>
+
+<h3 id="oidc-oidcAudience"><code>--oidcAudience</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcAudience</code> · <code>CORAINE_OIDCAUDIENCE</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>aud</code> is not checked</td></tr>
+  <tr><th>Values</th><td>an audience (a client id)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>An audience the token's <code>aud</code> must hold (a string, or an array that has it). A token without it is a 401
+with <code>error_description="wrong audience"</code>. Without the option every token the provider issued for any of
+its clients is taken, and the broker says so at start (<code>oidc: --oidcAudience not set - a token issued for any
+client of the provider is taken</code>). Keycloak puts a client into <code>aud</code> only with an audience mapper on
+the client the applications log in with (<a href="#docs/authorization/keycloak">Authorization</a>).</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcAudience coraine</pre>
+
+<h3 id="oidc-oidcLeeway"><code>--oidcLeeway</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcLeeway</code> · <code>CORAINE_OIDCLEEWAY</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>60</code></td></tr>
+  <tr><th>Values</th><td>0-600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The clock skew allowed between the broker and the provider, in seconds: a token is taken until <code>exp</code>
+plus the leeway, and from <code>nbf</code> minus it. A token outside it is a 401 with
+<code>error_description="expired, or not yet valid"</code>. A token found in the token cache has its <code>exp</code>
+and <code>nbf</code> checked again with the same leeway on every request. Out of range: the broker does not start
+(<code>value 601 for option '--oidcLeeway' exceeds its upper limit. Allowed range: 0-600</code>).</p>
+<pre>coraine --auth oidc --oidcIssuer https://idp.example.org/realms/city --oidcLeeway 0</pre>
+
+<h3 id="oidc-oidcRefresh"><code>--oidcRefresh</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcRefresh</code> · <code>CORAINE_OIDCREFRESH</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>300</code></td></tr>
+  <tr><th>Values</th><td>1-86400 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>Seconds between two fetches of the provider's keys (the discovery document, then its <code>jwks_uri</code>; or
+<code>--oidcJwks</code>). While there are no keys the fetch is repeated every second, whatever the option says - the
+provider may start after the broker. A token signed with a key the set does not have (the provider rotated its keys)
+is a 401 and has the keys fetched at once, at most once a second. A new key set empties the token cache.</p>
+<pre>coraine --auth oidc --oidcIssuer https://idp.example.org/realms/city --oidcRefresh 60</pre>
+
+<h3 id="oidc-oidcRolesClaim"><code>--oidcRolesClaim</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcRolesClaim</code> · <code>CORAINE_OIDCROLESCLAIM</code> · String</td></tr>
+  <tr><th>Default</th><td><code>realm_access.roles</code></td></tr>
+  <tr><th>Values</th><td>a claim's path, dot-separated</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>Where in the token the roles are: a path of claim names separated by dots, each one an object member. The claim is
+an array of strings, or a string of space-separated values (<code>scope</code>). The default is Keycloak's realm
+roles; <code>resource_access.&lt;client&gt;.roles</code> is a Keycloak client's roles, <code>scope</code>,
+<code>roles</code> or <code>groups</code> other providers'. A token whose claim does not hold
+<code>--oidcReadRole</code> or <code>--oidcWriteRole</code> may do nothing: 403 (<code>the token has neither role
+'...' nor '...' (claim '...')</code>). An empty value stops the broker at start (<code>--oidcRolesClaim,
+--oidcReadRole, --oidcWriteRole, --oidcTenantsClaim: none may be empty</code>).</p>
+<pre>coraine --auth oidc --oidcIssuer https://idp.example.org --oidcRolesClaim scope</pre>
+
+<h3 id="oidc-oidcReadRole"><code>--oidcReadRole</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcReadRole</code> · <code>CORAINE_OIDCREADROLE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>ngsild-read</code></td></tr>
+  <tr><th>Values</th><td>a role name</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The role that reads: <code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>, and the queries that are POSTs -
+<code>POST /ngsi-ld/v1/entityOperations/query</code>, <code>POST /ngsi-ld/v1/temporal/entityOperations/query</code>
+and <code>POST /ngsi-ld/v1/temporal/timepoint/entityOperations/query</code>. A token with only this role that writes
+gets a 403 (<code>a write needs the role 'ngsild-write' (claim 'realm_access.roles')</code>). Not empty (see
+<code>--oidcRolesClaim</code>).</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcReadRole city-viewer</pre>
+
+<h3 id="oidc-oidcWriteRole"><code>--oidcWriteRole</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcWriteRole</code> · <code>CORAINE_OIDCWRITEROLE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>ngsild-write</code></td></tr>
+  <tr><th>Values</th><td>a role name</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>The role that reads and writes: every request. Creating or updating a subscription is a write. Not empty (see
+<code>--oidcRolesClaim</code>).</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcWriteRole city-editor</pre>
+
+<h3 id="oidc-oidcTenantsClaim"><code>--oidcTenantsClaim</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcTenantsClaim</code> · <code>CORAINE_OIDCTENANTSCLAIM</code> · String</td></tr>
+  <tr><th>Default</th><td><code>tenants</code></td></tr>
+  <tr><th>Values</th><td>a claim's path, dot-separated</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>Where in the token the tenants it may use are: a dot-separated path, as <code>--oidcRolesClaim</code>; an array of
+strings, or a string of space-separated values. <code>default</code> is the default tenant (a request without
+<code>NGSILD-Tenant</code>), <code>*</code> every tenant. A token without the claim may use the default tenant only; a
+token whose claim names tenants may use those and no other - the default tenant only when <code>default</code> is
+among them. A request in another tenant is a 403 (<code>the token may not use the tenant 't1' (claim
+'tenants')</code>), decided before the tenant is resolved, so a create in a tenant the token may not use makes no
+tenant. Not empty (see <code>--oidcRolesClaim</code>). Not read with <code>--oidcAnyTenant</code>.</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcTenantsClaim org.tenants</pre>
+
+<h3 id="oidc-oidcAnyTenant"><code>--oidcAnyTenant</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcAnyTenant</code> · <code>CORAINE_OIDCANYTENANT</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>No tenant check: every token may use every tenant, and <code>--oidcTenantsClaim</code> is not read. The roles are
+checked as without it. <code>GET /.well-known/oauth-protected-resource</code> then gives <code>"coraine_tenants":
+null</code>.</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcAnyTenant</pre>
+
+<h3 id="oidc-oidcAnonymousRead"><code>--oidcAnonymousRead</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcAnonymousRead</code> · <code>CORAINE_OIDCANONYMOUSREAD</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>A read without a token (the reads of <code>--oidcReadRole</code>) is let in, in every tenant. A write without a
+token is still a 401 (<code>no access token (Authorization: Bearer)</code>). A request that does send a token is
+decided on the token, as without the option: a token that does not hold is a 401 even for a read.</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcAnonymousRead</pre>
+
+<h3 id="oidc-oidcOwnerMaxAge"><code>--oidcOwnerMaxAge</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-oidcOwnerMaxAge</code> · <code>CORAINE_OIDCOWNERMAXAGE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>86400</code> (a day)</td></tr>
+  <tr><th>Values</th><td>1-31536000 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>oidc</td></tr>
+</table>
+<p>A subscription's owner - the roles and tenants of the token that created it or last updated it - is kept with the
+subscription and holds for this many seconds from that request. Each notification is sent only while the owner holds,
+has a role that reads, and may use the subscription's tenant; after that none are sent, until a request with a valid
+token updates the subscription and makes its sender the owner. This is what bounds how long roles or tenants taken
+away at the provider still receive notifications: the token's own <code>exp</code> is not used (a token lives minutes,
+a subscription months).</p>
+<pre>coraine --auth oidc --oidcIssuer https://keycloak.example.org/realms/city --oidcOwnerMaxAge 3600</pre>
+
+<!-- ======================================================================= -->
+<h2 id="fdsc">Plugin: fdsc</h2>
+<p>Loaded by <code>--auth fdsc</code>.</p>
+<p><code>fdsc.so</code> takes what the FIWARE Data Space Connector's provider side has, unchanged: the access token
+VCVerifier issues for a Verifiable Presentation (a JWT, checked as APISIX's <code>openid-connect</code> checks it),
+and the ODRL policies of the ODRL-PAP, evaluated in the broker as OPA evaluates the Rego the PAP generates. No token,
+or one that does not hold: 401; no policy that allows the request: 403 (<code>no policy allows the request</code>).
+Keys and policies are fetched by a thread of the plugin and replaced whole; until the keys are there a request with a
+token is a 503, and until the policies are there every request is. A source of keys (<code>--fdscDiscovery</code> or
+<code>--fdscJwks</code>) and a source of policies (<code>--fdscPap</code> or <code>--fdscPolicies</code>) are
+required. The broker can also hold the policies itself, on a port of its own - <code>--policyApiPort</code>, a core
+option (<a href="#docs/authorization/policy-api">Authorization</a>). Also documented in: <a
+href="#docs/authorization/fdsc-options">Authorization</a>.</p>
+
+<h3 id="fdsc-fdscDiscovery"><code>--fdscDiscovery</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscDiscovery</code> · <code>CORAINE_FDSCDISCOVERY</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>--fdscJwks</code> is needed instead</td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), or a file (a path, or <code>file://</code>)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The verifier's OpenID discovery document - the URL APISIX's <code>openid-connect</code> has as
+<code>discovery</code> (<code>http://verifier:3000/services/&lt;service&gt;/.well-known/openid-configuration</code>).
+Its <code>jwks_uri</code> gives the keys, its <code>issuer</code> the <code>iss</code> a token must have unless
+<code>--fdscIssuer</code> is given. A document without an <code>issuer</code>, and no <code>--fdscIssuer</code>: every
+request with a token is a 503 (<code>the verifier's issuer is not known (its discovery document has none, and
+--fdscIssuer is not set)</code>). Without it and without <code>--fdscJwks</code> the broker stops at start: <code>auth
+plugin 'fdsc': no keys to check a token with: --fdscDiscovery or --fdscJwks</code>. With both, <code>--fdscJwks</code>
+is used and the discovery document is not read.</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscPap http://odrl-pap:8080</pre>
+
+<h3 id="fdsc-fdscJwks"><code>--fdscJwks</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscJwks</code> · <code>CORAINE_FDSCJWKS</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the keys come from <code>--fdscDiscovery</code></td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), or a file (a path, or <code>file://</code>)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The verifier's JWK Set itself, instead of the discovery document. It needs <code>--fdscIssuer</code>: the broker
+stops at start with <code>auth plugin 'fdsc': --fdscJwks needs --fdscIssuer: a token's iss is always checked</code>. A
+JWK Set that cannot be read is in the log, and requests with a token are a 503 until it can (<code>the verifier's keys
+are not loaded yet</code>).</p>
+<pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
+        --fdscPolicies /etc/coraine/policies.json</pre>
+
+<h3 id="fdsc-fdscIssuer"><code>--fdscIssuer</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscIssuer</code> · <code>CORAINE_FDSCISSUER</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the discovery document's <code>issuer</code></td></tr>
+  <tr><th>Values</th><td>the verifier's issuer (a URL or a DID)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The <code>iss</code> every token must have. Without it, the one the discovery document gives (re-read at every
+refresh). Required with <code>--fdscJwks</code>. A token of another issuer is a 401 with
+<code>error_description="wrong issuer"</code>. It is what <code>GET /.well-known/oauth-protected-resource</code> gives
+as <code>authorization_servers</code>.</p>
+<pre>coraine --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org --fdscPap http://odrl-pap:8080</pre>
+
+<h3 id="fdsc-fdscAudience"><code>--fdscAudience</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscAudience</code> · <code>CORAINE_FDSCAUDIENCE</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>aud</code> is not checked</td></tr>
+  <tr><th>Values</th><td>an audience - the verifier's service id</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>An audience the token's <code>aud</code> must hold. VCVerifier sets <code>aud</code> to the service id. Without it
+a token the verifier issued for another service is accepted - as APISIX accepts it; with it, such a token is a 401
+with <code>error_description="wrong audience"</code>. When given, <code>GET
+/.well-known/oauth-protected-resource</code> has it as <code>fdsc_audience</code>.</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscAudience data-service --fdscPap http://odrl-pap:8080</pre>
+
+<h3 id="fdsc-fdscLeeway"><code>--fdscLeeway</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscLeeway</code> · <code>CORAINE_FDSCLEEWAY</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>120</code></td></tr>
+  <tr><th>Values</th><td>0-600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The clock skew allowed on a token's <code>exp</code> and <code>nbf</code>, in seconds: a token is taken until
+<code>exp</code> plus the leeway, and from <code>nbf</code> minus it. 120 is what APISIX's <code>openid-connect</code>
+(lua-resty-openidc) allows. A token outside it is a 401 with <code>error_description="expired, or not yet
+valid"</code>; a token from the token cache is checked again on every request.</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscPap http://odrl-pap:8080 --fdscLeeway 30</pre>
+
+<h3 id="fdsc-fdscPap"><code>--fdscPap</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscPap</code> · <code>CORAINE_FDSCPAP</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>--fdscPolicies</code> is needed instead</td></tr>
+  <tr><th>Values</th><td>the ODRL-PAP's base URL</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The ODRL-PAP whose policies decide (<code>http://odrl-pap:8080</code>). They are read from its <code>GET
+/policy</code>, page by page (<code>?page=&lt;n&gt;&amp;pageSize=100</code>) until a page is empty, and installed only
+when every page has been read: a fetch that fails half-way keeps the policies in use. A policy that cannot be read is
+skipped and said in the log. Without it and without <code>--fdscPolicies</code> the broker stops at start: <code>auth
+plugin 'fdsc': no policies to decide with: --fdscPap or --fdscPolicies</code>. With both, <code>--fdscPolicies</code>
+is used.</p>
+<p>The broker's own policy API (<code>--policyApiPort</code>) is such a PAP: <code>--fdscPap
+http://127.0.0.1:&lt;port&gt;</code>.</p>
+<pre>coraine --database corDB --policyApiPort 8081 --auth fdsc --fdscPap http://127.0.0.1:8081 \
+        --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org</pre>
+
+<h3 id="fdsc-fdscPolicies"><code>--fdscPolicies</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscPolicies</code> · <code>CORAINE_FDSCPOLICIES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - <code>--fdscPap</code> is needed instead</td></tr>
+  <tr><th>Values</th><td>a URL (<code>http://</code>, <code>https://</code>), or a file (a path, or <code>file://</code>)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The ODRL policies themselves, instead of a PAP: a JSON array - of ODRL policies, or the PAP's own listing
+(<code>[{"id", "odrl:uid", "odrl": "&lt;the policy as a string&gt;"}]</code>) - or a single policy object. Read again
+every <code>--fdscRefresh</code> seconds. A file that is not JSON leaves the policies in use (none at first: every
+request is a 503, <code>the policies are not loaded yet</code>).</p>
+<pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
+        --fdscPolicies /etc/coraine/policies.json</pre>
+
+<h3 id="fdsc-fdscOrganization"><code>--fdscOrganization</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscOrganization</code> · <code>CORAINE_FDSCORGANIZATION</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - the PAP's default DID, <code>urn:ngsi-ld:organization:0b03975e-7ded-4fbd-9c3b-a5d6550df7e2</code></td></tr>
+  <tr><th>Values</th><td>a DID</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>The provider's DID - the PAP's <code>GENERAL_ORGANIZATION_DID</code>. A policy's <code>vc:role</code> reads the
+roles the credential's subject has for this organisation: the <code>names</code> of the entry of
+<code>credentialSubject.roles</code> whose <code>target</code> is this DID. A credential whose roles are for another
+target holds no role here. Two entries for the organisation with different names are OPA's
+<code>eval_conflict_error</code>: a 503. Set it to what the PAP has.</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscPap http://odrl-pap:8080 --fdscOrganization did:web:provider.example.org</pre>
+
+<h3 id="fdsc-fdscRefresh"><code>--fdscRefresh</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscRefresh</code> · <code>CORAINE_FDSCREFRESH</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>30</code></td></tr>
+  <tr><th>Values</th><td>1-86400 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>Seconds between two fetches of the keys and the policies. While either is missing, both are fetched every second,
+whatever the option says - the verifier and the PAP may start after the broker. A token signed with a key the set does
+not have (VCVerifier makes a new key at every start) is a 401 and has the keys fetched at once, at most once a second.
+A policy written to the PAP is in use within this many seconds. A new key set empties the token cache.</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscPap http://odrl-pap:8080 --fdscRefresh 5</pre>
+
+<h3 id="fdsc-fdscAnonymous"><code>--fdscAnonymous</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscAnonymous</code> · <code>CORAINE_FDSCANONYMOUS</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>A request without a token is not a 401: it is let in as no one, and the policies decide it - only a policy whose
+assignee is <code>vc:any</code> can allow it anything; for the rest it is a 403. A request with a token that does not
+hold is still a 401.</p>
+<pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
+        --fdscPolicies /etc/coraine/policies.json --fdscAnonymous</pre>
+
+<h3 id="fdsc-fdscNgsild"><code>--fdscNgsild</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscNgsild</code> · <code>CORAINE_FDSCNGSILD</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>Decide on the entity, as NGSI-LD has it, instead of as the Data Space Connector does - so decisions differ from the
+connector's. <code>ngsi-ld:entityType</code> is then the entity's own types, expanded: the body's for a create, the
+stored entity's for everything else; each entity of a batch on its own (a denied one is its 403 in the 207), each
+entity of a query on its own (the denied ones left out); the action is the NGSI-LD operation, not the HTTP method.
+Without it, <code>ngsi-ld:entityType</code> is what the connector reads: the type part of the id in the path, else
+<code>?type=</code> as one string, else the body's <code>type</code>.</p>
+<p>Only with it: the words <code>ngsi-ld:tenant</code> and <code>ngsi-ld:attribute</code> (a policy that uses one is
+skipped without it, and the log says why: <code>policy '&lt;uid&gt;' skipped: 'ngsi-ld:tenant' is coraine's own word -
+only with --fdscNgsild</code>); and the notifications - decided for the subscription's owner, entity by entity, the
+owner's credential kept with the subscription (<code>--fdscOwnerMaxAge</code>). Without it a subscription notifies
+what matches, and no credential is kept. Not available in the APISIX plugin: it needs the stored entity (<a
+href="#docs/authorization/fdsc-ngsild">Authorization</a>).</p>
+<pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
+        --fdscPolicies /etc/coraine/policies.json --fdscNgsild</pre>
+
+<h3 id="fdsc-fdscOwnerMaxAge"><code>--fdscOwnerMaxAge</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscOwnerMaxAge</code> · <code>CORAINE_FDSCOWNERMAXAGE</code> · Int</td></tr>
+  <tr><th>Default</th><td><code>0</code> (until the credential's own end)</td></tr>
+  <tr><th>Values</th><td>0-31536000 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p>With <code>--fdscNgsild</code> only (without it no owner is kept, and the option changes nothing). A subscription's
+owner - the credential of the token that made or last updated it, kept for its notifications - holds for this many
+seconds from that request; after that its notifications go without entities, until the owner updates the subscription.
+0: until the credential's own <code>validUntil</code> (VC 1.1: <code>expirationDate</code>); a credential past it no
+longer holds whatever this option says. A kept credential is never checked again for revocation: this is what bounds
+how long a revoked one still receives notifications.</p>
+<pre>coraine --database corDB --auth fdsc --fdscJwks /etc/coraine/jwks.json --fdscIssuer did:web:verifier.example.org \
+        --fdscPolicies /etc/coraine/policies.json --fdscNgsild --fdscOwnerMaxAge 86400</pre>
+
+<h3 id="fdsc-fdscStrippedPath"><code>--fdscStrippedPath</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-fdscStrippedPath</code> · <code>CORAINE_FDSCSTRIPPEDPATH</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>fdsc</td></tr>
+</table>
+<p><code>http:path</code> reads the <code>x-stripped-path</code> header when the request has one, as the connector's
+Rego does; without the option it reads the request's own path, and the header is ignored. Only behind a gateway that
+sets the header and drops a client's: a client that can send it chooses the path an <code>http:isInPath</code> rule
+sees (<a href="#docs/authorization/fdsc-differs">Authorization</a>).</p>
+<pre>coraine --auth fdsc --fdscDiscovery http://verifier:3000/services/data-service/.well-known/openid-configuration \
+        --fdscPap http://odrl-pap:8080 --fdscStrippedPath</pre>
+
+<!-- ======================================================================= -->
+<h2 id="coraine-import">coraine-import</h2>
+<p><code>coraine-import</code> is the writer half of a migration: a program of its own beside the broker, not a broker
+option. It reads a migration stream - one JSON record per line, expanded NGSI-LD - writes it into the stores its
+options name, prints a report on stderr (its log is stdout) and exits: 0 when every record was imported, 1 when any
+was refused or the stores could not be opened. It loads the broker's store plugins and takes their options by the
+broker's names, so what it writes is what a broker started with the same store options reads; the broker must not run
+on those stores during the import. The options below are coraine-import's: <code>coraine-import -u</code> lists them,
+with the options of the store plugins it loads (<code>coraine-import --database corDB --troe corDB -u</code> lists
+corDB's). Its environment variables have the broker's <code>CORAINE_</code> prefix and the same names as the broker's
+- a shell that sets <code>CORAINE_DATABASE</code> for a broker sets it for the import too. Built with
+<code>COR_FEATURE_MIGRATE</code> (on by default). Also documented in: <a href="#docs/migration/import">Migrating a
+database to coraine</a>.</p>
+
+<h3 id="import-file"><code>--file</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-f</code> · <code>CORAINE_FILE</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - required (see below)</td></tr>
+  <tr><th>Values</th><td>a path, or <code>-</code> for stdin</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The migration stream: one JSON object per line, records of kind <code>header</code>, <code>entity</code>,
+<code>subscription</code>, <code>registration</code>, <code>temporalEntity</code> and <code>temporalInstance</code>,
+every name expanded (<a href="#docs/migration/stream">The stream</a>). Records are written in the order they come. A
+refused record is named on stderr by its line in the stream and the reason, and the import goes on with the next:</p>
+<pre>stream.ndjson:4: entity: entity type 'Room' is not expanded - the stream must hold expanded NGSI-LD (full IRIs, core terms short)</pre>
+<p>A record already in the target store is refused - an import never overwrites - so importing the same stream again
+refuses everything that went in the first time (<code>-:2: entity: 'urn:ngsi-ld:Room:1' already exists in the
+target</code>). A file that cannot be opened: <code>coraine-import: cannot open '&lt;path&gt;'</code>, exit code
+1.</p>
+<p>The option is marked required, but a missing <code>--file</code> is not refused at start: the stores are opened
+first, and with <code>--database corDB</code> the program then crashes (SIGSEGV). Always give it.</p>
+<pre>coraine-import --database corDB --dbDir /var/lib/coraine --troe corDB --file stream.ndjson
+coraine-import -db corDB --dbDir /var/lib/coraine -f - &lt; stream.ndjson</pre>
+
+<h3 id="import-database"><code>--database</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-db</code> · <code>CORAINE_DATABASE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>mongoc</code></td></tr>
+  <tr><th>Values</th><td><code>mongoc</code>, <code>corDB</code>, <code>ramDB</code> (the plugins in <code>&lt;plugin dir&gt;/db/currentState/</code>), or a path to a <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The current-state store the entities, subscriptions and registrations are written into - the broker's
+<code>--database</code>, with the same plugins and the same resolution (<code>/opt/seamware/plugins</code>, or
+<code>SEAMWARE_PLUGIN_DIR</code>). Its plugin's options are added to the command line: <code>--dbHost</code> ... for
+mongoc, <code>--dbDir</code> ... for corDB (<a href="#docs/options" data-scroll="cordb">Plugin: corDB</a>).
+<code>ramDB</code> keeps nothing after the import exits. A plugin that is not there stops the import with the usage
+(<code>DB plugin 'bogus' (/opt/seamware/plugins/db/currentState/bogus.so): not found</code>, exit code 1); a store
+that cannot be opened too (<code>corDB: --dbDir '/x': Permission denied</code> ... <code>main: dbStart failed</code>,
+exit code 1).</p>
+<pre>coraine-import --database corDB --dbDir /var/lib/coraine --file stream.ndjson
+coraine-import --database mongoc --dbHost mongo --file stream.ndjson</pre>
+
+<h3 id="import-troe"><code>--troe</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-troe</code> · <code>CORAINE_TROE</code> · String</td></tr>
+  <tr><th>Default</th><td><code>none</code></td></tr>
+  <tr><th>Values</th><td><code>none</code>, <code>timescale</code>, <code>corDB</code>, <code>ramDB</code>, or a path to a <code>.so</code></td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The temporal store the history (<code>temporalEntity</code> and <code>temporalInstance</code> records) is written
+into - the broker's <code>--troe</code>, with the same plugins; its plugin's options are added
+(<code>--troeHost</code> ... for timescale). The history is written in batches of 500 events, one transaction each.
+With <code>none</code> every history record is refused (<code>temporalEntity: the importer runs without a TRoE store
+(--troe) - nowhere to put the history</code>), and the exit code is 1. The current state is written as it is: a store
+that records history at its write sites (<code>--troe corDB</code>) records none for the import's writes - the history
+is what the stream says.</p>
+<pre>coraine-import --database corDB --dbDir /var/lib/coraine --troe corDB --file stream.ndjson
+coraine-import --database mongoc --dbHost mongo --troe timescale --troeHost pg --file stream.ndjson</pre>
+
+<h3 id="import-verbose"><code>--verbose</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-v</code> · <code>CORAINE_VERBOSE</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The info and verbose lines of the log (<code>I:</code> and <code>V:</code>, stdout): the store plugins coming up,
+the tenants created, the stores closed. The report on stderr is printed with or without it.</p>
+<pre>coraine-import -v --database corDB --dbDir /var/lib/coraine --file stream.ndjson</pre>
+
+<h3 id="import-debug"><code>--debug</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-d</code> · <code>CORAINE_DEBUG</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The debug lines of the log (<code>D:</code>, stdout). Independent of <code>--verbose</code>.</p>
+<pre>coraine-import -d --database corDB --dbDir /var/lib/coraine --file stream.ndjson</pre>
+
+<h3 id="import-traceLevels"><code>--traceLevels</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-t</code> · <code>CORAINE_TRACELEVELS</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no trace levels</td></tr>
+  <tr><th>Values</th><td>trace levels - numbers and ranges, comma-separated (<code>0-255</code>)</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>The trace levels of the log, as the broker's <code>--traceLevels</code>. A release build has its traces compiled
+out: a trace level then turns nothing on, and the log says so once (<code>--traceLevels ...: this broker is a release
+build, its traces are compiled out - nothing to turn on</code>). A build with traces: <code>coraine-build
+--debug</code>.</p>
+<pre>coraine-import -t 0-255 --database corDB --dbDir /var/lib/coraine --file stream.ndjson</pre>
+
+<h3 id="import-version"><code>--version</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-V</code> · <code>CORAINE_VERSION</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>Prints <code>coraine-import &lt;version&gt;</code> and exits 0, before anything else is read or loaded.</p>
+<pre>$ coraine-import -V
+coraine-import 0.6.0-dev</pre>
+
+<h3 id="import-usage"><code>--usage</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-u</code> · no environment variable · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>Prints the options - those of the store plugins <code>--database</code> and <code>--troe</code> name included - and
+exits 0. An unknown option prints the same after <code>coraine-import: unrecognized option: &lt;option&gt;</code>, and
+exits 1.</p>
+<pre>coraine-import --database corDB --troe corDB -u</pre>
+
+<h3 id="import-Usage"><code>--Usage</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-U</code> · no environment variable · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>coraine-import</td></tr>
+</table>
+<p>Prints the options as a table - long and short name, environment variable, required or optional, type, and where
+the value came from - and exits 0.</p>
+<pre>coraine-import -U</pre>
+<p><b>The store plugins' options.</b> The options below are not coraine-import's: they are the mongoc plugin's,
+present because <code>--database</code> defaults to <code>mongoc</code>, and they are the broker's options of the same
+names (owner: the mongoc plugin - <a href="#docs/options" data-scroll="mongoc">Plugin: mongoc</a>). With
+<code>--database corDB</code> they are not there, and corDB's are; with <code>--troe timescale</code>, timescale's are
+added (<a href="#docs/options" data-scroll="timescale">Plugin: timescale</a>).</p>
+
+<h3 id="import-dbHost"><code>--dbHost</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbHost</code> · <code>CORAINE_DBHOST</code> · String</td></tr>
+  <tr><th>Default</th><td><code>localhost</code></td></tr>
+  <tr><th>Values</th><td>a host name or address</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB server's host, as the broker's <code>--dbHost</code>. Not used with <code>--dbURI</code>.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --file stream.ndjson</pre>
+
+<h3 id="import-dbPort"><code>--dbPort</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbPort</code> · <code>CORAINE_DBPORT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>27017</code></td></tr>
+  <tr><th>Values</th><td>1-65535</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB server's port, as the broker's <code>--dbPort</code>.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --dbPort 27018 --file stream.ndjson</pre>
+
+<h3 id="import-dbName"><code>--dbName</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbName</code> · <code>CORAINE_DBNAME</code> · String</td></tr>
+  <tr><th>Default</th><td><code>cor</code></td></tr>
+  <tr><th>Values</th><td>a database name prefix</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The database name of the default tenant, and the prefix of every tenant's (<code>cor-t1</code>), as the broker's
+<code>--dbName</code> - the import and the broker must use the same.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --dbName city --file stream.ndjson</pre>
+
+<h3 id="import-globalDb"><code>--globalDb</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-globalDb</code> · <code>CORAINE_GLOBALDB</code> · String</td></tr>
+  <tr><th>Default</th><td><code>coraine</code></td></tr>
+  <tr><th>Values</th><td>a database name</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The database for the state of no tenant (the hosted JSON-LD contexts), as the broker's <code>--globalDb</code>.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --globalDb coraine --file stream.ndjson</pre>
+
+<h3 id="import-dbUser"><code>--dbUser</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbUser</code> · <code>CORAINE_DBUSER</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no authentication</td></tr>
+  <tr><th>Values</th><td>a MongoDB user</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB user, as the broker's <code>--dbUser</code> - used only when <code>--dbPwd</code> is given too, and not
+with <code>--dbURI</code>; percent-encoded, as there.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --dbUser coraine --dbPwd "$PW" --file stream.ndjson</pre>
+
+<h3 id="import-dbPwd"><code>--dbPwd</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbPwd</code> · <code>CORAINE_DBPWD</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no password</td></tr>
+  <tr><th>Values</th><td>a password</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The MongoDB user's password, as the broker's <code>--dbPwd</code> - used only with <code>--dbUser</code>, and not
+with <code>--dbURI</code>; percent-encoded, as there. <code>CORAINE_DBPWD</code> keeps it off the command line.</p>
+<pre>CORAINE_DBPWD=... coraine-import --database mongoc --dbHost mongo --dbUser coraine --file stream.ndjson</pre>
+
+<h3 id="import-dbURI"><code>--dbURI</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbURI</code> · <code>CORAINE_DBURI</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - built from <code>--dbHost</code>, <code>--dbPort</code>, <code>--dbUser</code>, <code>--dbPwd</code></td></tr>
+  <tr><th>Values</th><td>a MongoDB connection URI</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The whole connection URI (a replica set, TLS, options), as the broker's <code>--dbURI</code>:
+<code>--dbHost</code>, <code>--dbPort</code>, <code>--dbUser</code> and <code>--dbPwd</code> are then not used.</p>
+<pre>coraine-import --database mongoc --dbURI 'mongodb://mongo-0,mongo-1/?replicaSet=rs0' --file stream.ndjson</pre>
+
+<h3 id="import-dbTimeout"><code>--dbTimeout</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbTimeout</code> · <code>CORAINE_DBTIMEOUT</code> · UShort</td></tr>
+  <tr><th>Default</th><td><code>30</code></td></tr>
+  <tr><th>Values</th><td>1-3600 (seconds)</td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>How long the connection to MongoDB is tried before the import gives up (<code>mongoc: ping failed: No suitable
+servers found</code> ... <code>main: dbStart failed</code>, exit code 1), as the broker's
+<code>--dbTimeout</code>.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --dbTimeout 5 --file stream.ndjson</pre>
+
+<h3 id="import-dbValueIndexes"><code>--dbValueIndexes</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-dbValueIndexes</code> · <code>CORAINE_DBVALUEINDEXES</code> · String</td></tr>
+  <tr><th>Default</th><td>no default - no declared indexes</td></tr>
+  <tr><th>Values</th><td>expanded attribute names, comma-separated, or a JSON array of <code>{attribute, type, tenant}</code></td></tr>
+  <tr><th>Plugin</th><td>mongoc</td></tr>
+</table>
+<p>The declared indexes - the attributes whose <code>q</code> an index serves - as the broker's
+<code>--dbValueIndexes</code>.</p>
+<pre>coraine-import --database mongoc --dbHost mongo --dbValueIndexes https://ex.org/temperature --file stream.ndjson</pre>
+
+<!-- ======================================================================= -->
+<h2 id="coraine-build">coraine-build</h2>
+<p><code>coraine-build</code> builds a coraine of your own - feature switches, HTTP server, bridges, profile-guided or
+tuned - from the exact source of the installed packages (the <code>coraine-dev</code> package's tarball), or from a
+directory of git clones. A shell script beside the broker (<code>packaging/deb/coraine-build</code> in the source),
+not a broker option. Everything is written into the directory it is given; root is not needed. The result is in
+<code>&lt;dir&gt;/install</code>: <code>bin/coraine</code> (or <code>--name</code>'s),
+<code>bin/coraine-import</code>, <code>plugins/...</code>, <code>etc/contextSourceExtras.json</code>, with
+<code>--tune</code> <code>etc/tune.env</code>, with dds <code>etc/bridges.json</code> and <code>etc/dds-types/</code>,
+and <code>env</code> - <code>. &lt;dir&gt;/install/env</code> puts <code>bin/</code> first on <code>PATH</code> and
+points the broker at its own plugins and etc (<code>SEAMWARE_PLUGIN_DIR</code>, <code>SEAMWARE_ETC_DIR</code>,
+<code>CORAINE_CONTEXTSOURCEEXTRAS</code>). The options below are coraine-build's; it reads no <code>CORAINE_*</code>
+variables. <code>&lt;dir&gt;</code>, its one argument, is a new or empty directory, or one an earlier coraine-build
+unpacked into (the source is then reused: <code>coraine-build: reusing the source already in &lt;dir&gt;</code>); any
+other directory is refused (<code>&lt;dir&gt; is neither empty nor a coraine-build directory</code>).
+<code>&lt;dir&gt;/install</code> is emptied at every build. Without <code>&lt;dir&gt;</code> (and without a list
+option) it prints the help and exits 1. An unknown option: <code>coraine-build: unknown option '&lt;option&gt;'
+(--help)</code>, exit 1. Each phase is one line (<code>coraine-build: phase build</code>, <code>install</code>,
+<code>bridges</code>, <code>check</code>, <code>done</code>; <code>tools</code>, <code>train</code> with
+<code>--pgo</code> / <code>--tune</code>). Also documented in: <a href="#docs/building/coraine-build">Building from
+source</a>.</p>
+
+<h3 id="build-release"><code>--release</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>the build mode when no other is given</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Optimised, with the traces compiled out - what the coraine package holds before profile-guiding.
+<code>--release</code>, <code>--debug</code>, <code>--pgo</code> and <code>--tune</code> are one choice: the last one
+given decides.</p>
+<pre>coraine-build --source ~/git --bridges none /tmp/cb</pre>
+
+<h3 id="build-debug"><code>--debug</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>The traces compiled in, so <code>--traceLevels</code> turns them on - for reproducing a crash report. The bridges
+are built in their debug flavour too.</p>
+<pre>coraine-build --debug --source ~/git /tmp/cb</pre>
+
+<h3 id="build-pgo"><code>--pgo</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Profile-guided release: built instrumented, trained here on the measured request shapes, rebuilt with the profile -
+what the coraine package and the image hold. A few minutes more than <code>--release</code>; needs <code>curl</code>,
+<code>wrk</code> and <code>python3</code> (<code>coraine-build: --pgo needs wrk</code>). The training's tools
+(corTestClient, corRequest) are built into <code>&lt;dir&gt;</code> first, and its output is kept in
+<code>&lt;dir&gt;/pgo.log</code>; a part of the training that fails stops the build (the profile would lack it). Not
+with <code>--http-server builtin</code> (<a href="#docs/performance">Performance</a>).</p>
+<pre>coraine-build --pgo --source ~/git /tmp/cb</pre>
+
+<h3 id="build-tune"><code>--tune</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
+  <tr><th>Default</th><td>no default - not tuned</td></tr>
+  <tr><th>Values</th><td>a workload file</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p><code>--pgo</code> trained on your workload instead of the measured request shapes, and the knobs measured on it -
+the best kept in <code>&lt;dir&gt;/install/etc/tune.env</code> (<code>TUNE_DBLOCKPREFER</code>,
+<code>TUNE_ALLOCATOR</code>: the <code>--dbLockPrefer</code> and the allocator to preload). Needs what
+<code>--pgo</code> needs; a file that is not there: <code>coraine-build: --tune: no workload file
+'&lt;file&gt;'</code>. Not with <code>--http-server builtin</code> (<a
+href="#docs/extreme-performance/the-workload-file">Extreme performance</a>).</p>
+<pre>coraine-build --tune workload.json --source ~/git /tmp/cb</pre>
+
+<h3 id="build-features"><code>--features</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
+  <tr><th>Default</th><td>no default - every switch at its default (<code>--list-features</code>)</td></tr>
+  <tr><th>Values</th><td>comma-separated <code>NAME=ON|OFF</code> (also <code>on</code>/<code>off</code>, <code>1</code>/<code>0</code>), <code>NAME</code> with or without <code>COR_FEATURE_</code>; <code>--features=&lt;list&gt;</code> too</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>The feature switches: what is compiled into the broker and its plugins, and what is left out - a route left out
+answers 501 (<code>'GET /ngsi-ld/v1/csourceRegistrations' is not included in this build of coraine</code>). A name
+that is not a switch: <code>coraine-build: --features: no feature 'FOO' (--list-features)</code>; a value that is not
+ON or OFF is refused too. <code>MONGOC=OFF</code> builds without the mongo-c driver, which is otherwise needed (v2 -
+<code>pkg-config mongoc2</code>, or the one <code>coraine-dev</code> bundles in <code>/opt/seamware</code>);
+<code>ICU_COLLATION=ON</code> needs ICU (<code>libicu-dev</code>). Switches that need another one are turned off
+without it (<code>--list-features --json</code> names them, <code>requires</code>) (<a
+href="#docs/building/features">Compiling out what you don't need</a>).</p>
+<pre>coraine-build --features REGISTRATIONS=OFF,SERVICE_EXECUTION=OFF,MONGOC=OFF --source ~/git /tmp/cb</pre>
+
+<h3 id="build-http-server"><code>--http-server</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
+  <tr><th>Default</th><td><code>mhd</code></td></tr>
+  <tr><th>Values</th><td><code>mhd</code> (libmicrohttpd), <code>builtin</code> (corHttp, no external library); <code>--http-server=&lt;s&gt;</code> too</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>The broker's HTTP server. With <code>builtin</code> the switches that need libmicrohttpd are off -
+<code>POLICY_API</code>, so the broker built has no <code>--policyApiPort</code>. Not with <code>--pgo</code> or
+<code>--tune</code> (<code>coraine-build: --http-server builtin: not with --pgo yet (its training tools are built and
+tried with libmicrohttpd only)</code>). Another value: <code>coraine-build: --http-server: '&lt;s&gt;' - mhd or
+builtin</code> (<a href="#docs/building/http-server">Choosing the HTTP server</a>).</p>
+<pre>coraine-build --http-server builtin --source ~/git /tmp/cb</pre>
+
+<h3 id="build-bridges"><code>--bridges</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
+  <tr><th>Default</th><td><code>mqtt,modbus</code></td></tr>
+  <tr><th>Values</th><td>comma-separated <code>mqtt</code>, <code>modbus</code>, <code>dds</code>, <code>ckan</code>, <code>opcua</code>, or <code>none</code>; <code>--bridges=&lt;list&gt;</code> too</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>The bridge plugins to build beside the broker, each from its own repository in the source, into
+<code>&lt;dir&gt;/install/plugins/bridge/</code> (the broker's own <code>loopback.so</code> is always built). A name
+that is not a bridge stops the build (<code>coraine-build: --bridges: no bridge '&lt;b&gt;' (--list-bridges)</code>),
+and so does one that cannot be built here, saying why (<code>--bridges: mqtt cannot be built here - libmosquitto's
+headers are not installed (libmosquitto-dev)</code>) - before anything is compiled. With <code>dds</code>,
+<code>etc/bridges.json</code> is the image's default DDS configuration (domain 0, no topics) with
+<code>etc/dds-types/</code>: the DDS bridge does not start without one.</p>
+<pre>coraine-build --bridges mqtt,dds --source ~/git /tmp/cb
+coraine-build --bridges none --source ~/git /tmp/cb</pre>
+
+<h3 id="build-list-bridges"><code>--list-bridges</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Prints every bridge - its name, whether it is a default, what it is, and, when it cannot be built here, why not -
+and exits 0. With <code>--json</code>: a JSON array of <code>{name, default, description, available, why}</code>. No
+<code>&lt;dir&gt;</code> is needed (a temporary one is used and removed); with <code>--source &lt;dir of
+clones&gt;</code> the clones are read as they are checked out, nothing is exported.</p>
+<pre>$ coraine-build --list-bridges --source ~/git
+coraine 0.6.0~git20261023.cf852586 - bridges (--bridges NAME,...):
+  mqtt     default  MQTT - NGSI-LD over MQTT topics (mqtt.so, libmosquitto)
+  modbus   default  Modbus TCP - values between Modbus registers and entities (modbus.so, no library)
+  dds               DDS - topics, services and actions between DDS and entities (dds.so, eProsima Fast DDS and the DDS Enabler)
+  ...</pre>
+
+<h3 id="build-list-features"><code>--list-features</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Prints every feature switch of the source - its name (without <code>COR_FEATURE_</code>), its default and what it
+is - and exits 0. With <code>--json</code>: a JSON array of <code>{name, default, description, group,
+requires}</code>. No <code>&lt;dir&gt;</code> is needed, as for <code>--list-bridges</code>.</p>
+<pre>$ coraine-build --list-features --source ~/git
+coraine 0.6.0~git20261023.cf852586 - feature switches (--features NAME=ON|OFF):
+  SUBSCRIPTIONS            ON   Enable Context Information Subscriptions + notifications
+  REGISTRATIONS            ON   Enable Context Source Registration CRUD (§ 12)
+  ...</pre>
+
+<h3 id="build-json"><code>--json</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>With <code>--list-features</code> or <code>--list-bridges</code>: the list as a JSON array. For a feature,
+<code>group</code> is the CMakeLists.txt group it is in (<code># Group: &lt;name&gt; - ...</code>), and
+<code>requires</code> names the switches it is turned off without, and a build setting as <code>NAME=value</code>
+(<code>"HTTP_SERVER=mhd"</code>: libmicrohttpd, not the built-in server). Without a list option it changes
+nothing.</p>
+<pre>$ coraine-build --list-features --json --source ~/git
+...
+  {"name": "POLICY_API", "default": true, "description": "...", "group": "Security", "requires": ["HTTP_SERVER=mhd"]},</pre>
+
+<h3 id="build-name"><code>--name</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
+  <tr><th>Default</th><td><code>coraine</code></td></tr>
+  <tr><th>Values</th><td>1-64 of <code>A-Z a-z 0-9 . _ -</code>, starting with a letter or a digit; not <code>coraine-import</code>; <code>--name=&lt;exe&gt;</code> too</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>The broker's executable: <code>&lt;dir&gt;/install/bin/&lt;exe&gt;</code> - a broker built for one role (a
+cor-agent, an edge node) named after it. It reads the same <code>CORAINE_*</code> environment variables whatever it is
+called. Refused: <code>coraine-build: --name coraine-import is the migration tool's</code>, and a name of other
+characters.</p>
+<pre>coraine-build --name edge1 --bridges none --source ~/git /tmp/cb
+. /tmp/cb/install/env &amp;&amp; edge1 --database corDB</pre>
+
+<h3 id="build-source"><code>--source</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · <code>LIBS_REF</code> (with a directory) · String</td></tr>
+  <tr><th>Default</th><td><code>/usr/share/coraine/src/coraine-src.tar.xz</code> (installed by <code>coraine-dev</code>)</td></tr>
+  <tr><th>Values</th><td>a source tarball, or a directory of git clones</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Where the source comes from.</p>
+<ul>
+  <li>A file: the source tarball. Without <code>--source</code> and without <code>coraine-dev</code> installed,
+nothing can be built or listed: <code>coraine-build: no source tarball at /usr/share/coraine/src/coraine-src.tar.xz
+(is coraine-dev installed? --source names another, or a directory of clones)</code>.</li>
+  <li>A directory: git clones of coraine and every Cor-Lib side by side, as <code>corLibs/bootstrap.sh</code> clones
+them (<code>~/git</code>). The tarball is exported from them as the packages' is
+(<code>coraine/packaging/deb/source.sh</code>): coraine at the commit checked out, each lib at
+<code>origin/main</code> - or, with <code>LIBS_REF=HEAD</code> in the environment, at the branch each clone has
+checked out. Committed trees only: uncommitted changes are not built. <code>coraine-dev</code> is not needed. A
+directory without a coraine clone: <code>coraine-build: --source &lt;dir&gt;: no coraine clone in it
+(coraine/packaging/deb/source.sh)</code>.</li>
+</ul>
+<p>The source is unpacked into <code>&lt;dir&gt;</code> once; a later build in the same <code>&lt;dir&gt;</code>
+reuses it, whatever <code>--source</code> then says.</p>
+<pre>coraine-build --source ~/git /tmp/cb
+LIBS_REF=HEAD coraine-build --source ~/git /tmp/cb</pre>
+
+<h3 id="build-help"><code>--help</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-h</code> · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Prints the help and exits 0.</p>
+<pre>coraine-build --help</pre>
+
+</article>

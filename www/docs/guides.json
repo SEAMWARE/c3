@@ -63,6 +63,18 @@
           ]
         },
         {
+          "id": "options",
+          "title": "Command-line options",
+          "desc": "every option of the broker, of each plugin, of coraine-import and coraine-build - short form, environment variable, type, default, values, what it does",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "733711b9"
+            }
+          ]
+        },
+        {
           "id": "building",
           "title": "Building from source",
           "desc": "the libraries, the make targets, coraine-build, the feature switches and the HTTP server",
