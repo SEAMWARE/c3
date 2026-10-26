@@ -728,7 +728,7 @@ export class Run {
   }
 
   //
-  // levelsRender - verbose, debug and info, and a tick box per trace level by library, its tooltip what it
+  // levelsRender - verbose and info, and a tick box per trace level by library, its tooltip what it
   // traces; a change is PUT at once (the whole set: PUT replaces), and the broker's answer shown
   //
   levelsRender(url, r) {
@@ -745,7 +745,7 @@ export class Run {
 
     const apply = async () => {
       const q = new URLSearchParams();
-      for (const f of ['verbose', 'debug', 'info']) q.set(f, body.querySelector('[data-flag="' + f + '"]').checked ? 'on' : 'off');
+      for (const f of ['verbose', 'info']) q.set(f, body.querySelector('[data-flag="' + f + '"]').checked ? 'on' : 'off');
       const set = [...body.querySelectorAll('[data-level]')].filter((c) => c.checked).map((c) => Number(c.dataset.level));
       for (const l of on) if (!known.has(l)) set.push(l);                         // levels c3 does not know stay
       q.set('traceLevels', rangesOf(set));
@@ -756,7 +756,7 @@ export class Run {
 
     const flags = el('div', 'rn-lvflags');
     for (const [f, label, why] of [['verbose', 'verbose', 'the -v lines: what the broker does, request by request'],
-                                   ['debug', 'debug', 'debug lines'], ['info', 'info', 'info lines']]) {
+                                   ['info', 'info', 'info lines']]) {
       const l = el('label', 'rn-check');
       const c = el('input');
       c.type = 'checkbox';
@@ -801,7 +801,7 @@ export class Run {
     const other = [...on].filter((l) => !known.has(l));
     if (other.length) body.append(el('div', 'rn-lvnote', 'Also set, levels c3 has no name for: ' + rangesOf(other)));
     const n = on.size;
-    $('rn-levels-sum').textContent = 'Log and trace levels - ' + ['verbose', 'debug', 'info'].filter((f) => cur[f]).concat(n ? [n + ' trace level' + (n === 1 ? '' : 's')] : []).join(', ')
+    $('rn-levels-sum').textContent = 'Log and trace levels - ' + ['verbose', 'info'].filter((f) => cur[f]).concat(n ? [n + ' trace level' + (n === 1 ? '' : 's')] : []).join(', ')
       .replace(/^$/, 'nothing extra');
   }
 
