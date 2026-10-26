@@ -13,6 +13,7 @@ the health probes, and the limits that keep it inside its memory. Installing one
 plugin brings its own (<code>--dbHost</code> comes with <code>mongoc</code>, <code>--dbDir</code> with <code>corDB</code>) - so ask
 with them: <code>coraine --database corDB --troe timescale -u</code>. On a running broker, <code>GET /admin/config</code> has
 every option with its value, its default and where the value came from.</p>
+<p>Every option in full - its values, what it needs and refuses, an example: <a href="#docs/options">Command-line options</a>.</p>
 
 <h3 id="env">Environment variables</h3>
 <p><b>Every</b> option is also an environment variable: <code>CORAINE_</code> + the long option in upper case, <code>-</code>
