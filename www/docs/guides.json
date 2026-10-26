@@ -437,6 +437,28 @@
       ]
     },
     {
+      "title": "Where coraine is going",
+      "items": [
+        {
+          "id": "roadmap",
+          "title": "Roadmap",
+          "desc": "what is available now, and what is planned - short, medium and long term",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/roadmap.md",
+              "at": "733711b9"
+            },
+            {
+              "repo": "coraine",
+              "path": "doc/ideas.md",
+              "at": "733711b9"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "The broker",
       "items": [
         {
