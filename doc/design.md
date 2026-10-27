@@ -28,7 +28,7 @@ default browser (`xdg-open`, `open` on macOS). A page cannot make itself full-sc
 prints the URL to open from a laptop (through `ssh -L` when the port is not reachable). The first
 thing shown is a **splash screen** while the backend gets ready - each step as it really completes
 (the `coraine-dev` version, `coraine-build --list-features`, the brokers and bridges found), not a
-timer - then Compile.
+timer - then the page open last (`ui.lastPage` in the configuration file), Explore the first time.
 
 **Connect over the WebSocket transport** ([WebSocket](https://github.com/SEAMWARE/coraine/blob/main/doc/websocket.md)): the initial state by queries,
 then a subscription on the same socket and the notifications it pushes - no polling. A browser cannot

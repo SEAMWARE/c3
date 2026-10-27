@@ -6,17 +6,16 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | Part | What it does |
 |---|---|
 | **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
-| **Configure** *(planned)* | The column mapping for the CKAN and CSV bridges. The DDS and OPC UA mappings are in Operate's broker form. |
-| **Run** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto. |
-| **Operate** | The brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
-| **Docs** | All of coraine's documentation in one place, written to be read: 25 guides - installation, administration, the API, building, deploying, performance, the transports, the bridges, authorization, the internals - with search, a guide's sections and the next one, offline; every component's repository. The same pages are the website [seamware.github.io/docs](https://seamware.github.io/docs/) (`make site`). Planned: a guide per cor-lib with an API reference from its headers, and a skeleton repository for each kind of plugin. |
-| **Connect** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
+| **Configure** *(planned - greyed, "Later", in the navigation)* | The column mapping for the CKAN and CSV bridges. The DDS and OPC UA mappings are in Operate's broker form. |
+| **Operate** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto; the brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
+| **Explore** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
+| **Documentation** | All of coraine's documentation in one place, written to be read: the guides - installation, administration, the API, building, deploying, performance, the transports, the bridges, authorization, the internals - a guide and an API reference per cor-lib, with search, a guide's sections and the next one, offline; every component's repository. The same pages are the website [seamware.github.io/docs](https://seamware.github.io/docs/) (`make site`). Planned: a skeleton repository for each kind of plugin. |
 
 Built today: the `c3` command, its backend and its configuration file; **Compile** - a broker built by
 `coraine-build` with the features, bridges, HTTP server and executable name chosen, its output followed
-live, the builds kept; **Run** and **Operate** - brokers started and stopped natively or in a container,
+live, the builds kept; **Operate** - brokers started and stopped natively or in a container,
 with MongoDB, PostgreSQL/TimescaleDB and Mosquitto as containers, their logs, configuration, metrics and
-log levels; **Connect** - discovery, the types picked, tenants, an entity's menu (linked entities,
+log levels; **Explore** - discovery, the types picked, tenants, an entity's menu (linked entities,
 neighbourhood), editing, the entities **on a map** (online, or offline from downloaded areas) and **live
 values** over the broker's WebSocket transport or HTTP notifications. [doc/design.md](doc/design.md) is
 the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
@@ -32,7 +31,7 @@ and zlib (`zlib1g-dev`, for the map files); a browser. To connect to a broker: a
 ([installation](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md) - `apt install
 coraine` from https://seamware.github.io/apt, or Docker). For **Compile**: the `coraine-dev` package (its
 `coraine-build` and source tarball) - or, without it, the git clones c³ itself is built against: coraine
-beside the cor-libs. For **Run** in containers: Docker or Podman.
+beside the cor-libs. For **Operate** in containers: Docker or Podman.
 
 The backend builds against the cor-libs as coraine does - sibling checkouts, each built with `make` in it
 (`COR_LIBS=<dir>` for checkouts elsewhere):
@@ -60,7 +59,7 @@ examples/ckan-bikes.sh http://localhost:1090           # real open data: 572 Bos
 ./c3                                                   # opens the application; Ctrl-C stops it
 ```
 
-In Connect, enter `http://localhost:1090` and press **Connect**. With the factory alone (25 entities)
+In Explore, enter `http://localhost:1090` and press **Connect**. With the factory alone (25 entities)
 everything is loaded at once; with the bike stations too (610), tick the types to see - **District**,
 then **BikeStation** - and press **Load**. Right-click a Robot for its linked entities (Dock, Floor,
 Building) or its neighbourhood. The next start connects to the last broker by itself, with the types
@@ -94,7 +93,7 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--planet`, `-pl` | the newest daily build at `build.protomaps.com` | the Protomaps planet (`.pmtiles` URL) map areas are extracted from |
 | `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package); else the coraine clone's, `<clones>/coraine/packaging/deb/coraine-build` | the script Compile runs |
 | `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz`; else `<clones>` | the coraine source Compile builds from (passed on as `--source`): a tarball, or a directory of clones |
-| `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Connect, below) - read again whenever it changes |
+| `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Explore, below) - read again whenever it changes |
 
 Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the proxies of the
 environment: `https_proxy`, `http_proxy`, `no_proxy` (or their upper-case names). A broker on this machine
@@ -125,7 +124,7 @@ the port is an error.
 ## The configuration file
 
 `~/.config/c3/c3.json`, written by the backend as the user works - never by the page. It holds the
-brokers connected to, with Connect's choices for each (the types, graph or map, the map's view, what the
+brokers connected to, with Explore's choices for each (the types, graph or map, the map's view, what the
 markers are coloured by), the downloaded map areas, and the last page:
 
 ```json
@@ -178,7 +177,7 @@ markers are coloured by), the downloaded map areas, and the last page:
 
 - A broker is added, or moved to the front with a new `lastUsed`, when it has answered the discovery;
   the 50 most recent are kept. A broker already in the list keeps its other members.
-- `tenant`: the tenant Connect works on at this broker (`""`: the default one); `tenants`: the ones used,
+- `tenant`: the tenant Explore works on at this broker (`""`: the default one); `tenants`: the ones used,
   most recent first, 20 at most.
 - `connect.types`: the types loaded with **Load** in the default tenant, sorted; `connect.tenantTypes`:
   the same per tenant. `[]` is a choice too (nothing loaded); a broker with no `types` was never picked
@@ -197,14 +196,14 @@ markers are coloured by), the downloaded map areas, and the last page:
 - `compile.choice`: Compile's choice as it is (`mode`, the `features` set by hand, `workload`), kept as it
   changes; `compile.presets`: the choices saved under a name. The builds themselves are not listed here:
   their directory is the truth (Compile, below).
-- `run.brokers`: the brokers Run started, with their options (Run, below) - kept when one is started, removed
+- `run.brokers`: the brokers Operate started, with their options (Operate, below) - kept when one is started, removed
   with **Forget**. What runs is not in the file: the processes and containers are the truth.
-- No access token is ever in it, nor a broker's own headers: remembered, they are in `secrets.json` beside it (Connect, below).
+- No access token is ever in it, nor a broker's own headers: remembered, they are in `secrets.json` beside it (Explore, below).
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
   written.
 
-## Connect
+## Explore
 
 - **The tenant.** The field beside the URL: the tenant (`NGSILD-Tenant`) everything is read from - the
   discovery, the entities, the live values; empty, the default tenant. It is kept per broker, and offered
@@ -258,7 +257,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   its last four characters (more than 12 characters long) or its length, and a secret header saved with
   its value field empty keeps the value it has. Refused: the headers c³ sets itself - `Host`,
   `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`, `Upgrade`, `Accept`, `Keep-Alive`,
-  `TE`, `Trailer`, `Sec-WebSocket-*`, `X-C3-Broker`, `NGSILD-Tenant` (the tenant is chosen in Connect). A
+  `TE`, `Trailer`, `Sec-WebSocket-*`, `X-C3-Broker`, `NGSILD-Tenant` (the tenant is chosen in Explore). A
   value has no line break nor other control character and is 8 KB at most.
 - **Discovery** - what a broker holds, before any entity is loaded:
   - `GET /ngsi-ld/v1/types?details=true` - the types and their attribute names (a broker that does not
@@ -512,7 +511,7 @@ Not yet: a rectangle drawn on the map as a `georel=within` query, saved views.
 
 ### Named demos
 
-A name in the broker field instead of a URL - **`CDMAD`**, Connect - is a demo: c³ asks the backend for
+A name in the broker field instead of a URL - **`CDMAD`**, Explore - is a demo: c³ asks the backend for
 it (`GET /api/demos/<name>`), the backend looks the name up in the configuration's `demos` (any case;
 `CDMAD`, [c3-demo-madrid](https://github.com/SEAMWARE/c3-demo-madrid), is built in as
 `http://127.0.0.1:7990/c3.json`) and fetches the demo's descriptor from it:
@@ -528,7 +527,7 @@ it (`GET /api/demos/<name>`), the backend looks the name up in the configuration
 }
 ```
 
-Connect then connects to `broker` (in `tenant`). What the broker has not been given in c³ yet comes from
+Explore then connects to `broker` (in `tenant`). What the broker has not been given in c³ yet comes from
 the descriptor: the view (`mode`, `center`, `zoom`, `relationships`), the types loaded (`watch`), the
 alert rules (`alerts`); what is changed in c³ is kept for the broker as for any other, and wins the next
 time. A demo that does not answer is said so: *CDMAD is not running at http://127.0.0.1:7990 - start it,
@@ -595,7 +594,7 @@ is the command shown, run by the backend, the same build as on the command line.
   training modes).
 - **Executable** - the broker's file name in `install/bin` (`--name`, default `coraine`): a broker built
   for one role named after it, a `cor-agent`. It reads the same `CORAINE_*` environment variables, and
-  Run starts it by that name.
+  Operate starts it by that name.
 - **The command** - `POST /api/builds/command` answers the exact `argv` for the choice; the page shows it,
   one option a line. Only the switches that differ from their defaults are passed. **Build** starts that
   command under the name it showed (the name field, else `<mode>-<date>-<time>`).
@@ -606,7 +605,7 @@ is the command shown, run by the backend, the same build as on the command line.
   **Cancel**: SIGTERM to the build's process group, SIGKILL 5 s later.
 - **The result** - the size of `install/` and of the broker, the mode and time, the features as the
   built broker reports them (`install/bin/<executable> --version`, the switches off struck through), its
-  `--version`, the directory, the whole log. **Run it** opens Run with that build in the form.
+  `--version`, the directory, the whole log. **Run it** opens Operate with that build in the form.
 - **Builds kept** - newest first, with their mode, date, size and the features turned off; a click
   opens one (its log and result); **Delete** (press twice) removes its directory, log and record.
 - **Presets** - the choice (mode, the features changed, the workload) saved under a name in `c3.json`,
@@ -664,7 +663,7 @@ its byte offset, which `EventSource` does by itself (`Last-Event-ID`); and a wri
 never waits - bytes a page has not taken wait in the stream (16 MiB at most, then that page is
 disconnected) - so a slow page cannot hold up the thread that reads the build's pipe.
 
-## Run
+## Operate
 
 Brokers started and stopped on this machine, and the services they use ([doc/design.md](doc/design.md), Run).
 
@@ -768,7 +767,7 @@ A native broker reaches them on `127.0.0.1:<port>`, a container broker by name o
   c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice) removes
   it, and only a volume c³ made (label `c3=run`) whose container does not run.
 
-**Starting.** The broker joins Connect's list (`http://localhost:<port>`, named as in Run) and is kept in
+**Starting.** The broker joins Explore's list (`http://localhost:<port>`, named as in Operate) and is kept in
 `c3.json`. A native broker is started in a session of its own (`setsid`), its stdout and stderr appended
 to its log, in its directory, with c³'s environment less `CORAINE_*` and `SEAMWARE_PLUGIN_DIR` (each option
 of the broker's can be set from the environment; the form is the whole of it). It does not need c³: when
@@ -816,7 +815,7 @@ the busiest operations over the last minute. A read that fails, or a request cou
 broker started again), is a break: no rate across it. A chart whose metrics the broker does not serve says
 so. The summary line carries requests per second, the mean latency and the subscriptions.
 
-**Log and trace levels** - above the log of a running broker with the admin API: verbose, debug and info,
+**Log and trace levels** - above the log of a running broker with the admin API: verbose and info,
 and a tick box per trace level, grouped by library, its tooltip what it traces - set live through coraine's
 `/admin/log` (a change PUTs the whole set; a level c³ has no name for, set elsewhere, is kept). The levels
 and what each traces are `www/data/traceLevels.json`, made from the libraries' trace-level headers by
@@ -851,7 +850,7 @@ is the map's downloaded areas (the planet read by Range, the extract, the fonts,
 `live.c` the live values (the page's sessions, their subscriptions and the alert rules', the notifications), `demo.c` the named demos' descriptors, and `ws.c`
 WebSocket (RFC 6455) both ways - the client end to a broker, the server end for the page - and
 `compile.c` Compile (the capabilities, the feature list, the builds and their processes, the live log),
-`run.c` Run (brokers and services, their processes and containers, status, logs) and `util.c` what those two
+`run.c` Operate (brokers and services, their processes and containers, status, logs) and `util.c` what those two
 share (a growing string, files, processes spawned and stopped, a log followed as server-sent events):
 
 | Library | Used for |
@@ -872,8 +871,8 @@ The backend's API, used by the pages:
 | `GET /api/config` | the configuration |
 | `POST /api/brokers` `{"url", "name"}` | a broker connected to: first in the list, `lastUsed` now |
 | `DELETE /api/brokers` `{"url"}` | forget a broker |
-| `PUT /api/brokers/types` `{"url", "types"}` | the types Connect loads from a broker, as its `connect.types` (the broker must be in the list) |
-| `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy", "relationships", "alerts", "tenant", "local"}` | Connect's view of a broker: each member given replaces the stored one |
+| `PUT /api/brokers/types` `{"url", "types"}` | the types Explore loads from a broker, as its `connect.types` (the broker must be in the list) |
+| `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy", "relationships", "alerts", "tenant", "local"}` | Explore's view of a broker: each member given replaces the stored one |
 | `PUT /api/ui` `{"lastPage"}` | `compile`, `run` or `connect` |
 | `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`), `run` (`coraine`, `coraineWhy`, `containers`, `engine`, `engineVersion`, `containersWhy`, `dir`) |
 | `GET /api/compile/features` | `coraine-build --list-features --json` as `{"coraineBuild", "source", "version", "features": [{"name", "default", "description", "requires"}]}` |
@@ -912,7 +911,7 @@ The backend's API, used by the pages:
 | `PUT /api/brokers/headers` | `{"url", "headers": [{"name", "value", "secret"}], "remember"}`: the broker's headers, all of them, in their order - a secret header without `value` keeps the one it has; an empty list forgets them; `remember` false or left out keeps them in memory only (and out of `secrets.json`). Answers as the GET; a refused name, a bad value or a name given twice is a `400` and nothing changes |
 | `DELETE /api/brokers/headers` | `{"url"}`: the broker's headers forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant`, the broker's own headers and its access token (`Authorization: Bearer`, unless an own header is the `Authorization`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory`, and `/.well-known/oauth-protected-resource` (RFC 9728) only, with the page's `NGSILD-Tenant`, the broker's own headers and its access token (`Authorization: Bearer`, unless an own header is the `Authorization`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 | `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
@@ -929,7 +928,7 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 |---|---|
 | `index.html`, `css/c3.css` | the shell and the look (dark only - Seamware magenta `#A72E60` on `#0E1014`) |
 | `css/compile.css`, `js/compile.js` | the Compile page |
-| `css/run.css`, `js/run.js` | the Run page |
+| `css/run.css`, `js/run.js` | the Operate page (`#run`) |
 | `js/metrics.js` | Operate's Metrics: `/admin/metrics` parsed, sampled and drawn |
 | `js/main.js` | the splash screen, then the pages (`#compile`, `#run`, `#connect`; the last one shown is `ui.lastPage`) |
 | `js/api.js` | the backend's API |
@@ -937,7 +936,7 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/layout.js` | the layout |
 | `js/graph.js` | boxes, arrows, zoom, pan, drag, selection, filters, a box expanded in place |
 | `js/menu.js` | the context menu, mouse and keyboard |
-| `js/connect.js` | the Connect page: discovery panel, picks, an entity's menu, neighbourhood, linked entities, graph or map, colour by, named demos |
+| `js/connect.js` | the Explore page (`#connect`): discovery panel, picks, an entity's menu, neighbourhood, linked entities, graph or map, colour by, named demos |
 | `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads (all, or the selected entity's), selection, click and menu, the changed entities ringed, movers gliding, alarms ringed |
 | `js/icons.js` | the icons per type, the state colours, drawn on a canvas |
 | `js/alerts.js` | alert rules and alarms: the toasts, the list, `q` evaluated for clearing, the rules kept per broker |
@@ -956,7 +955,7 @@ src/               the backend (C)
 www/               the pages, served by the backend
 www/vendor/        MapLibre GL JS, pmtiles, @protomaps/basemaps - as published, with their licences
 www/data/          data the pages read: the trace levels of the cor stack, the CKAN example's portal
-examples/          factory.sh - sample entities for Connect; live.sh - its robots at work (live values);
+examples/          factory.sh - sample entities for Explore; live.sh - its robots at work (live values);
                    ckan-bikes.sh - real open data from a CKAN portal
 tools/             traceLevels.py - www/data/traceLevels.json; ckan-ingest.py - a CKAN resource into a broker
 doc/design.md      what c³ is and how it is built
