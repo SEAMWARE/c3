@@ -457,7 +457,6 @@ export class Run {
     set('rn-dds-domain', String(this.f.dds.domain || 0));
     set('rn-dds-vocab', this.f.dds.vocabulary);
     for (const id of ['rn-dds-domain', 'rn-dds-vocab', 'rn-dds-discover', 'rn-dds-import']) $(id).disabled = own;
-    if (this.f.where === 'container') $('rn-dds-discover').disabled = true;
     this.renderDdsRows();
     this.renderDdsSum();
   }
@@ -468,7 +467,6 @@ export class Run {
     const mapped = [count('topic', 'topic'), count('service', 'service'), count('action', 'action')].filter(Boolean).join(', ');
     $('rn-dds-sum').textContent = this.f.bridgeConfig ? 'not with a bridge configuration file of one\'s own'
       : 'domain ' + (d.domain || 0) + ' - ' + (mapped || 'nothing mapped') + (d.vocabulary ? ', @context ' + d.vocabulary : '');
-    $('rn-dds-discover').title = this.f.where === 'container' ? 'discovery runs a broker natively - the installed one or a build' : '';
   }
 
   defaults() {

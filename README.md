@@ -706,10 +706,17 @@ pulled at the start, its progress in the broker's log. Images are named by their
   reply types, an action's type, as discovered (the bridge's `topics`, `services` and `actions` in
   `bridges.json`). With a vocabulary, c³ writes `<run>/<name>/dds-context.jsonld` - each entity type and
   attribute of the mapping a term, `<vocabulary><term>` - and starts the broker with
-  `--defaultUserContext` (a container: mounted at `/etc/c3/dds-context.jsonld`).
-  **Discover** (the installed broker or a build - natively) - c³ starts a broker of its own for it
-  (`POST /api/run/dds/discover`): the form's source and domain, the dds bridge alone, corDB in memory, no
-  history, the admin API, a free port from 39026, its directory `<run>/<name>.discover/`. One
+  `--defaultUserContext` (a container: mounted at `/etc/c3/dds-context.jsonld`). A container broker with
+  the dds bridge runs with `--network host --ipc host`: DDS discovery is UDP multicast, which a bridge
+  network such as `c3` keeps to its own containers, and Fast DDS reaches a participant on the same machine
+  over shared memory. Its port is then the host's - not published on `127.0.0.1` only: coraine listens on
+  every interface, as a native broker does - and it reaches the services on `127.0.0.1:<port>`, as a
+  native broker does.
+  **Discover** - c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
+  (the installed broker, a build, or the image: the container `c3-broker-<name>.discover`, `--rm`, its
+  entry point under `timeout 120` - it ends by itself if c³ does not stop it) and domain, the dds bridge
+  alone, corDB in memory, no history, the admin API, a free port from 39026, its directory
+  `<run>/<name>.discover/` (a container's output into `broker.log` before it is removed). One
   `GET /admin/bridges/dds/inventory` (coraine with bridge ABI 14), which the bridge answers once discovery
   has been quiet for 3 s (at most 10 s - "still announcing" when it ran out), and the broker is stopped
   again; a few seconds in all, one discovery at a time. What was announced is listed - ROS 2's housekeeping
@@ -750,7 +757,8 @@ service's port + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the n
 taken), so they do not collide with a MongoDB or PostgreSQL of one's own. Each broker has its own
 database in them: mongoc `--dbName c3_<name>`, timescale `--troeName c3_<name>_h` (`.` and `-` as `_`).
 A native broker reaches them on `127.0.0.1:<port>`, a container broker by name on the network
-(`c3-mongoc-timescale-mongo:27017`).
+(`c3-mongoc-timescale-mongo:27017`) - one with the dds bridge, on the host's network, on
+`127.0.0.1:<port>` too.
 
 - Started before the broker that needs them and waited for: MongoDB until `mongosh` answers its ping,
   PostgreSQL until `pg_isready`, Mosquitto until it takes a connection (3 minutes at most). MongoDB is a
@@ -765,8 +773,10 @@ A native broker reaches them on `127.0.0.1:<port>`, a container broker by name o
 to its log, in its directory, with c³'s environment less `CORAINE_*` and `SEAMWARE_PLUGIN_DIR` (each option
 of the broker's can be set from the environment; the form is the whole of it). It does not need c³: when
 c³ stops, the brokers keep running. A container broker listens on 1026 inside its container, the port
-chosen published on `127.0.0.1` - the image's `HEALTHCHECK` asks `localhost:1026/version`, and a broker on
-another port inside is reported `unhealthy`.
+chosen published on `127.0.0.1`; one with the dds bridge listens on the port chosen, on the host's
+network. The image's `HEALTHCHECK` asks the port in the broker's arguments (`--healthPort`, else
+`--port`); in images from before 2026-10-10 it asks `localhost:1026/version`, and a broker on another
+port is reported `unhealthy`.
 
 **Stopping.** SIGTERM to the broker's process group - corDB syncs its log and writes its snapshots - and
 SIGKILL when the grace period is over; the page counts it down. A container: `docker stop -t <grace>`

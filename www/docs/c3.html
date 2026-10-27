@@ -152,12 +152,14 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <li><b>DDS</b> (the dds bridge ticked) - the domain, a vocabulary, and the mapping: a topic, a service or an action a
   row, one attribute of an entity, its whole sample the value. With a vocabulary, c³ writes
   <code>dds-context.jsonld</code> - each entity type and attribute a term in it - and starts the broker with
-  <code>--defaultUserContext</code>. <b>Discover</b> starts a broker of c³'s own on the domain (natively: the installed
-  one or a build, the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery
+  <code>--defaultUserContext</code>. <b>Discover</b> starts a broker of c³'s own on the domain (the installed one, a
+  build or the image, the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery
   has been quiet for 3 s, at most 10 s - and stops it: a few seconds. The list hides ROS 2's housekeeping unless asked;
   each endpoint shows its type and its fields, and <b>+ map</b> adds a row named from the endpoint, every name editable.
   Discovering again keeps the rows and marks those not seen. <b>Import inventory.json</b> reads the list a DDS discovery
-  tool wrote.</li>
+  tool wrote. A container broker with the dds bridge runs on the host's network and IPC namespace
+  (<code>--network host --ipc host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its
+  own containers - so its port is the host's and, like a native broker's, open on every interface.</li>
   <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
   its <code>--version</code>.</li>
   <li>The command, exactly as it will run, and the services it starts first.</li>

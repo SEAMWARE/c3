@@ -20,7 +20,8 @@
 //   POST   /api/run/services/<container>/stop   a service nothing uses
 //   DELETE /api/run/volumes/<volume>            a service's or a container broker's data, deleted
 //   POST   /api/run/dds/discover                {broker}: what its DDS domain announces - a broker of its own
-//                                               for it, started and stopped again (ddsDiscoverThread)
+//                                               for it, natively or in a container, started and stopped
+//                                               again (ddsDiscoverThread)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
 //
@@ -1606,9 +1607,16 @@ static bool bridgesConfigOwn(const Def* dP)
 // coraine's options from the form. 'ports' are the services' host ports (natively they are reached on
 // 127.0.0.1, from a container by their names on the network c3). false with why.
 //
-static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int errLen)
+// A container with the dds bridge is on the host's network and IPC namespace instead: DDS discovery is UDP
+// multicast, which a bridge network keeps to its own containers, and Fast DDS reaches a participant on the
+// same machine over shared memory. Its port is the host's, and it reaches the services as a native broker
+// does. 'discovery': ddsDiscoverThread's container - removed when it ends, and it ends by itself in 120 s.
+//
+static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, char* err, int errLen)
 {
   bool container = (strcmp(dP->where, "container") == 0);
+  bool hostNet   = container && hasBridge(dP, "dds");
+  bool byName    = container && !hostNet;            // the services by their names on the network c3
   char dir[2300];
   char path[2400];
   char bridgeFile[2400] = "";
@@ -1653,16 +1661,26 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     argAdd(aP, engine);
     argAdd(aP, "run");
     argAdd(aP, "-d");
+    if (discovery)
+      argAdd(aP, "--rm");
     argAdd(aP, "--name");     argAdd(aP, name);
     argAdd(aP, "--label");    argAdd(aP, "c3=run");
-    argAdd(aP, "--label");    argAdd(aP, "c3.kind=broker");
+    argAdd(aP, "--label");    argAdd(aP, discovery ? "c3.kind=discovery" : "c3.kind=broker");
     argAdd(aP, "--label");    argAddf(aP, "c3.broker=%s", dP->name);
-    argAdd(aP, "--network");  argAdd(aP, "c3");
     argAdd(aP, "--stop-timeout"); argAddf(aP, "%d", dP->grace);
-    argAdd(aP, "-p");         argAddf(aP, "127.0.0.1:%d:1026", dP->port);   // 1026 inside: the image's HEALTHCHECK asks it
-    if (dP->healthPort > 0)
+    if (hostNet)
     {
-      argAdd(aP, "-p");       argAddf(aP, "127.0.0.1:%d:%d", dP->healthPort, dP->healthPort);
+      argAdd(aP, "--network"); argAdd(aP, "host");
+      argAdd(aP, "--ipc");     argAdd(aP, "host");
+    }
+    else
+    {
+      argAdd(aP, "--network"); argAdd(aP, "c3");
+      argAdd(aP, "-p");        argAddf(aP, "127.0.0.1:%d:1026", dP->port);   // 1026 inside: the image's HEALTHCHECK asks it
+      if (dP->healthPort > 0)
+      {
+        argAdd(aP, "-p");      argAddf(aP, "127.0.0.1:%d:%d", dP->healthPort, dP->healthPort);
+      }
     }
     if (dP->dbDir)
     {
@@ -1676,7 +1694,15 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     {
       argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/dds-context.jsonld:ro", ddsContext);
     }
+    if (discovery)
+    {
+      argAdd(aP, "--entrypoint"); argAdd(aP, "timeout");
+    }
     argAdd(aP, dP->image);
+    if (discovery)
+    {
+      argAdd(aP, "120"); argAdd(aP, "coraine-start");
+    }
     // The image's entry point is `coraine` (coraine-start) - in the foreground, logging to stdout: its defaults
   }
   else if (strcmp(dP->from, "build") == 0)
@@ -1732,7 +1758,7 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     argAdd(aP, path);
   }
 
-  argAdd(aP, "--port");        argAddf(aP, "%d", container ? 1026 : dP->port);
+  argAdd(aP, "--port");        argAddf(aP, "%d", byName ? 1026 : dP->port);
   if (dP->healthPort > 0)
   {
     argAdd(aP, "--healthPort"); argAddf(aP, "%d", dP->healthPort);
@@ -1753,8 +1779,8 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
   {
     svcName(dP->set, KIND_MONGO, svc, sizeof(svc));
     dbNameOf(dP->name, "", db, sizeof(db));
-    argAdd(aP, "--dbHost");    argAdd(aP, container ? svc : "127.0.0.1");
-    argAdd(aP, "--dbPort");    argAddf(aP, "%d", container ? kinds[KIND_MONGO].port : ports[KIND_MONGO]);
+    argAdd(aP, "--dbHost");    argAdd(aP, byName ? svc : "127.0.0.1");
+    argAdd(aP, "--dbPort");    argAddf(aP, "%d", byName ? kinds[KIND_MONGO].port : ports[KIND_MONGO]);
     argAdd(aP, "--dbName");    argAdd(aP, db);
   }
 
@@ -1763,8 +1789,8 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
   {
     svcName(dP->set, KIND_TIMESCALE, svc, sizeof(svc));
     dbNameOf(dP->name, "_h", db, sizeof(db));
-    argAdd(aP, "--troeHost");  argAdd(aP, container ? svc : "127.0.0.1");
-    argAdd(aP, "--troePort");  argAddf(aP, "%d", container ? kinds[KIND_TIMESCALE].port : ports[KIND_TIMESCALE]);
+    argAdd(aP, "--troeHost");  argAdd(aP, byName ? svc : "127.0.0.1");
+    argAdd(aP, "--troePort");  argAddf(aP, "%d", byName ? kinds[KIND_TIMESCALE].port : ports[KIND_TIMESCALE]);
     argAdd(aP, "--troeUser");  argAdd(aP, "postgres");
     argAdd(aP, "--troeName");  argAdd(aP, db);
   }
@@ -2671,7 +2697,7 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
   if (hasBridge(dP, "mqtt"))
   {
     svcName(dP->set, KIND_MOSQUITTO, svc, sizeof(svc));
-    if (strcmp(dP->where, "container") == 0)
+    if ((strcmp(dP->where, "container") == 0) && !hasBridge(dP, "dds"))   // with dds: the host's network (argvMake)
       strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://%s:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", svc, kinds[KIND_MOSQUITTO].port, dP->name);
     else
       strAddf(&s, "\"mqtt\": {\"server\": {\"uri\": \"mqtt://127.0.0.1:%d\", \"clientId\": \"c3-%s\"}, \"ngsild\": {\"topics\": {}}}", port, dP->name);
@@ -2823,7 +2849,7 @@ static void* startThread(void* vP)
   // The broker
   //
   Argv a = { { NULL }, 0 };
-  if (argvMake(&d, ports, &a, err, sizeof(err)) == false)
+  if (argvMake(&d, ports, false, &a, err, sizeof(err)) == false)
   {
     argFree(&a);
     startFail(bP, err);
@@ -3988,7 +4014,7 @@ static void runCommand(CorHttpConn* connP)
   pthread_mutex_unlock(&rMutex);
 
   Argv a = { { NULL }, 0 };
-  bool ok = argvMake(&d, ports, &a, err, sizeof(err));
+  bool ok = argvMake(&d, ports, false, &a, err, sizeof(err));
 
   strAdd(&s, "{\"def\": ");
   defRender(&d, &s);
@@ -4613,10 +4639,11 @@ static void* svcStopThread(void* vP)
 
 // -----------------------------------------------------------------------------
 //
-// DDS discovery - what a broker's DDS domain announces, for the mapping: a broker of its own for it, natively,
-// from what the form names (installed or a build) - the dds bridge alone, in memory, the admin API, a free
-// port, the form's domain and no mapping. One GET of the bridge's inventory, which answers once discovery has
-// gone quiet (corDdsBridge), and the broker is stopped again. Its log: <broker dir>.discover/broker.log.
+// DDS discovery - what a broker's DDS domain announces, for the mapping: a broker of its own for it, where the
+// form says (installed, a build or an image - a container on the host's network, argvMake) - the dds bridge
+// alone, in memory, the admin API, a free port, the form's domain and no mapping. One GET of the bridge's
+// inventory, which answers once discovery has gone quiet (corDdsBridge), and the broker is stopped again (a
+// container removed). Its log: <broker dir>.discover/broker.log.
 //
 typedef struct DiscoverJob
 {
@@ -4668,16 +4695,41 @@ static void* ddsDiscoverThread(void* vP)
   dirsMake(dir);
   snprintf(logPath, sizeof(logPath), "%s/broker.log", dir);
 
-  Argv a   = { { NULL }, 0 };
-  int  fd  = -1;
-  pid_t pid = -1;
+  Argv  a         = { { NULL }, 0 };
+  int   fd        = -1;
+  pid_t pid       = -1;
+  bool  container = (strcmp(d.where, "container") == 0);
+  char  name[96]  = "";                          // the container, while it runs
+  char  out[2048];
 
   if (d.port == 0)
     snprintf(err, sizeof(err), "no free port in 39026-39125 for the discovery's broker");
-  else if ((bridgesConfigWrite(&d, 0, err, sizeof(err)) == false) || (argvMake(&d, (int[KINDS]) { 0 }, &a, err, sizeof(err)) == false))
+  else if ((bridgesConfigWrite(&d, 0, err, sizeof(err)) == false) || (argvMake(&d, (int[KINDS]) { 0 }, true, &a, err, sizeof(err)) == false))
     ;
-  else if ((fd = open(logPath, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600)) == -1)
+  else if ((fd = open(logPath, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0600)) == -1)   // appended: logLine writes in it too
     snprintf(err, sizeof(err), "cannot open %s: %s", logPath, strerror(errno));
+  else if (container)
+  {
+    close(fd);
+    fd = -1;
+
+    if (imageEnsure(d.image, logPath, err, sizeof(err)) == true)
+    {
+      Str cmd = { NULL, 0, 0 };
+      argCommand(&a, &cmd);
+      logLine(logPath, "%s", cmd.s);
+      strFree(&cmd);
+
+      brokerContainer(d.name, name, sizeof(name));
+      engineRun(out, sizeof(out), 30, "rm", "-f", name, NULL);    // one a c3 that died left (it ends in 120 s anyway)
+
+      if (engineArgv(&a, out, sizeof(out), 120) != 0)
+      {
+        snprintf(err, sizeof(err), "%s run: %.600s", engineName, out);
+        name[0] = 0;
+      }
+    }
+  }
   else
   {
     Str cmd = { NULL, 0, 0 };
@@ -4704,9 +4756,16 @@ static void* ddsDiscoverThread(void* vP)
   int status = 0;
   bool up    = false;
 
-  for (int ix = 0; (pid > 0) && (ix < 300) && !up; ix++)
+  for (int ix = 0; ((pid > 0) || (name[0] != 0)) && (ix < 300) && !up; ix++)
   {
-    if (waitpid(pid, &status, WNOHANG) == pid)
+    bool ended = false;
+
+    if (pid > 0)
+      ended = (waitpid(pid, &status, WNOHANG) == pid);
+    else if ((ix % 10) == 9)                     // a container: asked once a second (--rm: gone when it ends)
+      ended = (engineRun(out, sizeof(out), 20, "inspect", "--format", "{{.State.Running}}", name, NULL) != 0) || (strcmp(out, "true") != 0);
+
+    if (ended)
     {
       snprintf(err, sizeof(err), "the discovery's broker ended before it answered - its log: %s", logPath);
       pid = -1;
@@ -4717,7 +4776,7 @@ static void* ddsDiscoverThread(void* vP)
       usleep(100 * 1000);
   }
 
-  if ((pid > 0) && !up)
+  if (((pid > 0) || (name[0] != 0)) && !up)
     snprintf(err, sizeof(err), "the discovery's broker did not answer on port %d in 30 s - its log: %s", d.port, logPath);
 
   int code = 0;
@@ -4775,6 +4834,22 @@ static void* ddsDiscoverThread(void* vP)
     logLine(logPath, "stopped - the discovery is over");
   }
 
+  //
+  // A container: its output into the log, then removed
+  //
+  if (name[0] != 0)
+  {
+    Argv l = { { NULL }, 0 };
+    argAdd(&l, engine);
+    argAdd(&l, "logs");
+    argAdd(&l, name);
+    engineToLog(logPath, 30, &l);
+    argFree(&l);
+
+    engineRun(out, sizeof(out), 30, "rm", "-f", name, NULL);
+    logLine(logPath, "%s removed - the discovery is over", name);
+  }
+
   pthread_mutex_lock(&rMutex);
   discovering = false;
   pthread_mutex_unlock(&rMutex);
@@ -4801,13 +4876,6 @@ static void ddsDiscover(CorHttpConn* connP)
   if (bodyDef(connP, &djP->def) == false)
   {
     free(djP);
-    return;
-  }
-
-  if (strcmp(djP->def.where, "native") != 0)
-  {
-    free(djP);
-    serveError(connP, 422, "Not in a container", "discovery runs a broker natively - the installed one or a build");
     return;
   }
 
