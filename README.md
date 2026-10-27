@@ -816,13 +816,23 @@ Operate with the dds bridge ticked in its form and the mapper open, with **← B
 topic, service or action mapped is one attribute of an entity. What was written is read back when c³
 opens (`GET /api/run/dds/files`), and the mapper opens on it.
 
-- **The domain and a vocabulary** - the namespace of the terms, each entity type and attribute
+- **How c³ reaches your DDS system** - **domain** (0-232; ROS 2: `ROS_DOMAIN_ID`), **transport**
+  (shared memory and UDP - DDS's default; UDP only, `udp`; shared memory only, `shm`) and **interfaces** -
+  the IPv4 addresses of this host's interfaces UDP is kept to, comma-separated; empty: all; none with `shm`
+  (refused). In the bridge configuration: `dds.ddsmodule.dds` `domain`, `transport`, `whitelist-interfaces`
+  (a list of addresses needs corDdsBridge with SEAMWARE/corDdsBridge#21 - before it, the DDS Enabler refused
+  a list of plain values and the broker did not start). Discover's broker and the broker Done starts use
+  them alike. DDS discovery reaches this host and its network segment, not across a router, a VPN or a NAT;
+  shared memory reaches this host alone, and a container only sharing its `/dev/shm`. A ROS 2 Discovery
+  Server, unicast peers and Fast DDS XML profiles cannot be given: the DDS Enabler 1.2.2's participant reads
+  none of them. Where c³ does not reach the system: **Import inventory.json**.
+- **A vocabulary** - the namespace of the terms, each entity type and attribute
   `<vocabulary><term>`; empty: the default context's (`https://uri.etsi.org/ngsi-ld/default-context/`).
   **proposals' type** - the entity type the proposals give (Robot).
 - **Discover** - asks the DDS system what it announces: c³ joins its domain from the machine it runs
   on, so it must reach it - DDS discovery is multicast, on that host or its network. c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
   (the installed broker, a build, or the image: the container `c3-broker-<name>.discover`, `--rm`, its
-  entry point under `timeout 120` - it ends by itself if c³ does not stop it) and the domain, the dds bridge
+  entry point under `timeout 120` - it ends by itself if c³ does not stop it) and the domain, transport and interfaces, the dds bridge
   alone, corDB in memory, no history, the admin API, a free port from 39026, its directory
   `<run>/<name>.discover/` (a container's output into `broker.log` before it is removed). One
   `GET /admin/bridges/dds/inventory` (coraine with bridge ABI 14), which the bridge answers once discovery
@@ -853,7 +863,7 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
 - **Done** - `POST /api/run/dds/files` writes `$XDG_DATA_HOME/c3/dds/` (else `~/.local/share/c3/dds/`):
 
   ```
-  dds-bridge.json      the bridge configuration: {"dds": {"ddsmodule": {...domain}, "ngsild": {topics, services, actions, typesDirectory}}}
+  dds-bridge.json      the bridge configuration: {"dds": {"ddsmodule": {"dds": {domain, transport, whitelist-interfaces}, ...}, "ngsild": {topics, services, actions, typesDirectory}}}
   dds-context.jsonld   the @context: each entity type and attribute a term
   dds-mapping.json     the mapping as posted - what the mapper reads back
   dds-types/           the bridge's typesDirectory

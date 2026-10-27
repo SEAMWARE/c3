@@ -23,7 +23,7 @@
 //                                               for it, natively or in a container, started and stopped
 //                                               again (ddsDiscoverThread)
 //   GET    /api/run/dds/files                   the DDS configuration the mapper wrote: its files and mapping
-//   POST   /api/run/dds/files                   {domain, vocabulary, topics, services, actions}: written (ddsFiles)
+//   POST   /api/run/dds/files                   {domain, transport, interfaces, vocabulary, topics, services, actions}: written (ddsFiles)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
 //
@@ -211,6 +211,8 @@ typedef struct Def
   struct                                         // the dds bridge's mapping - the bridge configuration c3 writes
   {
     int   domain;                                // the DDS domain
+    char  transport[8];                          // "": DDS's default (shared memory and UDP), "udp", "shm"
+    char  interfaces[256];                       // the IPv4 addresses of this host's interfaces UDP uses, comma-separated; "": all
     char  vocabulary[512];                       // the namespace of the terms mapped: dds-context.jsonld, --defaultUserContext; "": none
     char  topics[16384];                         // a line each: topic, entityId, entityType, attribute - tab-separated
     char  services[8192];                        // a line each: service, entityId, entityType, attribute, requestType, replyType
@@ -1098,7 +1100,7 @@ static const char* ddsActionNames[]  = { "action",  "entityId", "entityType", "a
 
 // -----------------------------------------------------------------------------
 //
-// ddsParse - "dds": { "domain", "vocabulary", "topics": [...], "services": [...], "actions": [...] }
+// ddsParse - "dds": { "domain", "transport", "interfaces", "vocabulary", "topics": [...], "services": [...], "actions": [...] }
 //
 static bool ddsParse(CorNode* ddsP, Def* dP, char* err, int errLen)
 {
@@ -1112,11 +1114,42 @@ static bool ddsParse(CorNode* ddsP, Def* dP, char* err, int errLen)
   }
 
   if (!memberInt(ddsP,    "domain",     &dP->dds.domain, 0, 232, err, errLen) ||
+      !memberString(ddsP, "transport",  dP->dds.transport, sizeof(dP->dds.transport), err, errLen) ||
+      !memberList(ddsP,   "interfaces", NULL, dP->dds.interfaces, sizeof(dP->dds.interfaces), err, errLen) ||
       !memberString(ddsP, "vocabulary", dP->dds.vocabulary, sizeof(dP->dds.vocabulary), err, errLen) ||
       !rowsParse(corTreeLookup(ddsP, "topics"),   "dds.topics",   ddsTopicNames,   4, dP->dds.topics,   sizeof(dP->dds.topics),   err, errLen) ||
       !rowsParse(corTreeLookup(ddsP, "services"), "dds.services", ddsServiceNames, 6, dP->dds.services, sizeof(dP->dds.services), err, errLen) ||
       !rowsParse(corTreeLookup(ddsP, "actions"),  "dds.actions",  ddsActionNames,  5, dP->dds.actions,  sizeof(dP->dds.actions),  err, errLen))
     return false;
+
+  const char* t = dP->dds.transport;
+
+  if ((t[0] != 0) && (strcmp(t, "udp") != 0) && (strcmp(t, "shm") != 0))
+  {
+    snprintf(err, errLen, "\"dds.transport\" is \"udp\" or \"shm\" - or none, DDS's default (shared memory and UDP)");
+    return false;
+  }
+
+  char  copy[sizeof(dP->dds.interfaces)];
+  char* save = NULL;
+
+  snprintf(copy, sizeof(copy), "%s", dP->dds.interfaces);
+  for (char* a = strtok_r(copy, ",", &save); a != NULL; a = strtok_r(NULL, ",", &save))
+  {
+    struct in_addr in;
+
+    if (inet_pton(AF_INET, a, &in) != 1)
+    {
+      snprintf(err, errLen, "\"dds.interfaces\": '%s' is not an IPv4 address - the addresses of this host's interfaces", a);
+      return false;
+    }
+  }
+
+  if ((dP->dds.interfaces[0] != 0) && (strcmp(t, "shm") == 0))
+  {
+    snprintf(err, errLen, "\"dds.interfaces\" are UDP's - with \"dds.transport\" \"shm\" there is no UDP");
+    return false;
+  }
 
   const char* v = dP->dds.vocabulary;
 
@@ -1320,7 +1353,8 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
   //
   // The DDS mapping is the dds bridge's, in the bridge configuration c3 writes
   //
-  if (((dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0) || (dP->dds.domain != 0)) && (dP->bridgeConfig[0] != 0))
+  if (((dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0) || (dP->dds.domain != 0) ||
+       (dP->dds.transport[0] != 0) || (dP->dds.interfaces[0] != 0)) && (dP->bridgeConfig[0] != 0))
   {
     snprintf(err, errLen, "the DDS domain and mapping go in the bridge configuration c3 writes - not with a bridge configuration file of one's own");
     return false;
@@ -1415,6 +1449,28 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 
 
 // -----------------------------------------------------------------------------
+//
+// csvJson - a comma-separated string as a JSON array of strings
+//
+static void csvJson(Str* sP, const char* csv)
+{
+  char        copy[4096];
+  char*       save  = NULL;
+  bool        first = true;
+
+  snprintf(copy, sizeof(copy), "%s", csv);
+  strAdd(sP, "[");
+  for (char* t = strtok_r(copy, ",", &save); t != NULL; t = strtok_r(NULL, ",", &save))
+  {
+    strAdd(sP, first ? "" : ", ");
+    strAddJson(sP, t);
+    first = false;
+  }
+  strAdd(sP, "]");
+}
+
+
+
 //
 // linesJson - a string of lines as a JSON array of strings
 //
@@ -1525,9 +1581,13 @@ static void defRender(const Def* dP, Str* sP)
     strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
     strAddf(sP, ", \"passwordSet\": %s}}", ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0)) ? "true" : "false");
   }
-  if ((dP->dds.domain != 0) || (dP->dds.vocabulary[0] != 0) || (dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0))
+  if ((dP->dds.domain != 0) || (dP->dds.transport[0] != 0) || (dP->dds.interfaces[0] != 0) || (dP->dds.vocabulary[0] != 0) ||
+      (dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0))
   {
-    strAddf(sP, ", \"dds\": {\"domain\": %d, \"vocabulary\": ", dP->dds.domain);
+    strAddf(sP, ", \"dds\": {\"domain\": %d, \"transport\": ", dP->dds.domain);
+    strAddJson(sP, (dP->dds.transport[0] != 0) ? dP->dds.transport : NULL);
+    strAdd(sP, ", \"interfaces\": ");    csvJson(sP, dP->dds.interfaces);
+    strAdd(sP, ", \"vocabulary\": ");
     strAddJson(sP, (dP->dds.vocabulary[0] != 0) ? dP->dds.vocabulary : NULL);
     strAdd(sP, ", \"topics\": ");      rowsJson(sP, dP->dds.topics,   ddsTopicNames,   4, false);
     strAdd(sP, ", \"services\": ");    rowsJson(sP, dP->dds.services, ddsServiceNames, 6, false);
@@ -2717,12 +2777,24 @@ static bool ddsContextWrite(const Def* dP, char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
-// ddsMember - "dds": the dds bridge's configuration - its domain (ddsmodule, the DDS Enabler's) and the mapping
-// (ngsild: topics, services, actions); typesDir: where the bridge keeps the DDS types it discovers (NULL: not kept)
+// ddsMember - "dds": the dds bridge's configuration - how the DDS Enabler reaches the DDS system (ddsmodule: the
+// domain, the transport, the interfaces) and the mapping (ngsild: topics, services, actions); typesDir: where the
+// bridge keeps the DDS types it discovers (NULL: not kept)
 //
 static void ddsMember(Str* sP, const Def* dP, const char* typesDir)
 {
-  strAddf(sP, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": %d}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": ", dP->dds.domain);
+  strAddf(sP, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": %d", dP->dds.domain);
+  if (dP->dds.transport[0] != 0)
+  {
+    strAdd(sP, ", \"transport\": ");
+    strAddJson(sP, dP->dds.transport);
+  }
+  if (dP->dds.interfaces[0] != 0)
+  {
+    strAdd(sP, ", \"whitelist-interfaces\": ");
+    csvJson(sP, dP->dds.interfaces);
+  }
+  strAdd(sP, "}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": ");
   rowsJson(sP, dP->dds.topics, ddsTopicNames, 4, true);
   if (dP->dds.services[0] != 0)
   {
@@ -4694,7 +4766,7 @@ static void* svcStopThread(void* vP)
 //
 // DDS discovery - what a broker's DDS domain announces, for the mapping: a broker of its own for it, where the
 // form says (installed, a build or an image - a container on the host's network, argvMake) - the dds bridge
-// alone, in memory, the admin API, a free port, the form's domain and no mapping. One GET of the bridge's
+// alone, in memory, the admin API, a free port, the form's domain, transport and interfaces and no mapping. One GET of the bridge's
 // inventory, which answers once discovery has gone quiet (corDdsBridge), and the broker is stopped again (a
 // container removed). Its log: <broker dir>.discover/broker.log.
 //
@@ -5022,8 +5094,8 @@ static void ddsFilesAnswer(CorHttpConn* connP, int status, const char* mappingJs
 // ddsFiles - the DDS configuration the mapper makes, for a broker started with it (--bridges dds
 // --bridgeConfig <bridgeConfig> --defaultUserContext <userContext>):
 //
-//   POST {domain, vocabulary, topics, services, actions} - the "dds" of a broker's definition - writes
-//        dds-bridge.json      the bridge configuration: the dds bridge's domain and mapping (ddsMember)
+//   POST {domain, transport, interfaces, vocabulary, topics, services, actions} - the "dds" of a broker's definition - writes
+//        dds-bridge.json      the bridge configuration: how the dds bridge reaches the DDS system, and the mapping (ddsMember)
 //        dds-context.jsonld   each entity type and attribute a term of the vocabulary (ddsContextWriteTo) - with
 //                             no vocabulary, of the default context's: the terms expand as they would without it
 //        dds-mapping.json     what was posted, as posted - what GET answers, the mapper's to edit again
@@ -5046,7 +5118,7 @@ static void ddsFiles(CorHttpConn* connP, bool post)
 
   if (connP->bodyRefused || (connP->body.s == NULL) || (connP->body.len == 0))
   {
-    serveError(connP, 400, "Bad request", "a JSON object is expected as the body - the mapping: {domain, vocabulary, topics, services, actions}");
+    serveError(connP, 400, "Bad request", "a JSON object is expected as the body - the mapping: {domain, transport, interfaces, vocabulary, topics, services, actions}");
     return;
   }
 
@@ -5058,7 +5130,7 @@ static void ddsFiles(CorHttpConn* connP, bool post)
   if ((bodyP == NULL) || (bodyP->type != CorObject))
   {
     free(dP);
-    serveError(connP, 400, "Bad request", "the mapping is a JSON object: {domain, vocabulary, topics, services, actions}");
+    serveError(connP, 400, "Bad request", "the mapping is a JSON object: {domain, transport, interfaces, vocabulary, topics, services, actions}");
     return;
   }
   if (ddsParse(bodyP, dP, err, sizeof(err)) == false)

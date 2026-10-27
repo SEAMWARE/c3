@@ -16,7 +16,7 @@
 .dm-head .cp-note { margin: 0; font-size: 13px; line-height: 19px; }
 .dm-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dm-row .cp-input { min-height: 34px; }
-.dm-domain { width: 110px; }
+.dm-domain { width: 70px; }
 .dm-vocab { flex: 1 1 320px; min-width: 200px; }
 .dm-status { flex: 1 1 300px; font-size: 13px; line-height: 18px; color: var(--muted); }
 
@@ -103,3 +103,12 @@
 }
 .dm-ok:hover { background: var(--ok); color: var(--bg); }
 .dm-all { color: var(--ok); border-color: var(--ok); }
+
+/* how c³ reaches the DDS system */
+.dm-reach { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.dm-reach .cp-note { margin: 0; font-size: 12px; line-height: 17px; }
+.dm-reachtitle { font-size: 14px; font-weight: 600; margin-right: 4px; }
+.dm-transport { min-height: 34px; }
+.dm-ifs { width: 220px; font-family: var(--mono); font-size: 13px; }
+.dm-ifs:disabled { opacity: 0.45; }
+@media (max-width: 700px) { .dm-ifs { width: 100%; } .dm-reach .dm-plabel { flex: 1 1 100%; } }
