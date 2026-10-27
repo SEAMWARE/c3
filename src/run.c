@@ -22,6 +22,8 @@
 //   POST   /api/run/dds/discover                {broker}: what its DDS domain announces - a broker of its own
 //                                               for it, natively or in a container, started and stopped
 //                                               again (ddsDiscoverThread)
+//   GET    /api/run/dds/files                   the DDS configuration the mapper wrote: its files and mapping
+//   POST   /api/run/dds/files                   {domain, vocabulary, topics, services, actions}: written (ddsFiles)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
 //
@@ -189,6 +191,7 @@ typedef struct Def
   bool  distributed;                             // --distributed: forwards to the Context Sources registered
   char  bridges[128];                            // comma-separated
   char  bridgeConfig[1024];                      // a file; "": the one c3 writes for mqtt and ckan
+  char  userContext[1024];                       // a file: --defaultUserContext (the DDS configuration's @context); "": none
   char  ckan[512];                               // CKAN datasets (ids in www/data/ckan.json), comma-separated
   struct                                         // the OPC UA bridge's server - the bridge configuration c3 writes
   {
@@ -1258,6 +1261,7 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberString(oP, "store",        dP->store,        sizeof(dP->store),        err, errLen) ||
       !memberString(oP, "history",      dP->history,      sizeof(dP->history),      err, errLen) ||
       !memberString(oP, "bridgeConfig", dP->bridgeConfig, sizeof(dP->bridgeConfig), err, errLen) ||
+      !memberString(oP, "userContext",  dP->userContext,  sizeof(dP->userContext),  err, errLen) ||
       !memberString(oP, "args",         dP->args,         sizeof(dP->args),         err, errLen) ||
       !memberString(oP, "lastStarted",  dP->lastStarted,  sizeof(dP->lastStarted),  err, errLen) ||
       !memberBool(oP,   "dbDir",        &dP->dbDir,       err, errLen) ||
@@ -1482,6 +1486,7 @@ static void defRender(const Def* dP, Str* sP)
   }
   strAdd(sP, "]");
   strAdd(sP, ", \"bridgeConfig\": "); strAddJson(sP, (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : NULL);
+  strAdd(sP, ", \"userContext\": ");  strAddJson(sP, (dP->userContext[0] != 0) ? dP->userContext : NULL);
   strAdd(sP, ", \"ckan\": [");
   {
     char  copy[512];
@@ -1612,6 +1617,8 @@ static bool bridgesConfigOwn(const Def* dP)
 // same machine over shared memory. Its port is the host's, and it reaches the services as a native broker
 // does. 'discovery': ddsDiscoverThread's container - removed when it ends, and it ends by itself in 120 s.
 //
+static void ddsFilesPath(const char* file, char* out, int outLen);
+
 static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, char* err, int errLen)
 {
   bool container = (strcmp(dP->where, "container") == 0);
@@ -1631,6 +1638,12 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   char ddsContext[2400] = "";                    // the DDS mapping's @context (ddsContextWrite), the default user context
   if (bridgesConfigOwn(dP) && hasBridge(dP, "dds") && (dP->dds.vocabulary[0] != 0))
     ddsContextPath(dP->name, ddsContext, sizeof(ddsContext));
+
+  if ((ddsContext[0] != 0) && (dP->userContext[0] != 0))
+  {
+    snprintf(err, errLen, "one default user @context: the DDS vocabulary's, which c3 writes, or the file given - not both");
+    return false;
+  }
 
   if (container && (dP->ckan[0] != 0))
   {
@@ -1693,6 +1706,20 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     if (ddsContext[0] != 0)
     {
       argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/dds-context.jsonld:ro", ddsContext);
+    }
+    if (dP->userContext[0] != 0)
+    {
+      argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/user-context.jsonld:ro", dP->userContext);
+    }
+
+    char ddsConf[2400];
+    ddsFilesPath("dds-bridge.json", ddsConf, sizeof(ddsConf));
+    if (strcmp(dP->bridgeConfig, ddsConf) == 0)      // the mapper's: its typesDirectory is a host path - there in the container too
+    {
+      char types[2400];
+      ddsFilesPath("dds-types", types, sizeof(types));
+      dirsMake(types);
+      argAdd(aP, "-v");       argAddf(aP, "%s:%s", types, types);
     }
     if (discovery)
     {
@@ -1816,6 +1843,10 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   if (ddsContext[0] != 0)
   {
     argAdd(aP, "--defaultUserContext"); argAdd(aP, container ? "/etc/c3/dds-context.jsonld" : ddsContext);
+  }
+  if (dP->userContext[0] != 0)
+  {
+    argAdd(aP, "--defaultUserContext"); argAdd(aP, container ? "/etc/c3/user-context.jsonld" : dP->userContext);
   }
   if (dP->verbose)
     argAdd(aP, "-v");
@@ -2607,18 +2638,17 @@ static void opcuaMember(const Def* dP, Str* sP)
 
 // -----------------------------------------------------------------------------
 //
-// ddsContextWrite - dds-context.jsonld: each entity type and attribute the DDS mapping names, a term in the
-// vocabulary (<vocabulary><term>) - the broker's default user @context (--defaultUserContext)
+// ddsContextWriteTo - an @context: each entity type and attribute the DDS mapping names, a term in the
+// vocabulary (<vocabulary><term>) - the broker's default user @context (--defaultUserContext); ddsContextWrite:
+// a broker's dds-context.jsonld, in its directory
 //
-static bool ddsContextWrite(const Def* dP, char* err, int errLen)
+static bool ddsContextWriteTo(const Def* dP, const char* path, char* err, int errLen)
 {
-  char        path[2400];
   Str         s     = { NULL, 0, 0 };
   const char* sets[3] = { dP->dds.topics, dP->dds.services, dP->dds.actions };
   char        seen[16384] = "\n";
   bool        first = true;
 
-  ddsContextPath(dP->name, path, sizeof(path));
   strAdd(&s, "{\n  \"@context\": {");
 
   for (int set = 0; set < 3; set++)
@@ -2675,6 +2705,46 @@ static bool ddsContextWrite(const Def* dP, char* err, int errLen)
 
 
 
+static bool ddsContextWrite(const Def* dP, char* err, int errLen)
+{
+  char path[2400];
+
+  ddsContextPath(dP->name, path, sizeof(path));
+  return ddsContextWriteTo(dP, path, err, errLen);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsMember - "dds": the dds bridge's configuration - its domain (ddsmodule, the DDS Enabler's) and the mapping
+// (ngsild: topics, services, actions); typesDir: where the bridge keeps the DDS types it discovers (NULL: not kept)
+//
+static void ddsMember(Str* sP, const Def* dP, const char* typesDir)
+{
+  strAddf(sP, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": %d}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": ", dP->dds.domain);
+  rowsJson(sP, dP->dds.topics, ddsTopicNames, 4, true);
+  if (dP->dds.services[0] != 0)
+  {
+    strAdd(sP, ", \"services\": ");
+    rowsJson(sP, dP->dds.services, ddsServiceNames, 6, true);
+  }
+  if (dP->dds.actions[0] != 0)
+  {
+    strAdd(sP, ", \"actions\": ");
+    rowsJson(sP, dP->dds.actions, ddsActionNames, 5, true);
+  }
+  if (typesDir != NULL)
+  {
+    dirsMake(typesDir);                            // the bridge writes in it, it makes none
+    strAdd(sP, ", \"typesDirectory\": ");
+    strAddJson(sP, typesDir);
+  }
+  strAdd(sP, "}}");
+}
+
+
+
 // -----------------------------------------------------------------------------
 //
 // bridgesConfigWrite - the bridge configuration c3 writes: the MQTT bridge for the set's Mosquitto (no
@@ -2704,28 +2774,11 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
   }
   if (hasBridge(dP, "dds"))
   {
+    char types[2400];
+
+    snprintf(types, sizeof(types), "%s/dds-types", dir);
     strAdd(&s, (s.len > 1) ? ", " : "");
-    strAddf(&s, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": %d}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": ", dP->dds.domain);
-    rowsJson(&s, dP->dds.topics, ddsTopicNames, 4, true);
-    if (dP->dds.services[0] != 0)
-    {
-      strAdd(&s, ", \"services\": ");
-      rowsJson(&s, dP->dds.services, ddsServiceNames, 6, true);
-    }
-    if (dP->dds.actions[0] != 0)
-    {
-      strAdd(&s, ", \"actions\": ");
-      rowsJson(&s, dP->dds.actions, ddsActionNames, 5, true);
-    }
-    if (strcmp(dP->where, "container") != 0)
-    {
-      strAdd(&s, ", \"typesDirectory\": ");
-      char types[2400];
-      snprintf(types, sizeof(types), "%s/dds-types", dir);
-      dirsMake(types);                             // the bridge writes in it, it makes none
-      strAddJson(&s, types);
-    }
-    strAdd(&s, "}}");
+    ddsMember(&s, dP, (strcmp(dP->where, "container") != 0) ? types : NULL);
   }
   if (dP->ckan[0] != 0)
   {
@@ -4676,6 +4729,7 @@ static void* ddsDiscoverThread(void* vP)
   d.distributed     = false;
   d.verbose         = false;
   d.bridgeConfig[0] = 0;
+  d.userContext[0]  = 0;
   d.ckan[0]         = 0;
   d.opcua.url[0]    = 0;
   d.args[0]         = 0;
@@ -4907,6 +4961,151 @@ static void ddsDiscover(CorHttpConn* connP)
 
 // -----------------------------------------------------------------------------
 //
+// textWrite - a file, its whole text (0644); false: why, in err
+//
+static bool textWrite(const char* path, const char* text, int len, char* err, int errLen)
+{
+  int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  bool ok = (fd != -1) && (write(fd, text, len) == len);
+
+  if (fd != -1)
+    close(fd);
+  if (!ok)
+    snprintf(err, errLen, "cannot write %s: %s", path, strerror(errno));
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsFilesPath - a file of the DDS configuration the mapper writes: <data>/c3/dds/<file>, beside run/
+//
+static void ddsFilesPath(const char* file, char* out, int outLen)
+{
+  const char* slash = strrchr(runDir, '/');
+  int         len   = (slash != NULL) ? (int) (slash - runDir) : (int) strlen(runDir);
+
+  snprintf(out, outLen, "%.*s/dds%s%s", len, runDir, (file != NULL) ? "/" : "", (file != NULL) ? file : "");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsFilesAnswer - {"directory", "bridgeConfig", "userContext", "mapping"}: the files' paths, and the mapping
+// they were written from (mappingJson: JSON text; NULL: null - nothing written yet)
+//
+static void ddsFilesAnswer(CorHttpConn* connP, int status, const char* mappingJson)
+{
+  char dir[2400];
+  char conf[2400];
+  char ctx[2400];
+  Str  s = { NULL, 0, 0 };
+
+  ddsFilesPath(NULL, dir, sizeof(dir));
+  ddsFilesPath("dds-bridge.json", conf, sizeof(conf));
+  ddsFilesPath("dds-context.jsonld", ctx, sizeof(ctx));
+
+  strAdd(&s, "{\"directory\": ");      strAddJson(&s, dir);
+  strAdd(&s, ", \"bridgeConfig\": ");  strAddJson(&s, conf);
+  strAdd(&s, ", \"userContext\": ");   strAddJson(&s, ctx);
+  strAdd(&s, ", \"mapping\": ");       strAdd(&s, (mappingJson != NULL) ? mappingJson : "null");
+  strAdd(&s, "}");
+  respondStr(connP, status, &s);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsFiles - the DDS configuration the mapper makes, for a broker started with it (--bridges dds
+// --bridgeConfig <bridgeConfig> --defaultUserContext <userContext>):
+//
+//   POST {domain, vocabulary, topics, services, actions} - the "dds" of a broker's definition - writes
+//        dds-bridge.json      the bridge configuration: the dds bridge's domain and mapping (ddsMember)
+//        dds-context.jsonld   each entity type and attribute a term of the vocabulary (ddsContextWriteTo) - with
+//                             no vocabulary, of the default context's: the terms expand as they would without it
+//        dds-mapping.json     what was posted, as posted - what GET answers, the mapper's to edit again
+//   GET  the paths, and the mapping last written (null: none)
+//
+static void ddsFiles(CorHttpConn* connP, bool post)
+{
+  char mapping[2400];
+  char err[1024];
+
+  ddsFilesPath("dds-mapping.json", mapping, sizeof(mapping));
+
+  if (!post)
+  {
+    char* text = fileText(mapping);
+    ddsFilesAnswer(connP, 200, ((text != NULL) && (text[0] != 0)) ? text : NULL);
+    free(text);
+    return;
+  }
+
+  if (connP->bodyRefused || (connP->body.s == NULL) || (connP->body.len == 0))
+  {
+    serveError(connP, 400, "Bad request", "a JSON object is expected as the body - the mapping: {domain, vocabulary, topics, services, actions}");
+    return;
+  }
+
+  CorJson json;
+  corJsonCreate(&json, &connP->alloc);
+  CorNode* bodyP = corJsonParse(&json, corAllocStrdup(&connP->alloc, connP->body.s));
+  Def*     dP    = calloc(1, sizeof(Def));
+
+  if ((bodyP == NULL) || (bodyP->type != CorObject))
+  {
+    free(dP);
+    serveError(connP, 400, "Bad request", "the mapping is a JSON object: {domain, vocabulary, topics, services, actions}");
+    return;
+  }
+  if (ddsParse(bodyP, dP, err, sizeof(err)) == false)
+  {
+    free(dP);
+    serveError(connP, 400, "Bad request", err);
+    return;
+  }
+
+  if (dP->dds.vocabulary[0] == 0)
+    snprintf(dP->dds.vocabulary, sizeof(dP->dds.vocabulary), "https://uri.etsi.org/ngsi-ld/default-context/");
+
+  char dir[2400];
+  char conf[2400];
+  char ctx[2400];
+  char types[2400];
+  Str  s = { NULL, 0, 0 };
+
+  ddsFilesPath(NULL, dir, sizeof(dir));
+  ddsFilesPath("dds-bridge.json", conf, sizeof(conf));
+  ddsFilesPath("dds-context.jsonld", ctx, sizeof(ctx));
+  ddsFilesPath("dds-types", types, sizeof(types));
+  dirsMake(dir);
+
+  strAdd(&s, "{");
+  ddsMember(&s, dP, types);
+  strAdd(&s, "}\n");
+
+  bool ok = textWrite(conf, s.s, s.len, err, sizeof(err)) &&
+            ddsContextWriteTo(dP, ctx, err, sizeof(err)) &&
+            textWrite(mapping, connP->body.s, connP->body.len, err, sizeof(err));
+  strFree(&s);
+  free(dP);
+
+  if (!ok)
+  {
+    serveError(connP, 500, "The DDS configuration was not written", err);
+    return;
+  }
+
+  ddsFilesAnswer(connP, 201, connP->body.s);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // runRequest - /api/run...
 //
 void runRequest(CorHttpConn* connP, const char* path)
@@ -4944,6 +5143,11 @@ void runRequest(CorHttpConn* connP, const char* path)
   if (strcmp(path, "/api/run/dds/discover") == 0)
   {
     if (post) ddsDiscover(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/dds/files") == 0)
+  {
+    if (post || get) ddsFiles(connP, post); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
   if (strcmp(path, "/api/run/brokers") == 0)

@@ -1,18 +1,27 @@
 //
-// ddsmap.js - the DDS mapper: the whole window for the mapping - what a DDS domain announced on the left, the
-// entities it becomes in the middle, the NGSI-LD and the configuration they make on the right
+// ddsmap.js - the DDS mapper: Operate's left side given to the mapping of DDS topics, services and actions to
+// NGSI-LD attributes, then the two files it makes and a broker started with them
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// It edits the Run form's DDS mapping in place (run.f.dds.rows: one row per endpoint - kind, name, entityId,
-// entityType, attribute, and a service's or an action's DDS types); the form's summary and command follow each
-// change. An endpoint is mapped by picking its entity (the list beside it, or dragged onto the entity), and its
-// attribute is named in the entity. An entity with no attribute yet lives here only (this.empty): the bridge
-// configuration has no entity without an endpoint.
+// The mapping screen: what a DDS domain announced (Discover, or an inventory.json), three lines - the topics,
+// the services, the actions - each opening to its endpoints, each endpoint opening to its attribute's name, its
+// entity's id and type. An entity's type is given once, on any of its endpoints; the others take it. Done
+// writes the DDS configuration (POST /api/run/dds/files): the bridge configuration and the @context, in c³'s
+// data directory - the files screen says where, and starts a broker with them, through the broker form.
 //
+// What was written is read back when the page opens (GET /api/run/dds/files): mapping once is the usual case,
+// the mapper opens on it.
+//
+import * as api from './api.js';
 
 const $ = (id) => document.getElementById(id);
+
+// count - '1 topic', '3 topics'
+function count(n, one, many) {
+  return n + ' ' + (n === 1 ? one : many);
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -39,6 +48,16 @@ function input(value, placeholder, label, onInput) {
   return i;
 }
 
+// the ▸ of a line that opens: aria-expanded kept with it
+function toggle(open, label, onClick) {
+  const b = el('button', 'dm-tog', open ? '▾' : '▸');
+  b.type = 'button';
+  b.setAttribute('aria-expanded', String(open));
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', onClick);
+  return b;
+}
+
 //
 // rosType - a DDS type name as ROS 2 writes it: turtlesim::msg::dds_::Pose_ is turtlesim/msg/Pose
 //
@@ -55,511 +74,523 @@ const RESERVED  = ['id', 'type', '@id', '@type', '@context', 'scope', 'createdAt
 
 const KINDS = [['topic', 'topics', 'Topics'], ['service', 'services', 'Services'], ['action', 'actions', 'Actions']];
 
+//
+// housekeeping - what ROS 2 itself has on every domain, rarely worth mapping: its discovery and log topics, and
+// every node's parameter services
+//
+function housekeeping(kind, name) {
+  if (kind === 'topic') return ['ros_discovery_info', 'rt/parameter_events', 'rt/rosout'].includes(name);
+  return kind === 'service' && /(^|\/)(describe_parameters|get_parameter_types|get_parameters|get_type_description|list_parameters|set_parameters|set_parameters_atomically)$/.test(name);
+}
+
+// typeOf - an endpoint's type as discovered: a service's and an action's without the request suffixes
+function typeOf(kind, e) {
+  if (kind === 'topic') return e.type || '';
+  if (kind === 'service') return ((e.request || {}).type || '').replace(/_Request_$/, '');
+  return (((e.goal || {}).request || {}).type || '').replace(/_SendGoal_Request_$/, '');
+}
+
+// suggested - an attribute name from an endpoint's name: its last segment, camelCased (rt/turtle1/cmd_vel: cmdVel)
+function suggested(name) {
+  const segs = name.replace(/^rt\//, '').split('/').filter(Boolean);
+  const last = segs.pop() || name;
+  return last.split(/[^A-Za-z0-9]+/).filter(Boolean)
+    .map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+}
+
 export class DdsMapper {
   constructor(run) {
-    this.run    = run;     // the Run page: its form (run.f.dds), the inventory (run.ddsInv), discovery
-    this.ov     = null;    // the mapper, built on first open
-    this.empty  = [];      // [{id, type}] - entities with no endpoint yet
-    this.sel    = null;    // the entity shown in the preview (its id); null: every entity
-    this.filter = '';
-    this.house  = false;   // ROS 2 housekeeping shown
+    this.run     = run;           // the Run page: its form, its Start, the broker discovery is started from
+    this.box     = null;          // the mapper's section in Operate's left side, built on first open
+    this.domain  = 0;
+    this.vocab   = '';
+    this.rows    = new Map();     // kind + '\n' + name -> { kind, name, attribute, entityId, entityType, requestType, replyType, type }
+    this.inv     = null;          // the inventory: { topics, services, actions, types }
+    this.files   = null;          // GET /api/run/dds/files: { directory, bridgeConfig, userContext, mapping }
+    this.open_   = { topic: false, service: false, action: false };
+    this.openEp  = new Set();     // the endpoints open (kind + '\n' + name)
+    this.house   = false;         // ROS 2 housekeeping shown
+    this.status  = '';
+    this.screen  = 'map';         // 'map' | 'files'
+    this.from    = '';            // 'compile' when opened from Compile: a way back to it
   }
 
-  get dds()  { return this.run.f.dds; }
-  get rows() { return this.run.f.dds.rows; }
-  get inv()  { return this.run.ddsInv; }
+  // ------------------------------------------------------------------ the saved configuration
+
+  async load() {
+    try {
+      this.files = await api.runDdsFiles();
+    } catch (e) {
+      this.files = null;
+    }
+    const m = this.files && this.files.mapping;
+    if (!m) return;
+    this.domain = m.domain || 0;
+    this.vocab  = m.vocabulary || '';
+    this.rows.clear();
+    for (const [kind, plural] of KINDS) {
+      for (const x of m[plural] || []) {
+        const r = { kind, name: x[kind], attribute: x.attribute || '', entityId: x.entityId || '', entityType: x.entityType || '' };
+        if (kind === 'service') Object.assign(r, { requestType: x.requestType || '', replyType: x.replyType || '' });
+        if (kind === 'action') r.type = x.type || '';
+        this.rows.set(kind + '\n' + r.name, r);
+      }
+    }
+  }
+
+  // note - the line under the form's button
+  note(on) {
+    const m = this.files && this.files.mapping;
+    if (!m) return on ? 'nothing mapped yet - a broker with the dds bridge alone shows what it sees on one entity, urn:ngsi-ld:dds:default' : '';
+    const n = (k) => (m[k] || []).length;
+    return 'the DDS configuration: ' + count(n('topics'), 'topic', 'topics') + ', ' + count(n('services'), 'service', 'services') + ', '
+      + count(n('actions'), 'action', 'actions') + ' mapped - '
+      + this.files.bridgeConfig;
+  }
 
   // ------------------------------------------------------------------ open, close
 
-  open() {
-    if (!this.ov) this.build();
-    this.ov.hidden = false;
-    this.domainIn.value = String(this.dds.domain || 0);
-    this.vocabIn.value  = this.dds.vocabulary || '';
-    this.render();
+  build() {
+    const main = document.querySelector('#page-run .cp-main');
+    this.box = el('section', 'dm');
+    this.box.setAttribute('aria-label', 'DDS mapping');
+    this.box.hidden = true;
+    main.append(this.box);
+    this.onKey = (e) => { if (e.key === 'Escape' && !e.target.closest('input, select, textarea')) this.close(); };
+  }
+
+  open(from) {
+    this.from = from || '';
+    if (!this.box) this.build();
+    const main = this.box.parentElement;
+    for (const c of main.children) if (c !== this.box) { c.dataset.dmHidden = c.hidden ? '1' : ''; c.hidden = true; }
+    this.box.hidden = false;
+    this.show('map');
     document.addEventListener('keydown', this.onKey);
-    (this.inv ? this.filterIn : this.discoverBtn).focus();
   }
 
   close() {
-    if (!this.ov || this.ov.hidden) return;
-    this.ov.hidden = true;
+    if (!this.box || this.box.hidden) return;
+    const main = this.box.parentElement;
+    for (const c of main.children) if (c !== this.box) { c.hidden = c.dataset.dmHidden === '1'; delete c.dataset.dmHidden; }
+    this.box.hidden = true;
     document.removeEventListener('keydown', this.onKey);
     this.run.renderDds();
-    if (this.inv) this.run.renderDdsInventory();
     $('rn-dds-map').focus();
   }
 
-  get isOpen() { return !!this.ov && !this.ov.hidden; }
-
-  // changed - the form's summary and command after a change of the mapping
-  changed() {
-    this.run.renderDdsSum();
-    this.run.changed(false);
+  // closeButtons - the × of a screen, and, opened from Compile, the way back to it
+  closeButtons() {
+    const out = [];
+    if (this.from === 'compile') out.push(button('← Back to Compile', 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
+    const close = button('×', 'dm-close', () => this.close());
+    close.title = 'back to the brokers';
+    close.setAttribute('aria-label', 'close the DDS mapping');
+    out.push(close);
+    return out;
   }
 
-  build() {
-    const ov = el('div', 'dm');
-    ov.setAttribute('role', 'dialog');
-    ov.setAttribute('aria-modal', 'true');
-    ov.setAttribute('aria-label', 'DDS mapping');
-    this.onKey = (e) => { if (e.key === 'Escape') this.close(); };
+  // show - a screen, from its top
+  show(screen) {
+    this.screen = screen;
+    this.render();
+    const page = this.box.closest('.page');
+    page.scrollTop = 0;
+    requestAnimationFrame(() => { page.scrollTop = 0; });   // after the layout: the button pressed, gone, had the page scrolled to it
+  }
 
-    const bar = el('div', 'dm-bar');
-    bar.append(el('h2', 'dm-title', 'DDS mapping'));
-    this.domainIn = input('', 'domain (0)', 'DDS domain', (v) => { this.dds.domain = parseInt(v, 10) || 0; this.changed(); });
-    this.domainIn.classList.add('dm-domain');
-    this.domainIn.inputMode = 'numeric';
-    this.vocabIn = input('', 'vocabulary - the terms\' namespace (https://example.org/robots/); empty: no @context', 'Vocabulary',
-      (v) => { this.dds.vocabulary = v; this.renderPreview(); this.changed(); });
-    this.vocabIn.classList.add('dm-vocab');
-    this.discoverBtn = button('Discover', 'primary', () => this.discover());
-    const importBtn = button('Import inventory.json', '', () => $('rn-dds-file').click());
-    this.status = el('span', 'dm-status');
-    const done = button('Done', '', () => this.close());
-    done.classList.add('dm-done');
-    bar.append(this.domainIn, this.vocabIn, this.discoverBtn, importBtn, this.status, done);
-
-    const cols = el('div', 'dm-cols');
-
-    // what was announced
-    const left = el('section', 'dm-col dm-left');
-    const lhead = el('div', 'dm-colhead');
-    lhead.append(el('h3', '', 'Announced'));
-    this.count = el('span', 'dm-count');
-    lhead.append(this.count);
-    const tools = el('div', 'dm-tools');
-    this.filterIn = input('', 'filter by name', 'Filter the endpoints by name', (v) => { this.filter = v.toLowerCase(); this.renderLeft(); });
-    const house = el('label', 'rn-check');
-    const hc = el('input');
-    hc.type = 'checkbox';
-    hc.addEventListener('change', () => { this.house = hc.checked; this.renderLeft(); });
-    house.title = 'ROS 2 discovery and log topics, every node\'s parameter services';
-    house.append(hc, document.createTextNode(' ROS 2 housekeeping'));
-    const byName = button('Map topics by their names', 'small', () => this.mapByNames());
-    byName.title = 'every topic shown and not mapped: its entity from the name (rt/turtle1/pose - urn:ngsi-ld:<type>:turtle1), its attribute the last segment (pose)';
-    tools.append(this.filterIn, house, byName);
-    this.list = el('div', 'dm-list');
-    left.append(lhead, tools, this.list);
-
-    // the entities
-    const mid = el('section', 'dm-col dm-mid');
-    const mhead = el('div', 'dm-colhead');
-    mhead.append(el('h3', '', 'Entities'));
-    this.newType = input('', 'type of a new entity (Robot)', 'Entity type of a new entity', () => {});
-    this.newType.classList.add('dm-newtype');
-    mhead.append(this.newType, button('+ Entity', 'small', () => this.entityNew()));
-    this.ents = el('div', 'dm-ents');
-    mid.append(mhead, this.ents);
-
-    // what it makes
-    const right = el('section', 'dm-col dm-right');
-    this.preview = el('div', 'dm-preview');
-    right.append(this.preview);
-
-    cols.append(left, mid, right);
-    ov.append(bar, cols);
-    ov.hidden = true;
-    document.body.append(ov);
-    this.ov = ov;
+  render() {
+    this.box.replaceChildren(...(this.screen === 'files' ? this.filesScreen() : this.mapScreen()));
   }
 
   // ------------------------------------------------------------------ discovery
 
-  async discover() {
-    this.discoverBtn.disabled = true;
-    this.status.textContent = 'discovering - a broker of its own on domain ' + (this.dds.domain || 0) + ', for a few seconds ...';
-    await this.run.ddsDiscover();
-    this.discoverBtn.disabled = false;
+  async discover(btn) {
+    btn.disabled = true;
+    this.status = 'discovering - a broker of c³\'s own on domain ' + this.domain + ', for a few seconds ...';
+    this.renderStatus();
+    try {
+      const def = this.run.def();
+      def.dds = { domain: this.domain, topics: [], services: [], actions: [] };
+      delete def.bridgeConfig;
+      delete def.userContext;
+      const inv = await api.runDdsDiscover(def);
+      this.inventorySet(inv, 'domain ' + this.domain + ', discovered ' + new Date().toLocaleTimeString());
+    } catch (e) {
+      this.status = e.message;
+    }
+    btn.disabled = false;
     this.render();
   }
 
-  // refresh - after a discovery or an import (Run.ddsInventorySet), or its failure
-  refresh() {
-    if (this.isOpen) this.render();
+  async importFile(file) {
+    if (!file) return;
+    try {
+      const inv = JSON.parse(await file.text());
+      if (!Array.isArray(inv.topics) && !Array.isArray(inv.services) && !Array.isArray(inv.actions)) throw new Error('not an inventory: no "topics", "services" or "actions"');
+      this.inventorySet(inv, file.name + (inv.discoveredAt ? ', discovered ' + inv.discoveredAt : ''));
+    } catch (e) {
+      this.status = file.name + ': ' + e.message;
+    }
+    this.render();
+  }
+
+  inventorySet(inv, from) {
+    this.inv = { topics: inv.topics || [], services: inv.services || [], actions: inv.actions || [], types: inv.types || {} };
+    const n = this.inv.topics.length + this.inv.services.length + this.inv.actions.length;
+    this.status = from + ' - ' + count(n, 'endpoint', 'endpoints')
+      + (inv.settled === false ? '; the domain was still announcing more when it answered - Discover again for the rest' : '');
+    for (const [kind, plural] of KINDS) if (this.inv[plural].some((e) => !housekeeping(kind, e.name))) this.open_[kind] = true;
+  }
+
+  renderStatus() {
+    const s = this.box.querySelector('.dm-status');
+    if (s) s.textContent = this.status;
   }
 
   // ------------------------------------------------------------------ the mapping
 
-  rowOf(kind, name) {
-    return this.rows.find((r) => r.kind === kind && r.name === name);
-  }
+  key(kind, name) { return kind + '\n' + name; }
 
-  // entities - every entity: those of the rows, in their order, then the empty ones
-  entities() {
+  // endpoints - of a kind: the discovered (housekeeping hidden unless asked) and the mapped not discovered
+  endpoints(kind) {
+    const plural = kind + 's';
+    const seen = new Set();
     const out = [];
-    const byId = new Map();
-    for (const r of this.rows) {
-      let e = byId.get(r.entityId);
-      if (!e) { e = { id: r.entityId, type: r.entityType, rows: [] }; byId.set(r.entityId, e); out.push(e); }
-      e.rows.push(r);
+    for (const e of (this.inv && this.inv[plural]) || []) {
+      seen.add(e.name);
+      if (this.house || !housekeeping(kind, e.name) || this.rows.has(this.key(kind, e.name))) out.push({ e, seen: true });
     }
-    this.empty = this.empty.filter((e) => !byId.has(e.id));
-    for (const e of this.empty) out.push({ id: e.id, type: e.type, rows: [], empty: e });
+    for (const r of this.rows.values()) if (r.kind === kind && !seen.has(r.name)) out.push({ e: { name: r.name }, seen: false });
     return out;
   }
 
-  // attributeFree - 'base', or base2, base3 ... - one the entity does not have yet
-  attributeFree(entityId, base, except) {
-    const taken = new Set(this.rows.filter((r) => r.entityId === entityId && r !== except).map((r) => r.attribute));
-    if (!taken.has(base)) return base;
-    for (let n = 2; ; n++) if (!taken.has(base + n)) return base + n;
-  }
-
-  // map - an endpoint onto an entity: its row made, or moved there; the attribute's name kept (free in the
-  // entity), or the endpoint's last segment
-  map(kind, name, ent) {
-    const e = this.endpoint(kind, name);
-    let r = this.rowOf(kind, name);
+  // row - an endpoint's row, made on its first field: the attribute's name suggested from the endpoint's, a service's
+  // and an action's DDS types from the inventory
+  row(kind, e) {
+    const k = this.key(kind, e.name);
+    let r = this.rows.get(k);
     if (!r) {
-      if (!e) return;
-      r = this.run.ddsRowFor(kind, e);
-      this.rows.push(r);
+      r = { kind, name: e.name, attribute: suggested(e.name), entityId: '', entityType: '' };
+      if (kind === 'service') Object.assign(r, { requestType: (e.request || {}).type || '', replyType: (e.reply || {}).type || '' });
+      if (kind === 'action') r.type = typeOf('action', e);
+      this.rows.set(k, r);
     }
-    r.entityId   = ent.id;
-    r.entityType = ent.type;
-    r.attribute  = this.attributeFree(ent.id, r.attribute || 'value', r);
-    this.sel = ent.id;
-    this.render();
-    this.changed();
+    return r;
   }
 
-  unmap(r) {
-    const left = this.rows.filter((x) => x.entityId === r.entityId).length === 1;
-    if (left && !this.empty.some((e) => e.id === r.entityId)) this.empty.push({ id: r.entityId, type: r.entityType });
-    this.rows.splice(this.rows.indexOf(r), 1);
-    this.render();
-    this.changed();
+  mapped(r) { return !!(r && (r.attribute || r.entityId || r.entityType)); }
+
+  // entityTypes - each entity id's type: the first given on one of its endpoints
+  entityTypes() {
+    const t = new Map();
+    for (const r of this.rows.values()) if (r.entityId && r.entityType && !t.has(r.entityId)) t.set(r.entityId, r.entityType);
+    return t;
   }
 
-  mapByNames() {
-    if (!this.inv) return;
-    let n = 0;
-    for (const e of this.shown('topic')) {
-      if (this.rowOf('topic', e.name)) continue;
-      const r = this.run.ddsRowFor('topic', e);
-      r.attribute = this.attributeFree(r.entityId, r.attribute, null);
-      this.rows.push(r);
-      n++;
+  //
+  // problems - per endpoint (its key) what Done would refuse; 'entities' - per entity id with no type anywhere
+  //
+  problems() {
+    const per = new Map();
+    const add = (k, t) => { if (!per.has(k)) per.set(k, []); per.get(k).push(t); };
+    const types = this.entityTypes();
+    const attrs = new Map();       // entityId + '\n' + attribute -> the first endpoint with it
+
+    for (const [k, r] of this.rows) {
+      if (!this.mapped(r)) continue;
+      if (!r.attribute) add(k, 'no attribute name');
+      else if (FORBIDDEN.test(r.attribute)) add(k, 'the attribute name has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))');
+      else if (RESERVED.includes(r.attribute)) add(k, '"' + r.attribute + '" is a member of every entity, not an attribute name');
+      if (!r.entityId) add(k, 'no entity id');
+      else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(r.entityId)) add(k, 'the entity id is not a URI (urn:ngsi-ld:Robot:1)');
+      else if (!types.has(r.entityId)) add(k, 'the entity ' + r.entityId + ' has no type - give it one here, or on another of its endpoints');
+      if (r.entityType && FORBIDDEN.test(r.entityType)) add(k, 'the entity type has a character NGSI-LD forbids in a name');
+      if (r.entityType && types.get(r.entityId) && r.entityType !== types.get(r.entityId)) add(k, 'another endpoint gives ' + r.entityId + ' the type ' + types.get(r.entityId));
+      if (r.attribute && r.entityId) {
+        const a = r.entityId + '\n' + r.attribute;
+        if (attrs.has(a)) add(k, r.entityId + ' has the attribute ' + r.attribute + ' already, from ' + attrs.get(a));
+        else attrs.set(a, r.name);
+      }
     }
-    this.status.textContent = n ? n + ' topic' + (n === 1 ? '' : 's') + ' mapped by name' : 'every topic shown is mapped already';
-    this.render();
-    this.changed();
+    return per;
   }
 
-  entityNew(type) {
-    const t = type || this.newType.value.trim() || this.run.ddsType || 'Robot';
-    const ids = new Set(this.entities().map((e) => e.id));
-    let n = 1;
-    while (ids.has('urn:ngsi-ld:' + t + ':' + n)) n++;
-    const ent = { id: 'urn:ngsi-ld:' + t + ':' + n, type: t };
-    this.empty.push(ent);
-    this.sel = ent.id;
-    this.render();
-    const card = this.ents.querySelector('[data-entity="' + CSS.escape(ent.id) + '"] .dm-entid');
-    if (card) { card.focus(); card.select(); }
-    return ent;
+  // ------------------------------------------------------------------ the mapping screen
+
+  mapScreen() {
+    const out = [];
+
+    const head = el('div', 'cp-card dm-head');
+    const top = el('div', 'dm-top');
+    top.append(el('h2', 'section', 'Map DDS topics, services and actions'), ...this.closeButtons());
+    head.append(top, el('p', 'cp-note', 'Each topic, service or action mapped is one attribute of an entity: its name, the entity\'s id, and the '
+      + 'entity\'s type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.'));
+
+    const row = el('div', 'dm-row');
+    const dom = input(String(this.domain), 'domain (0)', 'DDS domain', (v) => { this.domain = parseInt(v, 10) || 0; });
+    dom.inputMode = 'numeric';
+    dom.classList.add('dm-domain');
+    const voc = input(this.vocab, 'vocabulary - the terms\' namespace (https://example.org/robots/); empty: the default context\'s', 'Vocabulary',
+      (v) => { this.vocab = v; });
+    voc.classList.add('dm-vocab');
+    const disc = button('Discover', 'primary', () => this.discover(disc));
+    const file = el('input');
+    file.type = 'file';
+    file.accept = '.json,application/json';
+    file.hidden = true;
+    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; this.importFile(f); });
+    const imp = button('Import inventory.json', '', () => file.click());
+    row.append(dom, voc, disc, imp, file);
+    const st = el('div', 'dm-row');
+    const house = el('label', 'rn-check');
+    const hc = el('input');
+    hc.type = 'checkbox';
+    hc.checked = this.house;
+    hc.addEventListener('change', () => { this.house = hc.checked; this.render(); });
+    house.title = 'ROS 2 discovery and log topics, every node\'s parameter services';
+    house.append(hc, document.createTextNode(' show ROS 2 housekeeping'));
+    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : 'Discover asks the domain what it announces (a ROS 2 node, or anything speaking DDS, running on it) - or import an inventory.json')), house);
+    head.append(row, st);
+    out.push(head);
+
+    const problems = this.problems();
+    const types = this.entityTypes();
+    const ids = [...new Set([...this.rows.values()].map((r) => r.entityId).filter(Boolean))];
+    const listIds = el('datalist');
+    listIds.id = 'dm-ids';
+    for (const id of ids) listIds.append(new Option(id));
+    const listTypes = el('datalist');
+    listTypes.id = 'dm-types';
+    for (const t of new Set(types.values())) listTypes.append(new Option(t));
+
+    const card = el('div', 'cp-card dm-groups');
+    card.append(listIds, listTypes);
+    for (const [kind, , label] of KINDS) card.append(this.group(kind, label, problems));
+    out.push(card);
+
+    // Done
+    const foot = el('div', 'cp-card dm-foot');
+    const mapped = [...this.rows.values()].filter((r) => this.mapped(r));
+    const nProblems = [...problems.values()].reduce((n, l) => n + l.length, 0);
+    const ents = new Set(mapped.map((r) => r.entityId).filter(Boolean));
+    const sum = el('span', 'dm-sum', mapped.length
+      ? mapped.length + ' mapped, ' + count(ents.size, 'entity', 'entities') + (nProblems ? ' - ' + nProblems + ' to fix first' : '')
+      : 'nothing mapped yet');
+    const done = button('Done', 'primary dm-done', () => this.done(done));
+    done.disabled = !mapped.length || nProblems > 0;
+    foot.append(sum, el('span', 'dm-err'), done);
+    out.push(foot);
+    return out;
   }
 
-  // entityRename - the id or the type of an entity: every row of it, or the empty entity
-  entitySet(ent, key, v) {
-    const old = ent.id;
-    for (const r of this.rows) if (r.entityId === old) r[key === 'id' ? 'entityId' : 'entityType'] = v;
-    if (ent.empty) ent.empty[key] = v;
-    ent[key] = v;
-    if (key === 'id' && this.sel === old) this.sel = v;
+  group(kind, label, problems) {
+    const g = el('div', 'dm-group');
+    const list = this.endpoints(kind);
+    const nMapped = list.filter(({ e }) => this.mapped(this.rows.get(this.key(kind, e.name)))).length;
+    const open = this.open_[kind];
+    const head = el('div', 'dm-ghead');
+    const tog = toggle(open, label, () => { this.open_[kind] = !open; this.render(); });
+    const title = el('span', 'dm-gtitle', list.length + ' DDS ' + label);
+    title.addEventListener('click', () => tog.click());
+    head.append(tog, title, el('span', 'dm-gcount', nMapped ? nMapped + ' mapped' : ''));
+    g.append(head);
+    if (!open) return g;
+    if (!list.length) g.append(el('div', 'dm-empty', this.inv ? 'none announced' + (this.house ? '' : ' but ROS 2 housekeeping') : 'nothing discovered yet'));
+    for (const { e, seen } of list) g.append(this.endpoint(kind, e, seen, problems.get(this.key(kind, e.name)) || []));
+    return g;
   }
 
-  entityDelete(ent) {
-    for (const r of [...ent.rows]) this.rows.splice(this.rows.indexOf(r), 1);
-    this.empty = this.empty.filter((e) => e.id !== ent.id);
-    if (this.sel === ent.id) this.sel = null;
-    this.render();
-    this.changed();
-  }
-
-  // ------------------------------------------------------------------ the inventory
-
-  endpoint(kind, name) {
-    return this.inv ? (this.inv[kind + 's'] || []).find((e) => e.name === name) : null;
-  }
-
-  shown(kind) {
-    if (!this.inv) return [];
-    return (this.inv[kind + 's'] || []).filter((e) => (this.house || !this.run.ddsHousekeeping(kind, e.name))
-                                                 && (!this.filter || e.name.toLowerCase().includes(this.filter)));
-  }
-
-  // samples - what an endpoint carries, as its discovered types' samples: [label, sample]
-  samples(kind, e) {
-    const t = (name) => ((this.inv && this.inv.types) || {})[name];
-    const s = (label, name) => (t(name) && t(name).sample !== undefined ? [[label, t(name).sample]] : []);
-    if (!e) return [];
-    if (kind === 'topic')   return s('sample', e.type);
-    if (kind === 'service') return [...s('request', (e.request || {}).type), ...s('reply', (e.reply || {}).type)];
-    return [...s('goal', ((e.goal || {}).request || {}).type), ...s('feedback', (e.feedback || {}).type),
-            ...s('result', ((e.result || {}).reply || {}).type)];
-  }
-
-  // ------------------------------------------------------------------ drag and drop
-
-  dragSource(node, kind, name) {
-    node.draggable = true;
-    node.addEventListener('dragstart', (ev) => {
-      ev.dataTransfer.setData('application/x-c3-dds', JSON.stringify({ kind, name }));
-      ev.dataTransfer.effectAllowed = 'move';
-      this.ov.classList.add('dm-dragging');
-    });
-    node.addEventListener('dragend', () => this.ov.classList.remove('dm-dragging'));
-  }
-
-  dropTarget(node, onDrop) {
-    node.addEventListener('dragover', (ev) => {
-      if (!ev.dataTransfer.types.includes('application/x-c3-dds')) return;
-      ev.preventDefault();
-      node.classList.add('dm-over');
-    });
-    node.addEventListener('dragleave', (ev) => { if (!node.contains(ev.relatedTarget)) node.classList.remove('dm-over'); });
-    node.addEventListener('drop', (ev) => {
-      ev.preventDefault();
-      node.classList.remove('dm-over');
-      this.ov.classList.remove('dm-dragging');
-      try { const d = JSON.parse(ev.dataTransfer.getData('application/x-c3-dds')); onDrop(d.kind, d.name); } catch { /* not ours */ }
-    });
-  }
-
-  // ------------------------------------------------------------------ rendering
-
-  render() {
-    const inv = this.inv;
-    if (!this.discoverBtn.disabled) {
-      const why = $('rn-dds-why').textContent;
-      this.status.textContent = why || (inv ? '' : 'Discover asks the domain what it announces - or import an inventory.json');
-    }
-    this.renderLeft();
-    this.renderEntities();
-    this.renderPreview();
-  }
-
-  renderLeft() {
-    const box = this.list;
-    box.replaceChildren();
-    const inv = this.inv;
-    const ents = this.entities();
-    let all = 0, mapped = 0;
-
-    if (!inv) {
-      box.append(el('p', 'cp-note', 'Nothing discovered yet. Discover starts a broker of c³\'s own on the domain, a few seconds, and lists '
-        + 'the topics, services and actions it saw announced. A ROS 2 node, or anything else speaking DDS, has to be running on that domain.'));
-    }
-
-    for (const [kind, , label] of KINDS) {
-      const list = this.shown(kind);
-      if (!list.length) continue;
-      const m = list.filter((e) => this.rowOf(kind, e.name)).length;
-      all += list.length; mapped += m;
-      box.append(el('div', 'dm-group', label + ' - ' + m + ' of ' + list.length + ' mapped'));
-      for (const e of list) box.append(this.endpointNode(kind, e, ents));
-    }
-
-    // rows whose endpoint the inventory has not (the mapping of an earlier discovery, or a broker's saved one)
-    const unseen = this.rows.filter((r) => !this.endpoint(r.kind, r.name));
-    if (inv && unseen.length) {
-      box.append(el('div', 'dm-group', 'Mapped, not in the last discovery - ' + unseen.length));
-      for (const r of unseen) box.append(this.endpointNode(r.kind, { name: r.name }, ents, true));
-    }
-
-    if (inv && !all && !unseen.length) box.append(el('p', 'cp-note', this.filter ? 'no name has "' + this.filter + '"' : 'nothing announced' + (this.house ? '' : ' but ROS 2 housekeeping')));
-    this.count.textContent = inv ? mapped + ' of ' + all + ' mapped' : '';
-  }
-
-  endpointNode(kind, e, ents, unseen) {
-    const r = this.rowOf(kind, e.name);
-    const node = el('div', 'dm-ep' + (r ? ' mapped' : '') + (unseen ? ' unseen' : ''));
+  endpoint(kind, e, seen, probs) {
+    const k = this.key(kind, e.name);
+    const r = this.rows.get(k);
+    const open = this.openEp.has(k);
+    const node = el('div', 'dm-ep' + (this.mapped(r) ? ' mapped' : '') + (probs.length ? ' bad' : ''));
     const head = el('div', 'dm-ephead');
-    const samples = this.samples(kind, e);
-    const tog = el('button', 'dm-tog', samples.length ? '▸' : '');
-    tog.type = 'button';
-    tog.disabled = !samples.length;
-    tog.title = 'its fields';
-    tog.setAttribute('aria-label', 'the fields of ' + e.name);
-    const type = unseen ? '' : rosType(this.run.ddsTypeOf(kind, e));
-    head.append(tog, el('span', 'dm-kind dm-k-' + kind, kind), el('b', 'dm-name', e.name), el('span', 'dm-type', type));
+    const tog = toggle(open, e.name, () => { if (open) this.openEp.delete(k); else this.openEp.add(k); this.render(); });
+    const name = el('span', 'dm-name', e.name);
+    name.addEventListener('click', () => tog.click());
+    head.append(tog, name, el('span', 'dm-type', seen ? rosType(typeOf(kind, e)) : 'not in the last discovery'));
+    const chip = el('span', 'dm-chip');
+    if (this.mapped(r)) chip.textContent = (r.attribute || '?') + ' of ' + (r.entityId || '?');
+    head.append(chip);
     node.append(head);
+    if (!open) return node;
 
-    const line = el('div', 'dm-epmap');
-    const sel = el('select', 'cp-input dm-pick');
-    sel.setAttribute('aria-label', 'the entity of ' + e.name);
-    sel.append(new Option('- not mapped -', ''));
-    for (const ent of ents) sel.append(new Option(ent.id + (ent.type ? '  (' + ent.type + ')' : ''), ent.id));
-    sel.append(new Option('+ a new entity', '+'));
-    sel.value = r ? r.entityId : '';
-    sel.addEventListener('change', () => {
-      if (sel.value === '') { if (r) this.unmap(r); return; }
-      const ent = sel.value === '+' ? this.entityNew() : ents.find((x) => x.id === sel.value);
-      this.map(kind, e.name, ent);
-    });
-    line.append(sel);
-    if (r) line.append(el('span', 'dm-as', 'as'), el('b', 'dm-attr', r.attribute || '?'));
-    if (unseen) line.append(el('span', 'why', 'not announced'));
-    node.append(line);
+    const fields = el('div', 'dm-fields');
+    const types = this.entityTypes();
+    const sugg = suggested(e.name);
+    const f = (label, key, ph, list, hint) => {
+      const l = el('label', 'dm-field');
+      const i = input(r ? r[key] : '', ph, label + ' of ' + e.name, (v) => {
+        const row = this.row(kind, e);
+        row[key] = v;
+        this.refresh();
+      });
+      if (list) i.setAttribute('list', list);
+      l.append(el('span', 'dm-flabel', label), i);
+      if (hint) l.append(el('span', 'dm-fhint', hint));
+      return l;
+    };
+    const inherited = r && r.entityId && !r.entityType && types.get(r.entityId);
+    fields.append(
+      f('Attribute name', 'attribute', sugg || 'value', null),
+      f('Entity ID', 'entityId', 'urn:ngsi-ld:Robot:1', 'dm-ids'),
+      f('Entity type', 'entityType', inherited || 'Robot', 'dm-types', inherited ? 'optional - ' + r.entityId + ' is a ' + inherited : 'optional, if another endpoint of the entity gives it'));
+    node.append(fields);
 
-    const pre = el('pre', 'dm-sample');
-    pre.hidden = true;
-    pre.textContent = samples.map(([label, s]) => (samples.length > 1 ? label + ':\n' : '') + JSON.stringify(s, null, 2)).join('\n');
-    tog.addEventListener('click', () => { pre.hidden = !pre.hidden; tog.textContent = pre.hidden ? '▸' : '▾'; });
-    node.append(pre);
-
-    if (!unseen) this.dragSource(node, kind, e.name);
+    const tools = el('div', 'dm-eptools');
+    const sample = this.sample(kind, e);
+    if (sample) {
+      const pre = el('pre', 'dm-sample', sample);
+      pre.hidden = true;
+      const b = button('its fields', 'small', () => { pre.hidden = !pre.hidden; });
+      tools.append(b);
+      node.append(tools, pre);
+    }
+    if (this.mapped(r)) tools.append(button('not mapped', 'small', () => { this.rows.delete(k); this.render(); }));
+    if (!tools.parentElement) node.append(tools);
+    node.append(el('div', 'dm-probs', probs.join(' · ')));
     return node;
   }
 
-  renderEntities() {
-    const box = this.ents;
-    box.replaceChildren();
-    const ents = this.entities();
+  sample(kind, e) {
+    const t = (name) => ((this.inv && this.inv.types) || {})[name];
+    const parts = [];
+    const add = (label, name) => { if (t(name) && t(name).sample !== undefined) parts.push([label, t(name).sample]); };
+    if (kind === 'topic') add('sample', e.type);
+    else if (kind === 'service') { add('request', (e.request || {}).type); add('reply', (e.reply || {}).type); }
+    else { add('goal', ((e.goal || {}).request || {}).type); add('feedback', (e.feedback || {}).type); add('result', ((e.result || {}).reply || {}).type); }
+    return parts.map(([l, s]) => (parts.length > 1 ? l + ':\n' : '') + JSON.stringify(s, null, 2)).join('\n') || null;
+  }
 
-    if (!ents.length) {
-      box.append(el('p', 'cp-note', 'No entity yet. Pick one in the list beside an endpoint, drag an endpoint here, or + Entity. '
-        + 'Each mapped endpoint is one attribute of its entity, its name yours to choose.'));
+  //
+  // refresh - after a keystroke in an endpoint's field, a moment later: the screen again, the focus and the caret
+  // where they were
+  //
+  refresh() {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      const focus = document.activeElement;
+      const label = focus && focus.getAttribute('aria-label');
+      const pos = focus && focus.selectionStart;
+      this.render();
+      if (label) {
+        const again = [...this.box.querySelectorAll('input')].find((i) => i.getAttribute('aria-label') === label);
+        if (again) { again.focus(); if (pos !== null && pos !== undefined) again.setSelectionRange(pos, pos); }
+      }
+    }, 250);
+  }
+
+  // ------------------------------------------------------------------ Done: the files
+
+  body() {
+    const types = this.entityTypes();
+    const b = { domain: this.domain, vocabulary: this.vocab, topics: [], services: [], actions: [] };
+    for (const r of this.rows.values()) {
+      if (!this.mapped(r)) continue;
+      const o = { [r.kind]: r.name, entityId: r.entityId, entityType: r.entityType || types.get(r.entityId), attribute: r.attribute };
+      if (r.kind === 'service') Object.assign(o, { requestType: r.requestType, replyType: r.replyType });
+      if (r.kind === 'action') o.type = r.type;
+      b[r.kind + 's'].push(o);
     }
-
-    for (const ent of ents) box.append(this.entityCard(ent, ents));
-
-    const drop = el('div', 'dm-dropnew', 'drop an endpoint here - a new entity');
-    this.dropTarget(drop, (kind, name) => this.map(kind, name, this.entityNew()));
-    box.append(drop);
+    if (!b.vocabulary) delete b.vocabulary;
+    return b;
   }
 
-  entityCard(ent, ents) {
-    const card = el('div', 'dm-ent' + (this.sel === ent.id ? ' sel' : ''));
-    card.dataset.entity = ent.id;
-    card.addEventListener('focusin', () => { if (this.sel !== ent.id) { this.sel = ent.id; this.markSel(); this.renderPreview(); } });
-    card.addEventListener('click', (ev) => {
-      if (ev.target.closest('input, select, button')) return;
-      this.sel = this.sel === ent.id ? null : ent.id;
-      this.markSel();
-      this.renderPreview();
-    });
-
-    const head = el('div', 'dm-enthead');
-    const typeIn = input(ent.type, 'Robot', 'The entity\'s type', (v) => { this.entitySet(ent, 'type', v); this.check(card, ent); this.renderPreview(); this.changed(); });
-    typeIn.classList.add('dm-enttype');
-    const idIn = input(ent.id, 'urn:ngsi-ld:Robot:1', 'The entity\'s id', (v) => { this.entitySet(ent, 'id', v); card.dataset.entity = v; this.check(card, ent); this.renderPreview(); this.changed(); });
-    idIn.classList.add('dm-entid');
-    idIn.addEventListener('change', () => this.render());             // the entity lists beside the endpoints
-    const del = button('×', 'dm-del', () => this.entityDelete(ent));
-    del.title = ent.rows.length ? 'remove the entity - its ' + ent.rows.length + ' endpoint' + (ent.rows.length === 1 ? '' : 's') + ' not mapped any more' : 'remove the entity';
-    del.setAttribute('aria-label', 'remove ' + ent.id);
-    head.append(typeIn, idIn, del);
-    card.append(head);
-
-    const attrs = el('div', 'dm-attrs');
-    if (!ent.rows.length) attrs.append(el('div', 'dm-hint', 'no attribute yet - drop an endpoint here, or pick this entity beside one'));
-    for (const r of ent.rows) {
-      const row = el('div', 'dm-arow');
-      const nameIn = input(r.attribute, 'attribute', 'The attribute of ' + r.name, (v) => { r.attribute = v; this.check(card, ent); this.renderPreview(); this.changed(); });
-      nameIn.classList.add('dm-aname');
-      nameIn.addEventListener('change', () => this.renderLeft());
-      const move = el('select', 'cp-input dm-move');
-      move.setAttribute('aria-label', 'move ' + r.name + ' to another entity');
-      move.title = 'move to another entity';
-      move.append(new Option('move to ...', ''));
-      for (const x of ents) if (x.id !== ent.id) move.append(new Option(x.id, x.id));
-      move.append(new Option('+ a new entity', '+'));
-      move.addEventListener('change', () => {
-        if (!move.value) return;
-        this.map(r.kind, r.name, move.value === '+' ? this.entityNew(ent.type) : ents.find((x) => x.id === move.value));
-      });
-      const un = button('×', 'dm-del', () => this.unmap(r));
-      un.title = 'not mapped';
-      un.setAttribute('aria-label', 'unmap ' + r.name);
-      const src = el('span', 'dm-src');
-      src.append(el('span', 'dm-kind dm-k-' + r.kind, r.kind), el('span', 'dm-name', r.name));
-      row.append(nameIn, src, move, un);
-      this.dragSource(row, r.kind, r.name);
-      attrs.append(row);
+  async done(btn) {
+    btn.disabled = true;
+    try {
+      this.files = await api.runDdsFilesWrite(this.body());
+      this.show('files');
+      this.run.renderDds();
+    } catch (e) {
+      this.box.querySelector('.dm-err').textContent = e.message;
+      btn.disabled = false;
     }
-    card.append(attrs, el('div', 'dm-warn'));
-    this.dropTarget(card, (kind, name) => this.map(kind, name, ent));
-    this.check(card, ent);
-    return card;
   }
 
-  markSel() {
-    for (const c of this.ents.querySelectorAll('.dm-ent')) c.classList.toggle('sel', c.dataset.entity === this.sel);
-  }
+  // ------------------------------------------------------------------ the files screen
 
-  // problems - what the broker would refuse or do otherwise than meant, for an entity
-  problems(ent) {
+  filesScreen() {
+    const f = this.files;
+    const m = f.mapping || {};
+    const n = (k) => (m[k] || []).length;
+    const ents = new Set(['topics', 'services', 'actions'].flatMap((k) => (m[k] || []).map((x) => x.entityId)));
     const out = [];
-    if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(ent.id)) out.push('the id is not a URI (urn:ngsi-ld:Robot:1)');
-    if (this.entities().filter((e) => e.id === ent.id).length > 1) out.push('another entity has this id');
-    if (!ent.type) out.push('no type');
-    else if (FORBIDDEN.test(ent.type)) out.push('the type has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))');
-    if (new Set(ent.rows.map((r) => r.entityType)).size > 1) out.push('its endpoints disagree on the type - type it again');
-    const seen = new Set();
-    for (const r of ent.rows) {
-      const a = r.attribute;
-      if (!a) out.push(r.name + ': no attribute name');
-      else if (FORBIDDEN.test(a)) out.push(a + ': a character NGSI-LD forbids in a name (space < > " \' = ; ( ))');
-      else if (RESERVED.includes(a)) out.push(a + ': a member of every entity, not an attribute name');
-      else if (seen.has(a)) out.push(a + ': two endpoints, one attribute');
-      seen.add(a);
-    }
+
+    const head = el('div', 'cp-card dm-head');
+    const top = el('div', 'dm-top');
+    top.append(el('h2', 'section', 'The DDS configuration is written'), ...this.closeButtons());
+    head.append(top, el('p', 'cp-note', count(n('topics'), 'topic', 'topics') + ', ' + count(n('services'), 'service', 'services') + ' and '
+      + count(n('actions'), 'action', 'actions') + ', as attributes of ' + count(ents.size, 'entity', 'entities') + ' - domain ' + (m.domain || 0) + '. Two files, in ' + f.directory + ':'));
+
+    const fileCard = (title, path, what, flag) => {
+      const c = el('div', 'dm-file');
+      const p = el('code', 'dm-path', path);
+      const copy = button('Copy', 'small', async () => {
+        try { await navigator.clipboard.writeText(path); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'select it and copy'; }
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      });
+      const line = el('div', 'dm-fileline');
+      line.append(p, copy);
+      c.append(el('div', 'dm-filetitle', title), line, el('div', 'cp-note', what + ' - ' + flag));
+      return c;
+    };
+    head.append(
+      fileCard('The bridge configuration', f.bridgeConfig, 'the dds bridge\'s domain and the mapping the broker reads', '--bridgeConfig'),
+      fileCard('The @context', f.userContext, 'each entity type and attribute a term of ' + (m.vocabulary || 'the default context\'s namespace')
+        + ', so clients use the short names', '--defaultUserContext'));
+    out.push(head);
+
+    // a broker with them
+    const start = el('div', 'cp-card dm-start');
+    start.append(el('h2', 'section', 'Start a broker with it'));
+    start.append(el('p', 'cp-note', 'The broker of the form on the right - its name, port, store and where it runs - with the dds bridge and the two files. '
+      + 'More options are added as typed.'));
+    const cmd = el('pre', 'cp-cmd dm-cmd');
+    const more = input(this.run.f.args || '', '--memoryLimit 512 --ddsSync', 'More options for the broker', () => show());
+    more.classList.add('dm-more');
+    const show = () => {
+      cmd.textContent = 'coraine --bridges dds \\\n  --bridgeConfig ' + f.bridgeConfig + ' \\\n  --defaultUserContext ' + f.userContext
+        + (more.value.trim() ? ' \\\n  ' + more.value.trim() : '');
+    };
+    show();
+    const ml = el('label', 'dm-field');
+    ml.append(el('span', 'dm-flabel', 'More options'), more);
+    const go = button('Start the broker', 'primary dm-go', () => this.startBroker(more.value.trim(), go));
+    const fill = button('Put it in the broker form', '', () => { this.applyToForm(more.value.trim()); this.close(); });
+    fill.title = 'the form on the right gets the dds bridge, the two files and the options - to change more before Start';
+    const btns = el('div', 'dm-row');
+    btns.append(go, fill, el('span', 'dm-err'));
+    start.append(cmd, ml, btns);
+    out.push(start);
+
+    const back = el('div', 'dm-row');
+    back.append(button('Edit the mapping', '', () => this.show('map')), button('Close', '', () => this.close()));
+    if (this.from === 'compile') back.append(button('← Back to Compile', '', () => { this.close(); location.hash = '#compile'; }));
+    out.push(back);
     return out;
   }
 
-  check(card, ent) {
-    const p = this.problems(ent);
-    const w = card.querySelector('.dm-warn');
-    w.replaceChildren(...p.map((t) => el('div', '', t)));
-    card.classList.toggle('bad', p.length > 0);
+  applyToForm(args) {
+    const f = this.run.f;
+    if (!f.bridges.includes('dds')) f.bridges = [...f.bridges, 'dds'];
+    f.bridgeConfig = this.files.bridgeConfig;
+    f.userContext  = this.files.userContext;
+    f.dds          = this.run.ddsDefaults();          // the mapping is in the file, not in the broker's definition
+    f.args         = args;
+    this.run.renderForm();
   }
 
-  // ------------------------------------------------------------------ what it makes
-
-  renderPreview() {
-    const box = this.preview;
-    box.replaceChildren();
-    const ents = this.entities().filter((e) => e.rows.length && (!this.sel || e.id === this.sel));
-
-    box.append(el('h3', '', this.sel ? 'The entity' : 'The entities'));
-    box.append(el('p', 'cp-note', 'As the broker makes them: each attribute is there from the start, "uninitialized" until its first '
-      + 'sample; a topic\'s value is then the whole sample - here one of its type, as discovered (zeros). A service\'s attribute '
-      + 'calls the service when written, an action\'s sends a goal.' + (this.sel ? ' Click the entity again for all of them.' : '')));
-    if (!ents.length) box.append(el('p', 'cp-note', 'nothing mapped yet'));
-    for (const ent of ents) {
-      const o = { id: ent.id, type: ent.type };
-      for (const r of ent.rows) {
-        const e = this.endpoint(r.kind, r.name);
-        const s = r.kind === 'topic' ? this.samples('topic', e) : [];
-        o[r.attribute || '?'] = { type: 'Property', value: s.length ? s[0][1] : 'uninitialized' };
-      }
-      box.append(el('pre', 'dm-json', JSON.stringify(o, null, 2)));
+  async startBroker(args, btn) {
+    btn.disabled = true;
+    this.applyToForm(args);
+    if (!await this.run.start()) {
+      this.box.querySelector('.dm-start .dm-err').textContent = $('rn-problem').textContent;
+      btn.disabled = false;
+      return;
     }
-
-    const voc = this.dds.vocabulary;
-    box.append(el('h3', '', 'The @context'));
-    if (!voc) {
-      box.append(el('p', 'cp-note', 'No vocabulary: the types and attributes expand to the default context\'s namespace. With one, c³ writes '
-        + 'dds-context.jsonld and starts the broker with it as --defaultUserContext.'));
-    } else {
-      const ctx = {};
-      for (const r of this.rows) for (const t of [r.entityType, r.attribute]) if (t && !(t in ctx)) ctx[t] = voc + t;
-      box.append(el('pre', 'dm-json', JSON.stringify({ '@context': ctx }, null, 2)));
-    }
-
-    box.append(el('h3', '', 'The configuration'));
-    box.append(el('p', 'cp-note', 'dds.ngsild of the bridge configuration c³ writes when the broker starts'));
-    const conf = { topics: {}, services: {}, actions: {} };
-    for (const r of this.rows) {
-      const o = { entityId: r.entityId, entityType: r.entityType, attribute: r.attribute };
-      if (r.kind === 'service') Object.assign(o, { requestType: r.requestType, replyType: r.replyType });
-      if (r.kind === 'action') o.type = r.type;
-      conf[r.kind + 's'][r.name] = o;
-    }
-    for (const k of ['topics', 'services', 'actions']) if (!Object.keys(conf[k]).length) delete conf[k];
-    box.append(el('pre', 'dm-json', JSON.stringify(conf, null, 2)));
+    this.close();
   }
 }
