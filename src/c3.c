@@ -14,12 +14,12 @@
 // If the port is taken by a c3 already, that one is opened and this one exits.
 //
 #include <limits.h>                              // PATH_MAX
-#include <signal.h>                              // signal
+#include <signal.h>                              // signal, kill
 #include <stdio.h>                               // printf, fprintf, snprintf
-#include <stdlib.h>                              // exit
+#include <stdlib.h>                              // exit, atoi
 #include <string.h>                              // strrchr, strstr
 #include <sys/stat.h>                            // stat
-#include <unistd.h>                              // readlink
+#include <unistd.h>                              // readlink, getpid, usleep
 
 #include <arpa/inet.h>                           // htons, htonl
 #include <netinet/in.h>                          // sockaddr_in, INADDR_LOOPBACK
@@ -147,14 +147,15 @@ static bool wwwResolve(const char* argv0)
 
 // -----------------------------------------------------------------------------
 //
-// otherC3 - is the process on the port a c3?
+// otherC3 - is the process on the port a c3? Its pid in *pidP (0: a c3 that does not say)
 //
-static bool otherC3(const char* url)
+static bool otherC3(const char* url, int* pidP)
 {
   char                statusUrl[256];
   CorRestClientMulti* multiP = corRestClientMultiCreate(1);
   bool                isC3   = false;
 
+  *pidP = 0;
   if (multiP == NULL)
     return false;
 
@@ -167,7 +168,13 @@ static bool otherC3(const char* url)
 
     CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
     if ((respP != NULL) && (respP->statusCode == 200) && (respP->body != NULL))
+    {
       isC3 = (strstr(respP->body, "\"c3\"") != NULL);
+
+      const char* pid = strstr(respP->body, "\"pid\": ");
+      if (isC3 && (pid != NULL))
+        *pidP = atoi(pid + 7);
+    }
   }
 
   corRestClientMultiDestroy(multiP);
@@ -199,6 +206,56 @@ static bool portTaken(unsigned short port)
   close(fd);
 
   return taken;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// earlierBuild - the c3 of pid is an earlier build of this very file: its executable is this one's path, deleted
+//
+// An install replaces the file a running c3 was started from (/proc/<pid>/exe then reads "<path> (deleted)"); a
+// c3 started again from it finds the earlier one on its port. A c3 of another file - a checkout, another
+// install - is not one.
+//
+static bool earlierBuild(int pid)
+{
+  char self[PATH_MAX];
+  char other[PATH_MAX + 16];
+  char link[64];
+
+  ssize_t selfLen = readlink("/proc/self/exe", self, sizeof(self) - 1);
+  snprintf(link, sizeof(link), "/proc/%d/exe", pid);
+  ssize_t otherLen = readlink(link, other, sizeof(other) - 1);
+
+  if ((pid <= 0) || (pid == getpid()) || (selfLen <= 0) || (otherLen <= 0))
+    return false;
+
+  self[selfLen]   = 0;
+  other[otherLen] = 0;
+
+  return (strncmp(other, self, selfLen) == 0) && (strcmp(&other[selfLen], " (deleted)") == 0);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// earlierBuildStop - SIGTERM to the earlier c3, and its port free again - 10 s at most
+//
+static bool earlierBuildStop(int pid)
+{
+  if (kill(pid, SIGTERM) != 0)
+    return false;
+
+  for (int ix = 0; ix < 100; ix++)
+  {
+    if (portTaken(c3Port) == false)
+      return true;
+    usleep(100 * 1000);
+  }
+
+  return false;
 }
 
 
@@ -240,9 +297,21 @@ int main(int argC, char* argV[])
   char url[128];
   snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
 
+  int otherPid = 0;
+
+  if (portTaken(c3Port) && otherC3(url, &otherPid) && earlierBuild(otherPid))
+  {
+    printf("c3: the c3 on port %d (pid %d) is an earlier build of this one, replaced since it started - stopping it\n", c3Port, otherPid);
+    if (earlierBuildStop(otherPid) == false)
+    {
+      fprintf(stderr, "c3: the earlier c3 (pid %d) is still on port %d - stop it, or --port <port>\n", otherPid, c3Port);
+      return 1;
+    }
+  }
+
   if (portTaken(c3Port))
   {
-    if (otherC3(url))
+    if (otherC3(url, &otherPid))
     {
       printf("c3: already running on port %d\n", c3Port);
       browserOpen(url, noBrowser);

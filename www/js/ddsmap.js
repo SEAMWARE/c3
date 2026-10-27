@@ -444,7 +444,9 @@ export class DdsMapper {
     if (sample) {
       const pre = el('pre', 'dm-sample', sample);
       pre.hidden = true;
-      const b = button('its fields', 'small', () => { pre.hidden = !pre.hidden; });
+      const b = button(kind === 'topic' ? 'the topic\'s payload' : kind === 'service' ? 'the request and reply' : 'the goal, feedback and result',
+        'small', () => { pre.hidden = !pre.hidden; });
+      b.title = 'a sample of its DDS type - the value of the attribute it is mapped to';
       tools.append(b);
       node.append(tools, pre);
     }

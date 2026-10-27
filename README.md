@@ -76,6 +76,12 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 `make run ARGS="--port 7901 --no-browser"` builds and runs from the checkout; `make install`
 (`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3` and `share/c3/www`; `make clean`.
 
+A c³ started while one runs on its port opens that one in the browser and ends. When the running one is
+an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
+(`/proc/<pid>/exe` reads `<path> (deleted)`; `GET /api/status` says its `pid`) - the new one stops it
+(SIGTERM, the port free within 10 s) and starts in its place, as a stop by hand would: the brokers and
+services it started keep running and the new one attaches to them, a build that runs is cancelled.
+
 ## The `c3` command
 
 ```
@@ -827,8 +833,9 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
   and not in the last discovery is listed too.
 - **An endpoint opened** - Attribute name, Entity ID, Entity type (optional), the ids and types in use
   offered as you type. The first field typed in names the attribute from the endpoint: its last segment
-  (`rt/` dropped) camelCased - `rt/turtle1/cmd_vel`, `cmdVel`. **its fields** shows the type's sample;
-  **not mapped** takes the endpoint out. A service keeps its request and reply types, an action its type,
+  (`rt/` dropped) camelCased - `rt/turtle1/cmd_vel`, `cmdVel`. **the topic's payload** (a service's
+  **request and reply**, an action's **goal, feedback and result**) shows a sample of its DDS type - the
+  value of the attribute it is mapped to; **not mapped** takes the endpoint out. A service keeps its request and reply types, an action its type,
   as discovered.
 - **An entity's type, once** - an entity is created with its type: every entity id needs one on at least
   one of its endpoints, the others take it. Done is refused, and the endpoint says why, for: no attribute or
