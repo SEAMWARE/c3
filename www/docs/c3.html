@@ -239,8 +239,14 @@ entities and <code>PUT /admin/log</code> only, and only from c³'s own page.</p>
   <b>Replace…</b> (<code>PUT</code>), <b>Delete entity…</b>.</li>
   <li><b>The editor</b> - the entity as rows, an input per attribute kind (a value with its JSON type, a Relationship's
   target - or <i>pick in graph</i> -, a Point's coordinates - or <i>pick on map</i> -, a LanguageProperty's languages,
-  ...), sub-attributes, instances by <code>datasetId</code>. <b>The request</b> at the bottom shows what Save sends: one
-  merge, <code>PATCH /entities/{id}</code>, with <code>"urn:ngsi-ld:null"</code> for what was deleted. A right-click
+  ...), sub-attributes, instances by <code>datasetId</code>. <b>Save as</b> says how an edit is sent: a <b>merge</b>
+  (<code>PATCH /entities/{id}</code>, the default, <code>"urn:ngsi-ld:null"</code> for what was deleted), <b>update
+  attributes</b> (<code>PATCH /entities/{id}/attrs</code>, each new or changed instance whole, a deletion as
+  <code>"urn:ngsi-ld:null"</code>), <b>append attributes</b> (<code>POST /entities/{id}/attrs</code>, with or without
+  <code>?options=noOverwrite</code> - no deletions: they are left out, and counted) or a <b>partial attribute update</b>
+  (<code>PATCH /entities/{id}/attrs/{attrId}</code>, one per changed instance - its changed members, a deleted
+  sub-attribute as <code>"urn:ngsi-ld:null"</code>; a new or deleted attribute or instance left out). <b>The
+  request</b> at the bottom shows what Save sends. A right-click
   where there is no entity creates one (<code>POST /entities</code>). The broker's errors - a 401, a 403, a 400's
   detail, a 207's attributes not updated - show in the editor.</li>
 </ul>

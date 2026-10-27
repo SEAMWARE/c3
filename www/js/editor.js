@@ -11,10 +11,23 @@
 // graph), longitude and latitude for a Point, language rows for a LanguageProperty, item rows for the
 // lists, JSON for a JsonProperty.
 //
-// Save sends ONE request:
-//   edit     PATCH /entities/{id} - a merge (TS 104 175 § 10.2.9, RFC 7396 at the attribute level):
-//            what changed, and "urn:ngsi-ld:null" for what was deleted - an attribute, a sub-attribute,
-//            a key inside an object value, or one instance (with its datasetId)
+// Save sends:
+//   edit     what changed, as the "Save as" choice says (the default the merge):
+//              merge     PATCH /entities/{id} - Merge Entity (TS 104 175 § 10.2.9, RFC 7396 at the
+//                        attribute level): what changed, and "urn:ngsi-ld:null" for what was deleted -
+//                        an attribute, a sub-attribute, a key inside an object value, or one instance
+//                        (with its datasetId)
+//              update    PATCH /entities/{id}/attrs - Update Attributes: each new or changed instance
+//                        whole (a new one is appended), "urn:ngsi-ld:null" for a deleted attribute or
+//                        instance
+//              append    POST /entities/{id}/attrs - Append Attributes: each new or changed instance
+//                        whole; nothing deleted (an append cannot delete - the request says what is left
+//                        out)
+//              appendNo  POST /entities/{id}/attrs?options=noOverwrite - the same, an existing attribute
+//                        left as it is (the broker's 207 names it)
+//              partial   PATCH /entities/{id}/attrs/{attrId} - Partial Attribute Update, one request per
+//                        changed instance: its changed members whole, "urn:ngsi-ld:null" for a deleted
+//                        sub-attribute; neither a new attribute nor a deletion of one (left out)
 //   replace  PUT /entities/{id} - the entity as edited
 //   create   POST /entities - the entity as edited, its id and type typed in
 //
@@ -157,10 +170,7 @@ export function mergePatch(orig, edit) {
 
     for (const [key, i] of before) {
       if (after.has(key)) continue;
-      const kind = i.type;
-      const gone = { type: kind, [MEMBER[kind] || 'value']: kind === 'LanguageProperty' ? { '@none': NULL } : NULL };
-      if (key !== '@none') gone.datasetId = key;
-      frags.push(gone);
+      frags.push(gone(i, key));
     }
     for (const [key, i] of after) {
       if (!before.has(key)) frags.push(sendable(i));
@@ -171,6 +181,121 @@ export function mergePatch(orig, edit) {
 
   return patch;
 }
+
+//
+// gone - an instance deleted, as a merge and an update say it: its main member "urn:ngsi-ld:null"
+//
+function gone(i, key) {
+  const kind = i.type;
+  const g = { type: kind, [MEMBER[kind] || 'value']: kind === 'LanguageProperty' ? { '@none': NULL } : NULL };
+  if (key !== '@none') g.datasetId = key;
+  return g;
+}
+
+//
+// changes - per attribute of 'edit' that differs from 'orig': the instances added, changed (with the one
+// before) and deleted; and the attributes deleted
+//
+function changes(orig, edit) {
+  const attrs = [];
+  const deleted = Object.keys(orig).filter((k) => !ENTITY_CORE.has(k) && !(k in edit));
+
+  for (const [name, v] of Object.entries(edit)) {
+    if (ENTITY_CORE.has(name)) continue;
+    if (name in orig && same(sendable(orig[name]), sendable(v))) continue;
+    const before = new Map(name in orig ? instancesOf(orig[name]).map((i) => [instanceKey(i), i]) : []);
+    const after = new Map(instancesOf(v).map((i) => [instanceKey(i), i]));
+    const c = { name, isNew: !(name in orig), added: [], changed: [], removed: [] };
+    for (const [key, i] of before) if (!after.has(key)) c.removed.push([key, i]);
+    for (const [key, i] of after) {
+      if (!before.has(key)) c.added.push(i);
+      else if (!same(sendable(before.get(key)), sendable(i))) c.changed.push([before.get(key), i]);
+    }
+    attrs.push(c);
+  }
+  return { attrs, deleted };
+}
+
+//
+// attrsBody - Update Attributes (deletes: true) or Append Attributes (deletes: false): each new or changed
+// instance whole; with deletes "urn:ngsi-ld:null" for the deleted, else their number in 'left'
+//
+export function attrsBody(orig, edit, deletes) {
+  const { attrs, deleted } = changes(orig, edit);
+  const body = {};
+  let left = 0;
+
+  for (const k of deleted) {
+    if (deletes) body[k] = NULL;
+    else ++left;
+  }
+  for (const c of attrs) {
+    const frags = [...c.added.map(sendable), ...c.changed.map(([, i]) => sendable(i))];
+    for (const [key, i] of c.removed) {
+      if (deletes) frags.push(gone(i, key));
+      else ++left;
+    }
+    if (frags.length) body[c.name] = frags.length === 1 ? frags[0] : frags;
+  }
+  return { body, left };
+}
+
+//
+// partialFragment - Partial Attribute Update of one instance: the members that changed, whole (the
+// broker replaces them, it does not merge into them), "urn:ngsi-ld:null" for one that went; its type,
+// datasetId and main member always
+//
+function partialFragment(o, e) {
+  const r = {};
+  const main = MEMBER[e.type];
+
+  for (const k of Object.keys(o)) {
+    if (SYSTEM.has(k) || EMBEDDED.has(k)) continue;
+    if (!(k in e)) r[k] = NULL;
+  }
+  for (const [k, v] of Object.entries(e)) {
+    if (SYSTEM.has(k) || EMBEDDED.has(k)) continue;
+    if (!(k in o) || !same(o[k], v)) r[k] = sendable(v);
+  }
+  r.type = e.type;
+  if (typeof e.datasetId === 'string') r.datasetId = e.datasetId;
+  if (main && !(main in r) && (main in e)) r[main] = sendable(e[main]);
+  return r;
+}
+
+//
+// partials - one Partial Attribute Update per changed instance; what it cannot send - a new attribute or
+// instance, a deleted attribute or instance - counted in 'left'
+//
+export function partials(orig, edit) {
+  const { attrs, deleted } = changes(orig, edit);
+  const list = [];
+  let left = deleted.length;
+
+  for (const c of attrs) {
+    left += c.added.length + c.removed.length;
+    for (const [o, e] of c.changed) list.push({ name: c.name, body: partialFragment(o, e) });
+  }
+  return { list, left };
+}
+
+//
+// shortName - an attribute name as a broker's UpdateResult gives it, expanded: without the default @vocab
+//
+function shortName(n) {
+  return n.startsWith('https://uri.etsi.org/ngsi-ld/default-context/') ? n.slice(45) : n;
+}
+
+//
+// SAVE_AS - how an edit is saved: the label, and what an append or a partial update leaves out
+//
+const SAVE_AS = {
+  merge:    'Merge - PATCH /entities/{id}',
+  update:   'Update attributes - PATCH …/attrs',
+  append:   'Append attributes - POST …/attrs',
+  appendNo: 'Append, no overwrite - POST …/attrs?options=noOverwrite',
+  partial:  'Partial attribute update - PATCH …/attrs/{attrId}, one per instance',
+};
 
 //
 // fresh - a new attribute instance of 'kind', with an empty value of the kind
@@ -230,11 +355,21 @@ export class EntityEditor {
     const foot = el('div', 'efoot');
     this.err = el('div', 'eerr');
     this.err.hidden = true;
+    this.saveAs = 'merge';                       // kept from one edit to the next
+    this.asRow = el('label', 'eas');
+    this.asSel = el('select');
+    for (const [k, label] of Object.entries(SAVE_AS)) {
+      const o = el('option', null, label);
+      o.value = k;
+      this.asSel.append(o);
+    }
+    this.asSel.onchange = () => { this.saveAs = this.asSel.value; this.err.hidden = true; this.refresh(); };
+    this.asRow.append(el('span', null, 'Save as'), this.asSel);
     this.req = el('details', 'ereq');
     this.reqSum = el('summary');
     this.reqPre = el('pre');
     this.req.append(this.reqSum, this.reqPre);
-    foot.append(this.err, this.req);
+    foot.append(this.asRow, this.err, this.req);
     root.append(head, this.idRow, this.body, foot);
 
     root.addEventListener('keydown', (e) => {
@@ -281,7 +416,9 @@ export class EntityEditor {
 
     this.title.textContent = mode === 'create' ? 'New entity' : this.id;
     this.title.title = this.id;
-    this.modeLabel.textContent = { edit: 'edit · merge', replace: 'replace', create: 'create' }[mode];
+    this.modeLabel.textContent = { edit: 'edit', replace: 'replace', create: 'create' }[mode];
+    this.asRow.hidden = mode !== 'edit';
+    this.asSel.value = this.saveAs;
     this.err.hidden = true;
     this.req.open = false;
     this.root.hidden = false;
@@ -327,25 +464,38 @@ export class EntityEditor {
   }
 
   //
-  // request - what Save sends: { method, path, body, contentType, count } (count: the changes in it)
+  // request - what Save sends: { requests: [{ method, path, body }], count, left } - count: the attributes
+  // in it (an edit's), left: the changes the edit's "Save as" cannot send
   //
   request() {
     const attrs = this.edited();
     const path = '/ngsi-ld/v1/entities' + (this.mode === 'create' ? '' : '/' + encodeURIComponent(this.id));
     const types = this.type.split(',').map((t) => t.trim()).filter(Boolean);
     const whole = { id: this.id, type: types.length === 1 ? types[0] : types, ...sendable(attrs) };
+    const orig = this.origAttrs();
 
-    if (this.mode === 'edit') {
-      const body = mergePatch(this.origAttrs(), attrs);
-      return { method: 'PATCH', path, body, count: Object.keys(body).length };
+    if (this.mode !== 'edit') return { requests: [{ method: this.mode === 'create' ? 'POST' : 'PUT', path, body: whole }], count: 1, left: 0 };
+
+    if (this.saveAs === 'partial') {
+      const { list, left } = partials(orig, attrs);
+      const requests = list.map((x) => ({ method: 'PATCH', path: path + '/attrs/' + encodeURIComponent(x.name), body: x.body }));
+      return { requests, count: requests.length, left };
     }
-    return { method: this.mode === 'create' ? 'POST' : 'PUT', path, body: whole, count: 1 };
+    if (this.saveAs === 'merge') {
+      const body = mergePatch(orig, attrs);
+      return { requests: [{ method: 'PATCH', path, body }], count: Object.keys(body).length, left: 0 };
+    }
+    const { body, left } = attrsBody(orig, attrs, this.saveAs === 'update');
+    const method = this.saveAs === 'update' ? 'PATCH' : 'POST';
+    const query = this.saveAs === 'appendNo' ? '?options=noOverwrite' : '';
+    return { requests: [{ method, path: path + '/attrs' + query, body }], count: Object.keys(body).length, left };
   }
 
   dirty() {
     if (!this.isOpen) return false;
     if (this.mode !== 'edit') return true;
-    return this.request().count > 0;
+    const r = this.request();
+    return r.count + r.left > 0;
   }
 
   //
@@ -354,8 +504,12 @@ export class EntityEditor {
   refresh() {
     const r = this.request();
     const empty = this.mode === 'edit' && r.count === 0;
-    this.reqSum.textContent = empty ? 'Nothing changed yet' : `The request: ${r.method} ${decodeURIComponent(r.path)}${this.mode === 'edit' ? `  (${r.count} attribute${r.count === 1 ? '' : 's'})` : ''}`;
-    this.reqPre.textContent = empty ? '' : JSON.stringify(r.body, null, 2);
+    const leftOut = r.left ? `${r.left} change${r.left === 1 ? '' : 's'} left out - ${this.saveAs === 'partial' ? 'a partial update neither adds nor deletes an attribute or an instance' : 'an append cannot delete'}` : '';
+    const one = r.requests[0];
+    if (empty) this.reqSum.textContent = leftOut || 'Nothing changed yet';
+    else if (r.requests.length > 1) this.reqSum.textContent = `${r.requests.length} requests: PATCH …/attrs/{attrId}` + (leftOut ? ` (${leftOut})` : '');
+    else this.reqSum.textContent = `The request: ${one.method} ${decodeURIComponent(one.path)}${this.mode === 'edit' ? `  (${r.count} attribute${r.count === 1 ? '' : 's'})` : ''}` + (leftOut ? ` - ${leftOut}` : '');
+    this.reqPre.textContent = empty ? '' : r.requests.map((q) => (r.requests.length > 1 ? `${q.method} ${decodeURIComponent(q.path)}\n` : '') + JSON.stringify(q.body, null, 2)).join('\n\n');
     const idBad = this.mode !== 'edit' && (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(this.id) || !this.type.trim());
     this.saveBtn.disabled = empty || this.bad.size > 0 || idBad;
     this.saveBtn.title = this.bad.size ? 'An input does not parse - it is marked' : (idBad ? 'An id (a URI) and a type are needed' : 'Save - send the request below');
@@ -860,30 +1014,47 @@ export class EntityEditor {
     const r = this.request();
     this.saveBtn.disabled = true;
     this.err.hidden = true;
+    this.err.textContent = '';
 
-    const a = await brokerWrite(this.broker, r.method, r.path, r.body);
-    if (a.ok && a.status !== 207) {
-      const id = this.id;
-      this.close();
-      this.toast({ PATCH: 'Saved', PUT: 'Replaced', POST: 'Created' }[r.method] + ' - ' + id);
-      this.onSaved(id, this.mode);
+    //
+    // One request after the other (a partial update's are one per instance): the first that fails ends it,
+    // what was sent before it stays done
+    //
+    let done = 0;
+    let partly = false;
+    for (const q of r.requests) {
+      const a = await brokerWrite(this.broker, q.method, q.path, q.body);
+      const what = r.requests.length > 1 ? decodeURIComponent(q.path.slice(q.path.lastIndexOf('/') + 1)) + ' - ' : '';
+      if (a.ok && a.status !== 207) { ++done; continue; }
+      if (a.status === 207 && a.body) {
+        partly = true;
+        this.err.append(el('strong', null, what + 'Partly done (207):'));
+        for (const x of [].concat(a.body.notUpdated || [], a.body.errors || [])) {
+          this.err.append(el('div', null, `${shortName(x.attributeName || (x.entityId || ''))}: ${(x.reason || (x.error && (x.error.title + ' - ' + (x.error.detail || ''))) || JSON.stringify(x))}`));
+        }
+        ++done;
+        continue;
+      }
+      const b = a.body || {};
+      const head = a.reached === false ? 'c³ could not send it' : `The broker answered ${a.status}`;
+      if (done > 0) this.err.append(el('div', 'muted', `${done} of ${r.requests.length} requests done before it.`));
+      this.err.append(el('strong', null, what + head + ':'), el('div', null, [b.title, b.detail].filter(Boolean).join(' - ') || ''));
+      if (a.status === 401) this.err.append(el('div', 'muted', 'The broker wants an access token - Token, beside Connect.'));
+      if (a.status === 403) this.err.append(el('div', 'muted', 'The broker does not allow this request with the token sent.'));
+      if (done > 0) this.onSaved(this.id, this.mode);
+      this.err.hidden = false;
+      this.refresh();
       return;
     }
 
-    this.err.textContent = '';
-    if (a.status === 207 && a.body) {
-      this.err.append(el('strong', null, 'Partly done (207):'));
-      for (const x of [].concat(a.body.notUpdated || [], a.body.errors || [])) {
-        this.err.append(el('div', null, `${x.attributeName || (x.entityId || '')}: ${(x.reason || (x.error && (x.error.title + ' - ' + (x.error.detail || ''))) || JSON.stringify(x))}`));
-      }
-      this.onSaved(this.id, this.mode);
-    } else {
-      const b = a.body || {};
-      const head = a.reached === false ? 'c³ could not send it' : `The broker answered ${a.status}`;
-      this.err.append(el('strong', null, head + ':'), el('div', null, [b.title, b.detail].filter(Boolean).join(' - ') || ''));
-      if (a.status === 401) this.err.append(el('div', 'muted', 'The broker wants an access token - Token, beside Connect.'));
-      if (a.status === 403) this.err.append(el('div', 'muted', 'The broker does not allow this request with the token sent.'));
+    if (!partly) {
+      const id = this.id;
+      this.close();
+      this.toast({ edit: 'Saved', replace: 'Replaced', create: 'Created' }[this.mode] + ' - ' + id);
+      this.onSaved(id, this.mode);
+      return;
     }
+    this.onSaved(this.id, this.mode);
     this.err.hidden = false;
     this.refresh();
   }

@@ -337,11 +337,25 @@ markers are coloured by), the downloaded map areas, and the last page:
     (the names of the loaded entities' types offered), its kind, and a `datasetId` for another
     instance of an attribute; an existing attribute keeps its kind;
   - changed rows are marked, and an input that does not parse is marked and stops Save;
-  - **The request** at the bottom: what Save sends. Save sends **one** request - a merge
-    (`PATCH /entities/{id}`, TS 104 175 § 10.2.9): what changed, `"urn:ngsi-ld:null"` for what was
-    deleted - an attribute, a sub-attribute, a key inside an object value, one instance (with its
-    `datasetId`). A changed attribute always carries its main member (`value`, `object`, ...) and a
-    GeoProperty its whole value: the merge needs neither, some brokers refuse a fragment without them;
+  - **Save as** (an edit's): how the changes are sent - kept from one edit to the next:
+    - **Merge** (the default) - `PATCH /entities/{id}`, TS 104 175 § 10.2.9: what changed,
+      `"urn:ngsi-ld:null"` for what was deleted - an attribute, a sub-attribute, a key inside an object
+      value, one instance (with its `datasetId`). A changed attribute always carries its main member
+      (`value`, `object`, ...) and a GeoProperty its whole value: the merge needs neither, some brokers
+      refuse a fragment without them;
+    - **Update attributes** - `PATCH /entities/{id}/attrs`: each new or changed instance whole,
+      `"urn:ngsi-ld:null"` for a deleted attribute or instance;
+    - **Append attributes** - `POST /entities/{id}/attrs`: each new or changed instance whole; a
+      deletion is not sent (an append cannot delete) and the request says how many are left out;
+    - **Append, no overwrite** - `POST /entities/{id}/attrs?options=noOverwrite`: the same, and the
+      broker leaves an existing attribute as it is - its 207 names them;
+    - **Partial attribute update** - `PATCH /entities/{id}/attrs/{attrId}`, one request per changed
+      instance, one after the other: its changed members whole (the broker replaces them, it does not
+      merge into them), `"urn:ngsi-ld:null"` for a deleted sub-attribute, its `type`, `datasetId` and
+      main member always. A new attribute or instance and a deleted one are not sent (left out, and
+      counted). The first request that fails ends it; those before it stay done;
+  - **The request** at the bottom: what Save sends - the method, the path and the body (each of them,
+    for a partial update);
   - after Save the entity is read again and drawn; the broker's error (a 401, a 403, a 400's detail,
     a 207's attributes not updated) shows in the editor, which stays open; Esc closes it (twice, with
     unsaved changes).
