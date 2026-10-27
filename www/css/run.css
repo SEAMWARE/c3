@@ -122,6 +122,10 @@
 .rn-ouval { font-family: var(--mono, monospace); font-size: 12px; }
 .rn-ourow .btn { padding: 1px 8px; font-size: 12px; }
 
+/* DDS: the mapping, and what the domain announced */
+.rn-ddstypes { grid-column: 1 / 4; font-family: var(--mono, monospace); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.rn-ddssample { margin: 2px 0 6px 22px; padding: 4px 6px; font-size: 11px; background: var(--panel2, transparent); border: 1px solid var(--line); border-radius: 4px; max-height: 200px; overflow: auto; }
+
 /* Log and trace levels of a running broker (/admin/log) */
 .rn-levels { margin: 6px 0 8px; }
 .rn-levels > summary { cursor: pointer; font-size: 13px; }

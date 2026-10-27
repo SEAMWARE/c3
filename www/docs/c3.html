@@ -14,8 +14,8 @@ on this machine and does the work; the browser window is the interface.</p>
   <li><a href="#connect">Explore<span>a live connection to a broker: entities as boxes, Relationships as arrows, the entities on a map - online or offline - and their values as they change</span></a></li>
   <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component's repository</span></a></li>
 </ul>
-<p><b>Configure</b> - the mapping tools (DDS topics, services and actions to entities and attributes; then OPC UA, and
-the column mapping for the CKAN and CSV bridges) - is not built yet; it is greyed in the bar
+<p><b>Configure</b> - the column mapping for the CKAN and CSV bridges - is not built yet (the DDS and OPC UA
+mappings are in Operate's broker form); it is greyed in the bar
 (<a href="#docs/roadmap/short">Roadmap</a>). The <b>AI Assist</b> button in the header says what is planned; nothing
 of it is built.</p>
 
@@ -147,8 +147,17 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   timescale), the port and health port, the grace period (seconds from SIGTERM to SIGKILL), the WebSocket transport,
   the admin API, distributed operations, <code>-v</code>.</li>
   <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
-  configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS defaults, the CKAN datasets
-  ticked, an OPC UA server and its channels (native brokers).</li>
+  configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS domain and mapping, the CKAN
+  datasets ticked, an OPC UA server and its channels (native brokers).</li>
+  <li><b>DDS</b> (the dds bridge ticked) - the domain, a vocabulary, and the mapping: a topic, a service or an action a
+  row, one attribute of an entity, its whole sample the value. With a vocabulary, c³ writes
+  <code>dds-context.jsonld</code> - each entity type and attribute a term in it - and starts the broker with
+  <code>--defaultUserContext</code>. <b>Discover</b> starts a broker of c³'s own on the domain (natively: the installed
+  one or a build, the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery
+  has been quiet for 3 s, at most 10 s - and stops it: a few seconds. The list hides ROS 2's housekeeping unless asked;
+  each endpoint shows its type and its fields, and <b>+ map</b> adds a row named from the endpoint, every name editable.
+  Discovering again keeps the rows and marks those not seen. <b>Import inventory.json</b> reads the list a DDS discovery
+  tool wrote.</li>
   <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
   its <code>--version</code>.</li>
   <li>The command, exactly as it will run, and the services it starts first.</li>
