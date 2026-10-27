@@ -698,33 +698,14 @@ pulled at the start, its progress in the broker's log. Images are named by their
 - **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
   configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
   the DDS domain and mapping for dds, the CKAN datasets ticked, the OPC UA server.
-- **DDS** (with the dds bridge ticked, no bridge configuration file of one's own) - the DDS domain, a
-  vocabulary, and the mapping: a topic, a service or an action a row, one attribute of an entity, its whole
-  sample the value - the endpoint's name, the entity's id and type, the attribute; a service's request and
-  reply types, an action's type, as discovered (the bridge's `topics`, `services` and `actions` in
-  `bridges.json`). With a vocabulary, c³ writes `<run>/<name>/dds-context.jsonld` - each entity type and
-  attribute of the mapping a term, `<vocabulary><term>` - and starts the broker with
-  `--defaultUserContext` (a container: mounted at `/etc/c3/dds-context.jsonld`). A container broker with
-  the dds bridge runs with `--network host --ipc host`: DDS discovery is UDP multicast, which a bridge
-  network such as `c3` keeps to its own containers, and Fast DDS reaches a participant on the same machine
-  over shared memory. Its port is then the host's - not published on `127.0.0.1` only: coraine listens on
-  every interface, as a native broker does - and it reaches the services on `127.0.0.1:<port>`, as a
-  native broker does.
-  **Discover** - c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
-  (the installed broker, a build, or the image: the container `c3-broker-<name>.discover`, `--rm`, its
-  entry point under `timeout 120` - it ends by itself if c³ does not stop it) and domain, the dds bridge
-  alone, corDB in memory, no history, the admin API, a free port from 39026, its directory
-  `<run>/<name>.discover/` (a container's output into `broker.log` before it is removed). One
-  `GET /admin/bridges/dds/inventory` (coraine with bridge ABI 14), which the bridge answers once discovery
-  has been quiet for 3 s (at most 10 s - "still announcing" when it ran out), and the broker is stopped
-  again; a few seconds in all, one discovery at a time. What was announced is listed - ROS 2's housekeeping
-  (its discovery and log topics, every node's parameter services) hidden unless asked for - each with its
-  type and, a click away, its fields (the type's sample). **+ map** adds a row named from the endpoint: the
-  name's segments but the last (`rt/` dropped) the entity, `urn:ngsi-ld:<type>:<segments>`
-  (`urn:ngsi-ld:<type>:robot1` without any), the last one camelCased the attribute, the type the form's
-  (Robot); every name stays editable. Discovering again keeps the rows and marks a row whose endpoint the
-  last discovery did not see. **Import inventory.json** reads the same list from a file a DDS discovery
-  tool wrote (`dds-discovery -o inventory.json`), without the fields.
+- **DDS** - the bridge configuration file (`--bridgeConfig`) and the default user `@context` file
+  (`--defaultUserContext`), and **Map DDS topics, services and actions**, the width of the form, active with
+  the dds bridge ticked: the DDS mapper (below). A container broker with the dds bridge runs with
+  `--network host --ipc host`: DDS discovery is UDP multicast, which a bridge network such as `c3` keeps to
+  its own containers, and Fast DDS reaches a participant on the same machine over shared memory. Its port is
+  then the host's - not published on `127.0.0.1` only: coraine listens on every interface, as a native broker
+  does - and it reaches the services on `127.0.0.1:<port>`, as a native broker does. Its files are mounted:
+  the `--defaultUserContext` file at `/etc/c3/user-context.jsonld`, c³'s `dds-types/` at its own path.
 - **OPC UA** (native brokers - the image has no opcua bridge) - the server's URL, the model roots (an
   Object's NodeId a line: each one an AssetChannel, its model a graph of entities), the security mode and
   policy, the client's certificate, key and application URI, the server certificates to trust (or "trust
@@ -821,6 +802,54 @@ and what each traces are `www/data/traceLevels.json`, made from the libraries' t
 `tools/traceLevels.py <dir of the cor* repos>` - run it again when a library adds one. Traces exist in
 debug builds only: on coraine's `"traces": false` (a release build) the tick boxes are greyed, and say why.
 
+### The DDS mapper
+
+Operate's left side, given to the mapping of a DDS domain to NGSI-LD - from Operate's **Map DDS topics,
+services and actions**, or from Compile's, under its Bridges with dds on: that one asks first, then shows
+Operate with the dds bridge ticked in its form and the mapper open, with **← Back to Compile**. Each
+topic, service or action mapped is one attribute of an entity. What was written is read back when c³
+opens (`GET /api/run/dds/files`), and the mapper opens on it.
+
+- **The domain and a vocabulary** - the namespace of the terms, each entity type and attribute
+  `<vocabulary><term>`; empty: the default context's (`https://uri.etsi.org/ngsi-ld/default-context/`).
+- **Discover** - c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
+  (the installed broker, a build, or the image: the container `c3-broker-<name>.discover`, `--rm`, its
+  entry point under `timeout 120` - it ends by itself if c³ does not stop it) and the domain, the dds bridge
+  alone, corDB in memory, no history, the admin API, a free port from 39026, its directory
+  `<run>/<name>.discover/` (a container's output into `broker.log` before it is removed). One
+  `GET /admin/bridges/dds/inventory` (coraine with bridge ABI 14), which the bridge answers once discovery
+  has been quiet for 3 s (at most 10 s - "still announcing" when it ran out), and the broker is stopped
+  again; a few seconds in all, one discovery at a time. **Import inventory.json** reads the same list from a
+  file a DDS discovery tool wrote (`dds-discovery -o inventory.json`), without the fields. ROS 2's
+  housekeeping (its discovery and log topics, every node's parameter services) is hidden unless asked for.
+- **Three lines** - *N DDS Topics*, *N DDS Services*, *N DDS Actions*, each opened with ▸, with the number
+  mapped. Open, an endpoint a line: its name, its type, and, mapped, its attribute and entity; one mapped
+  and not in the last discovery is listed too.
+- **An endpoint opened** - Attribute name, Entity ID, Entity type (optional), the ids and types in use
+  offered as you type. The first field typed in names the attribute from the endpoint: its last segment
+  (`rt/` dropped) camelCased - `rt/turtle1/cmd_vel`, `cmdVel`. **its fields** shows the type's sample;
+  **not mapped** takes the endpoint out. A service keeps its request and reply types, an action its type,
+  as discovered.
+- **An entity's type, once** - an entity is created with its type: every entity id needs one on at least
+  one of its endpoints, the others take it. Done is refused, and the endpoint says why, for: no attribute or
+  no entity id, an id that is not a URI, an entity with no type anywhere, two types for one entity, a name
+  with a character NGSI-LD forbids (space `< > " ' = ; ( )`), a member of every entity (`id`, `type`,
+  `scope`, `createdAt`, ...) as an attribute, two endpoints on one attribute of an entity.
+- **Done** - `POST /api/run/dds/files` writes `$XDG_DATA_HOME/c3/dds/` (else `~/.local/share/c3/dds/`):
+
+  ```
+  dds-bridge.json      the bridge configuration: {"dds": {"ddsmodule": {...domain}, "ngsild": {topics, services, actions, typesDirectory}}}
+  dds-context.jsonld   the @context: each entity type and attribute a term
+  dds-mapping.json     the mapping as posted - what the mapper reads back
+  dds-types/           the bridge's typesDirectory
+  ```
+
+- **The files screen** - the two files' full paths, each with Copy, and **Start a broker with it**: the
+  broker of the form with the dds bridge, `--bridgeConfig <dds-bridge.json>`, `--defaultUserContext
+  <dds-context.jsonld>`, and **More options** as typed - the command shown. **Start the broker** starts it
+  and closes the mapper; **Put it in the broker form** fills the form only. A broker given both c³'s DDS
+  vocabulary and a `--defaultUserContext` of its own is refused: one default user `@context`.
+
 **Containers** go through `docker`, else `podman` (the same commands), found in `$PATH` and asked for its
 version. Without either, or with a daemon that does not answer, the container parts are greyed with what
 to install. c³ creates only `c3-*` containers, volumes and the network `c3`, all labelled `c3=run`, and
@@ -835,6 +864,7 @@ touches nothing else.
 <name>/bridges.json   the bridge configuration c3 writes (mqtt, dds, ckan, opcua)
 <name>/dds-context.jsonld  the DDS mapping's terms, the broker's --defaultUserContext (a DDS vocabulary given)
 <name>.discover/      the broker DDS discovery runs: its bridges.json and broker.log
+dds/                  the DDS mapper's: dds-bridge.json, dds-context.jsonld, dds-mapping.json, dds-types/ (next to run/)
 <name>/opcua.password the OPC UA user's password, mode 600 - never in c3.json
 services/<container>.log
 ```
@@ -896,6 +926,8 @@ The backend's API, used by the pages:
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
+| `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
+| `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
 | `POST /api/maps/estimate` `{"bbox", "maxzoom"}` | tiles and bytes of an area, from the planet's directories (`422` past 1 000 000 tiles) |
 | `POST /api/maps/download` `{"name", "bbox", "maxzoom"}` | start the download (`202`; `409` while one runs); `GET` its progress, `DELETE` cancels it |

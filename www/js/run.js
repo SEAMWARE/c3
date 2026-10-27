@@ -129,17 +129,13 @@ export class Run {
     $('rn-ou-browse').addEventListener('click', () => this.browseToggle());
 
     //
-    // DDS - the dds bridge's domain and mapping, in the bridge configuration c3 writes
+    // DDS - the mapper (ddsmap.js) makes the DDS configuration, a broker starts with it: its bridge configuration
+    // and its default user @context, the two files
     //
-    $('rn-dds-domain').addEventListener('input', () => { this.f.dds.domain = parseInt($('rn-dds-domain').value, 10) || 0; this.renderDdsSum(); this.changed(false); });
-    $('rn-dds-vocab').addEventListener('input', () => { this.f.dds.vocabulary = $('rn-dds-vocab').value.trim(); this.renderDdsSum(); this.changed(false); });
-    $('rn-dds-type').addEventListener('input', () => { this.ddsType = $('rn-dds-type').value.trim(); });
-    $('rn-dds-house').addEventListener('change', () => this.renderDdsInventory());
-    $('rn-dds-discover').addEventListener('click', () => this.ddsDiscover());
-    $('rn-dds-import').addEventListener('click', () => $('rn-dds-file').click());
-    $('rn-dds-file').addEventListener('change', () => this.ddsImport());
+    $('rn-uctx').addEventListener('input', () => { this.f.userContext = $('rn-uctx').value.trim(); this.changed(false); });
     this.ddsMap = new DdsMapper(this);
     $('rn-dds-map').addEventListener('click', () => this.ddsMap.open());
+    this.ddsMap.load().then(() => this.renderDds());
   }
 
   //
@@ -301,185 +297,33 @@ export class Run {
   }
 
   //
-  // ddsDiscover - what the form's DDS domain announces: the backend starts a broker of its own on it, asks its
-  // dds bridge once (it answers when discovery has gone quiet) and stops it again
+  // renderDds - the mapper's button, live when the dds bridge is ticked; under it, the DDS configuration made
   //
-  async ddsDiscover() {
-    const btn = $('rn-dds-discover');
-    btn.disabled = true;
-    $('rn-dds-why').textContent = 'discovering - a broker of its own on domain ' + this.f.dds.domain + ', for a few seconds ...';
-    try {
-      const inv = await api.runDdsDiscover(this.def());
-      this.ddsInventorySet(inv, 'domain ' + this.f.dds.domain + ', discovered ' + new Date().toLocaleTimeString());
-    } catch (e) {
-      $('rn-dds-why').textContent = e.message;
+  //
+  // ddsMapFromCompile - Compile's way in to the mapper: the dds bridge ticked, the mapper open with its way back
+  //
+  ddsMapFromCompile() {
+    if (!this.f.bridges.includes('dds')) {
+      this.f.bridges = [...this.f.bridges, 'dds'];
+      this.renderForm();
+      this.changed(false);
     }
-    btn.disabled = false;
-    this.ddsMap.refresh();
-  }
-
-  //
-  // ddsImport - an inventory.json a DDS discovery tool wrote (dds-discovery -o inventory.json): the same shape
-  //
-  async ddsImport() {
-    const file = $('rn-dds-file').files[0];
-    $('rn-dds-file').value = '';
-    if (!file) return;
-    try {
-      const inv = JSON.parse(await file.text());
-      if (!Array.isArray(inv.topics) && !Array.isArray(inv.services) && !Array.isArray(inv.actions)) throw new Error('not an inventory: no "topics", "services" or "actions"');
-      this.ddsInventorySet(inv, file.name + (inv.discoveredAt ? ', discovered ' + inv.discoveredAt : ''));
-    } catch (e) {
-      $('rn-dds-why').textContent = file.name + ': ' + e.message;
-      this.ddsMap.refresh();
-    }
-  }
-
-  ddsInventorySet(inv, from) {
-    this.ddsInv = { topics: inv.topics || [], services: inv.services || [], actions: inv.actions || [], types: inv.types || {} };
-    const n = this.ddsInv.topics.length + this.ddsInv.services.length + this.ddsInv.actions.length;
-    $('rn-dds-why').textContent = from + ' - ' + n + ' endpoint' + (n === 1 ? '' : 's')
-      + (inv.settled === false ? '; the domain was still announcing more when it answered - Discover again for the rest' : '');
-    $('rn-dds-inv').hidden = false;
-    this.renderDdsInventory();
-    this.renderDdsRows();
-    this.ddsMap.refresh();
-  }
-
-  //
-  // ddsHousekeeping - what ROS 2 itself has on every domain, rarely worth mapping: its discovery and log topics,
-  // and every node's parameter services
-  //
-  ddsHousekeeping(kind, name) {
-    if (kind === 'topic') return ['ros_discovery_info', 'rt/parameter_events', 'rt/rosout'].includes(name);
-    return kind === 'service' && /(^|\/)(describe_parameters|get_parameter_types|get_parameters|get_type_description|list_parameters|set_parameters|set_parameters_atomically)$/.test(name);
-  }
-
-  //
-  // ddsRowFor - a new row for an endpoint: the entity from the name's segments (rt/ dropped) but the last, the
-  // attribute the last one camelCased; the entity type the form's (Robot)
-  //
-  ddsRowFor(kind, e) {
-    const segs = e.name.replace(/^rt\//, '').split('/').filter(Boolean);
-    const last = segs.pop() || e.name;
-    const camel = (t) => t.split(/[^A-Za-z0-9]+/).filter(Boolean).map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('');
-    const type = this.ddsType || 'Robot';
-    const id = segs.length ? segs.join('-').replace(/[^A-Za-z0-9._-]/g, '') : 'robot1';
-    const row = { kind, name: e.name, entityId: 'urn:ngsi-ld:' + type + ':' + id, entityType: type, attribute: camel(last) || 'value' };
-    if (kind === 'service') Object.assign(row, { requestType: (e.request || {}).type || '', replyType: (e.reply || {}).type || '' });
-    if (kind === 'action') row.type = (((e.goal || {}).request || {}).type || '').replace(/_SendGoal_Request_$/, '');
-    return row;
-  }
-
-  ddsTypeOf(kind, e) {
-    if (kind === 'topic') return e.type || '';
-    if (kind === 'service') return ((e.request || {}).type || '').replace(/_Request_$/, '');
-    return (((e.goal || {}).request || {}).type || '').replace(/_SendGoal_Request_$/, '');
-  }
-
-  //
-  // renderDdsInventory - what was announced, housekeeping hidden unless asked for: each one mapped with a
-  // click, its type's fields (the sample the bridge gave) a click away
-  //
-  renderDdsInventory() {
-    const box = $('rn-dds-list');
-    const inv = this.ddsInv;
-    box.replaceChildren();
-    if (!inv) return;
-    const house = $('rn-dds-house').checked;
-    for (const [kind, list, label] of [['topic', inv.topics, 'Topics'], ['service', inv.services, 'Services'], ['action', inv.actions, 'Actions']]) {
-      const shown = list.filter((e) => house || !this.ddsHousekeeping(kind, e.name));
-      if (!shown.length) continue;
-      box.append(el('div', 'rn-oukind', label + ' (' + shown.length + ')'));
-      for (const e of shown) {
-        const node = el('div', 'rn-ounode');
-        const row = el('div', 'rn-ourow');
-        const type = this.ddsTypeOf(kind, e);
-        const sampleOf = kind === 'topic' ? e.type : kind === 'service' ? (e.request || {}).type : ((e.goal || {}).request || {}).type;
-        const t = inv.types[sampleOf];
-        const tog = el('button', 'rn-outog', t && t.sample ? '▸' : '');
-        tog.type = 'button';
-        tog.disabled = !(t && t.sample);
-        tog.title = 'its fields';
-        const mapped = this.f.dds.rows.some((r) => r.kind === kind && r.name === e.name);
-        const b = button(mapped ? 'mapped' : '+ map', '', () => {
-          this.f.dds.rows.push(this.ddsRowFor(kind, e));
-          b.textContent = 'mapped'; b.disabled = true;
-          this.renderDdsRows(); this.renderDdsSum(); this.changed(false);
-        });
-        b.disabled = mapped;
-        row.append(tog, el('b', '', e.name), el('span', 'rn-ouid', type), b);
-        const fields = el('pre', 'rn-ddssample');
-        fields.hidden = true;
-        if (t && t.sample) fields.textContent = JSON.stringify(t.sample, null, 2);
-        tog.addEventListener('click', () => { fields.hidden = !fields.hidden; tog.textContent = fields.hidden ? '▸' : '▾'; });
-        node.append(row, fields);
-        box.append(node);
-      }
-    }
-    if (!box.children.length) box.append(el('div', 'cp-note', 'nothing announced' + (house ? '' : ' but ROS 2 housekeeping')));
-  }
-
-  //
-  // renderDdsRows - the mapping, each row editable: the endpoint, the entity's id and type, the attribute; a
-  // service's or an action's types as discovered. A row the last discovery did not see says so
-  //
-  renderDdsRows() {
-    const box = $('rn-dds-rows');
-    const rows = this.f.dds.rows;
-    const inv = this.ddsInv;
-    box.replaceChildren();
-    rows.forEach((r, ix) => {
-      const card = el('div', 'rn-ouch');
-      const seen = !inv || (inv[r.kind + 's'] || []).some((e) => e.name === r.name);
-      for (const [key, label, ph, cls] of [['name', r.kind + (seen ? '' : ' - not in the last discovery'), 'rt/cmd_vel', 'node'],
-                                           ['entityId', 'entity id', 'urn:ngsi-ld:Robot:robot1', 'entityId'],
-                                           ['entityType', 'entity type', 'Robot', 'entityType'], ['attribute', 'attribute', 'velocity', 'attribute']]) {
-        const f = el('label', 'rn-ouf rn-ouf-' + cls);
-        const inp = el('input', 'cp-input');
-        inp.value = r[key];
-        inp.placeholder = ph;
-        inp.spellcheck = false;
-        inp.addEventListener('input', () => { r[key] = inp.value.trim(); this.renderDdsSum(); this.changed(false); });
-        f.append(el('span', seen ? '' : 'why', label), inp);
-        card.append(f);
-      }
-      if (r.kind === 'service') card.append(el('span', 'rn-ddstypes', r.requestType + ' -> ' + r.replyType));
-      if (r.kind === 'action') card.append(el('span', 'rn-ddstypes', r.type));
-      const del = button('×', 'rn-oudel', () => { rows.splice(ix, 1); this.renderDdsRows(); this.renderDdsInventory(); this.renderDdsSum(); this.changed(false); });
-      del.title = 'remove this row';
-      del.setAttribute('aria-label', 'remove row ' + (ix + 1));
-      card.append(del);
-      box.append(card);
-    });
+    this.renderDds();
+    this.ddsMap.open('compile');
   }
 
   renderDds() {
     const on = this.f.bridges.includes('dds');
-    const own = !!this.f.bridgeConfig;
-    $('rn-dds-field').hidden = !on;
-    if (!on) return;
-    const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
-    set('rn-dds-domain', String(this.f.dds.domain || 0));
-    set('rn-dds-vocab', this.f.dds.vocabulary);
-    for (const id of ['rn-dds-domain', 'rn-dds-vocab', 'rn-dds-discover', 'rn-dds-import', 'rn-dds-map']) $(id).disabled = own;
-    this.renderDdsRows();
-    this.renderDdsSum();
-  }
-
-  renderDdsSum() {
-    const d = this.f.dds;
-    const count = (k, word) => { const n = d.rows.filter((r) => r.kind === k).length; return n ? n + ' ' + word + (n === 1 ? '' : 's') : ''; };
-    const mapped = [count('topic', 'topic'), count('service', 'service'), count('action', 'action')].filter(Boolean).join(', ');
-    $('rn-dds-sum').textContent = this.f.bridgeConfig ? 'not with a bridge configuration file of one\'s own'
-      : 'domain ' + (d.domain || 0) + ' - ' + (mapped || 'nothing mapped') + (d.vocabulary ? ', @context ' + d.vocabulary : '');
+    $('rn-dds-map').disabled = !on;
+    $('rn-dds-map').title = on ? '' : 'tick the dds bridge first';
+    $('rn-dds-note').textContent = this.ddsMap.note(on);
   }
 
   defaults() {
     return {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
       store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
-      ws: true, admin: true, distributed: true, verbose: true, bridges: [], bridgeConfig: '', ckan: [], args: '',
+      ws: true, admin: true, distributed: true, verbose: true, bridges: [], bridgeConfig: '', userContext: '', ckan: [], args: '',
       opcua: this.opcuaDefaults(), dds: this.ddsDefaults(),
     };
   }
@@ -745,7 +589,7 @@ export class Run {
       name: d.name, set: d.set, from: d.from, build: d.build || '', tag, where: d.where,
       store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
       ws: (d.transports || []).includes('ws'), admin: d.admin, distributed: d.distributed !== false, verbose: d.verbose, bridges: [...(d.bridges || [])],
-      bridgeConfig: d.bridgeConfig || '', ckan: [...(d.ckan || [])], args: d.args || '',
+      bridgeConfig: d.bridgeConfig || '', userContext: d.userContext || '', ckan: [...(d.ckan || [])], args: d.args || '',
       opcua: this.opcuaDefaults(), dds: this.ddsDefaults(),
     };
     if (d.dds) {
@@ -1280,6 +1124,7 @@ export class Run {
       return l;
     }) : [el('span', 'cp-note', 'this broker has no bridge plugins')]));
     if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
+    if ($('rn-uctx').value !== f.userContext) $('rn-uctx').value = f.userContext;
     this.renderCkan(cont);
     this.renderOpcua();
     this.renderDds();
@@ -1371,6 +1216,7 @@ export class Run {
       args: f.args,
     };
     if (f.bridgeConfig) d.bridgeConfig = f.bridgeConfig;
+    if (f.userContext) d.userContext = f.userContext;
     if (f.ckan.length) d.ckan = f.ckan;
     if (f.opcua.url) {
       const o = f.opcua;
@@ -1472,9 +1318,11 @@ export class Run {
       await this.load();
       this.choosePorts();
       this.renderForm();
+      return true;
     } catch (e) {
       $('rn-problem').textContent = e.message;
       setTimeout(() => this.renderStartButton(), 3000);
+      return false;
     }
   }
 

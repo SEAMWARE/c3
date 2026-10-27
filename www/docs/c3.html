@@ -99,6 +99,10 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <li><b>Features</b> - from <code>coraine-build --list-features --json</code>, never a copy: each switch with its
   default and description; one changed from its default is marked, one whose requirements are off is greyed with what
   it needs. MONGOC is the <b>Stores</b> choice (corDB only, or corDB + mongoc).</li>
+  <li><b>Bridges</b> - from <code>coraine-build --list-bridges</code>, each its own repository, its size beside it;
+  dds is off by default (about 13 MiB, eProsima's Fast DDS and DDS Enabler). With dds on, <b>Map DDS topics, services
+  and actions</b> asks, then opens Operate with the dds bridge ticked in its broker form and the DDS mapper open
+  (<a href="#dds-mapper">below</a>); its <b>← Back to Compile</b>, or the Compile tab, comes back, the choice as it was.</li>
   <li><b>Optimisation</b> - Release, Profile-guided (<code>--pgo</code>), Tuned for a workload (<code>--tune
   &lt;file&gt;</code>, the workload by its absolute path), Debug (traces compiled in)
   (<a href="#docs/extreme-performance">Extreme performance</a>).</li>
@@ -147,27 +151,12 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
   configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS domain and mapping, the CKAN
   datasets ticked, an OPC UA server and its channels (native brokers).</li>
-  <li><b>DDS</b> (the dds bridge ticked) - the domain, a vocabulary, and the mapping: a topic, a service or an action a
-  row, one attribute of an entity, its whole sample the value. With a vocabulary, c³ writes
-  <code>dds-context.jsonld</code> - each entity type and attribute a term in it - and starts the broker with
-  <code>--defaultUserContext</code>. <b>Discover</b> starts a broker of c³'s own on the domain (the installed one, a
-  build or the image, the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery
-  has been quiet for 3 s, at most 10 s - and stops it: a few seconds. The list hides ROS 2's housekeeping unless asked;
-  each endpoint shows its type and its fields, and <b>+ map</b> adds a row named from the endpoint, every name editable.
-  Discovering again keeps the rows and marks those not seen. <b>Import inventory.json</b> reads the list a DDS discovery
-  tool wrote. <b>Open the DDS mapper</b> gives the mapping the whole window, in three columns. <b>Announced</b>: the
-  topics, services and actions, a filter by name, each one's type and fields, and beside each its entity - picked from
-  the list (or a new one), or the endpoint dragged onto an entity. <b>Map topics by their names</b> maps every topic shown
-  and not mapped the way + map does (<code>rt/turtle1/pose</code>: entity <code>urn:ngsi-ld:&lt;type&gt;:turtle1</code>,
-  attribute <code>pose</code>). <b>Entities</b>: each entity's type and id, and its attributes, each name typed, each
-  one moved to another entity or unmapped; <b>+ Entity</b> makes one of the type typed beside it. Under an entity, what
-  the broker would refuse or do otherwise: an id that is not a URI, two entities with one id, a name with a character
-  NGSI-LD forbids, <code>id</code> or <code>type</code> as an attribute, two endpoints on one attribute. The third
-  column: the entities as the broker makes them (a topic's attribute with a sample of its type), the
-  <code>@context</code> c³ writes with a vocabulary, and the configuration's <code>dds.ngsild</code>. The form's rows,
-  summary and command follow every change; Escape or Done closes the mapper. A container broker with the dds bridge runs on the host's network and IPC namespace
-  (<code>--network host --ipc host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its
-  own containers - so its port is the host's and, like a native broker's, open on every interface.</li>
+  <li><b>DDS</b> - the bridge configuration file and the default user <code>@context</code> file
+  (<code>--bridgeConfig</code>, <code>--defaultUserContext</code>), and, under them, <b>Map DDS topics, services and
+  actions</b>, the width of the form, active with the dds bridge ticked (<a href="#dds-mapper">the DDS mapper</a>). A
+  container broker with the dds bridge runs on the host's network and IPC namespace (<code>--network host --ipc
+  host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its own containers - so its
+  port is the host's and, like a native broker's, open on every interface.</li>
   <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
   its <code>--version</code>.</li>
   <li>The command, exactly as it will run, and the services it starts first.</li>
@@ -199,6 +188,42 @@ brokers keep running, and the next c³ attaches to them (by pid and the process'
 </ul>
 
 <!-- ======================================================================= -->
+<h3 id="dds-mapper">The DDS mapper</h3>
+<p>Operate's left side, given to the mapping of a DDS domain to NGSI-LD: each topic, service or action mapped is one
+attribute of an entity. Mapping once is the usual case: what was written is read back when c³ opens, and the mapper
+opens on it.</p>
+<ul>
+  <li><b>The domain and a vocabulary</b> - the vocabulary is the namespace of the terms (each entity type and attribute
+  <code>&lt;vocabulary&gt;&lt;term&gt;</code>); empty: the default context's.</li>
+  <li><b>Discover</b> starts a broker of c³'s own on the domain (the form's: the installed one, a build or the image,
+  the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery has been quiet
+  for 3 s, at most 10 s - and stops it: a few seconds. <b>Import inventory.json</b> reads the list a DDS discovery tool
+  wrote. <b>show ROS 2 housekeeping</b> - its discovery and log topics, every node's parameter services - hidden
+  otherwise.</li>
+  <li><b>Three lines</b> - <i>N DDS Topics</i>, <i>N DDS Services</i>, <i>N DDS Actions</i>, each with ▸ to open it
+  and the number mapped. Open, a line an endpoint: its name, its type, and, mapped, its attribute and entity. An
+  endpoint mapped and not in the last discovery is listed too.</li>
+  <li><b>An endpoint opened</b> - <b>Attribute name</b>, <b>Entity ID</b>, <b>Entity type</b> (optional), the ids
+  and types already used offered as you type. The first field typed in names the attribute from the endpoint (its
+  last segment camelCased: <code>rt/turtle1/cmd_vel</code>, <code>cmdVel</code>). <b>its fields</b> shows a sample of
+  the type; <b>not mapped</b> takes the endpoint out.</li>
+  <li><b>An entity's type, once</b> - an entity is created with its type, so every entity id needs one, on at least one
+  of its endpoints; the others take it. Under an endpoint, what Done refuses: no attribute or entity id, an id that is
+  not a URI, an entity with no type anywhere, two types for one entity, a name with a character NGSI-LD forbids
+  (space <code>&lt; &gt; " ' = ; ( )</code>), <code>id</code>, <code>type</code> or another member of every entity as
+  an attribute, two endpoints on one attribute of an entity.</li>
+  <li><b>Done</b> writes the DDS configuration (<code>POST /api/run/dds/files</code>) into
+  <code>~/.local/share/c3/dds/</code> (<code>$XDG_DATA_HOME/c3/dds/</code>): <code>dds-bridge.json</code>, the
+  bridge configuration (<code>--bridgeConfig</code>), and <code>dds-context.jsonld</code>, the
+  <code>@context</code> (<code>--defaultUserContext</code>); with them <code>dds-mapping.json</code>, the mapping as
+  the mapper reads it back, and <code>dds-types/</code>, the bridge's type files.</li>
+  <li><b>The files screen</b> - the two files' full paths, each with <b>Copy</b>; <b>Start a broker with it</b>:
+  the broker of the form on the right with the dds bridge and the two files, the command shown, <b>More options</b>
+  added as typed. <b>Start the broker</b> starts it and closes the mapper; <b>Put it in the broker form</b> fills the
+  form only, to change more before Start. <b>Edit the mapping</b> goes back to it.</li>
+  <li>Escape, <b>×</b> or <b>Close</b> closes the mapper, the brokers in view again.</li>
+</ul>
+
 <h2 id="explore">Explore - the graph and the map</h2>
 <p>A broker's URL and <b>Connect</b>. The next start connects to the last broker by itself, with the types picked last
 time. The examples in c³'s repository fill a broker to try it on:</p>

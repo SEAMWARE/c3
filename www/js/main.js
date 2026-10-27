@@ -151,6 +151,14 @@ async function main() {
     run.preselectBuild(e.detail.build);
   });
 
+  //
+  // Compile's "Map DDS topics, services and actions": Operate, its form with the dds bridge, the mapper open
+  //
+  window.addEventListener('c3:ddsmap', () => {
+    window.addEventListener('hashchange', () => run.ddsMapFromCompile(), { once: true });
+    location.hash = '#run';
+  });
+
   await new Promise((r) => setTimeout(r, 250));
   $('app').hidden = false;
   $('splash').classList.add('leaving');

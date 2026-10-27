@@ -151,6 +151,8 @@ export const runForget        = (name, data) => call('DELETE', '/api/run/brokers
 export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
 export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' + runName(volume));
 export const runDdsDiscover   = (def) => call('POST', '/api/run/dds/discover', def);     // what its DDS domain announces (a few seconds)
+export const runDdsFiles      = () => call('GET', '/api/run/dds/files');                // the DDS configuration written, and its mapping
+export const runDdsFilesWrite = (mapping) => call('POST', '/api/run/dds/files', mapping); // the DDS configuration from a mapping
 
 //
 // brokerWrite - a POST, PATCH, PUT or DELETE to the broker's entities, through the backend's proxy

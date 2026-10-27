@@ -246,6 +246,39 @@ function helpShow(title, text) {
 }
 
 //
+// ddsMapAsk - before Operate is shown for the DDS mapping: what is left here stays as it is, the way back is the
+// Compile tab
+//
+function ddsMapAsk() {
+  const ov = el('div', 'overlay cp-modal');
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.setAttribute('aria-label', 'Map DDS topics, services and actions');
+  const card = el('div', 'card cp-help-card');
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const cancel = el('button', 'btn', 'Stay here');
+  cancel.type = 'button';
+  cancel.addEventListener('click', close);
+  const go = el('button', 'btn primary', 'Go to Operate');
+  go.type = 'button';
+  go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:ddsmap')); });
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  const actions = el('div', 'actions');
+  actions.append(cancel, go);
+  card.append(el('h3', '', 'The DDS mapping is in Operate'),
+    el('p', '', 'The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: '
+      + 'the Compile tab brings you back, to build.'),
+    el('p', '', 'The mapping needs the DDS domain running - a ROS 2 node, or anything speaking DDS - and the broker c³ discovers it with has '
+      + 'the dds bridge: an installed coraine, a build, or an image with it.'),
+    actions);
+  ov.append(card);
+  document.body.append(ov);
+  go.focus();
+}
+
+//
 // helpButton - the '?' of a box; null when the source's doc has no section for it
 //
 function helpButton(section, inline) {
@@ -696,6 +729,15 @@ export class Compile {
       const items = this.bridges.map(bridgeButton);
       sections.push(groupSection('Bridges', items, this.bridges.filter((br) => this.isBridgeOn(br) !== !!br.default).length));
       groups.push({ name: 'Bridges', features: [] });
+      const dds = this.bridges.find((br) => br.name === 'dds');
+      if (dds) {
+        const map = el('button', 'btn primary cp-ddsmap', 'Map DDS topics, services and actions');
+        map.type = 'button';
+        map.disabled = !(dds.available && this.isBridgeOn(dds));
+        map.title = map.disabled ? 'switch the dds bridge on first' : 'in Operate - the Compile tab brings you back';
+        map.addEventListener('click', ddsMapAsk);
+        sections.push(map);
+      }
     }
 
     list.replaceChildren(...sections);
