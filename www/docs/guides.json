@@ -512,6 +512,7 @@
       "items": [
         {
           "repo": "coraine",
+          "guide": "overview",
           "desc": "the NGSI-LD context broker"
         }
       ]
@@ -548,6 +549,7 @@
         },
         {
           "repo": "c3",
+          "guide": "c3",
           "desc": "c³ - build, run, explore and configure coraine brokers"
         }
       ]
@@ -620,26 +622,32 @@
         },
         {
           "repo": "corBridge",
+          "guide": "api-corbridge",
           "desc": "the contract every bridge plugin implements - the seam to non-NGSI-LD transports"
         },
         {
           "repo": "corBridgeTemplate",
+          "guide": "writing-a-bridge",
           "desc": "start a new bridge here: the entry points, an example transport, a functest, CI"
         },
         {
           "repo": "corMqttBridge",
+          "guide": "mqtt-bridge",
           "desc": "MQTT"
         },
         {
           "repo": "corModbusBridge",
+          "guide": "modbus-bridge",
           "desc": "Modbus"
         },
         {
           "repo": "corDdsBridge",
+          "guide": "dds",
           "desc": "DDS / ROS 2: topics, services and actions as entity attributes"
         },
         {
           "repo": "corOpcuaBridge",
+          "guide": "iot-agents",
           "desc": "OPC UA: Variables as Channels, Objects as AssetChannels"
         },
         {
@@ -676,30 +684,37 @@
         },
         {
           "repo": "corCkanBridge",
+          "guide": "ckan-bridge",
           "desc": "open data from a CKAN portal, ingested as entities"
         },
         {
           "repo": "corIotaJsonBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent JSON, its commands as Service Executions"
         },
         {
           "repo": "corIotaUlBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent UltraLight 2.0"
         },
         {
           "repo": "corIotaLwm2mBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent for LwM2M - an LwM2M server"
         },
         {
           "repo": "corIotaLoraBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent LoRaWAN - TTN v3, ChirpStack v4"
         },
         {
           "repo": "corIotaSigfoxBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent for Sigfox - callbacks and downlinks"
         },
         {
           "repo": "corIotaIsoxmlBridge",
+          "guide": "iot-agents",
           "desc": "the FIWARE IoT Agent for ISOXML (ISO 11783-10 task data)"
         },
         {
@@ -740,6 +755,8 @@
         },
         {
           "repo": "corBase",
+          "guide": "lib-corbase",
+          "api": "api-corbase",
           "desc": "basic utilities: strings, time, files, coroutines"
         },
         {
@@ -776,6 +793,8 @@
         },
         {
           "repo": "corLog",
+          "guide": "lib-corlog",
+          "api": "api-corlog",
           "desc": "logging and trace levels"
         },
         {
@@ -807,6 +826,8 @@
         },
         {
           "repo": "corAlloc",
+          "guide": "lib-coralloc",
+          "api": "api-coralloc",
           "desc": "request arenas - fast allocation, freed at once"
         },
         {
@@ -838,6 +859,8 @@
         },
         {
           "repo": "corArgs",
+          "guide": "lib-corargs",
+          "api": "api-corargs",
           "desc": "command-line options and environment variables"
         },
         {
@@ -864,6 +887,8 @@
         },
         {
           "repo": "corHash",
+          "guide": "lib-corhash",
+          "api": "api-corhash",
           "desc": "hash tables"
         },
         {
@@ -895,6 +920,8 @@
         },
         {
           "repo": "corTree",
+          "guide": "lib-cortree",
+          "api": "api-cortree",
           "desc": "the in-memory tree (CorNode) every JSON document becomes"
         },
         {
@@ -921,6 +948,8 @@
         },
         {
           "repo": "corJson",
+          "guide": "lib-corjson",
+          "api": "api-corjson",
           "desc": "the JSON parser and renderer"
         },
         {
@@ -952,6 +981,8 @@
         },
         {
           "repo": "corJsonld",
+          "guide": "lib-corjsonld",
+          "api": "api-corjsonld",
           "desc": "JSON-LD: @context handling, expansion and compaction"
         },
         {
@@ -983,6 +1014,8 @@
         },
         {
           "repo": "corNgsild",
+          "guide": "lib-corngsild",
+          "api": "api-corngsild",
           "desc": "NGSI-LD semantics: parsing, checking, queries, subscriptions, distributed operations"
         },
         {
@@ -1034,6 +1067,8 @@
         },
         {
           "repo": "corDB",
+          "guide": "lib-cordb",
+          "api": "api-cordb",
           "desc": "the in-process NGSI-LD store, persistent with --dbDir, and its history"
         },
         {
@@ -1060,6 +1095,8 @@
         },
         {
           "repo": "corProm",
+          "guide": "lib-corprom",
+          "api": "api-corprom",
           "desc": "Prometheus metrics"
         },
         {
@@ -1096,6 +1133,8 @@
         },
         {
           "repo": "corPlugin",
+          "guide": "lib-corplugin",
+          "api": "api-corplugin",
           "desc": "the plugin loader"
         },
         {
@@ -1132,6 +1171,8 @@
         },
         {
           "repo": "corHttp",
+          "guide": "lib-corhttp",
+          "api": "api-corhttp",
           "desc": "the built-in HTTP server"
         },
         {
@@ -1168,6 +1209,8 @@
         },
         {
           "repo": "corRest",
+          "guide": "lib-correst",
+          "api": "api-correst",
           "desc": "the REST layer: services, requests, the HTTP and cor:// clients"
         }
       ]
@@ -1430,10 +1473,12 @@
         },
         {
           "repo": "corLibs",
+          "guide": "cor-libs",
           "desc": "the umbrella that builds every library"
         },
         {
           "repo": "corTest",
+          "guide": "testing",
           "desc": "the functional test harness"
         },
         {
@@ -1465,6 +1510,7 @@
         },
         {
           "repo": "corTools",
+          "guide": "cor-tools",
           "desc": "test and benchmark tools"
         },
         {
@@ -1506,6 +1552,7 @@
         },
         {
           "repo": "corApisixNgsild",
+          "guide": "apisix-plugin",
           "desc": "an APISIX plugin: coraine's NGSI-LD access decision, for any NGSI-LD broker"
         },
         {
@@ -1532,6 +1579,7 @@
         },
         {
           "repo": "corMcp",
+          "guide": "cormcp",
           "desc": "an MCP server for NGSI-LD brokers: an AI assistant reads a broker through it"
         }
       ]
