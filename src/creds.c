@@ -4,11 +4,22 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// The access tokens c3 sends to brokers - Authorization: Bearer <token> on every request to the broker
+// The access tokens c3 sends to brokers - Authorization: Bearer <token> on every request to the broker -
+// and the headers of a broker's own: an API key, a Basic Authorization, whatever its gateway asks for
 //
-//   GET    /api/brokers/tokens  which brokers have one, and where it comes from - never the token
-//   PUT    /api/brokers/token   {"url", "token", "remember"}: the broker's token
-//   DELETE /api/brokers/token   {"url"}: the broker's token forgotten
+//   GET    /api/brokers/tokens   which brokers have one, and where it comes from - never the token
+//   PUT    /api/brokers/token    {"url", "token", "remember"}: the broker's token
+//   DELETE /api/brokers/token    {"url"}: the broker's token forgotten
+//   GET    /api/brokers/headers  each broker's headers - a secret one's value never, its last characters
+//   PUT    /api/brokers/headers  {"url", "headers": [{"name", "value", "secret"}], "remember"}: the broker's
+//                                headers, all of them - a secret header given without "value" keeps its own;
+//                                "remember" false or left out: in memory only, out of secrets.json if there
+//   DELETE /api/brokers/headers  {"url"}: the broker's headers forgotten
+//
+// A broker's headers go with every request c3 sends it (credsHeaders): the proxy's reads and writes, live
+// values, the WebSocket's upgrade and the metadata of each of its messages. An Authorization among them
+// takes the place of the token. The headers c3 sets itself are refused (headerNameAllowed). Remembered,
+// they are in secrets.json with the tokens - the secret and the plain ones alike.
 //
 // A broker's token, in this order:
 //
@@ -48,6 +59,9 @@
 //
 #define CREDS_MAX        50                      // brokers with a token of their own
 #define CREDS_TOKEN_MAX  (16 * 1024)             // a JWT carrying a Verifiable Credential is several KB
+#define HDRS_MAX         16                      // headers of a broker's own
+#define HDR_NAME_MAX     64
+#define HDR_VALUE_MAX    (8 * 1024)
 
 
 
@@ -64,6 +78,30 @@ typedef struct Cred
 
 static Cred             creds[CREDS_MAX];
 static int              credN = 0;
+
+
+
+// -----------------------------------------------------------------------------
+//
+// Hdrs - a broker's own headers
+//
+typedef struct Hdr
+{
+  char   name[HDR_NAME_MAX + 1];
+  char*  value;                                  // malloc'ed
+  bool   secret;                                 // its value never sent to the page
+} Hdr;
+
+typedef struct Hdrs
+{
+  char   url[512];
+  Hdr    h[HDRS_MAX];
+  int    n;
+  bool   remembered;                             // also in secrets.json
+} Hdrs;
+
+static Hdrs             hdrs[CREDS_MAX];
+static int              hdrsN = 0;
 static pthread_mutex_t  credsLock = PTHREAD_MUTEX_INITIALIZER;
 static char             secretsPath[4200];
 
@@ -134,6 +172,113 @@ static char* tokenClean(char* t)
 
 // -----------------------------------------------------------------------------
 //
+// headerNameAllowed - a header name (RFC 9110 token, at most 64 characters) that c3 does not set itself
+//
+// Refused: what c3 sets, or what would change how the request is carried - Host, Content-Length,
+// Content-Type, Transfer-Encoding, Connection, Upgrade, Accept, X-C3-Broker, NGSILD-Tenant (the tenant
+// chosen in Connect), Sec-WebSocket-*. Authorization is allowed: it takes the place of the token.
+//
+static bool headerNameAllowed(const char* name, char* errBuf, int errLen)
+{
+  static const char* refused[] = { "Host", "Content-Length", "Content-Type", "Transfer-Encoding", "Connection", "Upgrade",
+                                   "Accept", "X-C3-Broker", "NGSILD-Tenant", "Keep-Alive", "TE", "Trailer" };
+  int len = strlen(name);
+
+  if ((len == 0) || (len > HDR_NAME_MAX))
+  {
+    snprintf(errBuf, errLen, "a header name: 1-%d characters", HDR_NAME_MAX);
+    return false;
+  }
+
+  for (int ix = 0; ix < len; ix++)
+  {
+    char c = name[ix];
+    if (((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')) || (strchr("!#$%&'*+-.^_`|~", c) != NULL))
+      continue;
+    snprintf(errBuf, errLen, "'%s': a header name is letters, digits and !#$%%&'*+-.^_`|~", name);
+    return false;
+  }
+
+  for (unsigned int ix = 0; ix < sizeof(refused) / sizeof(refused[0]); ix++)
+  {
+    if (strcasecmp(name, refused[ix]) == 0)
+    {
+      snprintf(errBuf, errLen, "'%s' is set by c3 itself", refused[ix]);
+      return false;
+    }
+  }
+
+  if (strncasecmp(name, "Sec-WebSocket-", 14) == 0)
+  {
+    snprintf(errBuf, errLen, "'%s' is set by c3 itself", name);
+    return false;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// headerValueValid - what a header's value can carry: visible characters, spaces and tabs - nothing that
+// would end it (CR, LF), at most 8 KB
+//
+static bool headerValueValid(const char* value)
+{
+  int len = strlen(value);
+
+  if (len > HDR_VALUE_MAX)
+    return false;
+
+  for (int ix = 0; ix < len; ix++)
+  {
+    unsigned char c = (unsigned char) value[ix];
+    if ((c < 0x20) && (c != '\t'))
+      return false;
+    if (c == 0x7F)
+      return false;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// hdrsFind - the broker's headers, or NULL (under credsLock)
+//
+static Hdrs* hdrsFind(const char* url)
+{
+  for (int ix = 0; ix < hdrsN; ix++)
+  {
+    if (strcmp(hdrs[ix].url, url) == 0)
+      return &hdrs[ix];
+  }
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// hdrsClear - a broker's headers freed (under credsLock)
+//
+static void hdrsClear(Hdrs* hP)
+{
+  for (int ix = 0; ix < hP->n; ix++)
+  {
+    free(hP->h[ix].value);
+    hP->h[ix].value = NULL;
+  }
+  hP->n = 0;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // credFind - the broker's entry, or NULL (under credsLock)
 //
 static Cred* credFind(const char* url)
@@ -166,6 +311,25 @@ static bool secretsWrite(char* errBuf, int errLen)
     strAddJson(&s, creds[ix].url);
     strAdd(&s, ": ");
     strAddJson(&s, creds[ix].token);
+  }
+  strAdd(&s, "}, \"headers\": {");
+  n = 0;
+  for (int ix = 0; ix < hdrsN; ix++)
+  {
+    if (hdrs[ix].remembered == false)
+      continue;
+    strAdd(&s, (n++ > 0) ? ", " : "");
+    strAddJson(&s, hdrs[ix].url);
+    strAdd(&s, ": [");
+    for (int hx = 0; hx < hdrs[ix].n; hx++)
+    {
+      strAdd(&s, (hx > 0) ? ", {\"name\": " : "{\"name\": ");
+      strAddJson(&s, hdrs[ix].h[hx].name);
+      strAdd(&s, ", \"value\": ");
+      strAddJson(&s, hdrs[ix].h[hx].value);
+      strAddf(&s, ", \"secret\": %s}", hdrs[ix].h[hx].secret ? "true" : "false");
+    }
+    strAdd(&s, "]");
   }
   strAdd(&s, "}}\n");
 
@@ -253,7 +417,44 @@ static void secretsRead(void)
       ++credN;
     }
   }
-  else if (treeP == NULL)
+
+  CorNode* headersP = ((treeP != NULL) && (treeP->type == CorObject)) ? corTreeLookup(treeP, "headers") : NULL;
+  char     err[256];
+
+  if ((headersP != NULL) && (headersP->type == CorObject))
+  {
+    for (CorNode* bP = headersP->value.head; (bP != NULL) && (hdrsN < CREDS_MAX); bP = bP->next)
+    {
+      if ((bP->type != CorArray) || (bP->name == NULL) || (strlen(bP->name) >= sizeof(hdrs[0].url)))
+        continue;
+
+      Hdrs* hP = &hdrs[hdrsN];
+      snprintf(hP->url, sizeof(hP->url), "%s", bP->name);
+      hP->n          = 0;
+      hP->remembered = true;
+
+      for (CorNode* iP = bP->value.head; (iP != NULL) && (hP->n < HDRS_MAX); iP = iP->next)
+      {
+        CorNode* nameP   = (iP->type == CorObject) ? corTreeLookup(iP, "name")   : NULL;
+        CorNode* valueP  = (iP->type == CorObject) ? corTreeLookup(iP, "value")  : NULL;
+        CorNode* secretP = (iP->type == CorObject) ? corTreeLookup(iP, "secret") : NULL;
+
+        if ((nameP == NULL) || (nameP->type != CorString) || (valueP == NULL) || (valueP->type != CorString) ||
+            (headerNameAllowed(nameP->value.s, err, sizeof(err)) == false) || (headerValueValid(valueP->value.s) == false))
+          continue;
+
+        snprintf(hP->h[hP->n].name, sizeof(hP->h[0].name), "%s", nameP->value.s);
+        hP->h[hP->n].value  = strdup(valueP->value.s);
+        hP->h[hP->n].secret = (secretP != NULL) && (secretP->type == CorBoolean) && secretP->value.b;
+        ++hP->n;
+      }
+
+      if (hP->n > 0)
+        ++hdrsN;
+    }
+  }
+
+  if (treeP == NULL)
   {
     printf("c3: %s is not JSON - no remembered tokens\n", secretsPath);
     fflush(stdout);
@@ -390,6 +591,80 @@ char* credsToken(const char* broker, const char** sourceP)
   if (sourceP != NULL)
     *sourceP = source;
   return token;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// credsHeaders - the headers c3 adds to a request to 'broker', in 'kv' (at most 'max'): its own headers, then
+// Authorization: Bearer <its token> unless an Authorization is among them. Keys and values malloc'ed - free
+// them with credsHeadersFree. Returns how many.
+//
+int credsHeaders(const char* broker, CorRestKeyValue* kv, int max)
+{
+  int  n       = 0;
+  bool ownAuth = false;
+
+  pthread_mutex_lock(&credsLock);
+
+  Hdrs* hP = (broker != NULL) ? hdrsFind(broker) : NULL;
+  for (int ix = 0; (hP != NULL) && (ix < hP->n) && (n < max); ix++)
+  {
+    kv[n].key   = strdup(hP->h[ix].name);
+    kv[n].value = strdup(hP->h[ix].value);
+    if ((kv[n].key == NULL) || (kv[n].value == NULL))
+    {
+      free(kv[n].key);
+      free(kv[n].value);
+      continue;
+    }
+    if (strcasecmp(hP->h[ix].name, "Authorization") == 0)
+      ownAuth = true;
+    ++n;
+  }
+
+  pthread_mutex_unlock(&credsLock);
+
+  if ((ownAuth == false) && (n < max))
+  {
+    char* token = credsToken(broker, NULL);
+    if (token != NULL)
+    {
+      int   alen = strlen(token) + 8;
+      char* auth = malloc(alen);
+      if (auth != NULL)
+      {
+        snprintf(auth, alen, "Bearer %s", token);
+        kv[n].key   = strdup("Authorization");
+        kv[n].value = auth;
+        if (kv[n].key != NULL)
+          ++n;
+        else
+          free(auth);
+      }
+      free(token);
+    }
+  }
+
+  return n;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// credsHeadersFree - what credsHeaders gave
+//
+void credsHeadersFree(CorRestKeyValue* kv, int n)
+{
+  for (int ix = 0; ix < n; ix++)
+  {
+    free(kv[ix].key);
+    free(kv[ix].value);
+    kv[ix].key   = NULL;
+    kv[ix].value = NULL;
+  }
 }
 
 
@@ -574,11 +849,276 @@ static void tokenForget(CorHttpConn* connP, CorNode* bodyP)
 
 // -----------------------------------------------------------------------------
 //
-// credsRequest - /api/brokers/token, /api/brokers/tokens
+// headersList - GET /api/brokers/headers: {"brokers": {"<url>": {"remembered", "headers": [{"name", "secret",
+// "value" | "tail", "length"}]}}} - a secret header's value never, its last 4 characters when it is long enough
+//
+static void headersList(CorHttpConn* connP)
+{
+  Str s = { NULL, 0, 0 };
+
+  strAdd(&s, "{\"brokers\": {");
+
+  pthread_mutex_lock(&credsLock);
+  for (int ix = 0; ix < hdrsN; ix++)
+  {
+    Hdrs* hP = &hdrs[ix];
+
+    strAdd(&s, (ix > 0) ? ", " : "");
+    strAddJson(&s, hP->url);
+    strAddf(&s, ": {\"remembered\": %s, \"headers\": [", hP->remembered ? "true" : "false");
+    for (int hx = 0; hx < hP->n; hx++)
+    {
+      Hdr* h   = &hP->h[hx];
+      int  len = strlen(h->value);
+
+      strAdd(&s, (hx > 0) ? ", {\"name\": " : "{\"name\": ");
+      strAddJson(&s, h->name);
+      if (h->secret)
+        strAddf(&s, ", \"secret\": true, \"tail\": \"%s\", \"length\": %d}", (len > 12) ? &h->value[len - 4] : "", len);
+      else
+      {
+        strAdd(&s, ", \"secret\": false, \"value\": ");
+        strAddJson(&s, h->value);
+        strAdd(&s, "}");
+      }
+    }
+    strAdd(&s, "]}");
+  }
+  pthread_mutex_unlock(&credsLock);
+
+  strAdd(&s, "}}");
+  respondStr(connP, 200, &s);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// headersSet - PUT /api/brokers/headers {"url", "headers": [{"name", "value", "secret"}], "remember"}
+//
+// The broker's headers, all of them, in their order: the ones not given are gone. A secret header given
+// without "value" keeps the value it has (the page never had it). An empty list forgets them.
+//
+static void headersSet(CorHttpConn* connP, CorNode* bodyP)
+{
+  CorNode* urlP      = corTreeLookup(bodyP, "url");
+  CorNode* listP     = corTreeLookup(bodyP, "headers");
+  CorNode* rememberP = corTreeLookup(bodyP, "remember");
+  char     err[512]  = "";
+
+  if ((urlP == NULL) || (urlP->type != CorString) || (strlen(urlP->value.s) >= sizeof(hdrs[0].url)) ||
+      ((strncmp(urlP->value.s, "http://", 7) != 0) && (strncmp(urlP->value.s, "https://", 8) != 0)))
+  {
+    serveError(connP, 400, "Bad request", "\"url\": the broker, http://host:port");
+    return;
+  }
+
+  if ((listP == NULL) || (listP->type != CorArray))
+  {
+    serveError(connP, 400, "Bad request", "\"headers\": an array of {\"name\", \"value\", \"secret\"}");
+    return;
+  }
+
+  if ((rememberP != NULL) && (rememberP->type != CorBoolean))
+  {
+    serveError(connP, 400, "Bad request", "\"remember\": true or false");
+    return;
+  }
+
+  //
+  // Checked, all of them, before anything changes
+  //
+  int n = 0;
+  for (CorNode* iP = listP->value.head; iP != NULL; iP = iP->next, ++n)
+  {
+    CorNode* nameP   = (iP->type == CorObject) ? corTreeLookup(iP, "name")   : NULL;
+    CorNode* valueP  = (iP->type == CorObject) ? corTreeLookup(iP, "value")  : NULL;
+    CorNode* secretP = (iP->type == CorObject) ? corTreeLookup(iP, "secret") : NULL;
+
+    if (n == HDRS_MAX)
+    {
+      snprintf(err, sizeof(err), "at most %d headers", HDRS_MAX);
+      break;
+    }
+    if ((nameP == NULL) || (nameP->type != CorString))
+    {
+      snprintf(err, sizeof(err), "header %d: \"name\", a string", n + 1);
+      break;
+    }
+    if (headerNameAllowed(nameP->value.s, err, sizeof(err)) == false)
+      break;
+    if ((secretP != NULL) && (secretP->type != CorBoolean))
+    {
+      snprintf(err, sizeof(err), "%s: \"secret\", true or false", nameP->value.s);
+      break;
+    }
+    if ((valueP != NULL) && ((valueP->type != CorString) || (headerValueValid(valueP->value.s) == false)))
+    {
+      snprintf(err, sizeof(err), "%s: the value is a string of at most 8 KB, with no line break nor other control character", nameP->value.s);
+      break;
+    }
+    for (CorNode* pP = listP->value.head; pP != iP; pP = pP->next)
+    {
+      if (strcasecmp(corTreeLookup(pP, "name")->value.s, nameP->value.s) == 0)
+      {
+        snprintf(err, sizeof(err), "%s: given twice", nameP->value.s);
+        break;
+      }
+    }
+    if (err[0] != 0)
+      break;
+  }
+
+  if (err[0] != 0)
+  {
+    serveError(connP, 400, "Bad request", err);
+    return;
+  }
+
+  bool remember = (rememberP != NULL) && rememberP->value.b;
+  bool ok       = true;
+
+  pthread_mutex_lock(&credsLock);
+
+  Hdrs* oldP          = hdrsFind(urlP->value.s);
+  bool  wasRemembered = (oldP != NULL) && oldP->remembered;
+  Hdrs  next;
+
+  memset(&next, 0, sizeof(next));
+  snprintf(next.url, sizeof(next.url), "%s", urlP->value.s);
+  next.remembered = remember;
+
+  for (CorNode* iP = listP->value.head; iP != NULL; iP = iP->next)
+  {
+    CorNode* nameP   = corTreeLookup(iP, "name");
+    CorNode* valueP  = corTreeLookup(iP, "value");
+    CorNode* secretP = corTreeLookup(iP, "secret");
+    Hdr*     hP      = &next.h[next.n];
+
+    snprintf(hP->name, sizeof(hP->name), "%s", nameP->value.s);
+    hP->secret = (secretP != NULL) && secretP->value.b;
+
+    if (valueP != NULL)
+      hP->value = strdup(valueP->value.s);
+    else
+    {
+      for (int ix = 0; (oldP != NULL) && (ix < oldP->n); ix++)        // a secret one, kept as it is
+      {
+        if ((strcasecmp(oldP->h[ix].name, hP->name) == 0) && oldP->h[ix].secret)
+          hP->value = strdup(oldP->h[ix].value);
+      }
+      if (hP->value == NULL)
+      {
+        snprintf(err, sizeof(err), "%s: a value is needed - c3 has none for it", hP->name);
+        break;
+      }
+    }
+    ++next.n;
+  }
+
+  if (err[0] != 0)
+  {
+    hdrsClear(&next);
+    pthread_mutex_unlock(&credsLock);
+    serveError(connP, 400, "Bad request", err);
+    return;
+  }
+
+  if (oldP != NULL)
+  {
+    hdrsClear(oldP);
+    if (next.n > 0)
+      *oldP = next;
+    else
+      *oldP = hdrs[--hdrsN];                     // the last one in its place
+  }
+  else if (next.n > 0)
+  {
+    if (hdrsN == CREDS_MAX)
+    {
+      hdrsClear(&next);
+      pthread_mutex_unlock(&credsLock);
+      serveError(connP, 507, "Too many brokers", "c3 keeps headers for 50 brokers at most - forget some first");
+      return;
+    }
+    hdrs[hdrsN++] = next;
+  }
+
+  if (remember || wasRemembered)
+    ok = secretsWrite(err, sizeof(err));
+
+  pthread_mutex_unlock(&credsLock);
+
+  if (ok == false)
+  {
+    serveError(connP, 500, "Not remembered", err);
+    return;
+  }
+
+  headersList(connP);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// headersForget - DELETE /api/brokers/headers {"url"}
+//
+static void headersForget(CorHttpConn* connP, CorNode* bodyP)
+{
+  CorNode* urlP = corTreeLookup(bodyP, "url");
+
+  if ((urlP == NULL) || (urlP->type != CorString))
+  {
+    serveError(connP, 400, "Bad request", "\"url\": the broker");
+    return;
+  }
+
+  char err[512] = "";
+  bool ok       = true;
+
+  pthread_mutex_lock(&credsLock);
+
+  Hdrs* hP = hdrsFind(urlP->value.s);
+  if (hP != NULL)
+  {
+    bool wasRemembered = hP->remembered;
+
+    hdrsClear(hP);
+    *hP = hdrs[--hdrsN];                         // the last one in its place
+
+    if (wasRemembered)
+      ok = secretsWrite(err, sizeof(err));
+  }
+
+  pthread_mutex_unlock(&credsLock);
+
+  if (ok == false)
+  {
+    serveError(connP, 500, "Not forgotten on disk", err);
+    return;
+  }
+
+  headersList(connP);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// credsRequest - /api/brokers/token, /api/brokers/tokens, /api/brokers/headers
 //
 void credsRequest(CorHttpConn* connP, const char* path)
 {
   const char* method = connP->method.s;
+
+  bool headers = (strcmp(path, "/api/brokers/headers") == 0);
+
+  if (headers && (strcmp(method, "GET") == 0))
+  {
+    headersList(connP);
+    return;
+  }
 
   if (strcmp(path, "/api/brokers/tokens") == 0)
   {
@@ -607,7 +1147,11 @@ void credsRequest(CorHttpConn* connP, const char* path)
     return;
   }
 
-  if (strcmp(method, "PUT") == 0)
+  if (headers && (strcmp(method, "PUT") == 0))
+    headersSet(connP, bodyP);
+  else if (headers)
+    headersForget(connP, bodyP);
+  else if (strcmp(method, "PUT") == 0)
     tokenSet(connP, bodyP);
   else
     tokenForget(connP, bodyP);

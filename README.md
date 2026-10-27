@@ -199,7 +199,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   their directory is the truth (Compile, below).
 - `run.brokers`: the brokers Run started, with their options (Run, below) - kept when one is started, removed
   with **Forget**. What runs is not in the file: the processes and containers are the truth.
-- No access token is ever in it: a remembered token is in `secrets.json` beside it (Connect, below).
+- No access token is ever in it, nor a broker's own headers: remembered, they are in `secrets.json` beside it (Connect, below).
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
   written.
@@ -249,6 +249,17 @@ markers are coloured by), the downloaded map areas, and the last page:
 
   A token is never on the command line, never in `c3.json`, and never sent to the page: the page learns
   where it comes from and its last four characters (`GET /api/brokers/tokens`).
+- **Headers of its own** - in **Token**, below the token: up to 16 headers per broker, each a name, a
+  value and **secret** - an API key, a Basic `Authorization`, whatever a gateway in front of the broker
+  asks for. They go with every request to that broker, as they are: through the proxy (reads and writes),
+  the live values' HTTP requests, the WebSocket's upgrade request and the metadata of each message on it.
+  An `Authorization` among them takes the place of the token. Kept in memory, and with **Remember them on
+  this machine** in `secrets.json` (mode 600); a secret header's value is never sent to the page - it shows
+  its last four characters (more than 12 characters long) or its length, and a secret header saved with
+  its value field empty keeps the value it has. Refused: the headers c³ sets itself - `Host`,
+  `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`, `Upgrade`, `Accept`, `Keep-Alive`,
+  `TE`, `Trailer`, `Sec-WebSocket-*`, `X-C3-Broker`, `NGSILD-Tenant` (the tenant is chosen in Connect). A
+  value has no line break nor other control character and is 8 KB at most.
 - **Discovery** - what a broker holds, before any entity is loaded:
   - `GET /ngsi-ld/v1/types?details=true` - the types and their attribute names (a broker that does not
     answer it is asked for `GET /types`);
@@ -850,8 +861,11 @@ The backend's API, used by the pages:
 | `GET /api/brokers/tokens` | which brokers have an access token of their own, and c³'s default: `{"brokers": {"<url>": {"source", "tail", "length"}}, "default": {...} or null, "tokenFile"}` - `source` is `typed`, `remembered`, `file` or `env`; never the token |
 | `PUT /api/brokers/token` | `{"url", "token", "remember"}`: the broker's token (`Bearer ` in front is taken off); RFC 6750's characters only, 16 KB at most |
 | `DELETE /api/brokers/token` | `{"url"}`: the broker's token forgotten, in memory and in `secrets.json` |
+| `GET /api/brokers/headers` | each broker's own headers: `{"brokers": {"<url>": {"remembered", "headers": [{"name", "secret", "value"}]}}}` - a secret one has `tail` and `length` instead of `value` |
+| `PUT /api/brokers/headers` | `{"url", "headers": [{"name", "value", "secret"}], "remember"}`: the broker's headers, all of them, in their order - a secret header without `value` keeps the one it has; an empty list forgets them; `remember` false or left out keeps them in memory only (and out of `secrets.json`). Answers as the GET; a refused name, a bad value or a name given twice is a `400` and nothing changes |
+| `DELETE /api/brokers/headers` | `{"url"}`: the broker's headers forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
-| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant` and the broker's access token (`Authorization: Bearer`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
+| `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory` only, with the page's `NGSILD-Tenant`, the broker's own headers and its access token (`Authorization: Bearer`, unless an own header is the `Authorization`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
 | `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there

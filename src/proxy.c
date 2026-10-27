@@ -19,8 +19,9 @@
 // POST, PATCH, PUT, DELETE: the entities only (/ngsi-ld/v1/entities, /ngsi-ld/v1/entities/...), with the
 // body and its Content-Type - and only from c3's own page: a write must carry an Origin of this machine
 // (a browser always sends one on them; a page of another site cannot set it, nor the X-C3-Broker header
-// without a preflight c3 never answers). The broker's access token (creds.c) goes with every request, as
-// Authorization: Bearer; the tenant is the page's NGSILD-Tenant.
+// without a preflight c3 never answers). The broker's own headers and its access token (creds.c) go with
+// every request - the token as Authorization: Bearer, unless an own header is the Authorization; the tenant
+// is the page's NGSILD-Tenant.
 //
 // The broker may be slow or not there at all, and the HTTP loop has one thread: the request is
 // suspended (corHttpSuspend), a thread of its own sends it with corRest's client, and the answer goes
@@ -89,7 +90,8 @@ typedef struct ProxyJob
   CorHttpConn*  connP;
   char          url[PROXY_URL_MAX];
   char          tenant[256];
-  char*         auth;                            // "Bearer <token>" (malloc), or NULL
+  CorRestKeyValue own[17];                       // the broker's own headers + Authorization (credsHeaders)
+  int           ownN;
   CorRestVerb   verb;
   char*         body;                            // a write's body (malloc), or NULL
   int           bodyLen;
@@ -210,7 +212,7 @@ static void* proxyThread(void* vP)
 {
   ProxyJob*          jobP  = (ProxyJob*) vP;
   CorHttpConn*       connP = jobP->connP;
-  CorRestKeyValue    headers[4];
+  CorRestKeyValue    headers[20];
   int                headerCount = 0;
   CorRestClientMulti* multiP     = corRestClientMultiCreate(1);
 
@@ -225,12 +227,8 @@ static void* proxyThread(void* vP)
     ++headerCount;
   }
 
-  if (jobP->auth != NULL)
-  {
-    headers[headerCount].key   = (char*) "Authorization";
-    headers[headerCount].value = jobP->auth;
-    ++headerCount;
-  }
+  for (int ix = 0; ix < jobP->ownN; ix++)
+    headers[headerCount++] = jobP->own[ix];
 
   if (jobP->body != NULL)
   {
@@ -324,7 +322,7 @@ static void* proxyThread(void* vP)
   if (multiP != NULL)
     corRestClientMultiDestroy(multiP);
 
-  free(jobP->auth);
+  credsHeadersFree(jobP->own, jobP->ownN);
   free(jobP->body);
   free(jobP);
   corHttpResume(connP);
@@ -443,20 +441,12 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   }
 
   //
-  // The broker's token - the broker as the configuration names it: no trailing slash
+  // The broker's own headers and its token - the broker as the configuration names it: no trailing slash
   //
   char brokerKey[512];
   snprintf(brokerKey, sizeof(brokerKey), "%.*s", blen, broker);
 
-  char* token = credsToken(brokerKey, NULL);
-  if (token != NULL)
-  {
-    int alen   = strlen(token) + 8;
-    jobP->auth = malloc(alen);
-    if (jobP->auth != NULL)
-      snprintf(jobP->auth, alen, "Bearer %s", token);
-    free(token);
-  }
+  jobP->ownN = credsHeaders(brokerKey, jobP->own, 17);
 
   jobP->connP = connP;
 
@@ -470,7 +460,7 @@ void proxyRequest(CorHttpConn* connP, const char* path)
 
   if (pthread_create(&tid, &attr, proxyThread, jobP) != 0)
   {
-    free(jobP->auth);
+    credsHeadersFree(jobP->own, jobP->ownN);
     free(jobP->body);
     free(jobP);
     serveError(connP, 503, "Busy", "no thread for the request");

@@ -422,12 +422,13 @@ static int tcpConnect(const char* host, const char* port, int timeoutMs)
 
 // -----------------------------------------------------------------------------
 //
-// wsConnect - the client handshake: GET 'path' with Upgrade: websocket, the ngsi-ld.json subprotocol
+// wsConnect - the client handshake: GET 'path' with Upgrade: websocket, the ngsi-ld.json subprotocol and
+// the 'hdrN' headers of 'hdrs'
 //
 // Answers 0 with the connection in 'wP'; -1 when the broker was not reached or broke off; -2 when it
 // answered with another status than 101 ('*statusP', the start of its body in 'errBuf').
 //
-int wsConnect(WsConn* wP, const char* url, const char* path, int timeoutMs, int* statusP, char* errBuf, int errLen)
+int wsConnect(WsConn* wP, const char* url, const char* path, const CorRestKeyValue* hdrs, int hdrN, int timeoutMs, int* statusP, char* errBuf, int errLen)
 {
   char host[256];
   char port[16];
@@ -457,17 +458,31 @@ int wsConnect(WsConn* wP, const char* url, const char* path, int timeoutMs, int*
   EVP_EncodeBlock((unsigned char*) key, nonce, sizeof(nonce));
   wsAcceptKey(key, accept, sizeof(accept));
 
-  char req[1024];
-  int  reqLen = snprintf(req, sizeof(req),
-                         "GET %s HTTP/1.1\r\n"
-                         "Host: %s:%s\r\n"
-                         "Upgrade: websocket\r\n"
-                         "Connection: Upgrade\r\n"
-                         "Sec-WebSocket-Key: %s\r\n"
-                         "Sec-WebSocket-Version: 13\r\n"
-                         "Sec-WebSocket-Protocol: ngsi-ld.json\r\n"
-                         "User-Agent: c3/" C3_VERSION "\r\n"
-                         "\r\n", path, host, port, key);
+  int reqSize = 1024 + strlen(path);
+  for (int ix = 0; ix < hdrN; ix++)
+    reqSize += strlen(hdrs[ix].key) + strlen(hdrs[ix].value) + 4;
+
+  char* req = malloc(reqSize);
+  if (req == NULL)
+  {
+    close(fd);
+    snprintf(errBuf, errLen, "out of memory");
+    return -1;
+  }
+
+  int reqLen = snprintf(req, reqSize,
+                        "GET %s HTTP/1.1\r\n"
+                        "Host: %s:%s\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: %s\r\n"
+                        "Sec-WebSocket-Version: 13\r\n"
+                        "Sec-WebSocket-Protocol: ngsi-ld.json\r\n"
+                        "User-Agent: c3/" C3_VERSION "\r\n", path, host, port, key);
+
+  for (int ix = 0; ix < hdrN; ix++)
+    reqLen += snprintf(&req[reqLen], reqSize - reqLen, "%s: %s\r\n", hdrs[ix].key, hdrs[ix].value);
+  reqLen += snprintf(&req[reqLen], reqSize - reqLen, "\r\n");
 
   int flags = fcntl(fd, F_GETFL, 0);
   fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
@@ -476,7 +491,10 @@ int wsConnect(WsConn* wP, const char* url, const char* path, int timeoutMs, int*
   setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
-  if (writeAll(fd, req, reqLen) == false)
+  bool written = writeAll(fd, req, reqLen);
+  free(req);
+
+  if (written == false)
   {
     close(fd);
     snprintf(errBuf, errLen, "the upgrade request could not be sent");

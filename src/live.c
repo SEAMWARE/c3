@@ -22,7 +22,9 @@
 //       machine).
 //
 // Every request to the broker carries the tenant (NGSILD-Tenant - over the WebSocket in each message's
-// metadata, as coraine reads it) and the broker's access token (creds.c, Authorization: Bearer).
+// metadata, as coraine reads it), the broker's own headers and its access token (creds.c, Authorization:
+// Bearer, unless an own header is the Authorization) - over the WebSocket in the upgrade request and in
+// each message's metadata.
 //
 // (a) is tried first; a broker that does not upgrade GET /ngsi-ld/v1/ws gets (b). Whichever it is, each
 // notification goes to the page as {"op": "notify", "broker", "message": {"body": <Notification>}}.
@@ -247,7 +249,9 @@ typedef struct HttpAnswer
 
 static void httpCall(CorRestVerb verb, const char* broker, const char* tenant, const char* url, const char* body, int timeoutMs, HttpAnswer* aP)
 {
-  CorRestKeyValue     headers[4];
+  CorRestKeyValue     headers[20];
+  CorRestKeyValue     own[17];
+  int                 ownN;
   int                 headerCount = 0;
   CorRestClientMulti* multiP      = corRestClientMultiCreate(1);
 
@@ -271,26 +275,14 @@ static void httpCall(CorRestVerb verb, const char* broker, const char* tenant, c
     ++headerCount;
   }
 
-  char* token = credsToken(broker, NULL);
-  char* auth  = NULL;
-  if (token != NULL)
-  {
-    int alen = strlen(token) + 8;
-    auth     = malloc(alen);
-    if (auth != NULL)
-    {
-      snprintf(auth, alen, "Bearer %s", token);
-      headers[headerCount].key   = (char*) "Authorization";
-      headers[headerCount].value = auth;
-      ++headerCount;
-    }
-    free(token);
-  }
+  ownN = credsHeaders(broker, own, 17);
+  for (int ix = 0; ix < ownN; ix++)
+    headers[headerCount++] = own[ix];
 
   if (multiP == NULL)
   {
     snprintf(aP->error, sizeof(aP->error), "out of memory");
-    free(auth);
+    credsHeadersFree(own, ownN);
     return;
   }
 
@@ -300,7 +292,7 @@ static void httpCall(CorRestVerb verb, const char* broker, const char* tenant, c
   {
     snprintf(aP->error, sizeof(aP->error), "the URL could not be used");
     corRestClientMultiDestroy(multiP);
-    free(auth);
+    credsHeadersFree(own, ownN);
     return;
   }
 
@@ -332,7 +324,7 @@ static void httpCall(CorRestVerb verb, const char* broker, const char* tenant, c
   }
 
   corRestClientMultiDestroy(multiP);
-  free(auth);
+  credsHeadersFree(own, ownN);
 }
 
 
@@ -710,9 +702,17 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
 {
   char  reqId[32];
   char* pathE = jsonEscapeDup(path);
-  char* token = credsToken(s->broker, NULL);    // b64token characters: nothing to escape
   char* extraE = (s->tenant[0] != 0) ? jsonEscapeDup(s->tenant) : NULL;
-  int   size  = 512 + strlen(pathE) + ((body != NULL) ? strlen(body) : 0) + ((token != NULL) ? strlen(token) : 0) + ((extraE != NULL) ? strlen(extraE) : 0);
+  CorRestKeyValue own[17];
+  int   ownN  = credsHeaders(s->broker, own, 17);
+  int   size  = 512 + strlen(pathE) + ((body != NULL) ? strlen(body) : 0) + ((extraE != NULL) ? strlen(extraE) : 0);
+
+  //
+  // An own header's name and value JSON-escaped: as much as six bytes for one (\u00XX), and the quotes
+  //
+  for (int ix = 0; ix < ownN; ix++)
+    size += 6 * (strlen(own[ix].key) + strlen(own[ix].value)) + 8;
+
   char* msg   = malloc(size);
   char* extra = malloc(size);
 
@@ -723,7 +723,7 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
   {
     free(msg);
     free(extra);
-    free(token);
+    credsHeadersFree(own, ownN);
     free(extraE);
     free(pathE);
     snprintf(detailOut, detailLen, "out of memory");
@@ -737,14 +737,23 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
   pthread_mutex_unlock(&s->lock);
 
   //
-  // The tenant and the token, in the metadata: a connection carries neither (coraine, doc/websocket.md)
+  // The tenant, the own headers and the token, in the metadata: coraine takes them from there
+  // (doc/websocket.md)
   //
   int eo = 0;
   extra[0] = 0;
   if (extraE != NULL)
     eo += snprintf(&extra[eo], size - eo, ", \"NGSILD-Tenant\": \"%s\"", extraE);
-  if (token != NULL)
-    snprintf(&extra[eo], size - eo, ", \"Authorization\": \"Bearer %s\"", token);
+  for (int ix = 0; ix < ownN; ix++)
+  {
+    char* keyE   = jsonEscapeDup(own[ix].key);
+    char* valueE = jsonEscapeDup(own[ix].value);
+
+    if ((keyE != NULL) && (valueE != NULL))
+      eo += snprintf(&extra[eo], size - eo, ", \"%s\": \"%s\"", keyE, valueE);
+    free(keyE);
+    free(valueE);
+  }
 
   if (body != NULL)
     snprintf(msg, size, "{\"metadata\": {\"method\": \"%s\", \"path\": \"%s\", \"requestId\": \"%s\", \"Content-Type\": \"application/json\"%s}, \"body\": %s}", method, pathE, reqId, extra, body);
@@ -753,7 +762,7 @@ static int bwsRequest(Live* s, const char* method, const char* path, const char*
   free(pathE);
   free(extra);
   free(extraE);
-  free(token);
+  credsHeadersFree(own, ownN);
 
   bool sent = wsSendText(&s->bws, msg, strlen(msg));
   free(msg);
@@ -823,9 +832,13 @@ static void bwsClose(Live* s)
 //
 static bool bwsOpen(Live* s)
 {
-  int  status = 0;
-  char err[400];
-  int  r = wsConnect(&s->bws, s->broker, "/ngsi-ld/v1/ws", LIVE_CONNECT_MS, &status, err, sizeof(err));
+  int             status = 0;
+  char            err[400];
+  CorRestKeyValue own[17];                       // a gateway in front of the broker may want them on the upgrade
+  int             ownN = credsHeaders(s->broker, own, 17);
+  int             r    = wsConnect(&s->bws, s->broker, "/ngsi-ld/v1/ws", own, ownN, LIVE_CONNECT_MS, &status, err, sizeof(err));
+
+  credsHeadersFree(own, ownN);
 
   if (r == -2)
   {

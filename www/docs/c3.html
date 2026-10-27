@@ -204,6 +204,14 @@ examples/ckan-bikes.sh http://localhost:1090           <span class="c"># open da
   in <code>c3.json</code>; a login's tokens are in memory only and renewed before they expire. A 401 shows the broker's
   reason, and <b>Log in…</b> when the broker says where its tokens come from (coraine's
   <code>/.well-known/oauth-protected-resource</code>) (<a href="#docs/authorization">Authorization</a>).</li>
+  <li><b>Headers of its own</b> (<b>Token</b>, below the token) - up to 16 per broker, each a name, a value and
+  <b>secret</b>: an API key, a Basic <code>Authorization</code>, what a gateway in front of the broker asks for. Sent
+  as they are with every request to that broker - the proxy's reads and writes, the live values' HTTP requests, the
+  WebSocket's upgrade request and each message's metadata. An <code>Authorization</code> among them takes the place of
+  the token. In memory, and with <b>Remember them on this machine</b> in <code>secrets.json</code>; a secret header's
+  value never reaches the page (its last four characters, or its length, do), and saved with its field empty it keeps
+  its value. The headers c³ sets itself are refused (<code>Host</code>, <code>Content-Type</code>, <code>Accept</code>,
+  <code>NGSILD-Tenant</code>, <code>X-C3-Broker</code>, the WebSocket's, ...).</li>
   <li><b>Discovery</b> - before any entity is loaded: <code>GET /types?details=true</code>, <code>GET /types/{type}</code>
   per type (its count and its attributes' kinds), <code>GET /attributes?details=true</code>. The panel lists the types
   with their counts, each one's attributes, and the Relationships between types.</li>
@@ -328,7 +336,7 @@ the page's name, marked as being in c³.</p>
 <p>It is written whole to <code>c3.json.tmp</code> and renamed over <code>c3.json</code> (mode 600, the directory
 700). Members this version does not know are kept; a file that is not a JSON object is moved to
 <code>c3.json.broken</code>; a file of a newer <code>version</code> is read and never written. No access token is in
-it: a remembered one is in <code>secrets.json</code> beside it (mode 600 - a file others can read is not used).</p>
+it, nor a broker's own headers: remembered, they are in <code>secrets.json</code> beside it (mode 600 - a file others can read is not used).</p>
 <p><b>The data directory</b>, <code>$XDG_DATA_HOME/c3/</code> (else <code>~/.local/share/c3/</code>) - here the
 directories are the truth, not the configuration:</p>
 <pre>builds/&lt;name&gt;/           coraine-build's directory: the source, the build tree, install/ (the result)
