@@ -1,0 +1,262 @@
+<!-- Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 -->
+<!-- docs/jsonld.html - a guide of the Documentation page, loaded into it (docs.js) -->
+<article class="guide">
+<h1>JSON-LD and @context</h1>
+<p class="lead">In NGSI-LD every name is an IRI. <code>speed</code> is a short name a client uses, and
+<code>https://example.org/vocab/speed</code> is the name the broker keeps. The client's <code>@context</code>
+maps one to the other. The broker expands the names of every request with it and compacts the names of every
+response with it, so two clients that use different short names for the same IRI see the same data. This guide
+says where the broker takes the <code>@context</code> from, what it does with it, and what it keeps.</p>
+
+<p>Every example below was run against a coraine broker on <code>localhost:1099</code>, with
+<code>--database corDB --httpEndpoint http://localhost:1099</code>, and the outputs are as it answered. Only the
+<code>Date</code> headers are left out.</p>
+
+<h2 id="what"><span class="g-n">1</span>What an @context does</h2>
+<p>An <code>@context</code> is a JSON object of terms: a short name and the IRI it stands for. Here it is hosted on
+the broker itself (<a href="#docs/jsonld/endpoints">the endpoints</a>):</p>
+<pre>curl -i localhost:1099/ngsi-ld/v1/jsonldContexts -H 'Content-Type: application/json' -d '{ "@context": {
+  "Vehicle": "https://example.org/vocab/Vehicle",
+  "speed":   "https://example.org/vocab/speed",
+  "brand":   "https://schema.org/brand" } }'
+<span class="o">HTTP/1.1 201 Created
+Location: /ngsi-ld/v1/jsonldContexts/urn:ngsi-ld:Context:1-1793107074</span></pre>
+<p>An entity created with it, named in the <code>Link</code> header:</p>
+<pre>CTX='&lt;http://localhost:1099/ngsi-ld/v1/jsonldContexts/urn:ngsi-ld:Context:1-1793107074&gt;; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
+
+curl -i localhost:1099/ngsi-ld/v1/entities -H 'Content-Type: application/json' -H "Link: $CTX" -d '{
+  "id": "urn:ngsi-ld:Vehicle:1", "type": "Vehicle",
+  "speed": { "type": "Property", "value": 42 },
+  "brand": { "type": "Property", "value": "Mercedes" },
+  "color": { "type": "Property", "value": "red" } }'
+<span class="o">HTTP/1.1 201 Created
+Location: /ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:1</span></pre>
+<p>Read back with the same <code>@context</code>, it looks the way it was written:</p>
+<pre>curl localhost:1099/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:1 -H "Link: $CTX"
+<span class="o">{"id":"urn:ngsi-ld:Vehicle:1","type":"Vehicle","speed":{"type":"Property","value":42},"brand":{"type":"Property","value":"Mercedes"},"color":{"type":"Property","value":"red"}}</span></pre>
+<p>Without it, the broker compacts with the core context alone. Each name the core does not know comes back as
+its IRI:</p>
+<pre>curl localhost:1099/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:1
+<span class="o">{"id":"urn:ngsi-ld:Vehicle:1","type":"https://example.org/vocab/Vehicle","https://example.org/vocab/speed":{"type":"Property","value":42},"https://schema.org/brand":{"type":"Property","value":"Mercedes"},"color":{"type":"Property","value":"red"}}</span></pre>
+<p><code>color</code> is in no context. It was expanded with the core context's <code>@vocab</code> to
+<code>https://uri.etsi.org/ngsi-ld/default-context/color</code>, and compaction strips that prefix again, so it
+reads <code>color</code> with any context. The same goes for a query: <code>type=Vehicle</code> without the
+<code>Link</code> is <code>https://uri.etsi.org/ngsi-ld/default-context/Vehicle</code>, a different type, and it
+matches nothing:</p>
+<pre>curl 'localhost:1099/ngsi-ld/v1/entities?type=Vehicle'
+<span class="o">[]</span>
+curl 'localhost:1099/ngsi-ld/v1/entities?type=Vehicle&amp;options=keyValues' -H "Link: $CTX"
+<span class="o">[{"id":"urn:ngsi-ld:Vehicle:1","type":"Vehicle","speed":42,"brand":"Mercedes","color":"red"}]</span></pre>
+<p>What expands: attribute and sub-attribute names, the values of <code>type</code>, a VocabProperty's
+<code>vocab</code>, the values of the other terms the core context types <code>@vocab</code>
+(<code>watchedAttributes</code>, <code>propertyNames</code> and so on), and the attribute names in URL parameters
+(<code>attrs</code>, <code>q</code>, <code>orderBy</code>). What does not expand: the <code>id</code>, a
+Property's <code>value</code>, the keys of a LanguageProperty's <code>languageMap</code>, and a JsonProperty's
+<code>json</code>. The rules, step by step, are in <a href="#docs/lib-corjsonld/expanding">corJsonld</a>.</p>
+<pre>curl localhost:1099/ngsi-ld/v1/entities -H 'Content-Type: application/ld+json' -d '{
+  "id": "urn:ngsi-ld:Car:1", "type": "Car", "category": { "type": "VocabProperty", "vocab": "sedan" },
+  "@context": { "sedan": "https://example.org/cat/sedan" } }'
+
+curl localhost:1099/ngsi-ld/v1/entities/urn:ngsi-ld:Car:1
+<span class="o">{"id":"urn:ngsi-ld:Car:1","type":"Car","category":{"type":"VocabProperty","vocab":"https://example.org/cat/sedan"}}</span></pre>
+
+<h2 id="request"><span class="g-n">2</span>Where a request's @context comes from</h2>
+<table class="gtable">
+  <tr><th>The request</th><th>Its @context</th></tr>
+  <tr><td><code>Content-Type: application/json</code>, with a <code>Link</code> header (<code>rel="http://www.w3.org/ns/json-ld#context"</code>)</td><td>the one the <code>Link</code> names</td></tr>
+  <tr><td><code>Content-Type: application/ld+json</code></td><td>the <code>@context</code> member of the body, an object, a URL or an array of them. For an array body, each element has its own</td></tr>
+  <tr><td><code>GET</code>, <code>HEAD</code>, <code>DELETE</code> - no body</td><td>the <code>Link</code> header</td></tr>
+  <tr><td>none of these</td><td>the default user context (<code>--defaultUserContext</code>, <a href="#docs/jsonld/default">below</a>), if the broker was started with one, else the core context alone</td></tr>
+</table>
+<p>The core context always comes last and wins, term by term (<a href="#docs/jsonld/core">the core
+context</a>). The combinations the spec does not allow are refused:</p>
+<pre>curl -i localhost:1099/ngsi-ld/v1/entities -H 'Content-Type: application/json' -d '{
+  "id": "urn:ngsi-ld:Vehicle:3", "type": "Vehicle", "@context": { "Vehicle": "https://example.org/vocab/Vehicle" } }'
+<span class="o">HTTP/1.1 400 Bad Request
+{"type":"https://uri.etsi.org/ngsi-ld/errors/BadRequestData","title":"Unexpected @context","status":400,"detail":"@context in body not allowed for Content-Type application/json"}</span></pre>
+<table class="gtable">
+  <tr><th>Refused</th><th>Answer</th></tr>
+  <tr><td><code>application/json</code> with an <code>@context</code> in the body</td><td>400 <code>BadRequestData</code>, "Unexpected @context"</td></tr>
+  <tr><td><code>application/ld+json</code> with a <code>Link</code> header as well</td><td>400 <code>BadRequestData</code>, "Conflicting @context"</td></tr>
+  <tr><td><code>application/ld+json</code> with no <code>@context</code> in the body</td><td>400 <code>BadRequestData</code>, "Missing @context"</td></tr>
+  <tr><td>an <code>@context</code> URL that cannot be downloaded</td><td>504 <code>LdContextNotAvailable</code></td></tr>
+  <tr><td>an <code>@context</code> that is not a valid one: a term with an <code>@context</code> of its own (a scoped context), an array that leads back to itself</td><td>400 <code>BadRequestData</code></td></tr>
+  <tr><td>an <code>@context</code> with <code>@import</code></td><td>501, not implemented</td></tr>
+</table>
+<pre>curl -i 'localhost:1099/ngsi-ld/v1/entities?type=Vehicle' \
+  -H 'Link: &lt;http://localhost:1/nothing.jsonld&gt;; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
+<span class="o">HTTP/1.1 504 Gateway Timeout
+{"type":"https://uri.etsi.org/ngsi-ld/errors/LdContextNotAvailable","title":"Context Not Available","status":504,"detail":"unable to retrieve @context from 'http://localhost:1/nothing.jsonld'"}</span></pre>
+
+<h2 id="response"><span class="g-n">3</span>The @context of a response</h2>
+<p>A response is compacted with the request's <code>@context</code>, and says which one it was. For
+<code>Accept: application/json</code> (the default) it is named in the <code>Link</code> header. For
+<code>Accept: application/ld+json</code> it is an <code>@context</code> member of the body, and there is no
+<code>Link</code>:</p>
+<pre>curl -i 'localhost:1099/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:1?options=keyValues' -H "Link: $CTX" -H 'Accept: application/ld+json'
+<span class="o">HTTP/1.1 200 OK
+Content-Type: application/ld+json
+Content-Length: 185
+
+{"id":"urn:ngsi-ld:Vehicle:1","type":"Vehicle","speed":42,"brand":"Mercedes","color":"red","@context":"http://localhost:1099/ngsi-ld/v1/jsonldContexts/urn:ngsi-ld:Context:1-1793107074"}</span></pre>
+<p>A request with no <code>@context</code> gets the core context's URL,
+<code>https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld</code>, or the default user context's.</p>
+<p>An <code>@context</code> that came inline, in an <code>application/ld+json</code> body, has no URL that a
+<code>Link</code> header could name. The broker hosts it for the purpose and names that:</p>
+<pre>curl -i 'localhost:1099/ngsi-ld/v1/entityOperations/query?options=keyValues' -H 'Content-Type: application/ld+json' -d '{
+  "type": "Query", "entities": [ { "type": "Vehicle" } ],
+  "@context": { "Vehicle": "https://example.org/vocab/Vehicle", "speed": "https://example.org/vocab/speed" } }'
+<span class="o">HTTP/1.1 200 OK
+Content-Type: application/json
+Link: &lt;http://localhost:1099/ngsi-ld/v1/jsonldContexts/urn:ngsi-ld:Context:vb789f444eb5c2b54&gt;; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"
+
+[{"id":"urn:ngsi-ld:Vehicle:1","type":"Vehicle","speed":42,"https://schema.org/brand":"Mercedes","color":"red"},{"id":"urn:ngsi-ld:Vehicle:2","type":"Vehicle","speed":80}]</span></pre>
+<p><code>brand</code> is not in this <code>@context</code>, so it comes back as its IRI.</p>
+<table class="g-opts">
+  <tr><th>Such a context</th><th></th></tr>
+  <tr><td>its id</td><td><code>urn:ngsi-ld:Context:v&lt;hash&gt;</code>, a hash of its body. The same inline <code>@context</code> on every request is one entry, whatever the request rate</td></tr>
+  <tr><td>its life</td><td>3600 s after it was last used: each use starts the hour again. Unused for an hour, it is dropped (checked every second)</td></tr>
+  <tr><td>fetched</td><td><code>GET</code> on its URL answers its body, with <code>Cache-Control: no-store</code>, because the URL can change once it is dropped and hosted again</td></tr>
+  <tr><td>listed</td><td>never: <code>GET /jsonldContexts</code> leaves it out</td></tr>
+  <tr><td>stored</td><td>in the cache only, never in the database</td></tr>
+</table>
+
+<h2 id="core"><span class="g-n">4</span>The core context</h2>
+<p>The NGSI-LD core context v1.9 (<code>https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld</code>)
+is compiled into the broker and never downloaded. A request that names it, or an older core context
+(<code>ngsi-ld-core-context.jsonld</code>, <code>-v1.N.jsonld</code>), downloads nothing: the broker's own core is
+used. <code>GET /jsonldContexts</code> lists it as kind <code>Cached</code> - a local copy of the @context at
+its URL, compiled in instead of downloaded - so, as for every <code>Cached</code> one, its metadata is served
+(<code>?details=true</code>) and its body is not (422 <code>OperationNotSupported</code>). It cannot be deleted
+(400).</p>
+<p><b>The core wins.</b> A core term keeps its meaning whatever a user context says about that name:
+<code>type</code>, <code>value</code>, <code>observedAt</code>, <code>location</code>, <code>status</code>,
+<code>name</code> and the rest. This user context maps <code>status</code> to an IRI of its own:</p>
+<pre>{ "@context": { "ParkingSpot": "https://example.org/parking/ParkingSpot",
+                "status":      "https://example.org/parking/status" } }</pre>
+<p>Yet an entity written with it has the core term <code>status</code> (<code>ngsi-ld:status</code>), and a reader
+with only the core context sees <code>status</code>, not <code>https://example.org/parking/status</code>:</p>
+<pre>curl 'localhost:1099/ngsi-ld/v1/entities?type=https://example.org/parking/ParkingSpot&amp;options=keyValues'
+<span class="o">[{"id":"urn:ngsi-ld:ParkingSpot:7","type":"https://example.org/parking/ParkingSpot","status":"occupied"}]</span></pre>
+<div class="g-callout warn">
+<p><b>A vocabulary term with the same name as a core term is shadowed.</b> The data model's IRI for it is never
+used, so a consumer that looks for that IRI does not find it. The core context's own list of terms says which
+names are taken.</p>
+</div>
+<p><b>Only the core context's <code>@vocab</code> is used.</b> A name that no context defines becomes
+<code>https://uri.etsi.org/ngsi-ld/default-context/</code> + the name. An <code>@vocab</code> in a user context is
+not used:</p>
+<pre>curl localhost:1099/ngsi-ld/v1/entities -H 'Content-Type: application/ld+json' -d '{
+  "id": "urn:ngsi-ld:Thing:1", "type": "Thing", "weight": { "type": "Property", "value": 3 },
+  "@context": { "@vocab": "https://example.org/mine/" } }'
+
+curl 'localhost:1099/ngsi-ld/v1/entities?type=https://example.org/mine/Thing'
+<span class="o">[]</span>
+curl 'localhost:1099/ngsi-ld/v1/entities?type=https://uri.etsi.org/ngsi-ld/default-context/Thing&amp;options=keyValues'
+<span class="o">[{"id":"urn:ngsi-ld:Thing:1","type":"Thing","weight":3}]</span></pre>
+<p>A name already an IRI (<code>urn:</code>, <code>http://</code>, <code>https://</code>) is kept as it is, and a
+<code>prefix:suffix</code> name is expanded with the prefixes of the user context first, then the core's
+(<code>ngsi-ld:</code>, <code>geojson:</code>).</p>
+
+<h2 id="default"><span class="g-n">5</span>A default user context</h2>
+<p><code>--defaultUserContext</code> (<code>-duc</code>) gives the broker the <code>@context</code> for every request
+that brings none: no <code>Link</code> header and, for <code>application/ld+json</code>, no <code>@context</code> in
+the body. The bridges' configuration and samples, and the auth plugin's policy terms, are expanded with it too. The
+core context still comes after it and wins.</p>
+<table class="g-opts">
+  <tr><th>Given as</th><th></th></tr>
+  <tr><td>a URL</td><td>kept as given and downloaded the first time it is needed. A request that needs it while it cannot be downloaded gets 504 <code>LdContextNotAvailable</code></td></tr>
+  <tr><td>a file, or <code>file://&lt;path&gt;</code></td><td>read and checked at start: it must be a JSON object with an <code>@context</code> member that is an object or an array, or the broker does not start. Then it is hosted, as <code>&lt;advertised endpoint&gt;/ngsi-ld/v1/jsonldContexts/defaultUserContext</code>, kind <code>Hosted</code></td></tr>
+</table>
+<pre>coraine --database corDB --httpEndpoint http://localhost:1099 --defaultUserContext parking.jsonld
+
+curl localhost:1099/ngsi-ld/v1/entities -H 'Content-Type: application/json' -d '{
+  "id": "urn:ngsi-ld:ParkingSpot:7", "type": "ParkingSpot", "status": { "type": "Property", "value": "occupied" } }'
+
+curl -i 'localhost:1099/ngsi-ld/v1/entities/urn:ngsi-ld:ParkingSpot:7?options=keyValues'
+<span class="o">HTTP/1.1 200 OK
+Content-Type: application/json
+Link: &lt;http://localhost:1099/ngsi-ld/v1/jsonldContexts/defaultUserContext&gt;; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"
+
+{"id":"urn:ngsi-ld:ParkingSpot:7","type":"ParkingSpot","status":"occupied"}</span></pre>
+<p>The option's reference: <a href="#docs/options">Command-line options</a>. The DDS mapping tool writes such a file
+(<a href="#docs/dds">DDS and ROS 2</a>).</p>
+
+<h2 id="cache"><span class="g-n">6</span>Downloads and the cache</h2>
+<p>An <code>@context</code> URL is downloaded once and kept in the broker's context cache, kind
+<code>Cached</code>. Every later request that names it uses the cached copy. Downloading also follows an
+<code>@context</code> that is itself a URL, and every URL element of an array.</p>
+<table class="g-opts">
+  <tr><th>The cache</th><th></th></tr>
+  <tr><td>one per broker</td><td>shared by every tenant and every request</td></tr>
+  <tr><td>size</td><td>100 entries. Past that, the one used longest ago is dropped and downloaded again when next needed</td></tr>
+  <tr><td>a URL and its scheme</td><td><code>http://h/x</code> and <code>https://h/x</code> are one entry: the first one seen</td></tr>
+  <tr><td>one download at a time per URL</td><td>a second request for a URL that is downloading waits for it, up to 3 s, and fails with 504 if it has not landed. A coroutine that waits yields (<a href="#docs/coroutines">Coroutines</a>)</td></tr>
+  <tr><td>TLS</td><td>verified against the system CA store. <code>--insecureNotif</code> turns that off for every outgoing request of the broker, downloads among them</td></tr>
+  <tr><td>a newer version of a context</td><td>not noticed: an entry stays until it is dropped for room or deleted. <code>DELETE /jsonldContexts/{id}?reload=true</code> downloads it again</td></tr>
+</table>
+<p>In the example below, the context server's log shows one <code>GET /parking.jsonld</code> for the create and
+none for the reads after it, then one more for the reload:</p>
+<pre>curl 'localhost:1099/ngsi-ld/v1/jsonldContexts?kind=Cached&amp;details=true'
+<span class="o">[{"URL":"http://127.0.0.1:8799/parking.jsonld","localId":"http://127.0.0.1:8799/parking.jsonld","kind":"Cached","createdAt":"2026-10-27T13:19:34.000Z","lastUsage":"2026-10-27T13:19:34.000Z"}, ...]</span>
+
+curl -i -X DELETE 'localhost:1099/ngsi-ld/v1/jsonldContexts/http%3A%2F%2F127.0.0.1%3A8799%2Fparking.jsonld?reload=true'
+<span class="o">HTTP/1.1 204 No Content</span></pre>
+
+<h2 id="endpoints"><span class="g-n">7</span>The @context endpoints</h2>
+<p>The JSON-LD context API (TS 104 175 clause 13), under <code>/ngsi-ld/v1/jsonldContexts</code>:</p>
+<table class="gtable">
+  <tr><th>Request</th><th>What it does</th></tr>
+  <tr><td><code>POST /jsonldContexts</code></td><td><code>{"@context": {...}}</code> is hosted as given, kind <code>Hosted</code>, with a new id <code>urn:ngsi-ld:Context:&lt;n&gt;-&lt;seconds&gt;</code>. <code>{"url": "..."}</code> is downloaded and cached, kind <code>Cached</code>, and its id is the URL. 201 with the <code>Location</code></td></tr>
+  <tr><td><code>GET /jsonldContexts</code></td><td>the URLs of the stored contexts. <code>details=true</code> gives objects instead (<code>URL</code>, <code>localId</code>, <code>kind</code>, <code>createdAt</code>, <code>lastUsage</code>). <code>kind=Hosted|Cached|ImplicitlyCreated</code> filters (anything else is 400), and <code>limit</code>, <code>offset</code> and <code>count</code> page it</td></tr>
+  <tr><td><code>GET /jsonldContexts/{id}</code></td><td>a <code>Hosted</code> or <code>ImplicitlyCreated</code> context's body, as <code>application/json</code>. A <code>Cached</code> one answers 422 <code>OperationNotSupported</code> - its metadata only, with <code>details=true</code></td></tr>
+  <tr><td><code>DELETE /jsonldContexts/{id}</code></td><td>removed from the broker. <code>reload=true</code> downloads a <code>Cached</code> one again instead; on any other kind it is 400</td></tr>
+</table>
+<p>The id in a path is URL-encoded when it is a URL. The <code>Location</code> of a <code>Cached</code> one is
+the URL itself:</p>
+<pre>curl -i localhost:1099/ngsi-ld/v1/jsonldContexts -H 'Content-Type: application/json' -d '{ "url": "http://127.0.0.1:8799/parking.jsonld" }'
+<span class="o">HTTP/1.1 201 Created
+Location: /ngsi-ld/v1/jsonldContexts/http://127.0.0.1:8799/parking.jsonld</span></pre>
+<p>The hosted contexts, the ones added by URL, and the ones a subscription creates are also written to the
+database, when its plugin stores contexts. A <code>GET</code> by id that misses the cache, after a restart for
+example, reads them there. A <code>Link</code> (or an <code>@context</code> URL in a body) that names one of
+the broker's own <code>/jsonldContexts/{id}</code> URLs - the advertised endpoint (<code>--httpEndpoint</code>,
+else the detected LAN address) + the path, as the listing and the <code>Link</code> headers give it - is that
+context, from the cache or the database: not a download, and no second, <code>Cached</code> entry. It makes no HTTP request to
+itself.</p>
+
+<h2 id="stored"><span class="g-n">8</span>What the database keeps</h2>
+<p>The store holds the expanded names: <code>https://example.org/vocab/speed</code>, not <code>speed</code>. A
+core term is kept by its short name (<code>type</code>, <code>value</code>, <code>observedAt</code> ...), so the
+structure of an entity costs no IRIs. So a query is answered the same whatever <code>@context</code> wrote the
+data, and an index is made on the IRI:
+<a href="#docs/database-indexes">Database indexes</a> shows the paths. Each corDB record decodes on its own, so it
+carries its attributes' expanded names every time. In the fixture of <a href="#docs/performance">Performance and
+footprint</a>, that is most of a record's 744 bytes.</p>
+
+<h2 id="specs">The specifications</h2>
+<p>coraine implements ETSI GS CIM 009 V1.9.1, the last edition of NGSI-LD published as one document. NGSI-LD is
+now published as a set of ETSI Technical Specifications. The ones below are the newest public versions, and they
+still name the core context v1.9.</p>
+<table class="gtable">
+  <tr><th>Specification</th><th>Published</th><th></th></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.09.01_60/gs_cim009v010901p.pdf" target="_blank" rel="noopener">ETSI GS CIM 009 V1.9.1 - NGSI-LD API</a></td><td>2025-07</td><td>the whole API in one document, the one coraine implements</td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104175/01.01.01_60/ts_104175v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 175 V1.1.1 - NGSI-LD Core API</a></td><td>2026-09</td><td>the operations, the data representations, the @context rules and the context API (clause 13)</td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104176/01.01.01_60/ts_104176v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 176 V1.1.1 - NGSI-LD HTTP Binding</a></td><td>2026-09</td><td>the HTTP side: the Link header, the content types, the @context resolution of a request</td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104178/01.01.01_60/ts_104178v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 178 V1.1.1 - NGSI-LD Information Model</a></td><td>2026-07</td><td>entities, attributes, relationships and the core vocabulary</td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104179/01.01.01_60/ts_104179v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 179 V1.1.1 - NGSI-LD Provenance and Integrity</a></td><td>2026-09</td><td></td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104187/01.01.01_60/ts_104187v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 187 V1.1.1 - NGSI-LD Implementation Conformance Statement</a></td><td>2026-10</td><td></td></tr>
+  <tr><td><a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104188/01.01.01_60/ts_104188v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 188 V1.1.1 - NGSI-LD Interoperability tests specification</a></td><td>2026-10</td><td></td></tr>
+  <tr><td><a href="https://www.w3.org/TR/json-ld11/" target="_blank" rel="noopener">JSON-LD 1.1</a></td><td>W3C Recommendation, 2020-07</td><td>the syntax: <code>@context</code>, terms, <code>@vocab</code>, containers</td></tr>
+  <tr><td><a href="https://www.w3.org/TR/json-ld11-api/" target="_blank" rel="noopener">JSON-LD 1.1 Processing Algorithms and API</a></td><td>W3C Recommendation, 2020-07</td><td>expansion and compaction, step by step</td></tr>
+</table>
+<p>Every edition of GS CIM 009 is listed under
+<a href="https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/" target="_blank" rel="noopener">etsi.org/deliver/etsi_gs/CIM/001_099/009</a>.</p>
+
+<h2 id="more">Further</h2>
+<ul class="g-cards">
+  <li><a href="#docs/lib-corjsonld"><b>corJsonld</b><span>the library: parsing, the cache, expansion and compaction rule by rule</span></a></li>
+  <li><a href="#docs/api-walkthrough"><b>API walkthrough</b><span>an entity created, read, queried, changed, watched and deleted</span></a></li>
+  <li><a href="#docs/options"><b>Command-line options</b><span><code>--defaultUserContext</code> and the rest</span></a></li>
+</ul>
+</article>

@@ -22,7 +22,7 @@ under <code>/ngsi-ld/v1</code>.</p>
       }'</pre>
 <p><code>201 Created</code>, and a <code>Location</code> header naming the entity. With a <code>Content-Type</code>
 of <code>application/json</code> the <code>@context</code> is the one in the <code>Link</code> header - without
-one, the NGSI-LD core context.</p>
+one, the NGSI-LD core context (<a href="#docs/jsonld">JSON-LD and @context</a>).</p>
 
 <h2 id="retrieve"><span class="g-n">2</span>Retrieve it</h2>
 <pre>curl http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Vehicle:A100</pre>
@@ -95,7 +95,7 @@ such a subscription is refused. The subscription itself is read, patched and del
   <code>/ngsi-ld/v1/csourceRegistrations</code> (the Registry API works without the option).</li>
   <li><b>The history</b> - with a temporal plugin (<code>--troe corDB</code> inside the corDB store, <code>--troe timescale</code> in PostgreSQL)
   every attribute's history is queried under <code>/ngsi-ld/v1/temporal/entities</code>.</li>
-  <li><b>The whole API</b> - coraine implements ETSI GS CIM 009 v1.9.1; the specification is the reference.</li>
+  <li><b>The whole API</b> - coraine implements <a href="https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.09.01_60/gs_cim009v010901p.pdf" target="_blank" rel="noopener">ETSI GS CIM 009 v1.9.1</a>; the specification is the reference. The newer ETSI TS editions are listed in <a href="#docs/jsonld/specs">JSON-LD and @context</a>.</li>
 </ul>
 <div class="g-callout">
 <p><b>The history is written after the response.</b> A temporal write is history, not state the caller waits for,

@@ -51,6 +51,43 @@
           ]
         },
         {
+          "id": "jsonld",
+          "title": "JSON-LD and @context",
+          "desc": "where a request's @context comes from, the core context and what it wins, a default user context, the context cache and endpoints, the NGSI-LD specifications",
+          "from": [
+            {
+              "repo": "coraine",
+              "path": "doc/options.md",
+              "at": "ecb22deb"
+            },
+            {
+              "repo": "coraine",
+              "path": "src/lib/serviceRoutines/*JsonldContext*.c",
+              "at": "ecb22deb"
+            },
+            {
+              "repo": "coraine",
+              "path": "src/lib/startup/startupContext.c",
+              "at": "ecb22deb"
+            },
+            {
+              "repo": "corJsonld",
+              "path": "README.md",
+              "at": "c7bfcded"
+            },
+            {
+              "repo": "corJsonld",
+              "path": "*.c",
+              "at": "c7bfcded"
+            },
+            {
+              "repo": "corNgsild",
+              "path": "ldContextHost.c",
+              "at": "8c311780"
+            }
+          ]
+        },
+        {
           "id": "administration",
           "title": "Administration",
           "desc": "every command-line option with its environment variable, the log, the admin API, health probes, memory, request and response limits",

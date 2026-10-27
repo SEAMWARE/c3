@@ -19,7 +19,7 @@ request to the broker and gives the answer back, shaped for a model.</p>
   a tenant the user did not choose. Another tenant is another corMcp, which only the user starts.</li>
   <li><b>Read-only.</b> Every tool is a <code>GET</code>; each is announced with <code>readOnlyHint: true</code> and
   <code>openWorldHint: false</code>. Nothing a model asks for changes the broker.</li>
-  <li><b>Any broker.</b> Only the NGSI-LD API (ETSI TS 104 175) at <code>&lt;broker&gt;/ngsi-ld/v1</code>; a tool whose
+  <li><b>Any broker.</b> Only the NGSI-LD API (<a href="https://www.etsi.org/deliver/etsi_ts/104100_104199/104175/01.01.01_60/ts_104175v010101p.pdf" target="_blank" rel="noopener">ETSI TS 104 175</a>) at <code>&lt;broker&gt;/ngsi-ld/v1</code>; a tool whose
   API the broker lacks (a broker with no temporal API) answers the broker's error.</li>
 </ul>
 
