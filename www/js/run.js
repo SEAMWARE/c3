@@ -293,7 +293,7 @@ export class Run {
   // ------------------------------------------------------------------ DDS: the mapping
 
   ddsDefaults() {
-    return { domain: 0, vocabulary: '', rows: [] };
+    return { domain: 0, transport: '', interfaces: [], vocabulary: '', rows: [] };
   }
 
   //
@@ -595,7 +595,7 @@ export class Run {
     if (d.dds) {
       const row = (kind, key) => (x) => ({ ...x, kind, name: x[key] });
       Object.assign(this.f.dds, {
-        domain: d.dds.domain || 0, vocabulary: d.dds.vocabulary || '',
+        domain: d.dds.domain || 0, transport: d.dds.transport || '', interfaces: [...(d.dds.interfaces || [])], vocabulary: d.dds.vocabulary || '',
         rows: [...(d.dds.topics || []).map(row('topic', 'topic')), ...(d.dds.services || []).map(row('service', 'service')),
                ...(d.dds.actions || []).map(row('action', 'action'))],
       });
@@ -1243,6 +1243,8 @@ export class Run {
       });
       d.dds = { domain: f.dds.domain || 0, topics: pick('topic', 'topic', []), services: pick('service', 'service', ['requestType', 'replyType']),
                 actions: pick('action', 'action', ['type']) };
+      if (f.dds.transport) d.dds.transport = f.dds.transport;
+      if (f.dds.interfaces.length) d.dds.interfaces = [...f.dds.interfaces];
       if (f.dds.vocabulary) d.dds.vocabulary = f.dds.vocabulary;
     }
     if (f.from === 'build') d.build = f.build;

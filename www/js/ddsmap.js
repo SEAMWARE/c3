@@ -108,6 +108,8 @@ export class DdsMapper {
     this.run     = run;           // the Run page: its form, its Start, the broker discovery is started from
     this.box     = null;          // the mapper's section in Operate's left side, built on first open
     this.domain  = 0;
+    this.transport  = '';         // '': DDS's default (shared memory and UDP), 'udp', 'shm'
+    this.interfaces = '';         // the IPv4 addresses UDP uses, as typed (comma or space between); '': all
     this.vocab   = '';
     this.rows    = new Map();     // kind + '\n' + name -> { kind, name, attribute, entityId, entityType, requestType, replyType, type }
     this.inv     = null;          // the inventory: { topics, services, actions, types }
@@ -132,6 +134,8 @@ export class DdsMapper {
     const m = this.files && this.files.mapping;
     if (!m) return;
     this.domain = m.domain || 0;
+    this.transport  = m.transport || '';
+    this.interfaces = [].concat(m.interfaces || []).join(', ');   // a list - or a string, as the API also takes
     this.vocab  = m.vocabulary || '';
     this.rows.clear();
     for (const [kind, plural] of KINDS) {
@@ -217,7 +221,7 @@ export class DdsMapper {
     this.renderStatus();
     try {
       const def = this.run.def();
-      def.dds = { domain: this.domain, topics: [], services: [], actions: [] };
+      def.dds = { ...this.reach(), topics: [], services: [], actions: [] };
       delete def.bridgeConfig;
       delete def.userContext;
       const inv = await api.runDdsDiscover(def);
@@ -347,6 +351,40 @@ export class DdsMapper {
 
   // ------------------------------------------------------------------ the mapping screen
 
+  // the domain, the transport and the interfaces - DDS discovery's reach, written into the bridge configuration
+  reachRow() {
+    const box = el('div', 'dm-reach');
+    const row = el('div', 'dm-row');
+    const lab = (text, ctl) => { const l = el('label', 'dm-plabel'); l.append(el('span', '', text), ctl); return l; };
+
+    const dom = input(String(this.domain), '0', 'DDS domain', (v) => { this.domain = parseInt(v, 10) || 0; });
+    dom.inputMode = 'numeric';
+    dom.classList.add('dm-domain');
+    dom.title = 'the DDS domain - ROS 2: ROS_DOMAIN_ID';
+
+    const tr = el('select', 'cp-input dm-transport');
+    tr.setAttribute('aria-label', 'Transport');
+    for (const [v, t] of [['', 'shared memory and UDP'], ['udp', 'UDP only'], ['shm', 'shared memory only']]) {
+      const o = el('option', '', t);
+      o.value = v;
+      o.selected = (this.transport === v);
+      tr.append(o);
+    }
+
+    const ifs = input(this.interfaces, 'all of this host\'s', 'Interfaces - IPv4 addresses', (v) => { this.interfaces = v; });
+    ifs.classList.add('dm-ifs');
+    ifs.title = 'the addresses of this host\'s interfaces UDP uses, comma-separated - empty: all';
+    ifs.disabled = (this.transport === 'shm');
+    tr.addEventListener('change', () => { this.transport = tr.value; ifs.disabled = (tr.value === 'shm'); });
+
+    row.append(el('span', 'dm-reachtitle', 'How c³ reaches your DDS system'), lab('domain', dom), lab('transport', tr), lab('interfaces', ifs));
+    box.append(row, el('p', 'cp-note', 'DDS discovery reaches this host and its network segment - not across a router, a VPN or a NAT. '
+      + 'Shared memory reaches this host alone, and a container only sharing its /dev/shm. Interfaces: the addresses UDP is kept to, '
+      + 'where this host has several networks. Where c³ cannot reach the system, import an inventory.json written where it runs. '
+      + 'The broker Done starts reaches it the same way.'));
+    return box;
+  }
+
   mapScreen() {
     const out = [];
 
@@ -356,10 +394,9 @@ export class DdsMapper {
     head.append(top, el('p', 'cp-note', 'Each topic, service or action mapped is one attribute of an entity: its name, the entity\'s id, and the '
       + 'entity\'s type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.'));
 
+    head.append(this.reachRow());
+
     const row = el('div', 'dm-row');
-    const dom = input(String(this.domain), 'domain (0)', 'DDS domain', (v) => { this.domain = parseInt(v, 10) || 0; });
-    dom.inputMode = 'numeric';
-    dom.classList.add('dm-domain');
     const voc = input(this.vocab, 'vocabulary - the terms\' namespace (https://example.org/robots/); empty: the default context\'s', 'Vocabulary',
       (v) => { this.vocab = v; });
     voc.classList.add('dm-vocab');
@@ -375,7 +412,7 @@ export class DdsMapper {
     file.hidden = true;
     file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; this.importFile(f); });
     const imp = button('Import inventory.json', '', () => file.click());
-    row.append(dom, voc, ptl, disc, imp, file);
+    row.append(voc, ptl, disc, imp, file);
     const st = el('div', 'dm-row');
     const house = el('label', 'rn-check');
     const hc = el('input');
@@ -384,7 +421,7 @@ export class DdsMapper {
     hc.addEventListener('change', () => { this.house = hc.checked; this.render(); });
     house.title = 'ROS 2 discovery and log topics, every node\'s parameter services';
     house.append(hc, document.createTextNode(' show ROS 2 housekeeping'));
-    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : 'Discover asks the domain what it announces (a ROS 2 node, or anything speaking DDS, running on it) - or import an inventory.json')), house);
+    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : 'Discover asks your DDS system what it announces - or import an inventory.json written where it runs')), house);
     head.append(row, st);
     out.push(head);
 
@@ -540,11 +577,20 @@ export class DdsMapper {
     }, 250);
   }
 
+  // how c³'s discovery broker, and the broker the files start, reach the DDS system: the bridge's ddsmodule.dds
+  reach() {
+    const r = { domain: this.domain };
+    const ifs = this.interfaces.split(/[\s,]+/).filter(Boolean);
+    if (this.transport) r.transport = this.transport;
+    if (ifs.length) r.interfaces = ifs;
+    return r;
+  }
+
   // ------------------------------------------------------------------ Done: the files
 
   body() {
     const types = this.entityTypes();
-    const b = { domain: this.domain, vocabulary: this.vocab, topics: [], services: [], actions: [] };
+    const b = { ...this.reach(), vocabulary: this.vocab, topics: [], services: [], actions: [] };
     for (const r of this.rows.values()) {
       if (!this.mapped(r)) continue;
       const o = { [r.kind]: r.name, entityId: r.entityId, entityType: r.entityType || types.get(r.entityId), attribute: r.attribute };
@@ -581,7 +627,9 @@ export class DdsMapper {
     const top = el('div', 'dm-top');
     top.append(el('h2', 'section', 'The DDS configuration is written'), ...this.closeButtons());
     head.append(top, el('p', 'cp-note', count(n('topics'), 'topic', 'topics') + ', ' + count(n('services'), 'service', 'services') + ' and '
-      + count(n('actions'), 'action', 'actions') + ', as attributes of ' + count(ents.size, 'entity', 'entities') + ' - domain ' + (m.domain || 0) + '. Two files, in ' + f.directory + ':'));
+      + count(n('actions'), 'action', 'actions') + ', as attributes of ' + count(ents.size, 'entity', 'entities') + ' - domain ' + (m.domain || 0)
+      + (m.transport ? ', ' + (m.transport === 'udp' ? 'UDP only' : 'shared memory only') : '') + ([].concat(m.interfaces || []).length ? ', on ' + [].concat(m.interfaces).join(', ') : '')
+      + '. Two files, in ' + f.directory + ':'));
 
     const fileCard = (title, path, what, flag) => {
       const c = el('div', 'dm-file');
@@ -596,7 +644,7 @@ export class DdsMapper {
       return c;
     };
     head.append(
-      fileCard('The bridge configuration', f.bridgeConfig, 'the dds bridge\'s domain and the mapping the broker reads', '--bridgeConfig'),
+      fileCard('The bridge configuration', f.bridgeConfig, 'how the dds bridge reaches the DDS system, and the mapping the broker reads', '--bridgeConfig'),
       fileCard('The @context', f.userContext, 'each entity type and attribute a term of ' + (m.vocabulary || 'the default context\'s namespace')
         + ', so clients use the short names', '--defaultUserContext'));
     out.push(head);

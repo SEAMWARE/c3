@@ -197,11 +197,20 @@ brokers keep running, and the next c³ attaches to them (by pid and the process'
 attribute of an entity. Mapping once is the usual case: what was written is read back when c³ opens, and the mapper
 opens on it.</p>
 <ul>
-  <li><b>The domain and a vocabulary</b> - the vocabulary is the namespace of the terms (each entity type and attribute
+  <li><b>How c³ reaches your DDS system</b> - <b>domain</b> (ROS 2: <code>ROS_DOMAIN_ID</code>), <b>transport</b>
+  (shared memory and UDP - DDS's default; UDP only; shared memory only) and <b>interfaces</b> - the IPv4 addresses of
+  this host's interfaces UDP is kept to, comma-separated; empty: all of them; none with shared memory only. Written into
+  the bridge configuration as <code>dds.ddsmodule.dds</code> <code>domain</code>, <code>transport</code> and
+  <code>whitelist-interfaces</code>; Discover's broker and the broker Done starts use them alike. DDS discovery reaches
+  this host and its network segment, not across a router, a VPN or a NAT; shared memory reaches this host alone, and a
+  container only when it shares the host's <code>/dev/shm</code>. A ROS 2 Discovery Server, unicast peers and Fast DDS
+  XML profiles cannot be given: the DDS Enabler's participant reads none of them. Where c³ does not reach the system,
+  <b>Import inventory.json</b>.</li>
+  <li><b>A vocabulary</b> - the namespace of the terms (each entity type and attribute
   <code>&lt;vocabulary&gt;&lt;term&gt;</code>); empty: the default context's. <b>proposals' type</b> - the entity type
   the proposals give (Robot).</li>
   <li><b>Discover</b> asks the DDS system what it announces: c³ joins its domain from the machine it runs on, so it
-  must reach it - DDS discovery is multicast, on that host or its network. It starts a broker of c³'s own on the domain (the form's: the installed one, a build or the image,
+  must reach it - DDS discovery is multicast, on that host or its network. It starts a broker of c³'s own on the domain, transport and interfaces (the form's: the installed one, a build or the image,
   the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery has been quiet
   for 3 s, at most 10 s - and stops it: a few seconds. <b>Import inventory.json</b> reads the list a DDS discovery tool
   wrote. <b>show ROS 2 housekeeping</b> - its discovery and log topics, every node's parameter services - hidden
