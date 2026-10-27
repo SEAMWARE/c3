@@ -125,8 +125,10 @@ Link: &lt;http://localhost:1099/ngsi-ld/v1/jsonldContexts/urn:ngsi-ld:Context:vb
 <p>The NGSI-LD core context v1.9 (<code>https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld</code>)
 is compiled into the broker and never downloaded. A request that names it, or an older core context
 (<code>ngsi-ld-core-context.jsonld</code>, <code>-v1.N.jsonld</code>), downloads nothing: the broker's own core is
-used. <code>GET /jsonldContexts</code> lists it as kind <code>ImplicitlyCreated</code>, and
-<code>GET</code> on its id answers its body (9764 bytes).</p>
+used. <code>GET /jsonldContexts</code> lists it as kind <code>Cached</code> - a local copy of the @context at
+its URL, compiled in instead of downloaded - so, as for every <code>Cached</code> one, its metadata is served
+(<code>?details=true</code>) and its body is not (422 <code>OperationNotSupported</code>). It cannot be deleted
+(400).</p>
 <p><b>The core wins.</b> A core term keeps its meaning whatever a user context says about that name:
 <code>type</code>, <code>value</code>, <code>observedAt</code>, <code>location</code>, <code>status</code>,
 <code>name</code> and the rest. This user context maps <code>status</code> to an IRI of its own:</p>
@@ -217,8 +219,10 @@ the URL itself:</p>
 Location: /ngsi-ld/v1/jsonldContexts/http://127.0.0.1:8799/parking.jsonld</span></pre>
 <p>The hosted contexts, the ones added by URL, and the ones a subscription creates are also written to the
 database, when its plugin stores contexts. A <code>GET</code> by id that misses the cache, after a restart for
-example, reads them there. A <code>Link</code> that names one of the broker's own
-<code>/jsonldContexts/{id}</code> URLs is read from its cache or its database too, with no HTTP request to
+example, reads them there. A <code>Link</code> (or an <code>@context</code> URL in a body) that names one of
+the broker's own <code>/jsonldContexts/{id}</code> URLs - the advertised endpoint (<code>--httpEndpoint</code>,
+else the detected LAN address) + the path, as the listing and the <code>Link</code> headers give it - is that
+context, from the cache or the database: not a download, and no second, <code>Cached</code> entry. It makes no HTTP request to
 itself.</p>
 
 <h2 id="stored"><span class="g-n">8</span>What the database keeps</h2>
