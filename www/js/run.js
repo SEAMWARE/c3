@@ -11,6 +11,7 @@
 //
 import * as api from './api.js';
 import { Metrics } from './metrics.js';
+import { DdsMapper } from './ddsmap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -137,6 +138,8 @@ export class Run {
     $('rn-dds-discover').addEventListener('click', () => this.ddsDiscover());
     $('rn-dds-import').addEventListener('click', () => $('rn-dds-file').click());
     $('rn-dds-file').addEventListener('change', () => this.ddsImport());
+    this.ddsMap = new DdsMapper(this);
+    $('rn-dds-map').addEventListener('click', () => this.ddsMap.open());
   }
 
   //
@@ -312,6 +315,7 @@ export class Run {
       $('rn-dds-why').textContent = e.message;
     }
     btn.disabled = false;
+    this.ddsMap.refresh();
   }
 
   //
@@ -327,6 +331,7 @@ export class Run {
       this.ddsInventorySet(inv, file.name + (inv.discoveredAt ? ', discovered ' + inv.discoveredAt : ''));
     } catch (e) {
       $('rn-dds-why').textContent = file.name + ': ' + e.message;
+      this.ddsMap.refresh();
     }
   }
 
@@ -338,6 +343,7 @@ export class Run {
     $('rn-dds-inv').hidden = false;
     this.renderDdsInventory();
     this.renderDdsRows();
+    this.ddsMap.refresh();
   }
 
   //
@@ -456,7 +462,7 @@ export class Run {
     const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
     set('rn-dds-domain', String(this.f.dds.domain || 0));
     set('rn-dds-vocab', this.f.dds.vocabulary);
-    for (const id of ['rn-dds-domain', 'rn-dds-vocab', 'rn-dds-discover', 'rn-dds-import']) $(id).disabled = own;
+    for (const id of ['rn-dds-domain', 'rn-dds-vocab', 'rn-dds-discover', 'rn-dds-import', 'rn-dds-map']) $(id).disabled = own;
     this.renderDdsRows();
     this.renderDdsSum();
   }

@@ -171,3 +171,4 @@
 .mx-line.s5, .mx-dot.s5 { stroke: var(--bad); background: var(--bad); }
 .mx-ops { max-width: 420px; }
 .mx-ops td.v { font-family: var(--mono); text-align: right; }
+.rn-ddsmapbtn { align-self: flex-start; margin-top: 6px; }
