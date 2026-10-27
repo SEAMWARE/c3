@@ -91,3 +91,15 @@
 /* Compile's way in: under its Bridges group */
 .cp-ddsmap { width: 100%; min-height: 44px; margin-top: 10px; font-size: 15px; }
 .cp-ddsmap:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* the proposals */
+.dm-plabel { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dm-ptype { width: 120px; }
+.dm-all { margin-left: 8px; }
+.dm-chip.prop { color: var(--dim); font-style: italic; }
+.dm-ok {
+  align-self: center; min-width: 30px; min-height: 26px; padding: 0 8px; border-radius: 6px;
+  border: 1px solid var(--ok); background: none; color: var(--ok); font-size: 15px; font-weight: 700; line-height: 1;
+}
+.dm-ok:hover { background: var(--ok); color: var(--bg); }
+.dm-all { color: var(--ok); border-color: var(--ok); }

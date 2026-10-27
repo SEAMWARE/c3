@@ -90,6 +90,11 @@ function typeOf(kind, e) {
   return (((e.goal || {}).request || {}).type || '').replace(/_SendGoal_Request_$/, '');
 }
 
+// segments - an endpoint's name in segments, rt/ dropped (rt/turtle1/cmd_vel: turtle1, cmd_vel)
+function segments(name) {
+  return name.replace(/^rt\//, '').split('/').filter(Boolean);
+}
+
 // suggested - an attribute name from an endpoint's name: its last segment, camelCased (rt/turtle1/cmd_vel: cmdVel)
 function suggested(name) {
   const segs = name.replace(/^rt\//, '').split('/').filter(Boolean);
@@ -110,6 +115,7 @@ export class DdsMapper {
     this.open_   = { topic: false, service: false, action: false };
     this.openEp  = new Set();     // the endpoints open (kind + '\n' + name)
     this.house   = false;         // ROS 2 housekeeping shown
+    this.propType = 'Robot';      // the entity type of the proposals
     this.status  = '';
     this.screen  = 'map';         // 'map' | 'files'
     this.from    = '';            // 'compile' when opened from Compile: a way back to it
@@ -281,6 +287,29 @@ export class DdsMapper {
 
   mapped(r) { return !!(r && (r.attribute || r.entityId || r.entityType)); }
 
+  //
+  // proposal - an endpoint's attribute, entity id and type as proposed: the name's last segment camelCased, the
+  // segments before it the entity (rt/turtle1/pose: pose of urn:ngsi-ld:Robot:turtle1; none: robot1), the type
+  // the proposals' - none when the entity has one already
+  //
+  proposal(kind, e) {
+    const t    = this.propType || 'Robot';
+    const segs = segments(e.name).slice(0, -1).map((s) => s.replace(/[^A-Za-z0-9._~-]/g, '-'));
+    const id   = 'urn:ngsi-ld:' + t + ':' + (segs.length ? segs.join(':') : t.toLowerCase() + '1');
+    const r    = this.rows.get(this.key(kind, e.name));
+    const has  = this.entityTypes().get((r && r.entityId) || id);
+    return { attribute: suggested(e.name), entityId: id, entityType: has ? '' : t };
+  }
+
+  // accept - the proposal into an endpoint's empty fields
+  accept(kind, e) {
+    const p = this.proposal(kind, e);
+    const r = this.row(kind, e);
+    if (!r.attribute) r.attribute = p.attribute;
+    if (!r.entityId)  r.entityId  = p.entityId;
+    if (!r.entityType && !this.entityTypes().has(r.entityId)) r.entityType = p.entityType || this.propType || 'Robot';
+  }
+
   // entityTypes - each entity id's type: the first given on one of its endpoints
   entityTypes() {
     const t = new Map();
@@ -334,6 +363,11 @@ export class DdsMapper {
     const voc = input(this.vocab, 'vocabulary - the terms\' namespace (https://example.org/robots/); empty: the default context\'s', 'Vocabulary',
       (v) => { this.vocab = v; });
     voc.classList.add('dm-vocab');
+    const pt = input(this.propType, 'Robot', 'Entity type of the proposals', (v) => { this.propType = v; this.refresh(); });
+    pt.classList.add('dm-ptype');
+    pt.title = 'the entity type the proposals give - urn:ngsi-ld:<type>:<the name\'s segments>';
+    const ptl = el('label', 'dm-plabel');
+    ptl.append(el('span', '', 'proposals\' type'), pt);
     const disc = button('Discover', 'primary', () => this.discover(disc));
     const file = el('input');
     file.type = 'file';
@@ -341,7 +375,7 @@ export class DdsMapper {
     file.hidden = true;
     file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; this.importFile(f); });
     const imp = button('Import inventory.json', '', () => file.click());
-    row.append(dom, voc, disc, imp, file);
+    row.append(dom, voc, ptl, disc, imp, file);
     const st = el('div', 'dm-row');
     const house = el('label', 'rn-check');
     const hc = el('input');
@@ -394,6 +428,15 @@ export class DdsMapper {
     const title = el('span', 'dm-gtitle', list.length + ' DDS ' + label);
     title.addEventListener('click', () => tog.click());
     head.append(tog, title, el('span', 'dm-gcount', nMapped ? nMapped + ' mapped' : ''));
+    const unmapped = list.filter(({ e }) => !this.mapped(this.rows.get(this.key(kind, e.name))));
+    if (open && unmapped.length) {
+      const all = button('✓ all (' + unmapped.length + ')', 'small dm-all', () => {
+        for (const { e } of unmapped) this.accept(kind, e);
+        this.render();
+      });
+      all.title = 'accept the proposals of every ' + kind + ' shown and not mapped - each name stays editable';
+      head.append(all);
+    }
     g.append(head);
     if (!open) return g;
     if (!list.length) g.append(el('div', 'dm-empty', this.inv ? 'none announced' + (this.house ? '' : ' but ROS 2 housekeeping') : 'nothing discovered yet'));
@@ -412,14 +455,27 @@ export class DdsMapper {
     name.addEventListener('click', () => tog.click());
     head.append(tog, name, el('span', 'dm-type', seen ? rosType(typeOf(kind, e)) : 'not in the last discovery'));
     const chip = el('span', 'dm-chip');
+    const complete = r && r.attribute && r.entityId && (r.entityType || this.entityTypes().has(r.entityId));
     if (this.mapped(r)) chip.textContent = (r.attribute || '?') + ' of ' + (r.entityId || '?');
     head.append(chip);
+    if (!complete) {
+      // the proposal, greyed, and its tick: the empty fields as proposed
+      const p = this.proposal(kind, e);
+      if (!this.mapped(r)) {
+        chip.textContent = p.attribute + ' of ' + p.entityId;
+        chip.classList.add('prop');
+      }
+      const ok = button('✓', 'dm-ok', () => { this.accept(kind, e); this.render(); });
+      ok.title = 'accept the proposal' + (this.mapped(r) ? ' for the empty fields' : ': ' + p.attribute + ' of ' + p.entityId);
+      ok.setAttribute('aria-label', 'accept the proposal for ' + e.name);
+      head.append(ok);
+    }
     node.append(head);
     if (!open) return node;
 
     const fields = el('div', 'dm-fields');
     const types = this.entityTypes();
-    const sugg = suggested(e.name);
+    const prop = this.proposal(kind, e);
     const f = (label, key, ph, list, hint) => {
       const l = el('label', 'dm-field');
       const i = input(r ? r[key] : '', ph, label + ' of ' + e.name, (v) => {
@@ -434,9 +490,9 @@ export class DdsMapper {
     };
     const inherited = r && r.entityId && !r.entityType && types.get(r.entityId);
     fields.append(
-      f('Attribute name', 'attribute', sugg || 'value', null),
-      f('Entity ID', 'entityId', 'urn:ngsi-ld:Robot:1', 'dm-ids'),
-      f('Entity type', 'entityType', inherited || 'Robot', 'dm-types', inherited ? 'optional - ' + r.entityId + ' is a ' + inherited : 'optional, if another endpoint of the entity gives it'));
+      f('Attribute name', 'attribute', prop.attribute || 'value', null),
+      f('Entity ID', 'entityId', (r && r.entityId) ? '' : prop.entityId, 'dm-ids'),
+      f('Entity type', 'entityType', inherited || prop.entityType || this.propType, 'dm-types', inherited ? 'optional - ' + r.entityId + ' is a ' + inherited : 'optional, if another endpoint of the entity gives it'));
     node.append(fields);
 
     const tools = el('div', 'dm-eptools');
@@ -444,7 +500,9 @@ export class DdsMapper {
     if (sample) {
       const pre = el('pre', 'dm-sample', sample);
       pre.hidden = true;
-      const b = button('its fields', 'small', () => { pre.hidden = !pre.hidden; });
+      const b = button(kind === 'topic' ? 'the topic\'s payload' : kind === 'service' ? 'the request and reply' : 'the goal, feedback and result',
+        'small', () => { pre.hidden = !pre.hidden; });
+      b.title = 'a sample of its DDS type - the value of the attribute it is mapped to';
       tools.append(b);
       node.append(tools, pre);
     }

@@ -41,7 +41,7 @@
 #include <string.h>                              // strcmp, strncmp, strstr, strrchr
 #include <sys/socket.h>                          // getpeername
 #include <sys/stat.h>                            // fstat
-#include <unistd.h>                              // read, close
+#include <unistd.h>                              // read, close, getpid
 
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
@@ -421,8 +421,8 @@ static void serveStatus(CorHttpConn* connP)
   int         size  = strlen(path) + ((errE != NULL) ? strlen(errE) : 0) + 256;
   char*       body  = corAlloc(&connP->alloc, size);
 
-  snprintf(body, size, "{\"c3\": \"%s\", \"port\": %d, \"config\": \"%s\", \"configError\": %s%s%s, \"brokers\": %d}",
-           C3_VERSION, c3Port, path,
+  snprintf(body, size, "{\"c3\": \"%s\", \"pid\": %d, \"port\": %d, \"config\": \"%s\", \"configError\": %s%s%s, \"brokers\": %d}",
+           C3_VERSION, (int) getpid(), c3Port, path,
            (errE != NULL) ? "\"" : "", (errE != NULL) ? errE : "null", (errE != NULL) ? "\"" : "",
            configBrokers());
 

@@ -76,6 +76,12 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 `make run ARGS="--port 7901 --no-browser"` builds and runs from the checkout; `make install`
 (`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3` and `share/c3/www`; `make clean`.
 
+A c³ started while one runs on its port opens that one in the browser and ends. When the running one is
+an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
+(`/proc/<pid>/exe` reads `<path> (deleted)`; `GET /api/status` says its `pid`) - the new one stops it
+(SIGTERM, the port free within 10 s) and starts in its place, as a stop by hand would: the brokers and
+services it started keep running and the new one attaches to them, a build that runs is cancelled.
+
 ## The `c3` command
 
 ```
@@ -812,7 +818,9 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
 
 - **The domain and a vocabulary** - the namespace of the terms, each entity type and attribute
   `<vocabulary><term>`; empty: the default context's (`https://uri.etsi.org/ngsi-ld/default-context/`).
-- **Discover** - c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
+  **proposals' type** - the entity type the proposals give (Robot).
+- **Discover** - asks the DDS system what it announces: c³ joins its domain from the machine it runs
+  on, so it must reach it - DDS discovery is multicast, on that host or its network. c³ starts a broker of its own for it (`POST /api/run/dds/discover`): the form's source
   (the installed broker, a build, or the image: the container `c3-broker-<name>.discover`, `--rm`, its
   entry point under `timeout 120` - it ends by itself if c³ does not stop it) and the domain, the dds bridge
   alone, corDB in memory, no history, the admin API, a free port from 39026, its directory
@@ -825,10 +833,17 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
 - **Three lines** - *N DDS Topics*, *N DDS Services*, *N DDS Actions*, each opened with ▸, with the number
   mapped. Open, an endpoint a line: its name, its type, and, mapped, its attribute and entity; one mapped
   and not in the last discovery is listed too.
+- **The proposals** - an endpoint not mapped shows, greyed, its proposal: the name's last segment
+  camelCased the attribute, the segments before it (`rt/` dropped) the entity - `rt/turtle1/pose`: `pose`
+  of `urn:ngsi-ld:Robot:turtle1`; no segment: `urn:ngsi-ld:Robot:robot1` - and the proposals' type the
+  entity's, once (an entity with a type keeps it). The green **✓** accepts it into the fields still
+  empty; **✓ all (N)** on a group accepts those of every endpoint shown and not mapped. Each name stays
+  editable.
 - **An endpoint opened** - Attribute name, Entity ID, Entity type (optional), the ids and types in use
   offered as you type. The first field typed in names the attribute from the endpoint: its last segment
-  (`rt/` dropped) camelCased - `rt/turtle1/cmd_vel`, `cmdVel`. **its fields** shows the type's sample;
-  **not mapped** takes the endpoint out. A service keeps its request and reply types, an action its type,
+  (`rt/` dropped) camelCased - `rt/turtle1/cmd_vel`, `cmdVel`. **the topic's payload** (a service's
+  **request and reply**, an action's **goal, feedback and result**) shows a sample of its DDS type - the
+  value of the attribute it is mapped to; **not mapped** takes the endpoint out. A service keeps its request and reply types, an action its type,
   as discovered.
 - **An entity's type, once** - an entity is created with its type: every entity id needs one on at least
   one of its endpoints, the others take it. Done is refused, and the endpoint says why, for: no attribute or
