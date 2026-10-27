@@ -1228,7 +1228,7 @@
             {
               "repo": "corBase",
               "path": "*.h",
-              "at": "7bd25c74"
+              "at": "3d9fcc01"
             }
           ]
         },
@@ -1242,7 +1242,7 @@
             {
               "repo": "corLog",
               "path": "*.h",
-              "at": "48290cf4"
+              "at": "dc194af4"
             }
           ]
         },
@@ -1256,7 +1256,7 @@
             {
               "repo": "corAlloc",
               "path": "*.h",
-              "at": "c3282375"
+              "at": "71fb4de8"
             }
           ]
         },
@@ -1270,7 +1270,7 @@
             {
               "repo": "corArgs",
               "path": "*.h",
-              "at": "143cfb50"
+              "at": "44bbe9f6"
             }
           ]
         },
@@ -1284,7 +1284,7 @@
             {
               "repo": "corHash",
               "path": "*.h",
-              "at": "d25d65b0"
+              "at": "c54a223e"
             }
           ]
         },
@@ -1298,7 +1298,7 @@
             {
               "repo": "corTree",
               "path": "*.h",
-              "at": "1a67f867"
+              "at": "9a457f93"
             }
           ]
         },
@@ -1312,7 +1312,7 @@
             {
               "repo": "corJson",
               "path": "*.h",
-              "at": "aaea0f05"
+              "at": "09e89c30"
             }
           ]
         },
@@ -1326,7 +1326,7 @@
             {
               "repo": "corJsonld",
               "path": "*.h",
-              "at": "c7bfcded"
+              "at": "42a97ace"
             }
           ]
         },
@@ -1340,7 +1340,7 @@
             {
               "repo": "corNgsild",
               "path": "*.h",
-              "at": "8c311780"
+              "at": "5ec2d28c"
             }
           ]
         },
@@ -1354,7 +1354,7 @@
             {
               "repo": "corDB",
               "path": "*.h",
-              "at": "173c7c79"
+              "at": "fecb8aff"
             }
           ]
         },
@@ -1368,7 +1368,7 @@
             {
               "repo": "corProm",
               "path": "*.h",
-              "at": "57836cbf"
+              "at": "9430e2f1"
             }
           ]
         },
@@ -1382,7 +1382,7 @@
             {
               "repo": "corPlugin",
               "path": "*.h",
-              "at": "a73241dd"
+              "at": "94b7df5d"
             }
           ]
         },
@@ -1396,7 +1396,7 @@
             {
               "repo": "corHttp",
               "path": "*.h",
-              "at": "8a36fc6b"
+              "at": "8c3dbe15"
             }
           ]
         },
@@ -1410,7 +1410,7 @@
             {
               "repo": "corRest",
               "path": "*.h",
-              "at": "78e26efe"
+              "at": "1ca90e49"
             }
           ]
         },
@@ -1424,7 +1424,7 @@
             {
               "repo": "corBridge",
               "path": "*.h",
-              "at": "103ed182"
+              "at": "5a128ef2"
             }
           ]
         }
