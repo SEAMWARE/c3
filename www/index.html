@@ -337,6 +337,32 @@
             <span class="cp-note">the opcua bridge (native brokers): a Variable a value (a Channel), an Object a model of entities (a model root). Browse a running broker's server to pick them. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
           </div>
 
+          <div class="cp-field" id="rn-dds-field" hidden>
+            <span class="cp-label">DDS</span>
+            <details class="rn-drop" id="rn-dds-drop">
+              <summary id="rn-dds-sum">domain 0 - nothing mapped</summary>
+              <div class="rn-stack">
+                <div class="rn-row">
+                  <input class="cp-input" id="rn-dds-domain" inputmode="numeric" maxlength="3" placeholder="domain (0)" aria-label="DDS domain">
+                  <input class="cp-input" id="rn-dds-vocab" placeholder="vocabulary - the terms' namespace (https://example.org/robots/); empty: no @context" spellcheck="false" autocomplete="off" aria-label="Vocabulary">
+                </div>
+                <div class="rn-ouchans" id="rn-dds-rows" aria-label="The DDS mapping"></div>
+                <div class="rn-row rn-oubtns">
+                  <button type="button" class="btn" id="rn-dds-discover">Discover</button>
+                  <button type="button" class="btn" id="rn-dds-import">Import inventory.json</button>
+                  <input class="cp-input" id="rn-dds-type" placeholder="entity type of new rows (Robot)" spellcheck="false" autocomplete="off" aria-label="Entity type of new rows">
+                </div>
+                <input type="file" id="rn-dds-file" accept=".json,application/json" hidden>
+                <span class="cp-note" id="rn-dds-why"></span>
+                <div class="rn-outree" id="rn-dds-inv" hidden aria-label="What the DDS domain announced">
+                  <label class="rn-check" title="ROS 2 discovery and log topics, every node's parameter services"><input type="checkbox" id="rn-dds-house"> show ROS 2 housekeeping</label>
+                  <div id="rn-dds-list"></div>
+                </div>
+              </div>
+            </details>
+            <span class="cp-note">the dds bridge: a topic, a service or an action becomes one attribute of an entity, its whole sample the value. Discover starts a broker of its own on the domain for a few seconds and asks it what was announced. With a vocabulary c3 writes dds-context.jsonld - each entity type and attribute a term in it - and starts the broker with --defaultUserContext</span>
+          </div>
+
           <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
 
           <div class="rn-svcneed" id="rn-need"></div>

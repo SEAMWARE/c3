@@ -6,7 +6,7 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | Part | What it does |
 |---|---|
 | **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
-| **Configure** *(planned)* | The mapping tools: DDS topics, services and actions to NGSI-LD entities and attributes (the file the DDS bridge reads), the same for OPC UA, and the column mapping for the CKAN and CSV bridges. |
+| **Configure** *(planned)* | The column mapping for the CKAN and CSV bridges. The DDS and OPC UA mappings are in Operate's broker form. |
 | **Run** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto. |
 | **Operate** | The brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
 | **Docs** | All of coraine's documentation in one place, written to be read: 25 guides - installation, administration, the API, building, deploying, performance, the transports, the bridges, authorization, the internals - with search, a guide's sections and the next one, offline; every component's repository. The same pages are the website [seamware.github.io/docs](https://seamware.github.io/docs/) (`make site`). Planned: a guide per cor-lib with an API reference from its headers, and a skeleton repository for each kind of plugin. |
@@ -699,7 +699,27 @@ pulled at the start, its progress in the broker's log. Images are named by their
   on by default; off and greyed for a broker built without REGISTRATIONS), `-v`.
 - **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
   configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
-  the DDS defaults for dds, the CKAN datasets ticked, the OPC UA server.
+  the DDS domain and mapping for dds, the CKAN datasets ticked, the OPC UA server.
+- **DDS** (with the dds bridge ticked, no bridge configuration file of one's own) - the DDS domain, a
+  vocabulary, and the mapping: a topic, a service or an action a row, one attribute of an entity, its whole
+  sample the value - the endpoint's name, the entity's id and type, the attribute; a service's request and
+  reply types, an action's type, as discovered (the bridge's `topics`, `services` and `actions` in
+  `bridges.json`). With a vocabulary, c³ writes `<run>/<name>/dds-context.jsonld` - each entity type and
+  attribute of the mapping a term, `<vocabulary><term>` - and starts the broker with
+  `--defaultUserContext` (a container: mounted at `/etc/c3/dds-context.jsonld`).
+  **Discover** (the installed broker or a build - natively) - c³ starts a broker of its own for it
+  (`POST /api/run/dds/discover`): the form's source and domain, the dds bridge alone, corDB in memory, no
+  history, the admin API, a free port from 39026, its directory `<run>/<name>.discover/`. One
+  `GET /admin/bridges/dds/inventory` (coraine with bridge ABI 14), which the bridge answers once discovery
+  has been quiet for 3 s (at most 10 s - "still announcing" when it ran out), and the broker is stopped
+  again; a few seconds in all, one discovery at a time. What was announced is listed - ROS 2's housekeeping
+  (its discovery and log topics, every node's parameter services) hidden unless asked for - each with its
+  type and, a click away, its fields (the type's sample). **+ map** adds a row named from the endpoint: the
+  name's segments but the last (`rt/` dropped) the entity, `urn:ngsi-ld:<type>:<segments>`
+  (`urn:ngsi-ld:<type>:robot1` without any), the last one camelCased the attribute, the type the form's
+  (Robot); every name stays editable. Discovering again keeps the rows and marks a row whose endpoint the
+  last discovery did not see. **Import inventory.json** reads the same list from a file a DDS discovery
+  tool wrote (`dds-discovery -o inventory.json`), without the fields.
 - **OPC UA** (native brokers - the image has no opcua bridge) - the server's URL, the model roots (an
   Object's NodeId a line: each one an AssetChannel, its model a graph of entities), the security mode and
   policy, the client's certificate, key and application URI, the server certificates to trust (or "trust
@@ -805,6 +825,8 @@ touches nothing else.
 <name>/state.json     a native broker that runs: {pid, procStart, started} - and broker.pid, the pid alone
 <name>/data/          --dbDir of a native corDB
 <name>/bridges.json   the bridge configuration c3 writes (mqtt, dds, ckan, opcua)
+<name>/dds-context.jsonld  the DDS mapping's terms, the broker's --defaultUserContext (a DDS vocabulary given)
+<name>.discover/      the broker DDS discovery runs: its bridges.json and broker.log
 <name>/opcua.password the OPC UA user's password, mode 600 - never in c3.json
 services/<container>.log
 ```
@@ -865,6 +887,7 @@ The backend's API, used by the pages:
 | `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
+| `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
 | `POST /api/maps/estimate` `{"bbox", "maxzoom"}` | tiles and bytes of an area, from the planet's directories (`422` past 1 000 000 tiles) |
 | `POST /api/maps/download` `{"name", "bbox", "maxzoom"}` | start the download (`202`; `409` while one runs); `GET` its progress, `DELETE` cancels it |

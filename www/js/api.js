@@ -150,6 +150,7 @@ export const runStop          = (name) => call('POST', '/api/run/brokers/' + run
 export const runForget        = (name, data) => call('DELETE', '/api/run/brokers/' + runName(name) + (data ? '?data=true' : ''));
 export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
 export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' + runName(volume));
+export const runDdsDiscover   = (def) => call('POST', '/api/run/dds/discover', def);     // what its DDS domain announces (a few seconds)
 
 //
 // brokerWrite - a POST, PATCH, PUT or DELETE to the broker's entities, through the backend's proxy

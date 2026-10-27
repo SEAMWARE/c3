@@ -19,6 +19,8 @@
 //   GET    /api/run/services/<container>/log    the same for a service
 //   POST   /api/run/services/<container>/stop   a service nothing uses
 //   DELETE /api/run/volumes/<volume>            a service's or a container broker's data, deleted
+//   POST   /api/run/dds/discover                {broker}: what its DDS domain announces - a broker of its own
+//                                               for it, started and stopped again (ddsDiscoverThread)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
 //
@@ -202,6 +204,14 @@ typedef struct Def
     char  username[128];                         // "": anonymous
     char  password[256];                         // WRITE-ONLY: as a request gave it, kept in <broker dir>/opcua.password (0600) and wiped
   } opcua;
+  struct                                         // the dds bridge's mapping - the bridge configuration c3 writes
+  {
+    int   domain;                                // the DDS domain
+    char  vocabulary[512];                       // the namespace of the terms mapped: dds-context.jsonld, --defaultUserContext; "": none
+    char  topics[16384];                         // a line each: topic, entityId, entityType, attribute - tab-separated
+    char  services[8192];                        // a line each: service, entityId, entityType, attribute, requestType, replyType
+    char  actions[8192];                         // a line each: action, entityId, entityType, attribute, type (the ROS 2 action type)
+  } dds;
   bool  verbose;                                 // -v
   char  args[2048];                              // more options, as typed
   int   grace;
@@ -925,93 +935,104 @@ static bool memberLines(CorNode* oP, const char* name, char* out, int outLen, ch
 
 // -----------------------------------------------------------------------------
 //
-// channelsJson - the channels' lines as JSON: the Def's list of { node, entityId, entityType, attribute }, or
-// (topics true) the bridge configuration's "topics": { "<node>": { "entityId", "entityType", "attribute" } }
+// rowsJson - lines of tab-separated strings as JSON: a list of objects, a member per name - or (keyed true)
+// an object, the first string each one's name and the rest its members (a bridge configuration's "topics")
 //
-static void channelsJson(Str* sP, const char* channels, bool topics)
+static void rowsJson(Str* sP, const char* lines, const char** names, int n, bool keyed)
 {
   char  copy[16384];
   char* save  = NULL;
   bool  first = true;
 
-  snprintf(copy, sizeof(copy), "%s", channels);
-  strAdd(sP, topics ? "{" : "[");
+  snprintf(copy, sizeof(copy), "%s", lines);
+  strAdd(sP, keyed ? "{" : "[");
 
   for (char* line = strtok_r(copy, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
   {
-    char* f[4];
+    char* f[8];
     char* fsave = NULL;
-    int   n     = 0;
+    int   got   = 0;
 
-    for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (n < 4); t = strtok_r(NULL, "\t", &fsave))
-      f[n++] = t;
+    for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (got < n); t = strtok_r(NULL, "\t", &fsave))
+      f[got++] = t;
 
-    if (n != 4)
+    if (got != n)
       continue;
 
     strAdd(sP, first ? "" : ", ");
-    if (topics)
+    if (keyed)
     {
       strAddJson(sP, f[0]);
-      strAdd(sP, ": {\"entityId\": ");
+      strAdd(sP, ": {");
     }
     else
     {
-      strAdd(sP, "{\"node\": ");      strAddJson(sP, f[0]);
-      strAdd(sP, ", \"entityId\": ");
+      strAdd(sP, "{");
+      strAddJson(sP, names[0]);
+      strAdd(sP, ": ");
+      strAddJson(sP, f[0]);
     }
-    strAddJson(sP, f[1]);
-    strAdd(sP, ", \"entityType\": ");  strAddJson(sP, f[2]);
-    strAdd(sP, ", \"attribute\": ");   strAddJson(sP, f[3]);
+    for (int ix = 1; ix < n; ix++)
+    {
+      strAdd(sP, ((ix == 1) && keyed) ? "" : ", ");
+      strAddJson(sP, names[ix]);
+      strAdd(sP, ": ");
+      strAddJson(sP, f[ix]);
+    }
     strAdd(sP, "}");
     first = false;
   }
 
-  strAdd(sP, topics ? "}" : "]");
+  strAdd(sP, keyed ? "}" : "]");
 }
 
 
 
 // -----------------------------------------------------------------------------
 //
-// channelsParse - "channels": [ { "node", "entityId", "entityType", "attribute" } ] - a Variable each, its
-// value one attribute of an entity: into lines of the four, tab-separated
+// rowsParse - a list of objects, each with the string members 'names' (none empty, each one line), into lines
+// of them, tab-separated - a Channel each. 'what' names the list in what is answered; names[1] is the entity's
+// id, a URI, and names[2] its type
 //
-static bool channelsParse(CorNode* oP, char* out, int outLen, char* err, int errLen)
+static bool rowsParse(CorNode* nP, const char* what, const char** names, int n, char* out, int outLen, char* err, int errLen)
 {
-  CorNode* nP  = corTreeLookup(oP, "channels");
-  int      len = 0;
+  char shape[256];
+  int  len = 0;
 
   out[0] = 0;
 
   if ((nP == NULL) || (nP->type == CorNull))
     return true;
 
+  len = snprintf(shape, sizeof(shape), "{ ");
+  for (int ix = 0; ix < n; ix++)
+    len += snprintf(&shape[len], sizeof(shape) - len, "%s\"%s\"", (ix > 0) ? ", " : "", names[ix]);
+  snprintf(&shape[len], sizeof(shape) - len, " }");
+  len = 0;
+
   if (nP->type != CorArray)
   {
-    snprintf(err, errLen, "\"opcua.channels\" is a list of { \"node\", \"entityId\", \"entityType\", \"attribute\" }");
+    snprintf(err, errLen, "\"%s\" is a list of %s", what, shape);
     return false;
   }
 
-  static const char* names[] = { "node", "entityId", "entityType", "attribute" };
-
   for (CorNode* iP = nP->value.head; iP != NULL; iP = iP->next)
   {
-    const char* v[4];
+    const char* v[8];
 
     if (iP->type != CorObject)
     {
-      snprintf(err, errLen, "\"opcua.channels\" is a list of { \"node\", \"entityId\", \"entityType\", \"attribute\" }");
+      snprintf(err, errLen, "\"%s\" is a list of %s", what, shape);
       return false;
     }
 
-    for (int ix = 0; ix < 4; ix++)
+    for (int ix = 0; ix < n; ix++)
     {
       CorNode* mP = corTreeLookup(iP, names[ix]);
 
       if ((mP == NULL) || (mP->type != CorString) || (mP->value.s[0] == 0) || (strpbrk(mP->value.s, "\t\n") != NULL))
       {
-        snprintf(err, errLen, "each of \"opcua.channels\" has \"%s\": a string of one line, not empty", names[ix]);
+        snprintf(err, errLen, "each of \"%s\" has \"%s\": a string of one line, not empty", what, names[ix]);
         return false;
       }
 
@@ -1024,15 +1045,81 @@ static bool channelsParse(CorNode* oP, char* out, int outLen, char* err, int err
       return false;
     }
 
-    int n = snprintf(&out[len], outLen - len, "%s%s\t%s\t%s\t%s", (len > 0) ? "\n" : "", v[0], v[1], v[2], v[3]);
-
-    if (n >= outLen - len)
+    for (int ix = 0; ix < n; ix++)
     {
-      snprintf(err, errLen, "\"opcua.channels\" is longer than %d characters", outLen - 1);
-      return false;
-    }
+      int w = snprintf(&out[len], outLen - len, "%s%s", (ix > 0) ? "\t" : ((len > 0) ? "\n" : ""), v[ix]);
 
-    len += n;
+      if (w >= outLen - len)
+      {
+        snprintf(err, errLen, "\"%s\" is longer than %d characters", what, outLen - 1);
+        return false;
+      }
+
+      len += w;
+    }
+  }
+
+  return true;
+}
+
+
+
+//
+// The OPC UA Channels: a Variable each, its value one attribute of an entity (rowsJson keyed: the bridge
+// configuration's "topics")
+//
+static const char* opcuaChannelNames[] = { "node", "entityId", "entityType", "attribute" };
+
+static void channelsJson(Str* sP, const char* channels, bool topics)
+{
+  rowsJson(sP, channels, opcuaChannelNames, 4, topics);
+}
+
+static bool channelsParse(CorNode* oP, char* out, int outLen, char* err, int errLen)
+{
+  return rowsParse(corTreeLookup(oP, "channels"), "opcua.channels", opcuaChannelNames, 4, out, outLen, err, errLen);
+}
+
+
+
+//
+// The DDS mapping: a topic, a service or an action each, one attribute of an entity - the bridge
+// configuration's dds.ngsild "topics", "services" and "actions", the first string each one's name
+//
+static const char* ddsTopicNames[]   = { "topic",   "entityId", "entityType", "attribute" };
+static const char* ddsServiceNames[] = { "service", "entityId", "entityType", "attribute", "requestType", "replyType" };
+static const char* ddsActionNames[]  = { "action",  "entityId", "entityType", "attribute", "type" };
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsParse - "dds": { "domain", "vocabulary", "topics": [...], "services": [...], "actions": [...] }
+//
+static bool ddsParse(CorNode* ddsP, Def* dP, char* err, int errLen)
+{
+  if ((ddsP == NULL) || (ddsP->type == CorNull))
+    return true;
+
+  if (ddsP->type != CorObject)
+  {
+    snprintf(err, errLen, "\"dds\" is an object");
+    return false;
+  }
+
+  if (!memberInt(ddsP,    "domain",     &dP->dds.domain, 0, 232, err, errLen) ||
+      !memberString(ddsP, "vocabulary", dP->dds.vocabulary, sizeof(dP->dds.vocabulary), err, errLen) ||
+      !rowsParse(corTreeLookup(ddsP, "topics"),   "dds.topics",   ddsTopicNames,   4, dP->dds.topics,   sizeof(dP->dds.topics),   err, errLen) ||
+      !rowsParse(corTreeLookup(ddsP, "services"), "dds.services", ddsServiceNames, 6, dP->dds.services, sizeof(dP->dds.services), err, errLen) ||
+      !rowsParse(corTreeLookup(ddsP, "actions"),  "dds.actions",  ddsActionNames,  5, dP->dds.actions,  sizeof(dP->dds.actions),  err, errLen))
+    return false;
+
+  const char* v = dP->dds.vocabulary;
+
+  if ((v[0] != 0) && ((strchr(v, ':') == NULL) || (strpbrk(v, " \t\n\"<>") != NULL)))
+  {
+    snprintf(err, errLen, "\"dds.vocabulary\" is a URI, the namespace of the terms mapped (https://example.org/robots/)");
+    return false;
   }
 
   return true;
@@ -1181,7 +1268,8 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberInt(oP,    "grace",        &dP->grace,       1, 600, err, errLen) ||
       !memberList(oP,   "bridges",      bridgeNames,      dP->bridges, sizeof(dP->bridges), err, errLen) ||
       !memberList(oP,   "ckan",         NULL,             dP->ckan,    sizeof(dP->ckan),    err, errLen) ||
-      !opcuaParse(corTreeLookup(oP, "opcua"), dP, err, errLen))
+      !opcuaParse(corTreeLookup(oP, "opcua"), dP, err, errLen) ||
+      !ddsParse(corTreeLookup(oP, "dds"), dP, err, errLen))
     return false;
 
   //
@@ -1222,6 +1310,15 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       int len = strlen(dP->bridges);
       snprintf(&dP->bridges[len], sizeof(dP->bridges) - len, "%sckan", (len > 0) ? "," : "");
     }
+  }
+
+  //
+  // The DDS mapping is the dds bridge's, in the bridge configuration c3 writes
+  //
+  if (((dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0) || (dP->dds.domain != 0)) && (dP->bridgeConfig[0] != 0))
+  {
+    snprintf(err, errLen, "the DDS domain and mapping go in the bridge configuration c3 writes - not with a bridge configuration file of one's own");
+    return false;
   }
 
   if (transportsP != NULL)
@@ -1422,6 +1519,15 @@ static void defRender(const Def* dP, Str* sP)
     strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
     strAddf(sP, ", \"passwordSet\": %s}}", ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0)) ? "true" : "false");
   }
+  if ((dP->dds.domain != 0) || (dP->dds.vocabulary[0] != 0) || (dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0))
+  {
+    strAddf(sP, ", \"dds\": {\"domain\": %d, \"vocabulary\": ", dP->dds.domain);
+    strAddJson(sP, (dP->dds.vocabulary[0] != 0) ? dP->dds.vocabulary : NULL);
+    strAdd(sP, ", \"topics\": ");      rowsJson(sP, dP->dds.topics,   ddsTopicNames,   4, false);
+    strAdd(sP, ", \"services\": ");    rowsJson(sP, dP->dds.services, ddsServiceNames, 6, false);
+    strAdd(sP, ", \"actions\": ");     rowsJson(sP, dP->dds.actions,  ddsActionNames,  5, false);
+    strAdd(sP, "}");
+  }
   strAddf(sP, ", \"admin\": %s, \"distributed\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->distributed ? "true" : "false", dP->verbose ? "true" : "false");
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
   strAddf(sP, ", \"grace\": %d", dP->grace);
@@ -1478,6 +1584,7 @@ static void brokerDir(const char* name, char* out, int outLen)      { snprintf(o
 static void brokerDataDir(const char* name, char* out, int outLen)  { snprintf(out, outLen, "%s/%s/data", runDir, name); }
 static void brokerVolume(const char* name, char* out, int outLen)   { snprintf(out, outLen, "c3-broker-%s", name); }
 static void brokerContainer(const char* name, char* out, int outLen) { snprintf(out, outLen, "c3-broker-%s", name); }
+static void ddsContextPath(const char* name, char* out, int outLen)  { snprintf(out, outLen, "%s/%s/dds-context.jsonld", runDir, name); }   // the DDS mapping's @context
 
 
 
@@ -1512,6 +1619,10 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     snprintf(bridgeFile, sizeof(bridgeFile), "%s", (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : "");
   if (bridgesConfigOwn(dP) == true)
     snprintf(bridgeFile, sizeof(bridgeFile), "%s/bridges.json", dir);
+
+  char ddsContext[2400] = "";                    // the DDS mapping's @context (ddsContextWrite), the default user context
+  if (bridgesConfigOwn(dP) && hasBridge(dP, "dds") && (dP->dds.vocabulary[0] != 0))
+    ddsContextPath(dP->name, ddsContext, sizeof(ddsContext));
 
   if (container && (dP->ckan[0] != 0))
   {
@@ -1560,6 +1671,10 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
     if (bridgeFile[0] != 0)
     {
       argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/bridges.json:ro", bridgeFile);
+    }
+    if (ddsContext[0] != 0)
+    {
+      argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/dds-context.jsonld:ro", ddsContext);
     }
     argAdd(aP, dP->image);
     // The image's entry point is `coraine` (coraine-start) - in the foreground, logging to stdout: its defaults
@@ -1671,6 +1786,10 @@ static bool argvMake(const Def* dP, const int* ports, Argv* aP, char* err, int e
   if (bridgeFile[0] != 0)
   {
     argAdd(aP, "--bridgeConfig"); argAdd(aP, container ? "/etc/c3/bridges.json" : bridgeFile);
+  }
+  if (ddsContext[0] != 0)
+  {
+    argAdd(aP, "--defaultUserContext"); argAdd(aP, container ? "/etc/c3/dds-context.jsonld" : ddsContext);
   }
   if (dP->verbose)
     argAdd(aP, "-v");
@@ -2462,10 +2581,81 @@ static void opcuaMember(const Def* dP, Str* sP)
 
 // -----------------------------------------------------------------------------
 //
+// ddsContextWrite - dds-context.jsonld: each entity type and attribute the DDS mapping names, a term in the
+// vocabulary (<vocabulary><term>) - the broker's default user @context (--defaultUserContext)
+//
+static bool ddsContextWrite(const Def* dP, char* err, int errLen)
+{
+  char        path[2400];
+  Str         s     = { NULL, 0, 0 };
+  const char* sets[3] = { dP->dds.topics, dP->dds.services, dP->dds.actions };
+  char        seen[16384] = "\n";
+  bool        first = true;
+
+  ddsContextPath(dP->name, path, sizeof(path));
+  strAdd(&s, "{\n  \"@context\": {");
+
+  for (int set = 0; set < 3; set++)
+  {
+    char  copy[16384];
+    char* save = NULL;
+
+    snprintf(copy, sizeof(copy), "%s", sets[set]);
+    for (char* line = strtok_r(copy, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+    {
+      char* f[4];
+      char* fsave = NULL;
+      int   n     = 0;
+
+      for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (n < 4); t = strtok_r(NULL, "\t", &fsave))
+        f[n++] = t;
+
+      if (n != 4)
+        continue;
+
+      for (int ix = 2; ix < 4; ix++)               // the entity type, the attribute
+      {
+        char key[300];
+        int  len = strlen(seen);
+
+        snprintf(key, sizeof(key), "\n%s\n", f[ix]);
+        if ((strstr(seen, key) != NULL) || (len + (int) strlen(f[ix]) + 2 >= (int) sizeof(seen)))
+          continue;
+        snprintf(&seen[len], sizeof(seen) - len, "%s\n", f[ix]);
+
+        strAdd(&s, first ? "\n    " : ",\n    ");
+        strAddJson(&s, f[ix]);
+        strAdd(&s, ": ");
+        char iri[1024];
+        snprintf(iri, sizeof(iri), "%s%s", dP->dds.vocabulary, f[ix]);
+        strAddJson(&s, iri);
+        first = false;
+      }
+    }
+  }
+
+  strAdd(&s, first ? "}\n}\n" : "\n  }\n}\n");
+
+  int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  bool ok = (fd != -1) && (write(fd, s.s, s.len) == s.len);
+  if (fd != -1)
+    close(fd);
+  strFree(&s);
+
+  if (!ok)
+    snprintf(err, errLen, "cannot write %s: %s", path, strerror(errno));
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // bridgesConfigWrite - the bridge configuration c3 writes: the MQTT bridge for the set's Mosquitto (no
-// Channels, the server only - notifications to mqtt:// work), the DDS bridge as coraine's etc/dds-default.json
-// has it (domain 0, no topics - the types it discovers kept in the broker's directory, natively), the CKAN
-// datasets of the broker, and its OPC UA server (opcuaMember)
+// Channels, the server only - notifications to mqtt:// work), the DDS bridge with its domain and the mapping
+// (topics, services, actions - the types it discovers kept in the broker's directory, natively), the CKAN
+// datasets of the broker, and its OPC UA server (opcuaMember). With a DDS vocabulary, the @context of the
+// terms mapped too (ddsContextWrite)
 //
 static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
 {
@@ -2489,7 +2679,18 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
   if (hasBridge(dP, "dds"))
   {
     strAdd(&s, (s.len > 1) ? ", " : "");
-    strAdd(&s, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": 0}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": {}");
+    strAddf(&s, "\"dds\": {\"ddsmodule\": {\"dds\": {\"domain\": %d}, \"specs\": {\"threads\": 4, \"logging\": {\"verbosity\": \"warning\"}}}, \"ngsild\": {\"topics\": ", dP->dds.domain);
+    rowsJson(&s, dP->dds.topics, ddsTopicNames, 4, true);
+    if (dP->dds.services[0] != 0)
+    {
+      strAdd(&s, ", \"services\": ");
+      rowsJson(&s, dP->dds.services, ddsServiceNames, 6, true);
+    }
+    if (dP->dds.actions[0] != 0)
+    {
+      strAdd(&s, ", \"actions\": ");
+      rowsJson(&s, dP->dds.actions, ddsActionNames, 5, true);
+    }
     if (strcmp(dP->where, "container") != 0)
     {
       strAdd(&s, ", \"typesDirectory\": ");
@@ -2535,8 +2736,15 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
   strFree(&s);
 
   if (!ok)
+  {
     snprintf(err, errLen, "cannot write %s: %s", path, strerror(errno));
-  return ok;
+    return false;
+  }
+
+  if (hasBridge(dP, "dds") && (dP->dds.vocabulary[0] != 0))
+    return ddsContextWrite(dP, err, errLen);
+
+  return true;
 }
 
 
@@ -4405,6 +4613,232 @@ static void* svcStopThread(void* vP)
 
 // -----------------------------------------------------------------------------
 //
+// DDS discovery - what a broker's DDS domain announces, for the mapping: a broker of its own for it, natively,
+// from what the form names (installed or a build) - the dds bridge alone, in memory, the admin API, a free
+// port, the form's domain and no mapping. One GET of the bridge's inventory, which answers once discovery has
+// gone quiet (corDdsBridge), and the broker is stopped again. Its log: <broker dir>.discover/broker.log.
+//
+typedef struct DiscoverJob
+{
+  Job  job;                                      // first: jobAnswer frees the whole
+  Def  def;
+} DiscoverJob;
+
+static bool discovering = false;                 // rMutex - one discovery at a time
+
+static void* ddsDiscoverThread(void* vP)
+{
+  DiscoverJob* djP = (DiscoverJob*) vP;
+  Def          d   = djP->def;
+  char         err[1024];
+  char         logPath[2400];
+  char         dir[2300];
+  Str          s   = { NULL, 0, 0 };
+
+  //
+  // The broker discovery runs: the form's, as little of it as finding the DDS domain needs
+  //
+  snprintf(d.name, sizeof(d.name), "%.50s.discover", djP->def.name);
+  snprintf(d.store, sizeof(d.store), "corDB");
+  snprintf(d.history, sizeof(d.history), "none");
+  snprintf(d.bridges, sizeof(d.bridges), "dds");
+  d.dbDir           = false;
+  d.healthPort      = 0;
+  d.ws              = false;
+  d.admin           = true;
+  d.distributed     = false;
+  d.verbose         = false;
+  d.bridgeConfig[0] = 0;
+  d.ckan[0]         = 0;
+  d.opcua.url[0]    = 0;
+  d.args[0]         = 0;
+  d.dds.vocabulary[0] = 0;
+  d.dds.topics[0]   = 0;
+  d.dds.services[0] = 0;
+  d.dds.actions[0]  = 0;
+
+  d.port = 0;
+  for (int port = 39026; (port < 39126) && (d.port == 0); port++)
+  {
+    if (portFree(port))
+      d.port = port;
+  }
+
+  brokerDir(d.name, dir, sizeof(dir));
+  dirsMake(dir);
+  snprintf(logPath, sizeof(logPath), "%s/broker.log", dir);
+
+  Argv a   = { { NULL }, 0 };
+  int  fd  = -1;
+  pid_t pid = -1;
+
+  if (d.port == 0)
+    snprintf(err, sizeof(err), "no free port in 39026-39125 for the discovery's broker");
+  else if ((bridgesConfigWrite(&d, 0, err, sizeof(err)) == false) || (argvMake(&d, (int[KINDS]) { 0 }, &a, err, sizeof(err)) == false))
+    ;
+  else if ((fd = open(logPath, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600)) == -1)
+    snprintf(err, sizeof(err), "cannot open %s: %s", logPath, strerror(errno));
+  else
+  {
+    Str cmd = { NULL, 0, 0 };
+    argCommand(&a, &cmd);
+    logLine(logPath, "%s", cmd.s);
+    strFree(&cmd);
+
+    char**    env = cleanEnv();
+    ProcSpawn sp  = { a.v, env, fd, dir, true, false, SIGKILL };   // its own group (stopped as one), dies with c3
+    pid = procSpawn(&sp);
+    free(env);
+
+    if (pid < 0)
+      snprintf(err, sizeof(err), "fork: %s", strerror(errno));
+  }
+
+  if (fd != -1)
+    close(fd);
+  argFree(&a);
+
+  //
+  // Up (it answers on its port) - then the one GET: the bridge waits for discovery to go quiet, at most 10 s
+  //
+  int status = 0;
+  bool up    = false;
+
+  for (int ix = 0; (pid > 0) && (ix < 300) && !up; ix++)
+  {
+    if (waitpid(pid, &status, WNOHANG) == pid)
+    {
+      snprintf(err, sizeof(err), "the discovery's broker ended before it answered - its log: %s", logPath);
+      pid = -1;
+      break;
+    }
+    up = portAnswers(d.port);
+    if (!up)
+      usleep(100 * 1000);
+  }
+
+  if ((pid > 0) && !up)
+    snprintf(err, sizeof(err), "the discovery's broker did not answer on port %d in 30 s - its log: %s", d.port, logPath);
+
+  int code = 0;
+
+  if (up)
+  {
+    char                url[128];
+    CorRestClientMulti* multiP = corRestClientMultiCreate(1);
+
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/admin/bridges/dds/inventory", d.port);
+    if (multiP != NULL)
+    {
+      corRestClientMultiMaxResponse(multiP, 16 * 1024 * 1024);
+      corRestClientMultiAdd(multiP, CorVerbGet, url, NULL, 0, NULL, 0, NULL, NULL);
+      corRestClientMultiPerform(multiP, 20000);
+
+      CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
+
+      if ((respP == NULL) || (respP->error != 0))
+        snprintf(err, sizeof(err), "the discovery's broker did not answer the inventory%s%s", ((respP != NULL) && (respP->errorDetail[0] != 0)) ? ": " : "", (respP != NULL) ? respP->errorDetail : "");
+      else
+      {
+        code = respP->statusCode;
+        if ((code == 200) && (respP->body != NULL))
+          strAddN(&s, respP->body, respP->bodyLen);
+        else
+          snprintf(err, sizeof(err), "the discovery's broker answered %d: %.700s", code, (respP->body != NULL) ? respP->body : "");
+      }
+      corRestClientMultiDestroy(multiP);
+    }
+    else
+      snprintf(err, sizeof(err), "no HTTP client for the inventory");
+  }
+
+  //
+  // Stopped: SIGTERM to its group, SIGKILL 5 s later
+  //
+  if (pid > 0)
+  {
+    kill(-pid, SIGTERM);
+    for (int ix = 0; ix < 50; ix++)
+    {
+      if (waitpid(pid, &status, WNOHANG) == pid)
+      {
+        pid = -1;
+        break;
+      }
+      usleep(100 * 1000);
+    }
+    if (pid > 0)
+    {
+      kill(-pid, SIGKILL);
+      waitpid(pid, &status, 0);
+    }
+    logLine(logPath, "stopped - the discovery is over");
+  }
+
+  pthread_mutex_lock(&rMutex);
+  discovering = false;
+  pthread_mutex_unlock(&rMutex);
+
+  if (s.len > 0)
+    jobAnswer(&djP->job, 200, &s);
+  else
+    jobError(&djP->job, 502, "No inventory", err);
+
+  strFree(&s);
+  return NULL;
+}
+
+static void ddsDiscover(CorHttpConn* connP)
+{
+  DiscoverJob* djP = calloc(1, sizeof(DiscoverJob));
+
+  if (djP == NULL)
+  {
+    serveError(connP, 500, "Out of memory", "no room for the discovery");
+    return;
+  }
+
+  if (bodyDef(connP, &djP->def) == false)
+  {
+    free(djP);
+    return;
+  }
+
+  if (strcmp(djP->def.where, "native") != 0)
+  {
+    free(djP);
+    serveError(connP, 422, "Not in a container", "discovery runs a broker natively - the installed one or a build");
+    return;
+  }
+
+  pthread_mutex_lock(&rMutex);
+  bool busy = discovering;
+  discovering = true;
+  pthread_mutex_unlock(&rMutex);
+
+  if (busy)
+  {
+    free(djP);
+    serveError(connP, 409, "A discovery runs", "one discovery at a time - wait for the one that runs");
+    return;
+  }
+
+  djP->job.connP = connP;
+  corHttpSuspend(connP);
+
+  if (threadStart(ddsDiscoverThread, djP) == false)
+  {
+    pthread_mutex_lock(&rMutex);
+    discovering = false;
+    pthread_mutex_unlock(&rMutex);
+    jobError(&djP->job, 500, "No thread", "no thread for the discovery");
+  }
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // runRequest - /api/run...
 //
 void runRequest(CorHttpConn* connP, const char* path)
@@ -4437,6 +4871,11 @@ void runRequest(CorHttpConn* connP, const char* path)
   if (strcmp(path, "/api/run/command") == 0)
   {
     if (post) runCommand(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/dds/discover") == 0)
+  {
+    if (post) ddsDiscover(connP); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
   if (strcmp(path, "/api/run/brokers") == 0)
