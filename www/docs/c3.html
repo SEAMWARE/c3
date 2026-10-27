@@ -198,8 +198,10 @@ attribute of an entity. Mapping once is the usual case: what was written is read
 opens on it.</p>
 <ul>
   <li><b>The domain and a vocabulary</b> - the vocabulary is the namespace of the terms (each entity type and attribute
-  <code>&lt;vocabulary&gt;&lt;term&gt;</code>); empty: the default context's.</li>
-  <li><b>Discover</b> starts a broker of c³'s own on the domain (the form's: the installed one, a build or the image,
+  <code>&lt;vocabulary&gt;&lt;term&gt;</code>); empty: the default context's. <b>proposals' type</b> - the entity type
+  the proposals give (Robot).</li>
+  <li><b>Discover</b> asks the DDS system what it announces: c³ joins its domain from the machine it runs on, so it
+  must reach it - DDS discovery is multicast, on that host or its network. It starts a broker of c³'s own on the domain (the form's: the installed one, a build or the image,
   the dds bridge alone, in memory), asks its bridge once what was announced - it answers when discovery has been quiet
   for 3 s, at most 10 s - and stops it: a few seconds. <b>Import inventory.json</b> reads the list a DDS discovery tool
   wrote. <b>show ROS 2 housekeeping</b> - its discovery and log topics, every node's parameter services - hidden
@@ -207,6 +209,11 @@ opens on it.</p>
   <li><b>Three lines</b> - <i>N DDS Topics</i>, <i>N DDS Services</i>, <i>N DDS Actions</i>, each with ▸ to open it
   and the number mapped. Open, a line an endpoint: its name, its type, and, mapped, its attribute and entity. An
   endpoint mapped and not in the last discovery is listed too.</li>
+  <li><b>The proposals</b> - an endpoint not mapped shows, greyed, its proposal: the name's last segment camelCased the
+  attribute, the segments before it the entity (<code>rt/turtle1/pose</code>: <code>pose</code> of
+  <code>urn:ngsi-ld:Robot:turtle1</code>; no segment: <code>urn:ngsi-ld:Robot:robot1</code>), the proposals' type the
+  entity's - once, an entity with a type keeps it. The green <b>✓</b> accepts it, into the fields still empty;
+  <b>✓ all (N)</b> on a group accepts those of every endpoint shown and not mapped. Each name stays editable.</li>
   <li><b>An endpoint opened</b> - <b>Attribute name</b>, <b>Entity ID</b>, <b>Entity type</b> (optional), the ids
   and types already used offered as you type. The first field typed in names the attribute from the endpoint (its
   last segment camelCased: <code>rt/turtle1/cmd_vel</code>, <code>cmdVel</code>). <b>the topic's payload</b> (a

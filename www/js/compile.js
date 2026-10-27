@@ -270,8 +270,9 @@ function ddsMapAsk() {
   card.append(el('h3', '', 'The DDS mapping is in Operate'),
     el('p', '', 'The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: '
       + 'the Compile tab brings you back, to build.'),
-    el('p', '', 'The mapping needs the DDS domain running - a ROS 2 node, or anything speaking DDS - and the broker c³ discovers it with has '
-      + 'the dds bridge: an installed coraine, a build, or an image with it.'),
+    el('p', '', 'Discover asks your DDS system what it announces: c³ joins its DDS domain from this machine, so it must reach it - DDS '
+      + 'discovery is multicast, on this host or its network. Where c³ does not reach it, import an inventory.json written where it runs. '
+      + 'Discover uses a broker with the dds bridge: an installed coraine, a build, or an image with it.'),
     actions);
   ov.append(card);
   document.body.append(ov);
