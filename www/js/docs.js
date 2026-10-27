@@ -55,17 +55,33 @@ async function contentsRead() {
 }
 
 //
-// repoItem - a repository's line in the list: opens it on GitHub
+// repoItem - a component's line in the list: its name opens its guide here (guides.json "guide"), else its
+// repository on GitHub; beside the description its API reference ("api") and the repository
 //
-function repoItem(name, desc, isPrivate) {
+function repoItem(name, desc, isPrivate, guide, api) {
   const li = el('li');
+  const repoUrl = 'https://github.com/SEAMWARE/' + encodeURIComponent(name);
+  const ext = (a) => { a.target = '_blank'; a.rel = 'noopener'; return a; };
   const a = el('a');
-  a.href = 'https://github.com/SEAMWARE/' + encodeURIComponent(name);
-  a.target = '_blank';
-  a.rel = 'noopener';
+  a.href = guide ? '#docs/' + guide : repoUrl;
+  if (!guide) ext(a);
   a.append(el('span', 'dname', name));
   if (isPrivate) a.append(el('span', 'dpriv', 'private'));
-  li.append(a, el('span', 'ddesc', desc || ''));
+
+  const d = el('span', 'ddesc', desc || '');
+  const more = el('span', 'dmore');
+  if (api) {
+    const x = el('a', '', 'API reference');
+    x.href = '#docs/' + api;
+    more.append(x);
+  }
+  if (guide) {
+    const x = ext(el('a', '', 'repository ↗'));
+    x.href = repoUrl;
+    more.append(x);
+  }
+  if (more.children.length) d.append(more);
+  li.append(a, d);
   return li;
 }
 
@@ -77,8 +93,18 @@ function indexRender() {
   for (const g of contents.groups) {
     const ul = el('ul', 'doclist');
     if (g.privateGroup) ul.id = 'docs-g-' + g.privateGroup;
+    //
+    // A component's own guide - its title the component's name (lib-corargs: "corArgs - command-line options"), or its
+    // id (c3) - is on the component's line; a guide of its own (Writing a bridge) keeps its line
+    //
+    const repoOf = new Map(g.items.filter((it) => it.repo && it.guide).map((it) => [it.guide, it.repo]));
+    const inLine = (it) => {
+      const r = repoOf.get(it.id);
+      return !!r && ((it.title === r) || it.title.startsWith(r + ' ') || (it.id === r.toLowerCase()));
+    };
 
     for (const it of g.items) {
+      if (it.id && inLine(it)) continue;
       if (it.id) {
         const li = el('li');
         const a = el('a');
@@ -87,7 +113,7 @@ function indexRender() {
         li.append(a, el('span', 'ddesc', it.desc || ''));
         ul.append(li);
       } else if (it.repo) {
-        ul.append(repoItem(it.repo, it.desc, false));
+        ul.append(repoItem(it.repo, it.desc, false, it.guide, it.api));
       }
     }
     box.append(el('h2', 'docgroup', g.title), ul);

@@ -12,11 +12,9 @@ on this machine and does the work; the browser window is the interface.</p>
   <li><a href="#compile">Compile<span>a broker built by coraine-build: the features compiled in or out, the optimisation, the HTTP server - its output followed live, the builds kept</span></a></li>
   <li><a href="#run">Operate<span>brokers started and stopped, natively or in a container, with MongoDB, PostgreSQL/TimescaleDB and Mosquitto; their logs, configuration, metrics and log levels</span></a></li>
   <li><a href="#connect">Explore<span>a live connection to a broker: entities as boxes, Relationships as arrows, the entities on a map - online or offline - and their values as they change</span></a></li>
-  <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component's repository</span></a></li>
+  <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component, with its guide and its repository</span></a></li>
 </ul>
-<p><b>Configure</b> - the column mapping for the CKAN and CSV bridges - is not built yet (the DDS and OPC UA
-mappings are in Operate's broker form); it is greyed in the bar
-(<a href="#docs/roadmap/short">Roadmap</a>). The <b>AI Assist</b> button in the header says what is planned; nothing
+<p>The DDS and OPC UA mappings are in Operate's broker form. The <b>AI Assist</b> button in the header says what is planned; nothing
 of it is built.</p>
 
 <h2 id="start">Starting it</h2>
@@ -338,7 +336,9 @@ when the broker goes away, the page watches again until it is back.</p>
 <p>These guides: the list (<code>#docs</code>), a guide (<code>#docs/&lt;guide&gt;</code>) and a section of it
 (<code>#docs/&lt;guide&gt;/&lt;section&gt;</code>), with <b>On this page</b>, the previous and next guide, and search
 across every guide's sections. The pages are part of c³ and served by its backend, so they work offline. Every
-component's repository is listed too; with the <code>gh</code> command logged in, the private SEAMWARE repositories the
+component is listed too, one line each: its name opens its guide here - a Cor-Lib's, the bridge's, the tool's - with
+its API reference and its repository beside it; a component with no guide (corAasBridge, and the private ones) opens
+its repository on GitHub. With the <code>gh</code> command logged in, the private SEAMWARE repositories the
 user can read are added (<code>gh repo list</code>, asked as the user).</p>
 <p>The same pages are the website <a href="https://seamware.github.io/docs/" target="_blank"
 rel="noopener">seamware.github.io/docs</a> (<code>make site</code>, in <code>build/site</code>); there a link to a
@@ -396,6 +396,6 @@ with its licence.</p>
   <li><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener">c3<span>the backend, the pages, the examples, the API in full</span></a></li>
   <li><a href="https://seamware.github.io/c3-demos/" target="_blank" rel="noopener">c³ demos<span>the factory floor, Boston's bike stations and Madrid, to run on your machine</span></a></li>
   <li><a href="#docs/building">Building from source<span>what Compile drives: coraine-build and the feature switches</span></a></li>
-  <li><a href="#docs/roadmap">Roadmap<span>Configure and what else is planned</span></a></li>
+  <li><a href="#docs/roadmap">Roadmap<span>what else is planned</span></a></li>
 </ul>
 </article>

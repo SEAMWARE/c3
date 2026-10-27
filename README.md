@@ -6,7 +6,6 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | Part | What it does |
 |---|---|
 | **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
-| **Configure** *(planned - greyed, "Later", in the navigation)* | The column mapping for the CKAN and CSV bridges. The DDS and OPC UA mappings are in Operate's broker form. |
 | **Operate** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto; the brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
 | **Explore** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
 | **Documentation** | All of coraine's documentation in one place, written to be read: the guides - installation, administration, the API, building, deploying, performance, the transports, the bridges, authorization, the internals - a guide and an API reference per cor-lib, with search, a guide's sections and the next one, offline; every component's repository. The same pages are the website [seamware.github.io/docs](https://seamware.github.io/docs/) (`make site`). Planned: a skeleton repository for each kind of plugin. |
