@@ -326,8 +326,109 @@ static bool nonceOk(const char* nonce)
 
 // -----------------------------------------------------------------------------
 //
-// windowStateSet - the window of a page to windowState, by way of "normal": Chrome minimises no full-screen
-// window, and makes no minimised one full-screen
+// WindowBounds - the window's state, size and position as Chrome has them
+//
+typedef struct WindowBounds
+{
+  char      state[32];                           // "normal", "minimized", "maximized", "fullscreen"; "?": unknown
+  long long width;
+  long long height;
+  long long left;
+  long long top;
+} WindowBounds;
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowBounds - Browser.getWindowBounds; false: Chrome did not say
+//
+static bool windowBounds(CorAlloc* allocP, long long windowId, WindowBounds* bP)
+{
+  char err[256];
+  char params[64];
+
+  snprintf(bP->state, sizeof(bP->state), "?");
+  bP->width = bP->height = bP->left = bP->top = -1;
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld}", windowId);
+
+  CorNode* resultP = cdp(allocP, "Browser.getWindowBounds", params, err, sizeof(err));
+  CorNode* boundsP = (resultP != NULL) ? corTreeLookup(resultP, "bounds") : NULL;
+
+  if (boundsP == NULL)
+    return false;
+
+  CorNode* stateP = corTreeLookup(boundsP, "windowState");
+  CorNode* wP     = corTreeLookup(boundsP, "width");
+  CorNode* hP     = corTreeLookup(boundsP, "height");
+  CorNode* xP     = corTreeLookup(boundsP, "left");
+  CorNode* yP     = corTreeLookup(boundsP, "top");
+
+  if ((stateP != NULL) && (stateP->type == CorString))
+    snprintf(bP->state, sizeof(bP->state), "%s", stateP->value.s);
+  if ((wP != NULL) && (wP->type == CorInt)) bP->width  = wP->value.i;
+  if ((hP != NULL) && (hP->type == CorInt)) bP->height = hP->value.i;
+  if ((xP != NULL) && (xP->type == CorInt)) bP->left   = xP->value.i;
+  if ((yP != NULL) && (yP->type == CorInt)) bP->top    = yP->value.i;
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// boundsText - "fullscreen 3840x2160+0+0"
+//
+static const char* boundsText(const WindowBounds* bP, char* out, int outLen)
+{
+  snprintf(out, outLen, "%s %lldx%lld%+lld%+lld", bP->state, bP->width, bP->height, bP->left, bP->top);
+  return out;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// stateApplied - the window to windowState, and waited for: up to 1 s, until Chrome has the state and - but
+// for "minimized", whose bounds stay - bounds other than fromP's. The ms waited; -1: not within the second
+//
+// On Wayland a state is a request the compositor carries out a moment later. Asked for the next one before
+// that, Chrome takes it for done and the desktop does not: a window "full-screen" in Chrome's eyes, its
+// earlier size on the screen, undecorated - and taking no input
+//
+static int stateApplied(CorAlloc* allocP, long long windowId, const char* windowState, const WindowBounds* fromP, WindowBounds* nowP, char* errBuf, int errLen)
+{
+  char params[256];
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, windowState);
+  if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
+    return -2;
+
+  for (int waited = 0; waited <= 1000; waited += 50)
+  {
+    windowBounds(allocP, windowId, nowP);
+
+    bool sameState  = (strcmp(nowP->state, windowState) == 0);
+    bool moved      = (nowP->width != fromP->width) || (nowP->height != fromP->height) || (nowP->left != fromP->left) || (nowP->top != fromP->top);
+
+    if (sameState && (moved || (strcmp(windowState, "minimized") == 0)))
+      return waited;
+
+    usleep(50 * 1000);
+  }
+
+  return -1;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowStateSet - the window of a page to windowState: by way of "normal" when it is in another state -
+// Chrome minimises no full-screen window, and makes no minimised one full-screen - each step waited for
+// (stateApplied). Already in it: nothing. Every change written to the log, its steps and their waits
 //
 static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* windowState, char* errBuf, int errLen)
 {
@@ -345,14 +446,44 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
     return false;
   }
 
-  long long windowId = windowP->value.i;
+  long long    windowId = windowP->value.i;
+  WindowBounds was;
+  WindowBounds normal;
+  WindowBounds now;
+  char         t1[96];
+  char         t2[96];
+  char         t3[96];
+  int          waitNormal = 0;
+  int          waitState  = 0;
 
-  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"normal\"}}", windowId);
-  if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
-    return false;
+  windowBounds(allocP, windowId, &was);
 
-  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, windowState);
-  return (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) != NULL);
+  if (strcmp(was.state, windowState) == 0)
+  {
+    printf("c3 window %lld -> %s: already %s\n", windowId, windowState, boundsText(&was, t1, sizeof(t1)));
+    fflush(stdout);
+    return true;
+  }
+
+  normal = was;
+  if (strcmp(was.state, "normal") != 0)
+    waitNormal = stateApplied(allocP, windowId, "normal", &was, &normal, errBuf, errLen);
+
+  if (waitNormal >= -1)                          // -1: not seen within the second - the state asked for all the same
+    waitState = stateApplied(allocP, windowId, windowState, &normal, &now, errBuf, errLen);
+  else
+    now = normal;
+
+  bool ok = (waitNormal >= -1) && (waitState >= -1);
+
+  printf("c3 window %lld -> %s: was %s, normal %s (%s), %s %s (%s)%s\n", windowId, windowState,
+         boundsText(&was, t1, sizeof(t1)),
+         boundsText(&normal, t2, sizeof(t2)), (waitNormal >= 0) ? "applied" : (waitNormal == -1) ? "NOT within 1 s" : "refused",
+         windowState, boundsText(&now, t3, sizeof(t3)), (waitState >= 0) ? "applied" : (waitState == -1) ? "NOT within 1 s" : "refused",
+         ok ? "" : " - FAILED");
+  fflush(stdout);
+
+  return ok;
 }
 
 
