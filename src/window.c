@@ -29,8 +29,9 @@
 //                                       Wayland only with the token of the click that asked - a Chrome started
 //                                       with it hands a new window to this c3's Chrome, the earlier pages are
 //                                       closed and the new one made full-screen (it opens on the last page the
-//                                       UI showed). Without a token: its first page activated, "normal" then
-//                                       "fullscreen" - which the desktop may answer with "c3 is ready" instead.
+//                                       UI showed). Without a token: its first page activated only - the
+//                                       desktop may answer with "c3 is ready"; shown so, the page asks for
+//                                       full-screen itself (window.js).
 //                                       503: no screen here
 //
 #define _DEFAULT_SOURCE                          // usleep
@@ -478,9 +479,13 @@ static void windowOpen(CorHttpConn* connP)
   {
     char params[256];
 
+    //
+    // Activated only: a minimised window made "normal" then "fullscreen" without the token is left half
+    // done on Wayland (big, undecorated, not full-screen). Shown again by the desktop ("c3 is ready"), the
+    // page asks for full-screen itself (window.js, on becoming visible)
+    //
     snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", firstId);
-    ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL) &&
-         windowStateSet(&alloc, firstId, "fullscreen", err, sizeof(err));
+    ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL);
     snprintf(answer, sizeof(answer), "{\"window\": \"activated\"}");
   }
 

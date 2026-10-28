@@ -290,6 +290,7 @@ extern void  liveShutdown(void);                                 // the backend 
 //
 extern bool  browserOpen(const char* url, bool noBrowser, bool control, const char* token);
 extern const char* activationToken(const char* token);
+extern const char* startToken(void);
 
 // repos.c
 extern void  reposRequest(CorHttpConn* connP, const char* path);

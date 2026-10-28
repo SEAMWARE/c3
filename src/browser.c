@@ -205,18 +205,45 @@ static void profileDir(char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// activationToken - the token when it is one (printable, no space, quote or backslash, 200 at most), else NULL
+// activationToken - the token when it is one, else NULL: 255 bytes at most, no control character, space,
+// quote or backslash - it goes into an argument, the environment and a JSON string. Bytes above 127 are
+// kept: GNOME's token holds the launched application's name, UTF-8 ("c³")
 //
 const char* activationToken(const char* token)
 {
-  if ((token == NULL) || (token[0] == 0) || (strlen(token) > 200))
+  if ((token == NULL) || (token[0] == 0) || (strlen(token) > 255))
     return NULL;
 
-  for (const char* cP = token; *cP != 0; cP++)
+  for (const unsigned char* cP = (const unsigned char*) token; *cP != 0; cP++)
   {
-    if ((*cP <= ' ') || (*cP > '~') || (*cP == '"') || (*cP == '\\') || (*cP == '\''))
+    if ((*cP <= ' ') || (*cP == 0x7F) || (*cP == '"') || (*cP == '\\') || (*cP == '\''))
       return NULL;
   }
+
+  return token;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// startToken - the activation token this c3 was started with: $XDG_ACTIVATION_TOKEN (Wayland), else
+// $DESKTOP_STARTUP_ID (X11 - GLib sets both, the same) - written to the log, its length, not the token
+//
+const char* startToken(void)
+{
+  const char* xdg    = getenv("XDG_ACTIVATION_TOKEN");
+  const char* x11    = getenv("DESKTOP_STARTUP_ID");
+  const char* token  = activationToken(xdg);
+
+  if (token == NULL)
+    token = activationToken(x11);
+
+  printf("c3: started with %s - $XDG_ACTIVATION_TOKEN %s, $DESKTOP_STARTUP_ID %s\n",
+         (token != NULL) ? "an activation token" : "no activation token",
+         (xdg == NULL) ? "unset" : (activationToken(xdg) != NULL) ? "set" : "set, not usable",
+         (x11 == NULL) ? "unset" : (activationToken(x11) != NULL) ? "set" : "set, not usable");
+  fflush(stdout);
 
   return token;
 }

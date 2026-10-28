@@ -356,7 +356,7 @@ int main(int argC, char* argV[])
     {
       printf("c3: already running on port %d\n", c3Port);
 
-      const char* token = activationToken(getenv("XDG_ACTIVATION_TOKEN"));
+      const char* token = startToken();
       char        answer[256] = "";
 
       if ((noBrowser == false) && otherC3Open(url, token, answer, sizeof(answer)))
@@ -394,7 +394,7 @@ int main(int argC, char* argV[])
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);
 
-  browserOpen(url, noBrowser, true, activationToken(getenv("XDG_ACTIVATION_TOKEN")));
+  browserOpen(url, noBrowser, true, startToken());
 
   corHttpServe(&server);
   liveShutdown();                                // no subscription left behind on any broker
