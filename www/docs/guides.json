@@ -12,12 +12,12 @@
             {
               "repo": "coraine",
               "path": "doc/index.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -29,7 +29,7 @@
             {
               "repo": "coraine",
               "path": "doc/installation.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
@@ -58,7 +58,7 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
@@ -95,7 +95,7 @@
             {
               "repo": "coraine",
               "path": "doc/installation.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -107,7 +107,7 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -119,12 +119,12 @@
             {
               "repo": "coraine",
               "path": "doc/building.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/building-details.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
@@ -163,7 +163,7 @@
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -192,7 +192,7 @@
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -209,7 +209,7 @@
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -221,7 +221,7 @@
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "c3",
@@ -243,7 +243,7 @@
             {
               "repo": "coraine",
               "path": "doc/websocket.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -255,7 +255,7 @@
             {
               "repo": "coraine",
               "path": "doc/sse.md",
-              "at": "77619c98"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -279,12 +279,12 @@
             {
               "repo": "coraine",
               "path": "doc/cor-protocol.md",
-              "at": "1e0ff6bb"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/cor-protocol-details.md",
-              "at": "9269c286"
+              "at": "0c6d1de6"
             }
           ]
         }
@@ -301,12 +301,12 @@
             {
               "repo": "coraine",
               "path": "doc/dds.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "corDdsBridge",
               "path": "README.md",
-              "at": "166e0bec"
+              "at": "aa6fbd05"
             }
           ]
         },
@@ -318,7 +318,7 @@
             {
               "repo": "coraine",
               "path": "doc/device-protocols.md",
-              "at": "eff352bc"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -416,7 +416,7 @@
             {
               "repo": "coraine",
               "path": "doc/authorization.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         }
@@ -433,7 +433,7 @@
             {
               "repo": "coraine",
               "path": "doc/plugin-architecture.md",
-              "at": "eff352bc"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -445,7 +445,7 @@
             {
               "repo": "coraine",
               "path": "doc/coroutines.md",
-              "at": "eff352bc"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -457,7 +457,7 @@
             {
               "repo": "coraine",
               "path": "doc/testing.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "corTest",
@@ -474,7 +474,7 @@
             {
               "repo": "coraine",
               "path": "doc/coverage.md",
-              "at": "506d9d42"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
@@ -496,12 +496,12 @@
             {
               "repo": "coraine",
               "path": "doc/roadmap.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/ideas.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         }
@@ -543,7 +543,7 @@
             {
               "repo": "c3",
               "path": "src",
-              "at": "ce691e66"
+              "at": "f84ca21f"
             }
           ]
         },
@@ -611,12 +611,12 @@
             {
               "repo": "coraine",
               "path": "doc/bridge-channels.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/plugin-architecture.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -678,7 +678,7 @@
             {
               "repo": "coraine",
               "path": "doc/bridge-channels.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -787,7 +787,7 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -914,7 +914,7 @@
             {
               "repo": "coraine",
               "path": "doc/performance.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -1031,7 +1031,7 @@
             {
               "repo": "corDB",
               "path": "doc/persistence.md",
-              "at": "fecb8aff"
+              "at": "b5972723"
             },
             {
               "repo": "corDB",
@@ -1056,12 +1056,12 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             },
             {
               "repo": "coraine",
               "path": "doc/installation.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -1165,7 +1165,7 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -1203,7 +1203,7 @@
             {
               "repo": "coraine",
               "path": "doc/options.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -1504,7 +1504,7 @@
             {
               "repo": "coraine",
               "path": "doc/testing.md",
-              "at": "91aa2cb0"
+              "at": "0c6d1de6"
             }
           ]
         },
@@ -1563,7 +1563,7 @@
             {
               "repo": "corMcp",
               "path": "README.md",
-              "at": "255beef1"
+              "at": "b6451343"
             },
             {
               "repo": "corMcp",
