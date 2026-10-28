@@ -11,6 +11,9 @@
 //   minimise and close buttons (window.c). With a profile of its own (--user-data-dir under
 //   $XDG_STATE_HOME/c3, else ~/.local/state/c3): a Chrome that is already running would take the
 //   request over and open a normal window, ignoring both flags.
+//   Chrome exits when the other end of its pipe closes: only a c3 that keeps running opens the window with
+//   the pipe (control). A c3 that finds another on its port asks that one to open it (window.c, POST
+//   /api/window/open), and opens it itself without the pipe only when that one cannot.
 // - Otherwise the default browser: xdg-open, or open on macOS.
 // - No screen (no $DISPLAY, no $WAYLAND_DISPLAY, on Linux): the URL is printed, to open from another
 //   machine through ssh -L.
@@ -188,9 +191,11 @@ static void profileDir(char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// browserOpen -
+// browserOpen - true: a browser was started; false: the URL was printed only
 //
-void browserOpen(const char* url, bool noBrowser)
+// control: Chrome with the DevTools pipe, kept by this c3 (window.c) - only for a c3 that keeps running
+//
+bool browserOpen(const char* url, bool noBrowser, bool control)
 {
   char prog[4096];
 
@@ -198,7 +203,7 @@ void browserOpen(const char* url, bool noBrowser)
   {
     printf("c3: open %s\n", url);
     fflush(stdout);
-    return;
+    return false;
   }
 
   if (headless())
@@ -206,7 +211,7 @@ void browserOpen(const char* url, bool noBrowser)
     printf("c3: no screen here - open %s\n"
            "    from another machine: ssh -L %d:localhost:%d <this host>, then the same URL there\n", url, c3Port, c3Port);
     fflush(stdout);
-    return;
+    return false;
   }
 
   if (chromeFind(prog, sizeof(prog)) != NULL)
@@ -219,13 +224,13 @@ void browserOpen(const char* url, bool noBrowser)
     snprintf(appArg,     sizeof(appArg),     "--app=%s", url);
     snprintf(profileArg, sizeof(profileArg), "--user-data-dir=%s", profile);
 
-    char* argV[] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", (char*) "--remote-debugging-pipe", NULL };
+    char* argV[] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", control ? (char*) "--remote-debugging-pipe" : NULL, NULL };
 
-    if (spawn(prog, argV, true))
+    if (spawn(prog, argV, control))
     {
       printf("c3: %s - opened in %s\n", url, prog);
       fflush(stdout);
-      return;
+      return true;
     }
   }
 
@@ -243,10 +248,11 @@ void browserOpen(const char* url, bool noBrowser)
     {
       printf("c3: %s - opened with %s\n", url, opener);
       fflush(stdout);
-      return;
+      return true;
     }
   }
 
   printf("c3: open %s\n", url);
   fflush(stdout);
+  return false;
 }

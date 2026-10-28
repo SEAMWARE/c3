@@ -21,6 +21,11 @@
 //   POST /api/window/fullscreen/<nonce> "normal" then "fullscreen" - the page's, when it is shown again
 //   POST /api/window/close/<nonce>      Target.closeTarget - the last window closed, Chrome exits. c3 itself
 //                                       keeps running, as when the window is closed by its own X
+//   POST /api/window/open               the window, for a c3 started again (the dock's button) that finds this
+//                                       one on its port: this c3's Chrome still there - its page activated,
+//                                       "normal" then "fullscreen"; gone - a new one, its pipes this c3's. The
+//                                       c3 started again exits at once, and a Chrome it started with the pipe
+//                                       would exit with it. 503: no screen here
 //
 #define _DEFAULT_SOURCE                          // usleep
 
@@ -313,6 +318,100 @@ static bool nonceOk(const char* nonce)
 
 // -----------------------------------------------------------------------------
 //
+// windowStateSet - the window of a page to windowState, by way of "normal": Chrome minimises no full-screen
+// window, and makes no minimised one full-screen
+//
+static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* windowState, char* errBuf, int errLen)
+{
+  char params[256];
+
+  snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", targetId);
+
+  CorNode* resultP = cdp(allocP, "Browser.getWindowForTarget", params, errBuf, errLen);
+  CorNode* windowP = (resultP != NULL) ? corTreeLookup(resultP, "windowId") : NULL;
+
+  if ((windowP == NULL) || (windowP->type != CorInt))
+  {
+    if (resultP != NULL)
+      snprintf(errBuf, errLen, "Browser.getWindowForTarget: no windowId");
+    return false;
+  }
+
+  long long windowId = windowP->value.i;
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"normal\"}}", windowId);
+  if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
+    return false;
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, windowState);
+  return (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) != NULL);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowOpen - POST /api/window/open
+//
+static void windowOpen(CorHttpConn* connP)
+{
+  if (pipesAlive() == false)
+  {
+    char url[64];
+
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
+
+    if (browserOpen(url, false, true))
+      serveJson(connP, 200, "{}");
+    else
+      serveError(connP, 503, "The window", "no screen here");
+    return;
+  }
+
+  //
+  // Chrome still there: a new one would hand the window over to it and exit - and windowPipesSet, closing
+  // the pipes of the one there, would end it. Its first page is brought back instead
+  //
+  char     err[512];
+  char     buf[8 * 1024];
+  CorAlloc alloc;
+  bool     ok = false;
+
+  corAllocBufferInit(&alloc, buf, sizeof(buf), 1024 * 1024, NULL, "c3 window");
+  snprintf(err, sizeof(err), "no page of c3's");
+
+  CorNode* resultP = cdp(&alloc, "Target.getTargets", NULL, err, sizeof(err));
+  CorNode* infosP  = (resultP != NULL) ? corTreeLookup(resultP, "targetInfos") : NULL;
+
+  for (CorNode* tP = ((infosP != NULL) && (infosP->type == CorArray)) ? infosP->value.head : NULL; tP != NULL; tP = tP->next)
+  {
+    CorNode* typeP = corTreeLookup(tP, "type");
+    CorNode* idP   = corTreeLookup(tP, "targetId");
+
+    if ((typeP != NULL) && (typeP->type == CorString) && (strcmp(typeP->value.s, "page") == 0) &&
+        (idP != NULL) && (idP->type == CorString) && (strlen(idP->value.s) < 128))
+    {
+      char params[256];
+
+      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", idP->value.s);
+      ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL) &&
+           windowStateSet(&alloc, idP->value.s, "fullscreen", err, sizeof(err));
+      break;
+    }
+  }
+
+  corAllocBufferReset(&alloc, false);
+
+  if (ok)
+    serveJson(connP, 200, "{}");
+  else
+    serveError(connP, 502, "The window", err);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // windowRequest - /api/window...
 //
 void windowRequest(CorHttpConn* connP, const char* path)
@@ -325,6 +424,15 @@ void windowRequest(CorHttpConn* connP, const char* path)
       serveError(connP, 405, "Method not allowed", path);
     else
       serveJson(connP, 200, pipesAlive() ? "{\"control\": true}" : "{\"control\": false}");
+    return;
+  }
+
+  if (strcmp(path, "/api/window/open") == 0)
+  {
+    if (strcmp(method, "POST") != 0)
+      serveError(connP, 405, "Method not allowed", path);
+    else
+      windowOpen(connP);
     return;
   }
 
@@ -372,28 +480,7 @@ void windowRequest(CorHttpConn* connP, const char* path)
       ok = (cdp(&alloc, "Target.closeTarget", params, err, sizeof(err)) != NULL);
     }
     else
-    {
-      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", targetId);
-
-      CorNode* resultP = cdp(&alloc, "Browser.getWindowForTarget", params, err, sizeof(err));
-      CorNode* windowP = (resultP != NULL) ? corTreeLookup(resultP, "windowId") : NULL;
-
-      //
-      // By way of normal: Chrome minimises no full-screen window, and makes no minimised one full-screen
-      //
-      if ((windowP != NULL) && (windowP->type == CorInt))
-      {
-        long long windowId = windowP->value.i;
-
-        snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"normal\"}}", windowId);
-        ok = (cdp(&alloc, "Browser.setWindowBounds", params, err, sizeof(err)) != NULL);
-
-        snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, full ? "fullscreen" : "minimized");
-        ok = ok && (cdp(&alloc, "Browser.setWindowBounds", params, err, sizeof(err)) != NULL);
-      }
-      else if (resultP != NULL)
-        snprintf(err, sizeof(err), "Browser.getWindowForTarget: no windowId");
-    }
+      ok = windowStateSet(&alloc, targetId, full ? "fullscreen" : "minimized", err, sizeof(err));
   }
 
   corAllocBufferReset(&alloc, false);
