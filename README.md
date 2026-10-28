@@ -76,7 +76,7 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 `make run ARGS="--port 7901 --no-browser"` builds and runs from the checkout; `make install`
 (`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3` and `share/c3/www`; `make clean`.
 
-A c³ started while one runs on its port opens that one in the browser and ends. When the running one is
+A c³ started while one runs on its port has that one open its window and ends. When the running one is
 an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
 (`/proc/<pid>/exe` reads `<path> (deleted)`; `GET /api/status` says its `pid`) - the new one stops it
 (SIGTERM, the port free within 10 s) and starts in its place, as a stop by hand would: the brokers and
