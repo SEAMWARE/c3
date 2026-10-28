@@ -20,7 +20,9 @@ docs="${1:?usage: tools/docsPublish.sh <clone of SEAMWARE/docs> [<release tag>]}
 tag="${2:-}"
 c3="$(cd "$(dirname "$0")/.." && pwd)"
 
-[ -d "$docs/.git" ] || { echo "docsPublish.sh: $docs is not a git clone"; exit 1; }
+# The clone's top - a clone or a worktree of one (whose .git is a file), not a directory inside some other repository
+[ "$(git -C "$docs" rev-parse --show-toplevel 2>/dev/null)" = "$(cd "$docs" && pwd -P)" ] \
+  || { echo "docsPublish.sh: $docs is not a git clone"; exit 1; }
 
 make -C "$c3" -s site SITE="$docs/latest" VERSION=latest
 
