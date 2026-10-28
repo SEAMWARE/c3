@@ -11,7 +11,7 @@
 //   c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
 //      [--coraine-build <path>] [--source <tarball>]
 //
-// If the port is taken by a c3 already, that one is opened and this one exits.
+// If the port is taken by a c3 already, that one opens its window (POST /api/window/open) and this one exits.
 //
 #include <limits.h>                              // PATH_MAX
 #include <signal.h>                              // signal, kill
@@ -185,6 +185,40 @@ static bool otherC3(const char* url, int* pidP)
 
 // -----------------------------------------------------------------------------
 //
+// otherC3Open - the c3 on the port opens its window: true when it did
+//
+// Not opened from here: this c3 exits now, and a Chrome it started with the DevTools pipe would exit with
+// it (browser.c). A c3 without POST /api/window/open (an earlier version), or with no screen, answers
+// other than 200.
+//
+static bool otherC3Open(const char* url)
+{
+  char                openUrl[256];
+  CorRestClientMulti* multiP = corRestClientMultiCreate(1);
+  bool                opened = false;
+
+  if (multiP == NULL)
+    return false;
+
+  snprintf(openUrl, sizeof(openUrl), "%s/api/window/open", url);
+  corRestClientMultiMaxResponse(multiP, 64 * 1024);
+
+  if (corRestClientMultiAdd(multiP, CorVerbPost, openUrl, NULL, 0, NULL, 0, NULL, NULL) >= 0)
+  {
+    corRestClientMultiPerform(multiP, 5000);
+
+    CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
+    opened = (respP != NULL) && (respP->statusCode == 200);
+  }
+
+  corRestClientMultiDestroy(multiP);
+  return opened;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // portTaken - something answers on 127.0.0.1:<port>
 //
 // Asked before corHttpInit, not left to bind() failing: corHttp sets SO_REUSEPORT on its listener, so a
@@ -314,7 +348,12 @@ int main(int argC, char* argV[])
     if (otherC3(url, &otherPid))
     {
       printf("c3: already running on port %d\n", c3Port);
-      browserOpen(url, noBrowser);
+
+      if ((noBrowser == false) && otherC3Open(url))
+        printf("c3: %s - its window opened\n", url);
+      else
+        browserOpen(url, noBrowser, false);  // no pipe: this c3 is gone in a moment, the window stays
+
       return 0;
     }
 
@@ -345,7 +384,7 @@ int main(int argC, char* argV[])
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);
 
-  browserOpen(url, noBrowser);
+  browserOpen(url, noBrowser, true);
 
   corHttpServe(&server);
   liveShutdown();                                // no subscription left behind on any broker

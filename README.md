@@ -76,7 +76,7 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 `make run ARGS="--port 7901 --no-browser"` builds and runs from the checkout; `make install`
 (`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3` and `share/c3/www`; `make clean`.
 
-A c³ started while one runs on its port opens that one in the browser and ends. When the running one is
+A c³ started while one runs on its port has that one open its window and ends. When the running one is
 an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
 (`/proc/<pid>/exe` reads `<path> (deleted)`; `GET /api/status` says its `pid`) - the new one stops it
 (SIGTERM, the port free within 10 s) and starts in its place, as a stop by hand would: the brokers and
@@ -123,8 +123,11 @@ The backend answers **this machine only**: a connection from another address get
 request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (another site's page, through DNS
 rebinding, cannot reach the proxy). From another machine: `ssh -L 7900:localhost:7900 <host>`.
 
-A second `c3` on a port where one is running opens the running one and exits; any other program on
-the port is an error.
+A second `c3` on a port where one is running asks that one to open its window (`POST /api/window/open`)
+and exits: the running one's window shown again, full-screen, or a new one when it was closed. The
+window is the running c3's, so its minimise and close buttons work. A running c3 of an earlier
+version, or one with no screen, cannot: the second `c3` opens the window itself, without those
+buttons. Any other program on the port is an error.
 
 ## The configuration file
 
