@@ -391,29 +391,36 @@ static const char* boundsText(const WindowBounds* bP, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// stateApplied - the window to windowState, and waited for: up to 1 s, until Chrome has the state and - but
-// for "minimized", whose bounds stay - bounds other than fromP's. The ms waited; -1: not within the second
+// stateApplied - the window asked for state ask, and waited for: up to 1 s, until Chrome reports want (NULL:
+// any state but fromP's) and the desktop has carried it out - bounds other than fromP's, but for a window
+// leaving or going to "minimized", whose bounds Chrome keeps. The ms waited; -1: not within the second;
+// -2: refused (errBuf)
 //
 // On Wayland a state is a request the compositor carries out a moment later. Asked for the next one before
 // that, Chrome takes it for done and the desktop does not: a window "full-screen" in Chrome's eyes, its
-// earlier size on the screen, undecorated - and taking no input
+// earlier size on the screen, undecorated
 //
-static int stateApplied(CorAlloc* allocP, long long windowId, const char* windowState, const WindowBounds* fromP, WindowBounds* nowP, char* errBuf, int errLen)
+static int stateApplied(CorAlloc* allocP, long long windowId, const char* ask, const char* want, const WindowBounds* fromP, WindowBounds* nowP, char* errBuf, int errLen)
 {
   char params[256];
 
-  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, windowState);
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, ask);
   if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
+  {
+    *nowP = *fromP;
     return -2;
+  }
+
+  bool minimisedSide = (strcmp(ask, "minimized") == 0) || (strcmp(fromP->state, "minimized") == 0);
 
   for (int waited = 0; waited <= 1000; waited += 50)
   {
     windowBounds(allocP, windowId, nowP);
 
-    bool sameState  = (strcmp(nowP->state, windowState) == 0);
-    bool moved      = (nowP->width != fromP->width) || (nowP->height != fromP->height) || (nowP->left != fromP->left) || (nowP->top != fromP->top);
+    bool stateOk = (want != NULL) ? (strcmp(nowP->state, want) == 0) : (strcmp(nowP->state, fromP->state) != 0);
+    bool moved   = (nowP->width != fromP->width) || (nowP->height != fromP->height) || (nowP->left != fromP->left) || (nowP->top != fromP->top);
 
-    if (sameState && (moved || (strcmp(windowState, "minimized") == 0)))
+    if (stateOk && (moved || minimisedSide))
       return waited;
 
     usleep(50 * 1000);
@@ -426,9 +433,34 @@ static int stateApplied(CorAlloc* allocP, long long windowId, const char* window
 
 // -----------------------------------------------------------------------------
 //
-// windowStateSet - the window of a page to windowState: by way of "normal" when it is in another state -
-// Chrome minimises no full-screen window, and makes no minimised one full-screen - each step waited for
-// (stateApplied). Already in it: nothing. Every change written to the log, its steps and their waits
+// stepText - " -> maximized 3840x2160+0+0 (120 ms)" appended to the log line of a change
+//
+static void stepText(char* line, int lineLen, const char* ask, const WindowBounds* nowP, int waited, const char* errBuf)
+{
+  char b[96];
+  int  len = strlen(line);
+
+  if (waited >= 0)
+    snprintf(&line[len], lineLen - len, " -> %s: %s (%d ms)", ask, boundsText(nowP, b, sizeof(b)), waited);
+  else if (waited == -1)
+    snprintf(&line[len], lineLen - len, " -> %s: %s (NOT within 1 s)", ask, boundsText(nowP, b, sizeof(b)));
+  else
+    snprintf(&line[len], lineLen - len, " -> %s: refused (%s)", ask, errBuf);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowStateSet - the window of a page to windowState, in the steps Chrome takes (Chrome 156, measured):
+//
+//   - from "fullscreen" or "minimized" nothing but "normal" - which, from "minimized", restores the window to
+//     its state before (maximised, when it was)
+//   - "minimized" by way of "maximized": the desktop brings the window back maximised, and from there it is
+//     one step to full-screen - not a small window first
+//   - "fullscreen" from "maximized" or "normal" directly
+//
+// Each step waited for (stateApplied); already in the state: nothing. Every change written to the log
 //
 static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* windowState, char* errBuf, int errLen)
 {
@@ -447,40 +479,46 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
   }
 
   long long    windowId = windowP->value.i;
-  WindowBounds was;
-  WindowBounds normal;
-  WindowBounds now;
-  char         t1[96];
-  char         t2[96];
-  char         t3[96];
-  int          waitNormal = 0;
-  int          waitState  = 0;
+  WindowBounds cur;
+  WindowBounds next;
+  char         line[1024];
+  char         b[96];
+  int          waited = 0;
 
-  windowBounds(allocP, windowId, &was);
+  windowBounds(allocP, windowId, &cur);
+  snprintf(line, sizeof(line), "c3 window %lld -> %s: %s", windowId, windowState, boundsText(&cur, b, sizeof(b)));
 
-  if (strcmp(was.state, windowState) == 0)
+  if (strcmp(cur.state, windowState) == 0)
   {
-    printf("c3 window %lld -> %s: already %s\n", windowId, windowState, boundsText(&was, t1, sizeof(t1)));
+    printf("%s - already\n", line);
     fflush(stdout);
     return true;
   }
 
-  normal = was;
-  if (strcmp(was.state, "normal") != 0)
-    waitNormal = stateApplied(allocP, windowId, "normal", &was, &normal, errBuf, errLen);
+  if ((strcmp(cur.state, "fullscreen") == 0) || (strcmp(cur.state, "minimized") == 0))
+  {
+    waited = stateApplied(allocP, windowId, "normal", NULL, &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), "normal", &next, waited, errBuf);
+    cur = next;
+  }
 
-  if (waitNormal >= -1)                          // -1: not seen within the second - the state asked for all the same
-    waitState = stateApplied(allocP, windowId, windowState, &normal, &now, errBuf, errLen);
-  else
-    now = normal;
+  if ((waited >= -1) && (strcmp(windowState, "minimized") == 0) && (strcmp(cur.state, "maximized") != 0))
+  {
+    waited = stateApplied(allocP, windowId, "maximized", "maximized", &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), "maximized", &next, waited, errBuf);
+    cur = next;
+  }
 
-  bool ok = (waitNormal >= -1) && (waitState >= -1);
+  if ((waited >= -1) && (strcmp(cur.state, windowState) != 0))
+  {
+    waited = stateApplied(allocP, windowId, windowState, windowState, &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), windowState, &next, waited, errBuf);
+    cur = next;
+  }
 
-  printf("c3 window %lld -> %s: was %s, normal %s (%s), %s %s (%s)%s\n", windowId, windowState,
-         boundsText(&was, t1, sizeof(t1)),
-         boundsText(&normal, t2, sizeof(t2)), (waitNormal >= 0) ? "applied" : (waitNormal == -1) ? "NOT within 1 s" : "refused",
-         windowState, boundsText(&now, t3, sizeof(t3)), (waitState >= 0) ? "applied" : (waitState == -1) ? "NOT within 1 s" : "refused",
-         ok ? "" : " - FAILED");
+  bool ok = (waited >= -1);
+
+  printf("%s%s\n", line, ok ? "" : " - FAILED");
   fflush(stdout);
 
   return ok;
