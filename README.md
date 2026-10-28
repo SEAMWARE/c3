@@ -143,6 +143,11 @@ the window again with it - a new window of its Chrome, the earlier one closed, f
 the UI showed last. Without a token (a `c3` typed in a terminal) the running one's window is activated,
 and the desktop may answer with "c³ is ready" instead of showing it. The second `c3` writes which it was.
 
+GNOME gives no token to a launch from the dock. There the desktop entry does it: `StartupWMClass` names the
+window c3 opens - Chrome's application window of `http://127.0.0.1:<port>` on c³'s profile, app id
+`chrome-127.0.0.1__-Default` (Chrome ignores `--class` for application windows) - so GNOME takes the
+window for c³'s, and the icon shows it again, minimised or not, without starting a second `c3`.
+
 ## The configuration file
 
 `~/.config/c3/c3.json`, written by the backend as the user works - never by the page. It holds the
