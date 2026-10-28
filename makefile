@@ -72,15 +72,28 @@ $(COR_ARCHIVES):
 run: c3
 	./c3 $(ARGS)
 
+#
+# The menu's and the dock's c³: desktop/com.seamware.c3.desktop, Exec the installed c3 by its full path (a
+# desktop session's PATH may not hold $(PREFIX)/bin, ~/.local/bin), and its icon in the hicolor theme, 256 and
+# 512 pixels
+#
+APPS        = $(DESTDIR)$(PREFIX)/share/applications
+ICONS       = $(DESTDIR)$(PREFIX)/share/icons/hicolor
+
 install: c3
-	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/c3
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/c3 $(APPS) $(ICONS)/256x256/apps $(ICONS)/512x512/apps
 	install -m 755 c3 $(DESTDIR)$(PREFIX)/bin/c3
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3/www
 	cp -r www $(DESTDIR)$(PREFIX)/share/c3/www
+	sed 's|@BINDIR@|$(PREFIX)/bin|' desktop/com.seamware.c3.desktop > $(APPS)/com.seamware.c3.desktop
+	chmod 644 $(APPS)/com.seamware.c3.desktop
+	install -m 644 desktop/com.seamware.c3-256.png $(ICONS)/256x256/apps/com.seamware.c3.png
+	install -m 644 desktop/com.seamware.c3-512.png $(ICONS)/512x512/apps/com.seamware.c3.png
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/c3
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3
+	rm -f $(APPS)/com.seamware.c3.desktop $(ICONS)/256x256/apps/com.seamware.c3.png $(ICONS)/512x512/apps/com.seamware.c3.png
 
 #
 # The website: site/index.html around the Documentation page's own files - docs.js, the guides, the styles
