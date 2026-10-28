@@ -38,9 +38,29 @@ cd coraine &amp;&amp; make di                  <span class="c"># the broker - co
   <tr><td>COR_GIT_RETRY_SECONDS</td><td>how long a failing clone or fetch is retried, default 600; <code>0</code> disables
   retrying. The pause between attempts doubles from 3 s up to a minute.</td></tr>
 </table>
-<p>It clones 22 repositories: <code>corBase corLog corAlloc corArgs corHash corTree corJson corProm corPlugin
-corBridge corDdsBridge corModbusBridge corMqttBridge corCkanBridge corOpcuaBridge corHttp corRest corJsonld corNgsild
-corDB corTools corTest</code>, each at <code>main</code>.</p>
+<p>It clones 22 repositories, each at <code>main</code> - it pins nothing:
+<a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener">corBase</a>,
+<a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener">corLog</a>,
+<a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener">corAlloc</a>,
+<a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener">corArgs</a>,
+<a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener">corHash</a>,
+<a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener">corTree</a>,
+<a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener">corJson</a>,
+<a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener">corProm</a>,
+<a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener">corPlugin</a>,
+<a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>,
+<a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>,
+<a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener">corModbusBridge</a>,
+<a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener">corMqttBridge</a>,
+<a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>,
+<a href="https://github.com/SEAMWARE/corOpcuaBridge" target="_blank" rel="noopener">corOpcuaBridge</a>,
+<a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener">corHttp</a>,
+<a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener">corRest</a>,
+<a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener">corJsonld</a>,
+<a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener">corNgsild</a>,
+<a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener">corDB</a>,
+<a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener">corTools</a>,
+<a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener">corTest</a>.</p>
 
 <h2 id="build">Building the stack</h2>
 <p>The umbrella's <code>COR_DIRS</code> is the build order, and <code>make &lt;target&gt;</code> runs the target in each

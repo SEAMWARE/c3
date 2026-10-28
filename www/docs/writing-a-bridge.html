@@ -192,8 +192,9 @@ client) fills in only what it needs, and a broker built without a feature leaves
   <li><b>Plain data.</b> Every parameter is <code>const char*</code>, an integer or a <code>bool</code>: no tree node,
   no allocator, no NGSI-LD type. A plugin need not be C - the DDS bridge is C++.</li>
   <li><b>Borrowed.</b> The <code>json</code> handed to <code>publish</code> (and every other text the broker passes) is
-  the broker's for the duration of the call: copy what is needed after it. The broker parses what the plugin hands to
-  <code>sampleIn</code> into its own buffer before returning.</li>
+  the broker's for the duration of the call: copy what is needed after it. The broker parses a copy of its own of what the
+  plugin hands to <code>sampleIn</code> and leaves the plugin's text alone; coraine 0.4.0 and older parse it in place, so
+  that text is never a string literal nor a buffer the transport reads again.</li>
   <li><b>Threads.</b> <code>publish</code>, <code>serviceInvoke</code>, <code>actionGoalSend</code> and
   <code>payloadCheck</code> run on a broker thread inside a client's request and must not block. <code>sampleIn</code>
   and the other upcalls come from the plugin's own threads; the broker sets up its per-request state and takes its
@@ -301,8 +302,11 @@ make install          <span class="c"># to /opt/seamware/plugins/bridge (PLUGIN_
 (<code>/usr/share/coraine/src/coraine-src.tar.xz</code>) is unpacked into <code>.coraine-src/</code> and used. For a
 broker built with <a href="#docs/building/coraine-build">coraine-build</a> <code>&lt;dir&gt;</code>:
 <code>make COR_LIBS=&lt;dir&gt;</code> and <code>make install PLUGIN_DIR=&lt;dir&gt;/install/plugins/bridge</code>. The
-<code>.so</code> is compiled <code>-fvisibility=hidden</code>, so of the plugin's own functions only
-<code>bridgeRegister</code> is exported. <code>make contract</code> compiles <code>src/tmplRegister.c</code> alone - it
+<code>.so</code> is compiled <code>-fvisibility=hidden</code>, so it exports two symbols:
+<code>bridgeRegister</code>, and <code>corNodeLayout</code> - weak, defined by <code>corTree/CorNode.h</code> (included
+by <code>BridgeDriver.h</code>), which the broker checks when it opens the plugin: a plugin built against another
+CorNode layout is refused. The contract is headers only - <code>corArgs/CorArg.h</code> for the type of one pointer
+member and <code>corTree/CorNode.h</code> - and no library is linked. <code>make contract</code> compiles <code>src/tmplRegister.c</code> alone - it
 includes no transport header, so the check runs where the transport library is not installed.</p>
 
 <h2 id="tests">The functional test</h2>

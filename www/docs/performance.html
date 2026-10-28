@@ -119,6 +119,34 @@ that is not an object or an array is 32 bytes, not 40.</p>
 in RAM, release builds, loaded in batches of 500, the RSS after the load; two runs of each, ABBA, within
 0.2&nbsp;% (2026-10-23). The load took the same time in all three (23.5-23.7&nbsp;s).</p>
 
+<h3 id="tree-threads">Threads building trees at once</h3>
+<p>Every thread writing the store builds and frees tree nodes - a batch update of 20 entities clones and frees
+thousands, in a few sizes. Each thread keeps a cache of free blocks per size class, taken and freed with no lock; the
+class's mutex is taken once for a batch of blocks (4&nbsp;KiB worth, 32 at most), and once to give a batch back when a
+thread holds two. A thread that ends gives its cache back. The cost is up to 8&nbsp;KiB a class a thread; with
+300&nbsp;000 entities stored the broker's RSS did not move (641&nbsp;MB both).</p>
+<div class="g-scroll"><table class="gtable">
+  <thead><tr><th>Scenario</th><th>One mutex a class</th><th>Thread caches</th><th>Change</th></tr></thead>
+  <tbody>
+  <tr><td>batch update (20), c50</td><td>16&nbsp;269</td><td>29&nbsp;076</td><td><b>+78.7&nbsp;%</b></td></tr>
+  <tr><td>batch create (20), c50</td><td>10&nbsp;474</td><td>29&nbsp;981</td><td><b>+186&nbsp;%</b></td></tr>
+  <tr><td>batch delete (20), c50</td><td>18&nbsp;590</td><td>60&nbsp;452</td><td><b>+225&nbsp;%</b></td></tr>
+  <tr><td>merge, c50</td><td>65&nbsp;497</td><td>70&nbsp;702</td><td>+7.9&nbsp;%</td></tr>
+  <tr><td><code>PATCH</code>, c50</td><td>100&nbsp;513</td><td>104&nbsp;067</td><td>+3.5&nbsp;%</td></tr>
+  <tr><td>create, c50</td><td>90&nbsp;415</td><td>93&nbsp;566</td><td>+3.5&nbsp;%</td></tr>
+  <tr><td>create into 300&nbsp;000 entities, c50</td><td>87&nbsp;680</td><td>88&nbsp;423</td><td>+0.8&nbsp;%</td></tr>
+  <tr><td><code>DELETE</code>, c50</td><td>150&nbsp;654</td><td>147&nbsp;052</td><td>-2.4&nbsp;%</td></tr>
+  <tr><td><code>PATCH</code>, c1</td><td>46&nbsp;510</td><td>47&nbsp;226</td><td>+1.5&nbsp;%</td></tr>
+  <tr><td>create, c1</td><td>33&nbsp;841</td><td>33&nbsp;909</td><td>+0.2&nbsp;%</td></tr>
+  </tbody>
+</table></div>
+<p class="muted">Requests/s. <code>test/perf/perfRun.sh corDB</code>, the durable configuration (<code>--dbDir</code> on ext4,
+NVMe, <code>--dbSync interval</code>, <code>--troe none</code>), plain release, AMD Ryzen 9 8940HX, two runs of each in the
+order A B B A, 2026-10-27.</p>
+<p>Reads and subscriptions: within ±3.3&nbsp;%. The batch p50s halve or better (batch update 2.92 → 1.53&nbsp;ms, batch
+delete 2.53 → 0.73&nbsp;ms). With one connection a batch does the same work either way; what the cache removes is threads
+waiting for each other on the same few sizes.</p>
+
 <h3 id="ram-million">At one and ten million entities</h3>
 <p>~2.0&nbsp;KiB of RAM a <code>corDB</code> entity (2.14 and 2.05&nbsp;KiB), ~630 bytes on disk. A
 <code>mongoc</code> broker holds 125&nbsp;MiB at either size, and mongod grows:</p>
@@ -410,6 +438,9 @@ connections unless named, the log on an NVMe disk (ext4).</p>
   ~21&nbsp;000-24&nbsp;000 with fifty sharing each sync.</li>
   <li><b><code>--dbCompress</code></b>: on eight cores every scenario within -2.3 to +2.9&nbsp;%; batch create
   with history, the scenario that snapshots most, -7.4&nbsp;%.</li>
+  <li><b>A store that pauses</b> when its log cannot be written (<a href="#docs/administration/store-paused">the pause</a>)
+  costs a write one atomic load: every single-entity scenario within ±2.5&nbsp;% of the same broker without it
+  (2026-10-27, the conditions of <a href="#docs/performance" data-scroll="tree-threads">Threads building trees at once</a>).</li>
   <li><b>Recovery</b>: 100&nbsp;000 entities (38&nbsp;MB of log or snapshot) are back in <b>0.19&nbsp;s</b>
   after <code>kill -9</code> or a clean stop (2026-10-04).</li>
 </ul>

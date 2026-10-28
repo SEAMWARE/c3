@@ -11,6 +11,10 @@ says where the broker takes the <code>@context</code> from, what it does with it
 <p>Every example below was run against a coraine broker on <code>localhost:1099</code>, with
 <code>--database corDB --httpEndpoint http://localhost:1099</code>, and the outputs are as it answered. Only the
 <code>Date</code> headers are left out.</p>
+<p>The JSON-LD processing - an <code>@context</code> parsed, the context cache, expansion and compaction - is
+<a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener">corJsonld</a>, a library of its own.
+The broker's NGSI-LD side, <a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener">corNgsild</a>,
+hosts the inline <code>@context</code>s a response names (<a href="#docs/jsonld/response">below</a>).</p>
 
 <h2 id="what"><span class="g-n">1</span>What an @context does</h2>
 <p>An <code>@context</code> is a JSON object of terms: a short name and the IRI it stands for. Here it is hosted on
@@ -102,7 +106,8 @@ Content-Length: 185
 <p>A request with no <code>@context</code> gets the core context's URL,
 <code>https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld</code>, or the default user context's.</p>
 <p>An <code>@context</code> that came inline, in an <code>application/ld+json</code> body, has no URL that a
-<code>Link</code> header could name. The broker hosts it for the purpose and names that:</p>
+<code>Link</code> header could name. The broker hosts it for the purpose and names that (corNgsild's
+<code>ldContextHost.c</code>):</p>
 <pre>curl -i 'localhost:1099/ngsi-ld/v1/entityOperations/query?options=keyValues' -H 'Content-Type: application/ld+json' -d '{
   "type": "Query", "entities": [ { "type": "Vehicle" } ],
   "@context": { "Vehicle": "https://example.org/vocab/Vehicle", "speed": "https://example.org/vocab/speed" } }'

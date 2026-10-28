@@ -2,7 +2,7 @@
 <!-- docs/lib-corlog.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corLog</h1>
-<p class="lead">The log of an executable: error, warning, info, verbose and FIXME lines, and 3200 numbered trace
+<p class="lead"><a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener">corLog</a> is the log of an executable: error, warning, info, verbose and FIXME lines, and 3200 numbered trace
 levels, written one line at a time to a file, to stdout or to both. coraine logs with it, and every library of
 the stack reaches it through corBase's library log.</p>
 
@@ -110,7 +110,7 @@ range, and names its levels in a header of its own:</p>
   <tr><td>50-66</td><td>corJson (50-54, 56-63), corTree (55, 64-66)</td><td><code>corJsonTraceLevels.h</code>, <code>corTreeTraceLevels.h</code></td></tr>
   <tr><td>100-116</td><td>corRest</td><td><code>corRestTraceLevels.h</code></td></tr>
   <tr><td>150-156</td><td>corJsonld</td><td><code>corLdTraceLevels.h</code></td></tr>
-  <tr><td>200-240</td><td>corNgsild - forwarding 220-226, notifications 230-239</td><td><code>ldTraceLevels.h</code></td></tr>
+  <tr><td>200-240</td><td>corNgsild - validation 200-210, forwarding 220-226, registration matching 227, notifications 230-235, transient entities 240</td><td><code>ldTraceLevels.h</code></td></tr>
   <tr><td>300-303</td><td>corAlloc</td><td><code>CorAllocTraceLevel.h</code></td></tr>
   <tr><td>400-404</td><td>coraine itself</td><td><code>src/app/coraine/coraineTraceLevels.h</code></td></tr>
 </table>

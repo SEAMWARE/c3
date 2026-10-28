@@ -6,7 +6,8 @@
 the sanitizer, soak and pre-release runs a release is checked with.</p>
 
 <p>Everything here assumes a build - <a href="#docs/building">Building from source</a>. The functional tests are
-under <code>test/funcTests/cases/</code>, and run through <b>corTest</b>, which the <code>corLibs</code> umbrella
+under <code>test/funcTests/cases/</code>, and run through <b><a href="https://github.com/SEAMWARE/corTest">corTest</a></b>, which the
+<a href="https://github.com/SEAMWARE/corLibs"><code>corLibs</code></a> umbrella
 installs as <code>~/git/corLibs/bin/corTest</code>.</p>
 
 <h2 id="run">Running the suite</h2>
@@ -310,7 +311,7 @@ gh workflow run prerelease.yml -f ref=release/0.5.0 -f only=soak -f soakMinutes=
   <tr><td><code>nightly</code></td><td>valgrind on both HTTP servers, ETSI (mhd/builtin × mongoc, mhd corDB), coverage, performance, the DDS bridge image, the suite on arm64</td><td>17</td></tr>
   <tr><td><code>packages</code></td><td>the Debian packages built (pgo), then installed in clean containers</td><td>20</td></tr>
   <tr><td><code>sanitizers</code></td><td>the whole suite under ASan + UBSan, {mhd, builtin} × {mongoc, corDB}</td><td>4</td></tr>
-  <tr><td><code>upgrade</code></td><td><code>test/upgrade/upgradeCheck.sh</code> from the image of the newest <code>v*</code> tag before <code>ref</code> to this build, mongoc + corDB</td><td>1</td></tr>
+  <tr><td><code>upgrade</code></td><td><code>test/upgrade/upgradeCheck.sh</code> from the image of the release before <code>ref</code> (the newest <code>v*</code> tag below its version - by version, not ancestry: a release is tagged on its release branch) to this build, mongoc + corDB</td><td>1</td></tr>
   <tr><td><code>soak</code></td><td><code>soakMinutes</code> per database, mongoc and corDB</td><td>2</td></tr>
   <tr><td><code>summary</code></td><td>every job of the run in the run summary; red if any part is</td><td>1</td></tr>
 </table>

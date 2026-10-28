@@ -105,10 +105,9 @@ list.</p>
 </table>
 <p>Prints every option as a table and exits with 0. The columns: the long name, the short name, the environment
 variable, <code>Optional</code>, the type (<code>Bool</code>, <code>String</code>, <code>Int</code>,
-<code>UInt</code>, <code>UShort</code>), and where the value in force came from (<code>Default Value</code>,
-<code>Short Option</code>, ...). The default value itself is not in the table. As with <code>--usage</code>, the
+<code>UInt</code>, <code>UShort</code>), and the default value (<code>-</code> for none). As with <code>--usage</code>, the
 plugins named on the same command line add their options.</p>
-<pre>coraine -U -db corDB      <span class="c"># ... --dbDir (-dbDir) CORAINE_DBDIR Optional String Default Value</span></pre>
+<pre>coraine -U -db corDB      <span class="c"># ... --dbSync (-dbSync) CORAINE_DBSYNC Optional String interval</span></pre>
 
 <h3 id="version"><code>--version</code></h3>
 <table class="g-opts">
@@ -126,7 +125,7 @@ checked.</p>
 <p>It is read from the command line only: <code>CORAINE_VERSION</code> is listed by <code>-U</code>, and setting it
 does nothing - the broker starts.</p>
 <pre>coraine -V
-<span class="c"># coraine 0.6.0-dev</span>
+<span class="c"># coraine 0.6.0</span>
 <span class="c"># features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 ... ICU_COLLATION=0 ...</span>
 <span class="c"># httpServer: mhd</span></pre>
 
@@ -143,7 +142,7 @@ the plugins loaded, <code>coraine running on port &lt;port&gt;</code>, and one l
 /ngsi-ld/v1/entities/...</code>). Without it a broker that has no error to report writes nothing. With the
 <code>admin</code> API plugin it can be switched at run time (<code>/admin/log</code>).</p>
 <pre>coraine -v -db corDB
-<span class="c"># V: 000000.000: coraine.c[1856]: main: coraine  0.6.0-dev</span>
+<span class="c"># V: 000000.000: coraine.c[1856]: main: coraine  0.6.0</span>
 <span class="c"># I: 000000.000: coraine.c[1857]: main: Advertised HTTP endpoint: http://192.168.1.138:1026 (auto-detected LAN IP)</span>
 <span class="c"># ...</span>
 <span class="c"># I: 000000.020: coraine.c[2280]: main: coraine running on port 1026</span></pre>
@@ -161,7 +160,8 @@ A level belongs to the code that writes it:</p>
   <tr><th>Levels</th><th>Code</th><th>Defined in</th></tr>
   <tr><td>50-66</td><td>the JSON parser and tree (corJson, corTree)</td><td><code>corJsonTraceLevels.h</code>, <code>corTreeTraceLevels.h</code></td></tr>
   <tr><td>100-199</td><td>the REST layer (corRest) and the JSON-LD library (corJsonld, 150 on)</td><td><code>corRestTraceLevels.h</code>, <code>corLdTraceLevels.h</code></td></tr>
-  <tr><td>200-399</td><td>the NGSI-LD library (corNgsild): validation, forwarding (220-226), notifications (230-239), ...</td><td><code>ldTraceLevels.h</code></td></tr>
+  <tr><td>200-240</td><td>the NGSI-LD library (corNgsild): validation (200-210), forwarding (220-226), registration matching (227), notifications (230-235), transient entities (240)</td><td><code>ldTraceLevels.h</code></td></tr>
+  <tr><td>300-303</td><td>the allocator (corAlloc)</td><td><code>CorAllocTraceLevel.h</code></td></tr>
   <tr><td>400-404</td><td>the broker: 400 forwarded requests, 401 cache sync between instances (<code>--high-availability</code>), 402 bridges, 403 Service Execution, 404 the SQL of a TRoE entity selector</td><td><code>src/app/coraine/coraineTraceLevels.h</code></td></tr>
 </table>
 <p>Traces exist in a debug build only. A release build has them compiled out: the option is accepted, turns on
@@ -425,7 +425,7 @@ asks again. 0 leaves the header out (the browser's own default applies). It has 
 <p>A TCP port for the health probes, served by a thread of its own, outside the HTTP server - a probe never waits
 behind the requests. <code>GET /live</code>: 200 while the broker makes progress, 503 when it is stuck
 (<code>--healthStallTimeout</code>). <code>GET /ready</code>: 200 once the broker serves, 503 while the store loads,
-when the store does not answer, over the memory budget, stuck, or stopping. Every answer carries a JSON report (store,
+when the store does not answer, over the memory budget, while the store is paused, stuck, or stopping. Every answer carries a JSON report (store,
 TRoE, memory, requests). It listens on every address and opens before the store is loaded, so <code>/live</code>
 answers during a long load. A port that cannot be opened stops the broker: <code>cannot listen for the health probes
 on port 8080</code>. The probes and the report: <a href="#docs/administration/health">Health port</a>; on Kubernetes:
@@ -830,7 +830,11 @@ href="#docs/administration/entitymaps">EntityMaps</a>.</p>
 <p>Turns forwarding on. With it, every entity operation is matched against the registrations and forwarded to the
 Context Sources that match; <code>GET /types</code> and <code>/attributes</code> are forwarded too; a subscription
 whose entities a registration covers is also created on that source (§ 5.8.1.4), with this broker's advertised
-endpoint as the callback.</p>
+endpoint as the callback. These subordinate subscriptions follow the registrations (§ 10.5.2.4): one is created when a
+matching registration is created, or PATCHed so that it matches; PATCHed at the source when a registration's change
+narrows its entities differently; deleted when the registration is deleted, or PATCHed so that it no longer matches -
+another type, or no <code>createSubscription</code> in its operations; and deleted at the old endpoint and created at the
+new one when a registration's endpoint or tenant changes. Without <code>--distributed</code> none is made.</p>
 <p>Off by default: the matching costs a registration lookup on every entity operation, and most deployments hold their
 data locally. Without it the Registry API (create, update, delete, query and discover registrations, § 12) works the
 same, and nothing is forwarded - registrations can be made before forwarding is turned on. With it, and at least one
@@ -1405,7 +1409,7 @@ the next (group commit).</li>
 <p>With any value, a log that cannot be written <b>pauses</b> the store: a segment that cannot be allocated ahead (a
 full disk, a file-size limit), a record that cannot be put in the log, a failed <code>fdatasync</code>. The flusher
 keeps 8 MiB of the log allocated ahead of its records, so a full disk is found before a write needs the room - unless
-more than 8 MiB is written between two of its runs. While paused, every write is refused before it touches the store:
+more than 8 MiB is written between two of its runs. While paused, every write is refused before it is parsed:
 503 <code>PersistenceUnavailable</code>, with <code>Retry-After: 5</code> and the detail <code>writes are refused until
 the broker can write its log again (paused for &lt;N&gt; s): &lt;why&gt;</code>; reads are served. A write already
 applied when the log failed is answered 503 as well: <code>the write is in the broker's memory but not in its log
@@ -1416,7 +1420,8 @@ case.</p>
 <p>The pause ends by itself: the snapshotter writes a snapshot of each tenant whose log failed, from memory, once a
 second backing off to once every 16 s; a snapshot rolls the log and drops the files before it. Once one succeeds for
 every such tenant the writes are served again - the writes answered 503 after they were applied are in that snapshot.
-A failure of the history log (<code>--troe corDB</code>) is not repaired: the store stays paused until a restart.
+A failure of the history log (<code>--troe corDB</code>) is repaired too: the history of each tenant whose history log
+failed is written anew from memory, as new segments that replace the old ones.
 <a href="#docs/administration/store-paused">Administration - A store that cannot write its log</a> has what is served
 and what is refused while paused, <code>/ready</code> and the metrics.</p>
 <p>Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbSync without --dbDir - the store is in RAM
@@ -1576,8 +1581,8 @@ href="#docs/performance/history">Performance</a>.</p>
 <code>"***"</code> and marks the option <code>"secret": true</code> (not set, the value is <code>null</code>). Given
 as the environment variable <code>CORAINE_TROEPWD</code>, it is not on the command line, which any user of the machine
 can read (<code>ps</code>); a process's environment is readable by its owner only. Leaving it out and giving libpq its
-own <code>PGPASSWORD</code> keeps it out of the broker's options altogether. It goes into the connection string
-unquoted: a password with a space or a <code>'</code> in it is not passed as it is.</p>
+own <code>PGPASSWORD</code> keeps it out of the broker's options altogether. It is quoted in the connection
+string, as the user and <code>--troeName</code> are: a space, a <code>'</code> or a <code>\</code> in it is passed as it is.</p>
 <pre>$ CORAINE_TROEPWD="$(cat /run/secrets/pg)" coraine --database corDB --troe timescale --apiPlugins admin
 $ curl -s localhost:1026/admin/config     <span class="c"># the --troePwd entry:</span>
 {"name": "--troePwd", "short": "-troePwd", "type": "string", "value": "***", "default": null, "from": "env", "env": "CORAINE_TROEPWD", "secret": true, ...}</pre>
@@ -1632,7 +1637,9 @@ with its PostgreSQL does not fail for starting first. Past it the broker does no
 <pre>$ coraine --database corDB --troe timescale --troePort 19659 --troeConnectTimeout 0
 E: ... timescale: connection to db 'postgres' failed: connection to server at "localhost" (127.0.0.1), port 19659 failed: Connection refused
 E: ... timescale: failed to initialise the default-tenant database (0 s, --troeConnectTimeout)</pre>
-<p>A wrong password is retried the same way, until the timeout.</p>
+<p>A password the server refuses - or none, when the server asks for one - is not retried: the start fails at once,
+with the server's message. A server whose messages are not in English (<code>lc_messages</code>) is retried until the
+timeout, as a server that is not up.</p>
 
 <h3 id="timescale-troeDownExit"><code>--troeDownExit</code></h3>
 <table class="g-opts">
@@ -2212,7 +2219,7 @@ build, its traces are compiled out - nothing to turn on</code>). A build with tr
 </table>
 <p>Prints <code>coraine-import &lt;version&gt;</code> and exits 0, before anything else is read or loaded.</p>
 <pre>$ coraine-import -V
-coraine-import 0.6.0-dev</pre>
+coraine-import 0.6.0</pre>
 
 <h3 id="import-usage"><code>--usage</code></h3>
 <table class="g-opts">

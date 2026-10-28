@@ -59,7 +59,7 @@ corRequest --url cor://localhost:2026 -X POST --path /ngsi-ld/v1/entities \
   <tr><td>--curl, --bodyFile, --pretty</td><td>the corCurl form, above</td></tr>
 </table>
 <p>Exit codes: <code>0</code> a response came back (whatever its status), <code>1</code> none did, <code>2</code> bad
-arguments or an unreadable <code>--payloadFile</code>, <code>3</code> the payload is not JSON - a request only HTTP can
+arguments, an unreadable <code>--payloadFile</code> or an <code>http://</code> URL outside load mode or not GET, <code>3</code> the payload is not JSON - a request only HTTP can
 carry. In coraine's functests each broker also listens on cor:// at its HTTP port + 1000, and
 <code>COR_TRANSPORT=cor</code> sends every request it can through <code>corRequest --curl</code>
 (<a href="#docs/testing/run">Running the suite</a>).</p>
@@ -138,7 +138,8 @@ almost every test, and fall back to <code>mongosh</code> where it is not built; 
 The <a href="#docs/cor-libs">corLibs</a> umbrella builds it after every library and collects the tools into
 <code>corLibs/bin</code>, beside <code>corTest</code>:</p>
 <pre>make -C ../corLibs di                <span class="c"># the whole stack</span>
-make di                              <span class="c"># this repository alone, once the libraries are built</span>
+make di                              <span class="c"># this repository alone, once the libraries are built:</span>
+                                     <span class="c"># bin/corRequest, bin/corTestClient, bin/corMongoDrop (where libmongoc is)</span>
 make COR_HTTP_SERVER=builtin di      <span class="c"># against a corRest built with the builtin HTTP server (corHttp)</span></pre>
 <p>It needs libmicrohttpd (or corHttp, with <code>COR_HTTP_SERVER=builtin</code> - it must be the server corRest was built
 with), OpenSSL and libmosquitto; <code>corMongoDrop</code> needs libmongoc (<code>pkg-config mongoc2</code>) and is skipped,

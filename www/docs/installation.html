@@ -38,11 +38,11 @@ sudo apt update &amp;&amp; sudo apt install coraine        <span class="c"># or 
 <ul>
   <li><b>Components.</b> <code>main</code> holds the releases; <code>testing</code> holds builds of a commit between
   releases - put <code>testing</code> in place of <code>main</code> on the <code>deb</code> line.</li>
-  <li><b>Versions.</b> <code>0.5.0+&lt;dist&gt;</code> for a release, <code>0.5.0~git&lt;YYYYMMDD&gt;.&lt;sha8&gt;+&lt;dist&gt;</code>
-  for any other commit (it sorts before <code>0.5.0</code>); <code>&lt;dist&gt;</code> is <code>ubuntu26.04</code>,
+  <li><b>Versions.</b> <code>0.6.0+&lt;dist&gt;</code> for a release, <code>0.6.0~git&lt;YYYYMMDD&gt;.&lt;sha8&gt;+&lt;dist&gt;</code>
+  for any other commit (it sorts before <code>0.6.0</code>); <code>&lt;dist&gt;</code> is <code>ubuntu26.04</code>,
   <code>ubuntu24.04</code> or <code>debian13</code>.</li>
   <li><b>Without the repository.</b> Each run of the <code>Packages</code> workflow keeps its <code>.deb</code> files as
-  artifacts (<code>debs-&lt;dist&gt;-&lt;arch&gt;</code>): <code>sudo apt install ./coraine_0.5.0+ubuntu24.04_amd64.deb</code>
+  artifacts (<code>debs-&lt;dist&gt;-&lt;arch&gt;</code>): <code>sudo apt install ./coraine_0.6.0+ubuntu24.04_amd64.deb</code>
   - apt resolves the dependencies.</li>
   <li><b>Dependencies</b> come from the distribution: OpenSSL, GEOS, libmicrohttpd, libmosquitto, libpq, zstd, and on
   Ubuntu 26.04 the MongoDB C driver v2. Ubuntu 24.04 and Debian 13 package only v1 of that driver, so there the package
@@ -115,6 +115,8 @@ On a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
 
 <!-- ======================================================================= -->
 <h2 id="source">Install from source</h2>
+<p>The broker is built against the Cor-Libs, its libraries; <a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener">corLibs</a>
+clones and builds them, and <a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener">coraine</a> is the broker's own repository.</p>
 <pre>git clone git@github.com:SEAMWARE/corLibs.git
 ./corLibs/bootstrap.sh          <span class="c"># clones and builds every Cor-Lib at its pinned version</span>
 cd coraine
@@ -203,6 +205,7 @@ given without <code>--dbDir</code> - on the command line or in the environment -
 names the option: <code>corDB: --dbSync without --dbDir - the store is in RAM only, there is no disk for it to act on</code>.</p>
 <p>A log that cannot be written - a full disk, a file-size limit, an I/O error - <b>pauses</b> the store: writes are
 refused with 503 <code>PersistenceUnavailable</code> and reads are served, until a snapshot of each such tenant succeeds
+- a history log that failed (<code>--troe corDB</code>) is written anew from memory the same way, and the pause ends by itself
 (<a href="#docs/administration/store-paused">A store that cannot write its log</a>).</p>
 <p>What it costs: <a href="#docs/performance">Performance</a>. How it works:
 <a href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">corDB's persistence</a>.</p>

@@ -2,7 +2,7 @@
 <!-- docs/lib-cordb.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corDB - the in-process store</h1>
-<p class="lead">corDB keeps a broker's entities, subscriptions and registrations in the broker's own memory - one
+<p class="lead"><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener">corDB</a> keeps a broker's entities, subscriptions and registrations in the broker's own memory - one
 tree per tenant, no database server - as a database plugin, <code>corDB.so</code>. With <code>--dbDir</code> it is
 durable (an append log and snapshots), and with <code>--troe corDB</code> the same store keeps the temporal history.</p>
 
@@ -212,10 +212,12 @@ lock is released; the writers that arrive during one sync share the next (group 
 <p>With any <code>--dbSync</code>, a log that cannot be written <b>pauses</b> the store: a segment that cannot be
 allocated ahead (a full disk, a file-size limit), a record that cannot be put in the log, a failed
 <code>fdatasync</code>. The pause is broker-wide and every write function checks it first, one atomic load
-(<code>corDbStoreWriteRefused</code>): while paused, a write is refused before it touches the store - 503
-<code>PersistenceUnavailable</code> - and reads are served. The driver's <code>paused</code> function tells the broker,
-which refuses every request but the reads before it is parsed, answers <code>/ready</code> with 503 and counts the
-refusals (<a href="#docs/administration">Administration</a>).</p>
+(<code>corDbStoreWriteRefused</code>). The driver's <code>paused</code> function tells the broker, which refuses every
+write before it is parsed - 503 <code>PersistenceUnavailable</code>, <code>Retry-After: 5</code>, detail
+<code>writes are refused until the broker can write its log again (paused for &lt;N&gt; s): &lt;why&gt;</code> - answers
+<code>/ready</code> with 503 and counts the refusals (<a href="#docs/administration">Administration</a>). A write that
+passed the broker's check and reaches the store as the pause begins is refused by the store, with the same answer.
+Reads are served.</p>
 <ul>
   <li><b>The reserve.</b> The flusher keeps 8 MiB of the open segment allocated ahead of its records, off the write
   path - a segment that would pass its roll size with it rolls early - so a full disk pauses the store before a write
@@ -228,8 +230,16 @@ refusals (<a href="#docs/administration">Administration</a>).</p>
   <li><b>The repair.</b> The snapshotter writes a snapshot of each tenant whose log failed, from memory, once a second
   backing off to once every 16 s; a snapshot rolls the log and drops the files before it. When it has succeeded for
   every such tenant the pause ends, and the writes answered 503 after they were applied are in that snapshot.
-  <code>--dbSync request</code> waiters whose sync failed wait up to 10 s for it. A failure of the history log is not
-  repaired - the history is not in a snapshot: paused until a restart.</li>
+  <code>--dbSync request</code> waiters whose sync failed wait up to 10 s for it.</li>
+  <li><b>The history's repair</b> (<code>--troe corDB</code>). The history is not in a snapshot: a tenant whose history log
+  lost a record or a sync has its history written anew from memory - every entity's instances and lifecycle events, as
+  new segments after the open one, their records numbered from 1 again. Each is synced and renamed from
+  <code>.tmp</code>, the last first, the directory synced, and only then the older segments deleted; the appends go on in
+  the last new segment. While it is written the tenant's history mutex is held: no history is drained, and temporal
+  reads and writes wait. The pause ends when the repair is done for every such tenant. Recovery takes a history segment
+  whose first record is number 1, after others, as the start of the history and deletes the ones before it; a death
+  before the first new segment was renamed leaves the new ones after a gap, set aside as <code>.torn</code> - the history
+  is then the old segments.</li>
 </ul>
 
 <h3 id="compress"><code>--dbCompress</code></h3>

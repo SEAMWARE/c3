@@ -8,7 +8,7 @@ a StatefulSet.</p>
 
 <h2 id="image">The image</h2>
 <p><code>quay.io/seamware/coraine:&lt;tag&gt;</code> - one immutable tag per merge to <code>main</code>:
-<code>0.5.0</code> for a release, <code>0.5.0-&lt;date&gt;-&lt;commit&gt;</code> for a merge. There is no
+<code>0.6.0</code> for a release, <code>0.6.0-&lt;date&gt;-&lt;commit&gt;</code> for a merge. There is no
 <code>latest</code> tag: name the tag you tested.</p>
 <ul>
   <li><b>Multi-arch</b> - linux/amd64 and linux/arm64 under the same tag; <code>&lt;tag&gt;-amd64</code> and
@@ -40,9 +40,10 @@ kernel reclaims.</p>
 what it fetches - current state, temporal history, the answers of the Context Sources of a distributed query -
 stops at <code>--maxResponseSize</code>, by default 1/16 of the memory budget.</p>
 <div class="g-callout">
-<p><b>Sizing with <code>corDB</code>:</b> about 3.5&nbsp;KiB resident per entity of five attributes - 100&nbsp;000
-entities are about 355&nbsp;MiB, a million about 3.5&nbsp;GiB. With <code>mongoc</code> the entities are in
-MongoDB.</p>
+<p><b>Sizing with <code>corDB</code>:</b> 2&nbsp;047 bytes of RSS per entity of five attributes - 100&nbsp;000
+entities, 231&nbsp;MiB (0.6.0, <code>corDB</code> in RAM, a release build, 2026-10-23 -
+<a href="#docs/performance">Performance</a>). Entities that are larger, a persistent <code>--dbDir</code> (the log is page
+cache) and the requests in flight add to it. With <code>mongoc</code> the entities are in MongoDB.</p>
 </div>
 <p>With a CPU limit, the broker's HTTP event loops and its worker pool follow the CPUs the container may use - its
 CPU affinity and its cgroup quota - not the node's core count.</p>
@@ -139,7 +140,7 @@ spec:
     spec:
       containers:
         - name: coraine
-          image: quay.io/seamware/coraine:0.5.0
+          image: quay.io/seamware/coraine:0.6.0
           args:
             - --database
             - mongoc
@@ -203,7 +204,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: coraine
-          image: quay.io/seamware/coraine:0.5.0
+          image: quay.io/seamware/coraine:0.6.0
           args:
             - --database
             - corDB

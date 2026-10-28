@@ -98,7 +98,9 @@ changed since, over HTTP or another connection, to notify elsewhere stays.</p>
 crashes, leaves its connections' subscriptions in the store. At its next start every subscription, periodic
 subscription and context source subscription that notifies a connection of another run is deleted, in every
 tenant. Not with <code>--high-availability</code>: there, a connection of another run may be another instance's,
-alive, and a killed instance's subscriptions stay.</p>
+alive. Each instance writes the beat of its run every 10 s in the shared database, and the subscriptions of a
+run with no beat for 60 s are deleted by any instance alive - 60 to 70 s after the kill
+(<a href="#docs/high-availability">High Availability</a>).</p>
 </div>
 <p>A client that reconnects creates its subscriptions again, and is sent nothing it missed.</p>
 

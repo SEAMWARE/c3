@@ -25,7 +25,7 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   <li><b>An NGSI-LD plugin for APISIX</b> - <code>ngsild-pep</code>
   (<a href="https://github.com/SEAMWARE/corApisixNgsild">corApisixNgsild</a>): <code>fdsc.so</code>'s own decision in
   the gateway the FIWARE Data Space Connector already uses, in front of any NGSI-LD broker; on the 64 cases of
-  <code>test/fdscDiff</code> it decides as <code>--auth fdsc</code> does. <code>--fdscNgsild</code> stays in the broker:
+  <code>test/fdscDiff</code> at the coraine commit its CI pins (<code>7239cf37</code>) it decides as <code>--auth fdsc</code> does. <code>--fdscNgsild</code> stays in the broker:
   it needs the stored entity (<a href="#docs/authorization/fdsc-connector">Authorization - Inside a Data Space
   Connector</a>).</li>
   <li><b>DDS</b> - topics both ways, services, actions, through the DDS bridge (<a href="#docs/dds">DDS and ROS
@@ -81,18 +81,18 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   entity, temporal and distributed queries (<a href="#docs/kubernetes">Kubernetes</a>).</li>
   <li><b>Running outside a container</b> - <code>--daemon</code> to detach, and the log in a file, on stdout or both
   (<code>--logTo</code>, <code>--logDir</code>); the broker stays in the foreground, logging to stdout, by default.
-  <code>-fg</code> is accepted until 0.8.0 (<a href="#docs/administration/running">Administration - Foreground or
+  <code>-fg</code> is accepted, with a warning, until 0.8.0 (<a href="#docs/administration/running">Administration - Foreground or
   daemon</a>).</li>
   <li><b>Authorization in the broker</b> - <code>--auth</code>: auth plugins, and <code>fdsc.so</code>, the FIWARE Data
-  Space Connector's access tokens and ODRL policies decided inside the broker as the connector decides them - 64 cases
+  Space Connector's access tokens and ODRL policies decided inside the broker as the connector decides them - 67 cases
   against a deployed connector, 0 differences; per entity, per attribute and per tenant with
   <code>--fdscNgsild</code>, notifications decided for the subscription's owner; the ODRL-PAP's <code>/policy</code> API
   served by the broker (<code>--policyApiPort</code>) (<a href="#docs/authorization">Authorization</a>).</li>
   <li><b>The CKAN bridge and DataChannels</b> - a CKAN portal's DataStore resources read into entities
-  (<code>ckan.so</code>, corCkanBridge); a DataChannel makes each record (a row) into the entities its mapping names
+  (<code>ckan.so</code>, <a href="https://github.com/SEAMWARE/corCkanBridge">corCkanBridge</a>); a DataChannel makes each record (a row) into the entities its mapping names
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/bridge-channels.md#datachannels">DataChannels</a>). A
   bridge reports a Channel's status, and why, at any time (<code>channelStatusIn</code>).</li>
-  <li><b>c³, the coraine Control Center - Compile</b> - a broker built for a deployment from a web page: the features
+  <li><b><a href="https://github.com/SEAMWARE/c3">c³</a>, the coraine Control Center - Compile</b> - a broker built for a deployment from a web page: the features
   in or out, each with its size, the bridges, the build mode (release, PGO, <code>make tune</code>, debug), on
   <code>coraine-dev</code>'s <code>coraine-build</code>
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
@@ -121,10 +121,11 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   whether its build has traces (<code>/admin/log</code>), a bridge's inventory for a mapping tool
   (<code>/admin/bridges/{bridge}/inventory</code>) (<a href="#docs/administration/admin">Administration - The admin
   API</a>).</li>
-  <li><b>c³ - Operate and Connect</b> - brokers started and stopped, natively or in a container, with their services;
-  their logs, log and trace levels, configuration and metrics as charts; the entity editor, and signing in to a
-  broker's security (an OpenID provider, or the Data Space Connector's verifier)
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>c³ - Operate and Explore</b> - brokers started and stopped, natively or in a container, with their services;
+  their logs, log and trace levels, configuration and metrics as charts; signing in to a broker's security (an OpenID
+  provider, or the Data Space Connector's verifier). Explore: a running broker's entities as a graph, the GeoProperty
+  ones on a map (online, or offline from downloaded areas), their values live over the WebSocket transport or HTTP
+  notifications, and the entity editor (<a href="#docs/c3">c³</a>).</li>
   <li><b>The documentation in c³, and as a website</b> - the guides of c³'s Documentation page, written from coraine's
   documentation for the reader, searchable, offline in c³; the same pages at
   <a href="https://seamware.github.io/docs/">seamware.github.io/docs</a>.</li>
@@ -132,37 +133,43 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   page, freezes its set of matching entities on the first page and serves the pages from it (the links carry the
   map's id); an entity that no longer matches is left out of its page
   (<a href="#docs/administration/entitymaps">EntityMaps</a>).</li>
+  <li><b>c³: the DDS mapping tool</b> - DDS topics, services and actions to entities and attributes, in Operate,
+  beside the broker it maps for, and from Compile's Bridges: made from the bridge's inventory
+  (<code>/admin/bridges/{bridge}/inventory</code>), with the DDS domain, the transport (UDP or shared memory) and the
+  network interfaces to reach it; it writes the mapping file and the default user @context, and starts a broker with
+  them (<a href="#docs/dds">DDS and ROS 2</a>).</li>
+  <li><b>Subordinate subscriptions follow a registration's PATCH</b> (§ 10.5.2.4) - created, PATCHed, moved to the
+  new endpoint or deleted as the registration changes (<code>--distributed</code>,
+  <a href="#docs/options/distributed-ops">Command-line options - Distributed operations</a>).</li>
+  <li><b>WebSocket subscriptions of an instance gone, under High Availability</b> - every instance writes the beat of
+  its run in the shared database every 10 s; the WebSocket subscriptions of a run with no beat for 60 s are deleted by
+  the instances alive, also when a killed pod never comes back
+  (<a href="#docs/high-availability">High Availability</a>).</li>
 </ul>
 <div class="g-callout">
-<p><b>Bridges and Channels are coraine's own mechanism, not a standard.</b> The concept goes to the ETSI TC DATA
-face-to-face in Athens, 20-22 October 2026, and anything normative will realistically follow in 2027. coraine
+<p><b>Bridges and Channels are coraine's own mechanism, not a standard:</b> anything normative from ETSI TC DATA
+will realistically follow in 2027. coraine
 implements its own objects now and adapts to whatever TC DATA settles on.</p>
 </div>
 
 <!-- ======================================================================= -->
 <h2 id="short">Short term</h2>
-<p>Planned for the short term and the next release of the product, in roughly this order:</p>
-<ul>
-  <li><b>c³ - Configure: the DDS mapping tool</b> - DDS topics, services and actions to entities and attributes, in
-  the Control Center: the mapping file the DDS bridge reads, made from the bridge's inventory
-  (<code>/admin/bridges/{bridge}/inventory</code>) (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
-  <li><b>WebSocket subscriptions of a crashed instance, under High Availability</b> - each instance's run id and a
-  heartbeat in the shared store, so that any instance deletes the WebSocket subscriptions of a run whose heartbeat
-  stopped - also when a killed pod never comes back. Without <code>--high-availability</code> a broker deletes them
-  when it starts (<a href="#docs/websocket/subscriptions">more</a>).</li>
-  <li><b>c³ Documentation, the rest</b> - a guide per cor-lib with an API reference from its headers, the pages in
-  <code>coraine-dev</code> for offline use, and a skeleton repository per kind of plugin (<code>c3 new
-  plugin</code>).</li>
-  <li><b>Subordinate subscriptions on registration change</b> - § 10.5.2.4 for <code>PATCH</code> too
-  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#subordinate-subscriptions-on-registration-change">more</a>).</li>
-</ul>
+<p>Nothing at the moment - the next release ships what is under <a href="#docs/roadmap/now">Available now</a>.</p>
 
 <!-- ======================================================================= -->
 <h2 id="medium">Medium term</h2>
 <p>Proposed for the medium term, typically within the subsequent releases of the next <b>9 months</b>:</p>
 <ul>
-  <li><b>c³ - Configure: the OPC UA mapping tool</b> - OPC UA variables, monitored items and methods to entities and
-  attributes, as for DDS (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
+  <li><b>c³ Documentation, the rest</b> - a guide per cor-lib with an API reference from its headers, the pages in
+  <code>coraine-dev</code> for offline use, and a skeleton repository per kind of plugin (<code>c3 new
+  plugin</code>).</li>
+  <li><b>A small build: less RAM, slower</b> - one build switch that picks memory over speed everywhere it trades one
+  for the other: fewer threads, no per-thread caches in the tree heap, a smaller log allocated ahead, scans instead of
+  indexes. For a broker with few requests on the cheapest hardware; where its RAM goes is measured first, and the
+  resident set at a few store sizes is documented.</li>
+  <li><b>c³: the OPC UA mapping tool</b> - OPC UA variables, monitored items and methods to entities and attributes,
+  the same tool as for DDS: in Operate, and from Compile's Bridges, made from the OPC UA bridge's inventory
+  (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
   <li><b>Live public transport: a GTFS-realtime bridge, and buses moving in c³</b> - a transit agency's routes (a
   <code>LineString</code> each), stops and trips from its static GTFS; its vehicles' live positions (GTFS-realtime,
   Protocol Buffers over HTTP, polled) as <code>Bus</code> entities related to their trip, route and next stop; c³
@@ -217,7 +224,7 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
 timeframe; they are here so that potential contributors can see where the product is heading and may wish to get
 involved.</p>
 <ul>
-  <li><b>corDB standalone</b> - corDB as a server of its own beside the brokers, for high availability (the haaux
+  <li><b><a href="https://github.com/SEAMWARE/corDB">corDB</a> standalone</b> - corDB as a server of its own beside the brokers, for high availability (the haaux
   role), with backups of current state and history
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-standalone---and-as-haaux">more</a>).</li>
   <li><b>Our own string collation, replacing ICU</b> - root collation without 39&nbsp;MiB of libicu
@@ -227,10 +234,8 @@ involved.</p>
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#array-reduction-in-corjsonld">more</a>).</li>
   <li><b>Embedded deployment</b> - constrained hardware as a build configuration
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#embedded-deployment">more</a>).</li>
-  <li><b>c³ - Connect</b> - the Control Center connected live to a running broker over its WebSocket transport
-  (queries, then a subscription's notifications): its entities, their relationships as a graph (boxes and arrows, zoom,
-  pan, entities dragged into place), the GeoProperty entities on a map, their values as they change; also as an API
-  plugin of the broker itself
+  <li><b>c³ Explore inside the broker</b> - Explore, the Control Center's live view of a broker's entities, as an API
+  plugin of the broker itself: no c³ to install
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
   <li><b>A smaller DDS stack for the DDS bridge</b> - for where the bridge has to run: the DDS libraries are today the
   largest part of a coraine installation (about five times the broker), which is why the arm64 image and the Debian

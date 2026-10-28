@@ -5,7 +5,8 @@
 <p class="lead">Counters, gauges and histograms for a server whose request path must not allocate, block or take a
 lock: an update is one atomic operation on a fixed-point <code>int64_t</code> (a histogram: one per bucket it falls in,
 and two more). Rendering happens only when the metrics are asked for - as the Prometheus text format, or as a
-<a href="#docs/lib-cortree">corTree</a>.</p>
+<a href="#docs/lib-cortree">corTree</a>. Repository:
+<a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener">SEAMWARE/corProm</a>.</p>
 
 <h2 id="metrics">The three kinds</h2>
 <pre>CorPromMetric* corPromCounterCreate(const char* name, const char* help);
@@ -14,7 +15,7 @@ CorPromMetric* corPromHistogramCreate(const char* name, const char* help, double
 <table class="gtable">
   <tr><th>Kind</th><th>Updated by</th><th>Kept as</th></tr>
   <tr><td>counter</td><td><code>corPromCounterInc(m)</code>, <code>corPromCounterAdd(m, int64_t n)</code></td><td>the value × 1000</td></tr>
-  <tr><td>gauge</td><td><code>corPromGaugeSet(m, double v)</code>, <code>corPromGaugeAdd</code>, <code>corPromGaugeSub</code></td><td>the value × 1000, truncated - a thousandth is the smallest step</td></tr>
+  <tr><td>gauge</td><td><code>corPromGaugeSet(m, double v)</code>, <code>corPromGaugeAdd</code>, <code>corPromGaugeSub</code></td><td>the value × 1000, rounded to the nearest thousandth - a thousandth is the smallest step</td></tr>
   <tr><td>histogram</td><td><code>corPromHistogramObserve(m, double v)</code></td><td>a count per bucket, the number of observations, their sum in billionths (rounded) - 0.2 ms adds 200 000</td></tr>
 </table>
 <ul>
@@ -26,10 +27,13 @@ CorPromMetric* corPromHistogramCreate(const char* name, const char* help, double
   <li><b>Every metric is global</b>, in one list in the order created, kept for the life of the process: the name
   and help are copied, nothing is freed. <code>corPromLookup(name)</code> finds one by name. A metric has no labels.</li>
 </ul>
-<div class="g-callout warn">
-<p><b>Create the metrics before the threads start.</b> The updates are atomic and lock-free; creating a metric
-appends to the list with no lock, and a second metric of the same name is not refused - both are rendered. coraine
-creates all of its metrics once, at start-up, and keeps the pointers.</p>
+<div class="g-callout">
+<p><b>Creating is thread-safe, a name is taken once.</b> Any thread can create a metric at any time: creation takes
+a mutex, and a metric is linked into the list only once it is complete, so a render or a lookup running at the same
+time sees it whole or not at all. A name already created is refused - the create returns <code>NULL</code>
+(Prometheus refuses an exposition with a name twice), as it does when out of memory - and an update on that
+<code>NULL</code> does nothing. The updates themselves stay atomic and lock-free. coraine creates all of its metrics
+once, at start-up, and keeps the pointers.</p>
 </div>
 <p>coraine's own, from <code>src/lib/metrics/metrics.c</code>:</p>
 <pre>requestLatency = corPromHistogramCreate("ngsild_request_latency_seconds",
@@ -63,7 +67,8 @@ corPromRender(text, size + 1);</pre>
 requests_total 7
 # HELP connections Open connections
 # TYPE connections gauge
-connections 2
+connections 2.5
+
 # HELP latency_seconds Request latency
 # TYPE latency_seconds histogram
 latency_seconds_bucket{le="0.001"} 0
@@ -80,11 +85,13 @@ the newline that ends the last metric - is lost, and the return value is the sam
 one it returns the size it needed. It returns the bytes written, without the zero.</p>
 </div>
 <ul>
-  <li><b>A counter and a gauge are written as whole numbers</b> - the stored value divided by 1000, truncated: the
-  gauge above, 2.5, is written <code>2</code>. A histogram's sum has 9 decimals, a bucket bound is <code>%g</code>.</li>
+  <li><b>A counter and a gauge are written with their thousandths</b> - a whole value without a fraction
+  (<code>7</code>), else with up to three decimals, trailing zeros dropped: the gauge above is <code>2.5</code>, a
+  gauge of 1/3 <code>0.333</code>. A histogram's sum has 9 decimals, a bucket bound is <code>%g</code>.</li>
   <li><b>Each value is read atomically, not all of them together</b>: a render while observations are made may
-  show a histogram whose buckets and count are a few observations apart. The size and the render are two passes,
-  too - a metric created in between does not fit.</li>
+  show a histogram whose buckets and count are a few observations apart. Rendering takes no lock. The size and the
+  render are two passes, too - a metric created or a value grown in between can make the text longer, and
+  <code>corPromRender</code> then returns the size it needed.</li>
 </ul>
 
 <h3 id="tree">As a tree</h3>
@@ -114,6 +121,7 @@ are written after corProm's text, by coraine itself: they carry labels, which co
   <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><b>SEAMWARE/corProm</b><span>the repository - a sibling checkout: <code>-I..</code> and <code>../corProm/libcorProm.a</code>; <code>make di</code></span></a></li>
 </ul>
 <p>corProm depends on <a href="#docs/lib-cortree">corTree</a> (for <code>corPromMetrics</code>) and
-<a href="#docs/lib-coralloc">corAlloc</a>'s header. It is used by coraine's <code>src/lib/metrics</code> and the admin
+<a href="#docs/lib-coralloc">corAlloc</a>'s header, and uses <code>pthread</code> and <code>libm</code>, which its
+consumer links. It is used by coraine's <code>src/lib/metrics</code> and the admin
 plugin.</p>
 </article>

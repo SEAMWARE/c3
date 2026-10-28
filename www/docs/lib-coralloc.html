@@ -4,7 +4,8 @@
 <h1>corAlloc</h1>
 <p class="lead">An arena allocator: memory is handed out from a buffer by moving a pointer, nothing is freed one
 allocation at a time, and everything an arena gave out goes at once. A request's parse tree, its rendered
-response, a downloaded document - all of it lives in a <code>CorAlloc</code> and is dropped with it.</p>
+response, a downloaded document - all of it lives in a <code>CorAlloc</code> and is dropped with it.
+Repository: <a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener">SEAMWARE/corAlloc</a>.</p>
 
 <h2 id="model">The model</h2>
 <p>A <code>CorAlloc</code> starts on a buffer the caller gives it - usually a <code>char</code> array on the
@@ -144,7 +145,6 @@ context store, into which every thread that downloads or parses an <code>@contex
   <tr><td>CorAllocErrorHook</td><td><code>void hook(struct CorAlloc* kaP, CorAllocStatus kas, char* errorString, void* vP)</code> - called on an allocation failure; <code>corAllocStatus(kas)</code> names the status</td></tr>
   <tr><td>CorAllocTraceLevel</td><td>the library's trace levels, 300-303: init, new buffer, bytes left, alloc (<a href="#docs/lib-corlog/numbering">trace levels</a>)</td></tr>
   <tr><td>corAllocMem*</td><td>a process-wide memory budget around <code>malloc</code>/<code>free</code>: a limit, a wait (default 5000 ms) for memory when it is reached, statistics. A separate interface - the arena does not use it, and coraine does not call it</td></tr>
-  <tr><td>corAllocInit, CORALLOC_E, ...</td><td>a log function of the library's own and macros for it, compiled only with <code>CORALLOC_LOG_ON</code>. The library's code does not use them: it logs through corBase's <code>COR_LIB_*</code></td></tr>
 </table>
 
 <h2 id="more">API, repository, dependencies</h2>

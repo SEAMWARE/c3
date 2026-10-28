@@ -2,7 +2,9 @@
 <!-- docs/dds.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>DDS and ROS 2</h1>
-<p class="lead">coraine speaks DDS, and so ROS 2, through its DDS bridge: topics, services and actions become
+<p class="lead">coraine speaks DDS, and so ROS 2, through its DDS bridge
+(<a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>), built on
+eProsima's DDS Enabler: topics, services and actions become
 entity attributes. A robot's pose is an NGSI-LD attribute, and writing an attribute publishes a sample, calls a
 service or sends a goal.</p>
 
@@ -20,6 +22,10 @@ service or sends a goal.</p>
   <tr><td>Discovery</td><td>Topics, services and actions that no configuration names are shown on one catch-all
   entity, <code>urn:ngsi-ld:dds:default</code> - "what is on this bus?" answers itself. A discovered service is
   callable, too.</td></tr>
+  <tr><td>Inventory</td><td>For a mapping tool: <code>GET /admin/bridges/dds/inventory</code> (<code>--apiPlugins
+  admin</code>) answers with everything the domain announced - its topics, services and actions with their types, and
+  for each type its IDL and a sample with every member at its zero value. <a href="#docs/c3">c³</a>'s Discover starts a
+  broker for a few seconds and makes this one call.</td></tr>
 </table>
 <ul>
   <li><b>Pre-population.</b> Every configured attribute exists from start-up - its entity is created if it is not
@@ -44,8 +50,8 @@ service or sends a goal.</p>
 </table>
 
 <h2 id="config">Configuration</h2>
-<p>One file, shared by the plugin and the broker: the DDS Enabler reads <code>dds.ddsmodule</code>, the broker
-reads <code>dds.ngsild</code>.</p>
+<p>One file, shared by the plugin and the broker: <code>dds.ddsmodule</code> is the DDS Enabler's configuration
+(the plugin reads it and hands it to the Enabler), the broker reads <code>dds.ngsild</code>.</p>
 <pre>{
   "dds": {
     "ddsmodule": { "dds": { "domain": 0 } },
@@ -63,6 +69,39 @@ reads <code>dds.ngsild</code>.</p>
 <code>_Response</code>; they are configured because a service, unlike a topic, cannot be learned by listening.
 An action names its ROS 2 action type once, in <code>type</code>; its DDS types follow from it.</p>
 
+<h3 id="reach">Reaching the DDS system - <code>dds.ddsmodule.dds</code></h3>
+<p>The Enabler joins the DDS system as one participant. These members of <code>dds.ddsmodule.dds</code> decide which
+participants it finds:</p>
+<table class="g-opts">
+  <tr><th>Member</th><th>Values</th></tr>
+  <tr><td>domain</td><td>the DDS domain, 0-232 (ROS 2: <code>ROS_DOMAIN_ID</code>). Default 0</td></tr>
+  <tr><td>transport</td><td><code>builtin</code> (shared memory and UDP, the default), <code>udp</code>,
+  <code>shm</code></td></tr>
+  <tr><td>whitelist-interfaces</td><td>a list of IPv4 addresses of this host's interfaces - UDP uses only those.
+  Default: all interfaces</td></tr>
+  <tr><td>ignore-participant-flags</td><td><code>no_filter</code> (the default), <code>filter_different_host</code>,
+  <code>filter_different_process</code>, <code>filter_same_process</code>,
+  <code>filter_different_and_same_process</code></td></tr>
+  <tr><td>allowlist, blocklist</td><td>lists of <code>{"name": "&lt;topic&gt;", "type": "&lt;type&gt;"}</code>,
+  <code>*</code> and <code>?</code> wildcards. Default: everything</td></tr>
+</table>
+<pre>"ddsmodule": { "dds": { "domain": 0, "transport": "udp", "whitelist-interfaces": ["192.168.1.138"] } }</pre>
+<ul>
+  <li><b>Discovery is DDS's own</b>: multicast (239.255.0.1) plus the participants on this host. It reaches the
+  participants on the same host and on the same network segment; it does not cross a router, a VPN or a NAT.</li>
+  <li><code>shm</code> reaches only participants on the same host and sharing <code>/dev/shm</code> - a container
+  without <code>--ipc=host</code> does not.</li>
+  <li><code>whitelist-interfaces</code> takes addresses, not interface names. With none of them on this host, the
+  participant finds nothing; Fast DDS logs <code>All whitelist interfaces were filtered out</code>.</li>
+  <li>A ROS 2 Discovery Server, unicast initial peers and Fast DDS XML profiles are not reachable through this
+  configuration: the Enabler 1.2.2's participant reads none of them, and removes <code>ROS_DISCOVERY_SERVER</code>
+  from the environment before it is created.</li>
+  <li>A change of the file reloads <code>allowlist</code>, <code>blocklist</code> and <code>topics</code> while the
+  broker runs; <code>domain</code>, <code>transport</code>, <code>whitelist-interfaces</code> and
+  <code>ignore-participant-flags</code> are read once, at start.</li>
+</ul>
+
+<h3 id="options">Options</h3>
 <table class="g-opts">
   <tr><th>Option</th><th>What it does</th></tr>
   <tr><td>--bridges dds<span class="env">CORAINE_BRIDGES</span></td><td>loads the DDS bridge, <code>dds.so</code></td></tr>
@@ -72,6 +111,39 @@ An action names its ROS 2 action type once, in <code>type</code>; its DDS types 
   <tr><td>--ddsSyncTimeout &lt;ms&gt;<span class="env">CORAINE_DDSSYNCTIMEOUT</span></td><td>how long a waiting PATCH gives a service before answering <code>202</code>. 0 (default): the configuration's <code>syncTimeoutMs</code>, else 200</td></tr>
   <tr><td>--ddsSyncWaitMax &lt;n&gt;<span class="env">CORAINE_DDSSYNCWAITMAX</span></td><td>at most this many requests wait for a service at once (default 8); the rest send without waiting (<code>202</code>), so a slow DDS network cannot take every worker</td></tr>
 </table>
+
+<h2 id="inventory">The inventory</h2>
+<p><code>GET /admin/bridges/dds/inventory</code> answers with every topic, service and action the DDS network has
+announced to the broker, configured or not, in the shape the DDS discovery tools write, plus <code>settled</code> and
+<code>types</code>:</p>
+<pre>{
+  "discoveredAt": "2026-10-27T08:37:25Z",
+  "settled": true,
+  "topics":   [ { "name": "rt/chatter", "type": "std_msgs::msg::dds_::String_", "qos": "reliability: true\n..." } ],
+  "services": [ { "name": "add_two_ints",
+                  "request": { "type": "example_interfaces::srv::dds_::AddTwoInts_Request_", "qos": "..." },
+                  "reply":   { "type": "example_interfaces::srv::dds_::AddTwoInts_Response_", "qos": "..." } } ],
+  "actions":  [ { "name": "fibonacci", "goal": { ... }, "result": { ... }, "cancel": { ... },
+                  "feedback": { ... }, "status": { ... } } ],
+  "types": {
+    "std_msgs::msg::dds_::String_": { "idl": "module std_msgs\n{\n    module msg\n ...", "sample": { "data": "" } }
+  }
+}</pre>
+<table class="gtable">
+  <tr><td><code>discoveredAt</code></td><td>when the answer was made, UTC</td></tr>
+  <tr><td><code>settled</code></td><td><code>true</code>: discovery had been quiet for 3 s before the answer.
+  <code>false</code>: the call's time ran out first (10 s), and more may still be announced</td></tr>
+  <tr><td><code>topics</code>, <code>services</code>, <code>actions</code></td><td>as announced; <code>qos</code> is the
+  Enabler's serialized QoS, as it is. ROS 2 housekeeping is included: <code>ros_discovery_info</code>,
+  <code>rt/parameter_events</code>, <code>rt/rosout</code> and every node's parameter services</td></tr>
+  <tr><td><code>types</code></td><td>per type name, its IDL text (<code>idl</code>) and a JSON sample with every member
+  at its zero value (<code>sample</code>). Kept in memory only</td></tr>
+</table>
+<p>DDS has no "discovery is done", so the call waits until no topic, type, service or action has been announced for
+3 s, measured from the broker's start too, 10 s at most. One call right after the broker starts answers with what the
+network had to say - 3.4 s for three ROS 2 nodes; a broker that has been up longer answers at once. A node that starts
+after the answer is in the next one. The list is flat: <code>?from</code> is answered <code>404</code>, and
+<code>?depth</code> is not used. The bridge fills the slot from bridge ABI 14.</p>
 
 <h2 id="build">Building the plugin</h2>
 <p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>, and is
@@ -83,7 +155,8 @@ make contract   <span class="c"># does it still satisfy BridgeDriver.h? needs no
 <ul>
   <li><b>Needs</b> the DDS Enabler and Fast DDS in <code>/usr/local</code>, and <code>nlohmann-json3-dev</code>.</li>
   <li><b>C++, behind a C contract.</b> The DDS Enabler's API is C++ only. The plugin is a C++ shared object that
-  exports one C symbol, <code>bridgeRegister</code>; the broker stays C. <code>libstdc++</code> enters the broker's
+  exports C symbols only - <code>bridgeRegister</code>, and <code>corNodeLayout</code>, which every bridge carries from
+  <code>corTree/CorNode.h</code>; the broker stays C. <code>libstdc++</code> enters the broker's
   process when the plugin is loaded.</li>
   <li><b>What it fills of the contract</b> (<code>BridgeDriver.h</code> in
   <a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>): topics -

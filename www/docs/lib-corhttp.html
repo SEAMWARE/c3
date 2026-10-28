@@ -2,7 +2,7 @@
 <!-- docs/lib-corhttp.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corHttp - the built-in HTTP server</h1>
-<p class="lead">An HTTP/1.1 server and nothing else: it accepts connections, parses requests in place and writes
+<p class="lead"><a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener">corHttp</a> is an HTTP/1.1 server and nothing else: it accepts connections, parses requests in place and writes
 responses. A request reaches one callback with its method, path, query, headers and body; routing, JSON and
 everything else belong to the caller. It is the HTTP server of a coraine built with
 <code>COR_HTTP_SERVER=builtin</code>, and depends on corAlloc, corBase and libc only.</p>
@@ -196,8 +196,10 @@ make streamTest   <span class="c"># a file body and a streamed body: chunked, fr
 $ curl "localhost:1041/ngsi-ld/v1/entities?type=T&amp;limit=5&amp;local"
 <span class="o">{"method":"GET","path":"/ngsi-ld/v1/entities","query":"type=T&amp;limit=5&amp;local","headers":3,"uriParams":3,"accept":"*/*","limit":"5","bodyLen":0}</span></pre>
 <p>The repositories are siblings: sources compile with <code>-I..</code> and link <code>../corAlloc/libcorAlloc.a</code> and
-<code>../corBase/libcorBase.a</code>. Through the broker, coraine's functional suite runs on a <code>builtin</code> build as
-on an <code>mhd</code> one.</p>
+<code>../corBase/libcorBase.a</code>. Through the broker, coraine's functional suite runs on both servers - its corDB
+shards on a <code>builtin</code> build in every pull request, both servers in the nightly run. A test tied to one server
+says so (<code>REQUIRE_HTTPSERVER</code>): five need libmicrohttpd - among them the one whose notification receiver
+serves HTTPS, which this server cannot - and two need this one.</p>
 
 <h2 id="reference">Reference</h2>
 <ul class="g-cards">

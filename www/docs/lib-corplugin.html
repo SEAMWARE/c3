@@ -2,7 +2,7 @@
 <!-- docs/lib-corplugin.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corPlugin - loading plugins</h1>
-<p class="lead">A small loader over <code>dlopen</code> and <code>dlsym</code>: it turns a plugin's short name into
+<p class="lead"><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener">SEAMWARE/corPlugin</a> - a small loader over <code>dlopen</code> and <code>dlsym</code>: it turns a plugin's short name into
 the path of a <code>.so</code> under a base directory, opens it, finds its register symbol, refuses one built against
 another tree-node layout, and closes every handle at shutdown. coraine loads its database, history, API, transport,
 auth and bridge plugins through it; the library itself knows none of those kinds.</p>
@@ -65,13 +65,13 @@ and their driver structs are coraine's, not this library's.</p>
 
 <h3 id="close">Closing</h3>
 <p><code>corPluginCloseAll()</code> <code>dlclose</code>s every handle <code>corPluginOpen</code> returned a symbol for -
-coraine calls it at shutdown, after the DB plugin's <code>close</code>. Up to 32 handles are tracked; a 33rd plugin
-opens and works, and is not closed by it.</p>
+coraine calls it at shutdown, after the DB plugin's <code>close</code>. Every plugin opened is tracked, however many
+there are (the list grows); a failed open closes its handle at once and is not tracked.</p>
 
 <h2 id="layout">The layout check</h2>
 <p>A plugin reads and builds the host's tree nodes by their fields - every kind does. Built against another
 <a href="#docs/lib-cortree/layout"><code>CorNode</code> layout</a>, it would read every node at the wrong offsets.
-Every object compiled with corTree's <code>CorNode.h</code> carries the layout's number, <code>corNodeLayout</code>
+Every object compiled with corTree's <code>CorNode.h</code> (<a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener">SEAMWARE/corTree</a>) carries the layout's number, <code>corNodeLayout</code>
 (2), as an exported weak symbol - a plugin built with <code>-fvisibility=hidden</code> too. After the
 <code>dlsym</code>, <code>corPluginOpen</code> looks up <code>corNodeLayout</code> in the handle and compares it with
 the host's own:</p>
@@ -128,5 +128,5 @@ a directory with no plugin leaves the description as it was.</p>
   <li><a href="#docs/plugin-architecture"><b>Plugin architecture</b><span>coraine's six plugin kinds, where they live, how they are loaded and checked</span></a></li>
 </ul>
 <p>corPlugin depends on <a href="#docs/lib-corargs">corArgs</a> (for <code>corPluginArgUpdate</code>),
-<a href="#docs/lib-cortree">corTree</a>'s <code>CorNode.h</code> (the layout number), and <code>libdl</code>. It is used by coraine and <code>coraine-import</code>.</p>
+<a href="#docs/lib-cortree">corTree</a>'s <code>CorNode.h</code> (the layout number - a header only, nothing linked), and <code>libdl</code>. It is used by coraine and <code>coraine-import</code>.</p>
 </article>
