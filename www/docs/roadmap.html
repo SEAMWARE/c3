@@ -127,7 +127,10 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   ones on a map (online, or offline from downloaded areas), their values live over the WebSocket transport or HTTP
   notifications, and the entity editor (<a href="#docs/c3">c³</a>).</li>
   <li><b>The documentation in c³, and as a website</b> - the guides of c³'s Documentation page, written from coraine's
-  documentation for the reader, searchable, offline in c³; the same pages at
+  documentation for the reader: installation, administration, the API, building, deploying, performance, the
+  transports, the bridges, authorization, the internals, and a guide and an API reference (from its headers) per
+  cor-lib; each guide links the repositories it is written from. Searchable, offline in c³ (installed with the
+  <code>coraine</code> package); the same pages at
   <a href="https://seamware.github.io/docs/">seamware.github.io/docs</a>.</li>
   <li><b>EntityMaps the broker creates itself</b> - a distributed query, and a local query paginated past its first
   page, freezes its set of matching entities on the first page and serves the pages from it (the links carry the
@@ -160,9 +163,9 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
 <h2 id="medium">Medium term</h2>
 <p>Proposed for the medium term, typically within the subsequent releases of the next <b>9 months</b>:</p>
 <ul>
-  <li><b>c³ Documentation, the rest</b> - a guide per cor-lib with an API reference from its headers, the pages in
-  <code>coraine-dev</code> for offline use, and a skeleton repository per kind of plugin (<code>c3 new
-  plugin</code>).</li>
+  <li><b>A skeleton repository per kind of plugin</b> - a current-state store, a temporal store, an API, a transport,
+  a bridge: a makefile, a template <code>.c</code>/<code>.h</code>, a functest and CI each, made with
+  <code>c3 new plugin</code>.</li>
   <li><b>A small build: less RAM, slower</b> - one build switch that picks memory over speed everywhere it trades one
   for the other: fewer threads, no per-thread caches in the tree heap, a smaller log allocated ahead, scans instead of
   indexes. For a broker with few requests on the cheapest hardware; where its RAM goes is measured first, and the
