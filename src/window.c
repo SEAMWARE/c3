@@ -22,10 +22,16 @@
 //   POST /api/window/close/<nonce>      Target.closeTarget - the last window closed, Chrome exits. c3 itself
 //                                       keeps running, as when the window is closed by its own X
 //   POST /api/window/open               the window, for a c3 started again (the dock's button) that finds this
-//                                       one on its port: this c3's Chrome still there - its page activated,
-//                                       "normal" then "fullscreen"; gone - a new one, its pipes this c3's. The
-//                                       c3 started again exits at once, and a Chrome it started with the pipe
-//                                       would exit with it. 503: no screen here
+//                                       one on its port - {"activationToken": "<its $XDG_ACTIVATION_TOKEN>"}.
+//                                       This c3's Chrome gone: a new one, its pipes this c3's (the c3 started
+//                                       again exits at once, and a Chrome it started with the pipe would exit
+//                                       with it). Still there, with the token: a window comes to the front on
+//                                       Wayland only with the token of the click that asked - a Chrome started
+//                                       with it hands a new window to this c3's Chrome, the earlier pages are
+//                                       closed and the new one made full-screen (it opens on the last page the
+//                                       UI showed). Without a token: its first page activated, "normal" then
+//                                       "fullscreen" - which the desktop may answer with "c3 is ready" instead.
+//                                       503: no screen here
 //
 #define _DEFAULT_SOURCE                          // usleep
 
@@ -40,6 +46,7 @@
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocBufferInit.h"         // corAllocBufferInit
 #include "corAlloc/corAllocBufferReset.h"        // corAllocBufferReset
+#include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corJson/corJsonCreate.h"               // corJsonCreate
 #include "corJson/corJsonParse.h"                // corJsonParse
 #include "corTree/corTreeLookup.h"               // corTreeLookup
@@ -355,27 +362,45 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
 //
 static void windowOpen(CorHttpConn* connP)
 {
+  char        url[64];
+  const char* token = NULL;
+
+  snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
+
+  if ((connP->bodyRefused == false) && (connP->body.s != NULL) && (connP->body.len > 0))
+  {
+    CorJson json;
+
+    corJsonCreate(&json, &connP->alloc);
+
+    CorNode* bodyP  = corJsonParse(&json, corAllocStrdup(&connP->alloc, connP->body.s));
+    CorNode* tokenP = ((bodyP != NULL) && (bodyP->type == CorObject)) ? corTreeLookup(bodyP, "activationToken") : NULL;
+
+    if ((tokenP != NULL) && (tokenP->type == CorString))
+      token = activationToken(tokenP->value.s);
+  }
+
   if (pipesAlive() == false)
   {
-    char url[64];
-
-    snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
-
-    if (browserOpen(url, false, true))
-      serveJson(connP, 200, "{}");
+    if (browserOpen(url, false, true, token))
+      serveJson(connP, 200, "{\"window\": \"opened\"}");
     else
       serveError(connP, 503, "The window", "no screen here");
     return;
   }
 
   //
-  // Chrome still there: a new one would hand the window over to it and exit - and windowPipesSet, closing
-  // the pipes of the one there, would end it. Its first page is brought back instead
+  // Chrome still there - not a new one with the pipe: it would hand the window over to this one and exit, and
+  // windowPipesSet, closing the pipes of the one there, would end it
   //
   char     err[512];
-  char     buf[8 * 1024];
+  char     buf[16 * 1024];
   CorAlloc alloc;
   bool     ok = false;
+  char     before[16][128];                      // this c3's pages before the new window
+  int      beforeN = 0;
+  char     answer[64];
+  char     firstId[128] = "";
 
   corAllocBufferInit(&alloc, buf, sizeof(buf), 1024 * 1024, NULL, "c3 window");
   snprintf(err, sizeof(err), "no page of c3's");
@@ -389,21 +414,80 @@ static void windowOpen(CorHttpConn* connP)
     CorNode* idP   = corTreeLookup(tP, "targetId");
 
     if ((typeP != NULL) && (typeP->type == CorString) && (strcmp(typeP->value.s, "page") == 0) &&
-        (idP != NULL) && (idP->type == CorString) && (strlen(idP->value.s) < 128))
-    {
-      char params[256];
+        (idP != NULL) && (idP->type == CorString) && (strlen(idP->value.s) < 128) && (beforeN < 16))
+      snprintf(before[beforeN++], 128, "%s", idP->value.s);
+  }
 
-      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", idP->value.s);
-      ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL) &&
-           windowStateSet(&alloc, idP->value.s, "fullscreen", err, sizeof(err));
-      break;
+  if (beforeN > 0)
+    snprintf(firstId, sizeof(firstId), "%s", before[0]);
+
+  //
+  // With the token: a new window, by way of a Chrome started with it - it hands the window to this c3's Chrome,
+  // the token with it, and the desktop shows it. Waited for up to 5 s; the earlier pages then closed
+  //
+  char newId[128] = "";
+
+  if ((token != NULL) && browserOpen(url, false, false, token))
+  {
+    for (int attempt = 0; (attempt < 50) && (newId[0] == 0); attempt++)
+    {
+      usleep(100 * 1000);
+
+      CorNode* nowP   = cdp(&alloc, "Target.getTargets", NULL, err, sizeof(err));
+      CorNode* nowsP  = (nowP != NULL) ? corTreeLookup(nowP, "targetInfos") : NULL;
+
+      for (CorNode* tP = ((nowsP != NULL) && (nowsP->type == CorArray)) ? nowsP->value.head : NULL; tP != NULL; tP = tP->next)
+      {
+        CorNode* typeP = corTreeLookup(tP, "type");
+        CorNode* idP   = corTreeLookup(tP, "targetId");
+        bool     seen  = false;
+
+        if ((typeP == NULL) || (typeP->type != CorString) || (strcmp(typeP->value.s, "page") != 0) ||
+            (idP == NULL) || (idP->type != CorString) || (strlen(idP->value.s) >= 128))
+          continue;
+
+        for (int ix = 0; ix < beforeN; ix++)
+        {
+          if (strcmp(before[ix], idP->value.s) == 0)
+            seen = true;
+        }
+
+        if (seen == false)
+        {
+          snprintf(newId, sizeof(newId), "%s", idP->value.s);
+          break;
+        }
+      }
     }
+  }
+
+  if (newId[0] != 0)
+  {
+    char params[256];
+
+    for (int ix = 0; ix < beforeN; ix++)
+    {
+      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", before[ix]);
+      cdp(&alloc, "Target.closeTarget", params, err, sizeof(err));
+    }
+
+    ok = windowStateSet(&alloc, newId, "fullscreen", err, sizeof(err));
+    snprintf(answer, sizeof(answer), "{\"window\": \"new\", \"closed\": %d}", beforeN);
+  }
+  else if (firstId[0] != 0)
+  {
+    char params[256];
+
+    snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", firstId);
+    ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL) &&
+         windowStateSet(&alloc, firstId, "fullscreen", err, sizeof(err));
+    snprintf(answer, sizeof(answer), "{\"window\": \"activated\"}");
   }
 
   corAllocBufferReset(&alloc, false);
 
   if (ok)
-    serveJson(connP, 200, "{}");
+    serveJson(connP, 200, answer);
   else
     serveError(connP, 502, "The window", err);
 }

@@ -288,7 +288,8 @@ extern void  liveShutdown(void);                                 // the backend 
 //
 // browser.c - open the application
 //
-extern bool  browserOpen(const char* url, bool noBrowser, bool control);
+extern bool  browserOpen(const char* url, bool noBrowser, bool control, const char* token);
+extern const char* activationToken(const char* token);
 
 // repos.c
 extern void  reposRequest(CorHttpConn* connP, const char* path);

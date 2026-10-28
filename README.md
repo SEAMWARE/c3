@@ -136,6 +136,13 @@ window opened without the buttons, or one whose c3 was stopped - would take ever
 none could be shown again. Before c3 opens the window it controls, it stops that Chrome (SIGTERM; the
 one named in the profile's `SingletonLock`, on this host, its command line naming this profile).
 
+On Wayland a window comes to the front only with the *activation token* of the click that asked for it:
+the desktop gives it to the program it starts (`$XDG_ACTIVATION_TOKEN`; GNOME only for a desktop entry
+with `StartupNotify=true`, as c³'s has). A second `c3` sends its token to the running one, which opens
+the window again with it - a new window of its Chrome, the earlier one closed, full-screen, on the page
+the UI showed last. Without a token (a `c3` typed in a terminal) the running one's window is activated,
+and the desktop may answer with "c³ is ready" instead of showing it. The second `c3` writes which it was.
+
 ## The configuration file
 
 `~/.config/c3/c3.json`, written by the backend as the user works - never by the page. It holds the

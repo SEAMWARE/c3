@@ -6,5 +6,6 @@ Comment=Compile, operate and explore coraine brokers
 Exec=@BINDIR@/c3
 Icon=com.seamware.c3
 Terminal=false
+StartupNotify=true
 Categories=Development;
 Keywords=coraine;NGSI-LD;broker;control;
