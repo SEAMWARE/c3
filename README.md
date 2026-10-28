@@ -74,7 +74,9 @@ attributes and the line to its district. **Download this area** shows the size o
 down to the level chosen, then downloads it: from then on it is drawn from the file, also offline.
 
 `make run ARGS="--port 7901 --no-browser"` builds and runs from the checkout; `make install`
-(`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3` and `share/c3/www`; `make clean`.
+(`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3`, `share/c3/www` and the menu's and
+the dock's c³: `share/applications/com.seamware.c3.desktop` (`Exec` the installed `bin/c3`) and its icon,
+`share/icons/hicolor/{256x256,512x512}/apps/com.seamware.c3.png`; `make uninstall`; `make clean`.
 
 A c³ started while one runs on its port has that one open its window and ends. When the running one is
 an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
