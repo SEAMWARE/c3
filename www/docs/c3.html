@@ -2,7 +2,8 @@
 <!-- docs/c3.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>c³ - the coraine Control Center</h1>
-<p class="lead">One application for everything around a coraine broker: build it for a deployment, start and watch
+<p class="lead"><a href="https://github.com/SEAMWARE/c3" target="_blank" rel="noopener">c³</a> is one application for everything around a
+<a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener">coraine</a> broker: build it for a deployment, start and watch
 it, explore its entities as a graph and on a map, and read its documentation. A small backend in C serves the pages
 on this machine and does the work; the browser window is the interface.</p>
 
@@ -106,7 +107,7 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <li><b>Bridges</b> - from <code>coraine-build --list-bridges</code>, each its own repository, its size beside it;
   dds is off by default (about 13 MiB, eProsima's Fast DDS and DDS Enabler). With dds on, <b>Map DDS topics, services
   and actions</b> asks, then opens Operate with the dds bridge ticked in its broker form and the DDS mapper open
-  (<a href="#dds-mapper">below</a>); its <b>← Back to Compile</b>, or the Compile tab, comes back, the choice as it was.</li>
+  (<a href="#docs/c3/dds-mapper">below</a>); its <b>← Back to Compile</b>, or the Compile tab, comes back, the choice as it was.</li>
   <li><b>Optimisation</b> - Release, Profile-guided (<code>--pgo</code>), Tuned for a workload (<code>--tune
   &lt;file&gt;</code>, the workload by its absolute path), Debug (traces compiled in)
   (<a href="#docs/extreme-performance">Extreme performance</a>).</li>
@@ -157,7 +158,7 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   datasets ticked, an OPC UA server and its channels (native brokers).</li>
   <li><b>DDS</b> - the bridge configuration file and the default user <code>@context</code> file
   (<code>--bridgeConfig</code>, <code>--defaultUserContext</code>), and, under them, <b>Map DDS topics, services and
-  actions</b>, the width of the form, active with the dds bridge ticked (<a href="#dds-mapper">the DDS mapper</a>). A
+  actions</b>, the width of the form, active with the dds bridge ticked (<a href="#docs/c3/dds-mapper">the DDS mapper</a>). A
   container broker with the dds bridge runs on the host's network and IPC namespace (<code>--network host --ipc
   host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its own containers - so its
   port is the host's and, like a native broker's, open on every interface.</li>

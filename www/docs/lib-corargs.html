@@ -5,7 +5,8 @@
 <p class="lead">A program declares its options in one table - name, type, default, limits, description - and
 corArgs fills the variables from the defaults, the environment and the command line, checks every value against
 its type and its limits, and prints the usage. coraine, <code>coraine-import</code> and every plugin's own options
-go through it.</p>
+go through it. Repository:
+<a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener">SEAMWARE/corArgs</a>.</p>
 
 <h2 id="table">The option table</h2>
 <p>An option is a <code>CorArg</code>; a table is a vector of them ending with <code>CORARGS_END</code>. Every field
@@ -28,7 +29,7 @@ static CorArg kargV[] =
   <tr><td><code>valueP</code></td><td>the variable; <code>NULL</code> is refused</td></tr>
   <tr><td><code>sort</code></td><td><code>CorArgOpt</code> (optional), <code>CorArgReq</code> (required - <a href="#docs/lib-corargs/errors">refused</a> when neither the command line nor the environment sets it), <code>CorArgHid</code> (hidden: accepted, never listed by <code>-u</code> or <code>-U</code>)</td></tr>
   <tr><td><code>def</code></td><td>the default, written into the variable by <code>corArgsInit</code> - a number cast to the pointer, a string as the pointer itself</td></tr>
-  <tr><td><code>min</code>, <code>max</code></td><td>the limits of an integer option; <code>CORARGS_NL</code> is no limit</td></tr>
+  <tr><td><code>min</code>, <code>max</code></td><td>the limits - whole numbers for an integer or a <code>CorArgFloat</code> option, strings for a <code>CorArgString</code> option (compared with <code>strcmp</code>); <code>CORARGS_NL</code> is no limit</td></tr>
   <tr><td><code>description</code></td><td>the usage text; <code>NULL</code> is refused</td></tr>
 </table>
 <table class="gtable">
@@ -46,18 +47,22 @@ static CorArg kargV[] =
 <div class="g-callout warn">
 <p><b>Limits are pointers too.</b> <code>NULL</code> as <code>min</code> is the number 0, not "no limit": an
 <code>int</code> option with <code>min</code> <code>NULL</code> refuses <code>-1</code>. Write
-<code>CORARGS_NL</code> for no limit. The limits are checked for the integer types only - a
-<code>CorArgFloat</code> or a <code>CorArgString</code> takes any value, and a <code>CorArgFloat</code>'s default is a
-whole number (it is converted from the pointer as an integer).</p>
+<code>CORARGS_NL</code> for no limit. A <code>CorArgFloat</code>'s default and limits are whole numbers - the
+pointer holds a <code>long long</code>: <code>_vp 1, _vp 1, _vp 10</code> is a default of 1.0 and a range of 1.0-10.0.
+A <code>CorArgString</code>'s limits are strings, and for a string <code>NULL</code> is no limit, as
+<code>CORARGS_NL</code> is: with <code>_vp "050"</code> and <code>_vp "100"</code>, <code>060</code> is accepted and
+<code>200</code> refused. A value outside its limits is refused on the command line and in the environment
+alike.</p>
 </div>
 
 <h3 id="table-checked">What <code>corArgsInit</code> checks</h3>
 <p>Before anything is set, the table itself: an option with no name, a name used twice or taken by a builtin
 (<code>--usage</code>, <code>-u</code>, <code>--Usage</code>, <code>-U</code>, <code>--verbose</code>, <code>-v</code>),
 a limit or a default outside the type's range (256 for a <code>CorArgUChar</code>), <code>min</code> above
-<code>max</code>, a default outside <code>min</code>-<code>max</code> when both are set, a <code>NULL</code>
-<code>valueP</code> or <code>description</code>, a type or sort out of its enum. Each is
-<code>CorArgsBadParam</code> or <code>CorArgsNameTaken</code>, and nothing is set.</p>
+<code>max</code>, an integer option's default outside its limits (one limit alone too; an option with no default,
+<code>CORARGS_NL</code>, is not checked), a <code>NULL</code> <code>valueP</code> or <code>description</code>, a type
+or sort out of its enum. Each is <code>CorArgsBadParam</code> or <code>CorArgsNameTaken</code>, with the option named in the error list (<code>corArgsErrorGet()</code>), and nothing is set. A <code>CORARGS_SEPARATOR</code> has no name
+and no variable, and is accepted.</p>
 
 <h2 id="flow">Init, add, parse</h2>
 <pre>CorArgsStatus corArgsInit(const char* progName, CorArg* kargV, const char* prefix);
@@ -164,8 +169,8 @@ short name, the environment variable, the sort, the type and the default (<code>
   code; <code>corArgsConfig(CorArgsExitOnUsage, "no")</code> makes <code>corArgsParse</code> print the list after
   the parse and return.</li>
   <li><b>A separator</b> - <code>CORARGS_SEPARATOR("title")</code> - is a heading line in the <code>-u</code> list
-  and nothing in <code>-U</code>. It is accepted in a table given to <code>corArgsAdd</code>; in the table of
-  <code>corArgsInit</code> it is refused as an option without a name. coraine puts one before each plugin's options:
+  and nothing in <code>-U</code>. It goes in the table given to <code>corArgsInit</code> or
+  <code>corArgsAdd</code>. coraine puts one before each plugin's options:
   <code>bridge (mqtt) plugin options:</code>.</li>
 </ul>
 
@@ -263,7 +268,7 @@ line and function that pushed it, the option's name, <code>errno</code>, the sta
 <h2 id="more">API, repository, dependencies</h2>
 <ul class="g-cards">
   <li><a href="#docs/api-corargs"><b>corArgs API</b><span>every header and entry - CorArg, CorArgInfo, the statuses, corArgsInit, corArgsParse, ...</span></a></li>
-  <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><b>SEAMWARE/corArgs</b><span>the repository - <code>make</code>, <code>make envTest</code>, <code>make parseTest</code></span></a></li>
+  <li><a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener"><b>SEAMWARE/corArgs</b><span>the repository - <code>make</code>, <code>make envTest</code>, <code>make parseTest</code>, <code>make limitsTest</code></span></a></li>
   <li><a href="#docs/options"><b>coraine's options</b><span>the table this library parses, option by option</span></a></li>
 </ul>
 <p>corArgs depends on <a href="#docs/lib-corbase">corBase</a> (the library log, <code>COR_VEC_SIZE</code>,

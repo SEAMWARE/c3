@@ -2,7 +2,7 @@
 <!-- docs/ckan-bridge.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>The CKAN bridge</h1>
-<p class="lead"><code>ckan.so</code>, loaded with <code>--bridges ckan</code>, reads the DataStore resources of a
+<p class="lead"><code>ckan.so</code> (<a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>), loaded with <code>--bridges ckan</code>, reads the DataStore resources of a
 <a href="https://ckan.org" target="_blank" rel="noopener">CKAN</a> portal - the open-data portal software behind many
 city and government data sites - and hands each row to the broker, where a DataChannel makes it into entities.</p>
 
@@ -115,20 +115,26 @@ for every bridge that carries DataChannels:</p>
   default - each character outside <code>[A-Za-z0-9._-]</code> becomes <code>_</code>, <code>South Boston</code> &#8594;
   <code>South_Boston</code>, so values that differ only there name one entity) or <code>percent</code> (each such byte
   becomes <code>%XX</code>, <code>South%20Boston</code>: two values never name one entity)</td></tr>
-  <tr><td><code>{ "column": ... }</code></td><td>a Property; <code>"as"</code> converts the value: <code>number</code>,
-  <code>integer</code>, <code>float</code>, <code>boolean</code> (<code>yes</code>/<code>true</code>/<code>y</code>/<code>1</code>,
-  <code>no</code>/<code>false</code>/<code>n</code>/<code>0</code>), <code>string</code>, <code>datetime</code>,
-  <code>json</code>; <code>"unitCode"</code> beside it</td></tr>
+  <tr><td><code>{ "column": ... }</code></td><td>a Property; <code>"as"</code> converts the value: <code>number</code>
+  (<code>"15"</code> to 15), <code>integer</code> (a whole number: <code>"15"</code>, <code>15.0</code>), <code>float</code>,
+  <code>boolean</code> (<code>yes</code>/<code>true</code>/<code>y</code>/<code>1</code>,
+  <code>no</code>/<code>false</code>/<code>n</code>/<code>0</code>, any case), <code>string</code>, <code>datetime</code>
+  (ISO 8601, normalised to UTC - a DateTime value), <code>json</code> (a string holding JSON, parsed);
+  <code>"unitCode"</code> beside it</td></tr>
   <tr><td><code>{ "point": { "longitude", "latitude" } }</code></td><td>a GeoProperty Point from two columns;
-  <code>{ "geo": ... }</code> one from a single column</td></tr>
+  <code>{ "geo": ... }</code> one from a single column: <code>"lat, lng"</code> (latitude first) or GeoJSON, an
+  object or its text</td></tr>
   <tr><td><code>{ "relationship": &lt;template&gt; }</code></td><td>a Relationship</td></tr>
-  <tr><td><code>{ "value": &lt;JSON&gt; }</code></td><td>a Property whose value is always that</td></tr>
+  <tr><td><code>{ "json": ... }</code>, <code>{ "vocab": ... }</code>, <code>{ "languageMap": ... }</code></td><td>a
+  JsonProperty, a VocabProperty, a LanguageProperty (the column an object of language to text)</td></tr>
+  <tr><td><code>{ "value": &lt;JSON&gt; }</code></td><td>a Property whose value is always that - no column, no
+  <code>observedAt</code>; <code>"unitCode"</code> beside it</td></tr>
 </table>
 <p>An absent, null or empty column, or a value that does not convert, leaves that attribute out. All the entities of one
 row are written as one batch upsert with <code>options=update</code>: created when they are not there, their mapped
 attributes replaced, other attributes left alone - with the checks, notifications and temporal events of
 <code>POST /entityOperations/upsert</code>. A row that makes no entity is not taken (<code>recordsRefused</code>), and
-the read goes on. The full mapping - <code>scope</code>, <code>otherColumns</code>, the other attribute kinds - is in
+the read goes on. The full mapping - <code>scope</code>, <code>otherColumns</code> - is in
 coraine's <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/bridge-channels.md#datachannels" target="_blank" rel="noopener">DataChannels</a>.</p>
 
 <h2 id="status">What a DataChannel shows</h2>
@@ -142,7 +148,9 @@ headers without it, only the log says why.</p>
 <h2 id="build">Building</h2>
 <p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>,
 built as <a href="#docs/writing-a-bridge/build">every bridge from the template</a> is. It needs no library of its own:
-<code>-lpthread</code>, and the Cor-Libs and corRest from the broker that loads it.</p>
+<code>-lpthread</code>, and the Cor-Libs and corRest from the broker that loads it. The <code>.so</code> exports
+<code>bridgeRegister</code> and <code>corNodeLayout</code> (weak, from <code>corTree/CorNode.h</code>, checked by the
+broker when it opens the plugin), nothing else.</p>
 <pre>make                  <span class="c"># ckan.so, debug (traces compiled in)</span>
 make BUILD=release
 make contract         <span class="c"># does src/ckanRegister.c still satisfy BridgeDriver.h?</span>

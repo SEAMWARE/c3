@@ -3,7 +3,7 @@
 <article class="guide">
 <h1>coraine</h1>
 <p class="lead">An NGSI-LD context broker, written in C. It implements <a href="https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.09.01_60/gs_cim009v010901p.pdf" target="_blank" rel="noopener">ETSI GS CIM 009 v1.9.1</a> and passes the ETSI
-NGSI-LD conformance suite<sup>*</sup>.</p>
+NGSI-LD conformance suite<sup>*</sup>. Its repository: <a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener">github.com/SEAMWARE/coraine</a>.</p>
 
 <div class="xp-hero" role="list" aria-label="coraine in numbers">
   <div class="xp-stat" role="listitem"><span class="xp-x">1</span><span class="xp-what">process</span><span class="xp-how">no other service required (corDB)</span></div>
@@ -17,7 +17,7 @@ NGSI-LD conformance suite<sup>*</sup>.</p>
 <p>The broker speaks NGSI-LD; shared libraries chosen at start decide the rest:</p>
 <table class="gtable">
   <tr><th>What</th><th>Chosen with</th><th>Today</th></tr>
-  <tr><td>where the entities live</td><td><code>--database</code></td><td><code>corDB</code> (in the broker, persistent with <code>--dbDir</code>), <code>mongoc</code> (MongoDB), <code>ramDB</code></td></tr>
+  <tr><td>where the entities live</td><td><code>--database</code></td><td><a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener"><code>corDB</code></a> (in the broker, persistent with <code>--dbDir</code>), <code>mongoc</code> (MongoDB), <code>ramDB</code></td></tr>
   <tr><td>where the history lives</td><td><code>--troe</code></td><td><code>corDB</code> (inside the corDB store), <code>timescale</code> (PostgreSQL / TimescaleDB), <code>ramDB</code> (a ring in RAM), <code>none</code></td></tr>
   <tr><td>more API</td><td><code>--apiPlugins</code></td><td><code>admin</code></td></tr>
   <tr><td>how the API is reached besides HTTP</td><td><code>--transports</code></td><td>WebSocket</td></tr>

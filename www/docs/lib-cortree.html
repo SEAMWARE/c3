@@ -2,7 +2,7 @@
 <!-- docs/lib-cortree.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corTree - the tree</h1>
-<p class="lead">The in-memory tree every part of coraine works on: the node, <code>CorNode</code>, and the functions
+<p class="lead">The in-memory tree every part of coraine works on (<a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener">SEAMWARE/corTree</a>): the node, <code>CorNode</code>, and the functions
 that build, edit, search, clone, sort and free a tree of them. It parses and renders nothing - JSON in and out is
 <a href="#docs/lib-corjson">corJson</a>; the binary cor format (<code>corTreeBin.h</code>) is another producer and
 consumer of the same tree.</p>
@@ -40,8 +40,8 @@ type, <code>corTreeValue(nodeP, buf, bufLen)</code> gives a node's value as text
 attribute's type (0: a plain object) - and the cor format writes both instead of the strings they stand for
 (<a href="#docs/cor-protocol">cor://</a>). <code>flags</code> is bits for any user.</p>
 <div class="g-callout warn">
-<p><b>Every builder zeroes all three, and <code>corTreeClone</code> copies all three.</b> Code that builds nodes
-without the builders - a parser, a database reader - must do the same, or what a node is taken for depends on which
+<p><b>Every builder zeroes all three (and sets <code>next</code> to <code>NULL</code>), and <code>corTreeClone</code>
+copies all three.</b> Code that builds nodes without the builders - a parser, a database reader - must do the same, or what a node is taken for depends on which
 code path made it.</p>
 </div>
 
@@ -149,7 +149,7 @@ gets none returns a string node <code>"too big string"</code> instead.</p>
   <tr><td><code>corTreeNodeDecouple(parent, node, prev)</code></td><td>unlinks it when the caller already has the previous sibling (<code>NULL</code>: it is the first) - no search</td></tr>
   <tr><td><code>corTreeChildMove(from, to, child)</code></td><td>removes it from <code>from</code> and appends it to <code>to</code>; a child not in <code>from</code> is left alone</td></tr>
   <tr><td><code>corTreeChildReplace(container, outP, inP)</code></td><td>puts <code>inP</code> where <code>outP</code> was; <code>outP</code> is unlinked, not freed</td></tr>
-  <tr><td><code>corTreeChildAddOrReplace(container, name, nodeP)</code></td><td>appends <code>nodeP</code>, or - when the object has a member of that name - copies <code>nodeP</code>'s type and value into that member</td></tr>
+  <tr><td><code>corTreeChildAddOrReplace(container, name, nodeP)</code></td><td>appends <code>nodeP</code>, or - when the object has a member of that name - puts <code>nodeP</code> in that member's place. The old member is not overwritten: it is returned, out of the tree, for the caller to free (<code>NULL</code> when <code>nodeP</code> was added)</td></tr>
 </table>
 <div class="g-callout warn">
 <p><b><code>corTreeChildAdd</code> is not a move.</b> It sets <code>child-&gt;next</code> to <code>NULL</code>: a node
@@ -203,7 +203,11 @@ allocator (<code>NULL</code>) and live in the tree heap, <code>corTreeHeap.c</co
   <li><b>Addresses, not RAM.</b> At the first allocation the heap reserves 64 GiB of addresses (half of that, and so
   on, down to 256 MiB, where less can be had), <code>MAP_NORESERVE</code>: what is resident is what is used. The
   untouched part is kept out of a core dump.</li>
-  <li><b>Threads:</b> a mutex per size.</li>
+  <li><b>Threads: a cache per thread.</b> Each thread keeps its own free blocks of each size and takes and frees
+  them with no lock. A size's mutex is taken only for a batch - 4 KiB worth of blocks, 32 at most (32 blocks of up to
+  128 bytes, 4 of 1024) - from its free list or, else, a range of its page, and to give a batch back when a thread
+  holds two batches. That is at most 8 KiB per size per thread. A thread that ends gives its cache back; the blocks
+  stay in the heap, for the other threads.</li>
 </ul>
 <table class="gtable">
   <tr><th>Then the heap is <code>malloc</code></th><th>Why</th></tr>
@@ -218,6 +222,21 @@ allocator (<code>NULL</code>) and live in the tree heap, <code>corTreeHeap.c</co
 release builds, loaded in batches of 500, the broker's RSS after the load (2026-10-23, A B B A, within 0.2 %):
 270 MiB with <code>malloc</code> and 40-byte nodes, 240 MiB in the tree heap with 40-byte nodes, 231 MiB with 32-byte
 scalars - <code>-14.5 %</code> - with the load time the same in all three (<a href="#docs/performance">Performance</a>).</p>
+<p>The thread caches, measured: <code>perfRun.sh corDB</code>, the durable configuration (<code>--dbDir</code> on
+ext4, NVMe, <code>--dbSync interval</code>, <code>--troe none</code>), plain release, AMD Ryzen 9 8940HX, one mutex
+a size against the thread caches, A B B A (2026-10-27), requests/s at 50 connections:</p>
+<table class="gtable">
+  <tr><th>Scenario</th><th>One mutex a size</th><th>Thread caches</th><th>Change</th></tr>
+  <tr><td>batch update (20)</td><td>16 269</td><td>29 076</td><td><b>+78.7 %</b></td></tr>
+  <tr><td>batch create (20)</td><td>10 474</td><td>29 981</td><td><b>+186 %</b></td></tr>
+  <tr><td>batch delete (20)</td><td>18 590</td><td>60 452</td><td><b>+225 %</b></td></tr>
+  <tr><td>merge</td><td>65 497</td><td>70 702</td><td>+7.9 %</td></tr>
+  <tr><td><code>PATCH</code></td><td>100 513</td><td>104 067</td><td>+3.5 %</td></tr>
+  <tr><td>create</td><td>90 415</td><td>93 566</td><td>+3.5 %</td></tr>
+  <tr><td><code>DELETE</code></td><td>150 654</td><td>147 052</td><td>-2.4 %</td></tr>
+</table>
+<p>Reads and subscriptions within ±3.3 %; with one connection within +1.5 %. With 300 000 entities stored the
+broker's RSS was the same either way (641 MB).</p>
 
 <h2 id="free">Freeing</h2>
 <pre>void corTreeFree(CorNode* nodeP);</pre>

@@ -2,13 +2,13 @@
 <!-- docs/lib-corngsild.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corNgsild</h1>
-<p class="lead">The NGSI-LD library: what an NGSI-LD body may hold and what it means, the three representations of
+<p class="lead">The NGSI-LD library (<a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener">SEAMWARE/corNgsild</a>): what an NGSI-LD body may hold and what it means, the three representations of
 an entity, the q, scopeQ, type and geo languages, the subscription and registration caches, the notifications and
 the distributed operations. It plugs into <a href="#docs/lib-correst">corRest</a> as a set of request hooks and
 leaves storage to the broker - coraine is the broker built on it.</p>
 
 <h2 id="place">Where it sits</h2>
-<p>corNgsild is the largest of the libraries - 117 headers, 100 source files. Below it are
+<p>corNgsild is the largest of the libraries - 118 headers, 101 source files. Below it are
 <a href="#docs/lib-correst">corRest</a> (the request, its arena, the HTTP client) and
 <a href="#docs/lib-corjsonld">corJsonld</a> (the <code>@context</code>s and the expansion); above it, the broker
 supplies what it does not own:</p>
@@ -291,7 +291,7 @@ off, the forwarding matchers find nothing and every operation stays local; the R
   <tr><td>ldDistOpForwardContext</td><td>the <code>@context</code> a forward to this registration uses - its <code>jsonldContext</code></td></tr>
   <tr><td>ldEntityFragment.h, ldWriteResult.h</td><td>a write split by RegistrationInfo; the answers merged into one UpdateResult</td></tr>
   <tr><td>ldDistMerge.h</td><td>versions of one entity from several sources merged (§ 4.5.5.3)</td></tr>
-  <tr><td>ldDistSub.h</td><td>a subscription forwarded to the matching sources as subordinates, kept in step on PATCH, DELETE and registration changes; their notifications come back to <code>ldBrokerHttpEndpoint</code></td></tr>
+  <tr><td>ldDistSub.h</td><td>a subscription forwarded to the matching sources as subordinates, kept in step on PATCH and DELETE of the subscription and on registration changes; their notifications come back to <code>ldBrokerHttpEndpoint</code>. A new registration gets the subordinates of the subscriptions it matches (<code>ldDistSubOnRegCreate</code>), a deleted one loses them (<code>ldDistSubOnRegDelete</code>), and a PATCHed one (§ 10.5.2.4, <code>ldDistSubOnRegUpdate</code>) is compared before and after: a subordinate still matching at the same endpoint and tenant has its <code>entities</code> PATCHed at the source when they changed; one no longer matching (the type, the operations, a Via loop) or whose registration moved endpoint or tenant is DELETEd where it was; one matching now with no subordinate is POSTed. None of it without <code>--distributed</code></td></tr>
 </table>
 <p><code>ldSplitEntities</code> (<a href="#docs/options/noSplitEntities">--noSplitEntities</a> turns it off) decides
 whether a distributed query assembles entities from parts held by several sources, or takes each entity whole from
@@ -341,7 +341,7 @@ on a bridge, a cache rebuilt from the store - expands with <code>ldDefaultContex
   <li><b>Raise with <code>ldError</code> and return false</b>; the render hook turns <code>corRest.out</code> into the ProblemDetails.</li>
   <li><b>Hold no cache lock across a send</b>: pin, unlock, send, unpin. Registration lock before subscription lock.</li>
   <li><b>A thread that is not corRest's</b> and calls the library sets up its own <code>corRest</code> arena (as the periodic loop does) and calls <code>corNgsildFallbackRelease()</code> before it ends.</li>
-  <li><b>Trace levels</b> are 200-399 (<code>ldTraceLevels.h</code>).</li>
+  <li><b>Trace levels</b> are 200-240 (<code>ldTraceLevels.h</code>); a new one takes 241 and up, below corAlloc's 300-303.</li>
 </ul>
 <h3 id="build">Building it</h3>
 <table class="g-opts">

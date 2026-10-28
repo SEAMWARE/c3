@@ -2,7 +2,7 @@
 <!-- docs/building.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide steps">
 <h1>Building from source</h1>
-<p class="lead">The published image runs the broker with no compiler involved. Build from source to change
+<p class="lead">The published image runs the broker with no compiler involved. Build from source - <a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener">github.com/SEAMWARE/coraine</a> - to change
 coraine, to run it where no image suits, or to compile out the features a deployment does not use.</p>
 
 <h2 id="packages"><span class="g-n">1</span>Install the system packages</h2>
@@ -26,7 +26,7 @@ coraine, to run it where no image suits, or to compile out the features a deploy
 <p>coraine links the Cor-Libs - <code>corBase corLog corAlloc corArgs corHash corTree corJson corProm corRest
 corNgsild corJsonld corPlugin</code> - and they must sit as <b>siblings</b> of <code>coraine</code> under one
 parent directory (by default <code>~/git</code>): the build references <code>../&lt;lib&gt;/lib&lt;lib&gt;.a</code>.
-The <code>corLibs</code> umbrella's bootstrap clones every one of them, and <code>corTest</code>, beside itself,
+The <a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><code>corLibs</code></a> umbrella's bootstrap clones every one of them, and <code>corTest</code>, beside itself,
 and builds them:</p>
 <pre>git clone git@github.com:SEAMWARE/corLibs.git
 ./corLibs/bootstrap.sh</pre>
@@ -50,7 +50,7 @@ SIGSEGV within seconds.</p>
 
 <h2 id="check"><span class="g-n">4</span>Check what the binary carries</h2>
 <pre>coraine --version            <span class="c"># without starting it</span>
-<span class="o">coraine 0.6.0-dev
+<span class="o">coraine 0.6.0
 features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 CONTEXT_HOSTING=1 MONGOC=1 ...
 httpServer: mhd</span>
 curl localhost:1026/build    <span class="c"># a running broker</span></pre>
@@ -90,7 +90,7 @@ coraine --database corDB</pre>
 <table class="g-opts">
   <tr><th>Option</th><th>What it does</th></tr>
   <tr><td>&lt;dir&gt;</td><td>where the source is unpacked and built: a new or empty directory, or one an earlier <code>coraine-build</code> unpacked into (the source is then reused). The result is in <code>&lt;dir&gt;/install</code>: <code>bin/coraine</code>, <code>bin/coraine-import</code>, <code>plugins/</code>, <code>etc/</code>, <code>env</code></td></tr>
-  <tr><td>--release</td><td>optimised, traces compiled out (<code>--traceLevels</code> is not there), no training - the default</td></tr>
+  <tr><td>--release</td><td>optimised, traces compiled out (<code>--traceLevels</code> is accepted and turns on nothing; the broker says so at start), no training - the default</td></tr>
   <tr><td>--pgo</td><td>profile-guided: built instrumented, trained on the measured request shapes, rebuilt with the profile - what the <code>coraine</code> package and the image hold. A few minutes more; the training needs <code>curl</code> and <code>wrk</code>, and <code>coraine-build --pgo</code> checks for <code>python3</code> too, which only <code>--tune</code> runs; libmicrohttpd only</td></tr>
   <tr><td>--tune &lt;workload&gt;</td><td>profile-guided, trained on <b>your</b> workload, and the knobs measured on it; the best are kept in <code>&lt;dir&gt;/install/etc/tune.env</code></td></tr>
   <tr><td>--debug</td><td><code>-g</code>, not optimised, traces compiled in (<code>--traceLevels</code> works) - for reproducing a problem report, not for production</td></tr>
@@ -161,7 +161,8 @@ build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so 
   <tr><td>BRIDGE_HTTP_LISTEN</td><td>no <code>BridgeBroker.httpListen</code> (bridge ABI 16): the broker serves no port for a bridge plugin (an IoT Agent's southbound port, a webhook); a plugin that needs one says so in the log</td><td>-43,616 bytes (libmicrohttpd build, corHttp with it)</td></tr>
   <tr><td colspan="3" class="muted">Protocols</td></tr>
   <tr><td>COR_PROTOCOL</td><td>no <code>--corPort</code>; a <code>cor://</code> registration is not forwarded to. The cor format stays - corDB's log is written in it. Set with <code>coraine-build</code> or <code>make COR_WITH_COR_PROTOCOL=0</code>, not a cmake <code>-D</code> alone - <a href="#docs/cor-protocol">cor://</a></td><td>-24 KiB</td></tr>
-  <tr><td>TRANSPORTS</td><td>no <code>--transports</code>, <code>ws.so</code> not built - <a href="#docs/websocket">WebSocket</a></td><td>-38 KiB</td></tr>
+  <tr><td>TRANSPORTS</td><td>no <code>--transports</code>, <code>ws.so</code> not built - <a href="#docs/websocket">WebSocket</a>; <code>HA_RUNS</code> goes with it</td><td>-38 KiB</td></tr>
+  <tr><td>HA_RUNS</td><td>no beats of the runs under <code>--high-availability mongo</code>: the WebSocket subscriptions of an instance killed stay - <a href="#docs/high-availability">High availability</a>. Off by itself when <code>TRANSPORTS</code> is</td><td>-3,545 bytes (release build)</td></tr>
   <tr><td>SSE</td><td>no <code>--sseStreams</code>; a subscription on <code>urn:ngsi-ld:self</code> is a 400 - <a href="#docs/sse">Server-Sent Events</a>. Off by itself when <code>SUBSCRIPTIONS</code> is</td><td>-9,505 bytes</td></tr>
   <tr><td colspan="3" class="muted">Operations</td></tr>
   <tr><td>ADMIN_API</td><td><code>admin.so</code> not built; <code>METRICS</code>, <code>ADMIN_CONFIG</code> and <code>BRIDGE_INVENTORY</code> go with it</td><td>-40 KiB</td></tr>

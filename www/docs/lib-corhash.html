@@ -4,7 +4,8 @@
 <h1>corHash</h1>
 <p class="lead">A chained hash table keyed by a string. The caller supplies the hash function and the compare
 function, and the table stores only a pointer to the caller's item - the key is read from the item, never
-copied. Its memory comes from <code>malloc</code> or from a <a href="#docs/lib-coralloc">corAlloc</a> arena.</p>
+copied. Its memory comes from <code>malloc</code> or from a <a href="#docs/lib-coralloc">corAlloc</a> arena, chosen
+per table. Repository: <a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener">SEAMWARE/corHash</a>.</p>
 
 <h2 id="model">The model</h2>
 <p>A table is an array of <code>slots</code> list heads. An item added is a <code>CorHashListItem</code> -
@@ -104,7 +105,7 @@ older one is found again. A caller that wants one item per name looks it up befo
 <ul class="g-cards">
   <li><a href="#docs/api-corhash"><b>corHash API</b><span>every entry of <code>corHash.h</code></span></a></li>
   <li><a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener"><b>SEAMWARE/corHash</b><span>the repository</span></a></li>
-  <li><a href="#docs/lib-coralloc"><b>corAlloc</b><span>what it depends on: <code>corHash.h</code> includes <code>corAlloc.h</code>, and the library calls <code>corAlloc</code></span></a></li>
+  <li><a href="#docs/lib-coralloc"><b>corAlloc</b><span>what it depends on, and through it corBase: <code>corHash.h</code> includes <code>corAlloc.h</code>, and the library calls <code>corAlloc</code> - it is compiled and linked against corAlloc also when every table passes <code>NULL</code> and uses <code>malloc</code></span></a></li>
 </ul>
 <p>Used by <a href="#docs/lib-corjsonld">corJsonld</a> (a context's terms by name and by value),
 <a href="#docs/lib-cordb">corDB</a> (its indexes and history), and coraine (the bridge channel cache, the

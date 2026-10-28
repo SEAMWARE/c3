@@ -238,6 +238,27 @@ function tocRender(id, root) {
   toc.append(ul);
 }
 
+//
+// sourcesRender - the foot of a guide: the repositories its facts come from (guides.json "from"), each a
+// link to it on GitHub - every guide links the repositories it describes
+//
+function sourcesRender(id, box) {
+  const g = guides.find((x) => x.id === id);
+  const repos = [...new Set((g.from || []).map((f) => f.repo))];
+  if (repos.length === 0) return;
+
+  const p = el('p', 'docs-source muted', repos.length === 1 ? 'Source: ' : 'Sources: ');
+  repos.forEach((repo, ix) => {
+    if (ix > 0) p.append(' · ');
+    const a = el('a', null, 'SEAMWARE/' + repo + ' ↗');
+    a.href = 'https://github.com/SEAMWARE/' + encodeURIComponent(repo);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    p.append(a);
+  });
+  box.append(p);
+}
+
 function pagerRender(id) {
   const pager = $('docs-pager');
   pager.replaceChildren();
@@ -394,6 +415,7 @@ export async function docsShow(hash) {
     box.innerHTML = await guideRead(guide);
     box.dataset.guide = guide;
     headingsIdentify(box);
+    sourcesRender(guide, box);
     if (site) siteLinks(box);
     navRender(guide);
     tocRender(guide, box);

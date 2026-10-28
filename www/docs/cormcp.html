@@ -2,7 +2,7 @@
 <!-- docs/cormcp.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corMcp - an MCP server for NGSI-LD brokers</h1>
-<p class="lead">corMcp gives an AI model read access to an NGSI-LD context broker through the
+<p class="lead"><a href="https://github.com/SEAMWARE/corMcp" target="_blank" rel="noopener">corMcp</a> gives an AI model read access to an NGSI-LD context broker through the
 <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a>: the model asks in
 tools - "the vehicles faster than 90 km/h near Sol" - and corMcp makes the NGSI-LD requests,
 <code>GET /entities?type=Vehicle&amp;q=speed&gt;90&amp;georel=...</code>. It works with any NGSI-LD broker over
@@ -54,10 +54,13 @@ make install          <span class="c"># /usr/local/bin/corMcp (PREFIX=..., DESTD
   holds a bearer token, sent as <code>Authorization: Bearer</code>. The token itself is never a command-line argument;
   a variable that is not set stops the start</td></tr>
   <tr><td>--limit-max, -lm &lt;n&gt;<span class="env">CORMCP_LIMIT_MAX</span></td><td>the largest <code>limit</code> a
-  tool call may ask for, 1 - 1000 (default 100); a larger one is lowered to it</td></tr>
+  tool call may ask for, 1 - 1000 (default 100; another value: corMcp does not start); a tool call asking for more
+  gets this many</td></tr>
 </table>
 </div>
-<p>Each option can also be set in the environment, by the name beside it; the command line wins.</p>
+<p>Each option can also be set in the environment, by the name beside it; the command line wins. An environment
+variable set to a value the option does not take stops corMcp all the same. <code>-u</code> lists the options,
+<code>-U</code> with their environment variables and defaults.</p>
 
 <h2 id="tools">The tools</h2>
 <div class="g-scroll">
@@ -72,22 +75,28 @@ make install          <span class="c"># /usr/local/bin/corMcp (PREFIX=..., DESTD
   <code>ids</code>, <code>idPattern</code>, <code>q</code>, <code>scopeQ</code>, <code>geoQ</code>, <code>csf</code>;
   <code>pick</code>, <code>omit</code>, <code>datasetId</code>, <code>lang</code>, <code>format</code>;
   <code>limit</code>, <code>offset</code></td></tr>
-  <tr><td><code>get_entity</code></td><td><code>GET /entities/{id}</code></td><td>one entity by its id - also how a
-  Relationship is followed</td></tr>
+  <tr><td><code>get_entity</code></td><td><code>GET /entities/{id}</code></td><td>one entity by its <code>id</code>
+  (required) - also how a Relationship is followed; <code>pick</code>, <code>omit</code>, <code>datasetId</code>,
+  <code>lang</code>, <code>format</code></td></tr>
   <tr><td><code>count_entities</code></td><td><code>GET /entities?count=true&amp;limit=0</code></td><td>how many match
-  the same filters - no entities returned</td></tr>
+  the same filters (<code>type</code>, <code>ids</code>, <code>idPattern</code>, <code>q</code>, <code>scopeQ</code>,
+  <code>geoQ</code>, <code>csf</code>) - no entities returned</td></tr>
   <tr><td><code>temporal</code></td><td><code>GET /temporal/entities[/{id}]</code></td><td>history: <code>timerel</code>
-  and <code>timeAt</code> (required), <code>endTimeAt</code>, <code>timeproperty</code>, <code>lastN</code>,
-  <code>attrs</code>; aggregation with <code>aggrMethods</code> and <code>aggrPeriodDuration</code>; one entity by
+  (<code>before</code>, <code>after</code> or <code>between</code>) and <code>timeAt</code> (both required),
+  <code>endTimeAt</code> (required with <code>between</code>), <code>timeproperty</code> (default
+  <code>observedAt</code>), <code>lastN</code>, <code>attrs</code>; aggregation with <code>aggrMethods</code> and <code>aggrPeriodDuration</code>; one entity by
   <code>id</code>, or the filters</td></tr>
   <tr><td><code>list_subscriptions</code></td><td><code>GET /subscriptions</code></td><td>what each subscription
-  watches, where it notifies, its status</td></tr>
+  watches, where it notifies, its status; <code>limit</code>, <code>offset</code></td></tr>
   <tr><td><code>query_registrations</code></td><td><code>GET /csourceRegistrations</code></td><td>which context sources
-  hold which entities - NGSI-LD wants at least one filter (§ 5.10.2.4)</td></tr>
+  hold which entities: <code>type</code>, <code>ids</code>, <code>idPattern</code>, <code>attrs</code>, <code>q</code>,
+  <code>csf</code>, <code>limit</code>, <code>offset</code> - NGSI-LD wants at least one filter (§ 5.10.2.4)</td></tr>
 </table>
 </div>
 <p><code>geoQ</code> is an object - <code>{ "georel": "near;maxDistance==2000", "geometry": "Point", "coordinates":
-[2.2945, 48.8584] }</code>, with an optional <code>geoproperty</code> - sent as the four URL parameters. A list
+[2.2945, 48.8584] }</code> - <code>georel</code>, <code>geometry</code> and <code>coordinates</code> required,
+<code>geoproperty</code> optional (default <code>location</code>) - sent as the four URL parameters. A required argument
+that is missing is a tool error before anything is sent: <code>'timeAt' is required (a string)</code>. A list
 argument (<code>type</code>, <code>ids</code>, <code>pick</code>, <code>attrs</code>, ...) is a string or an array of
 strings, joined with commas. Each tool's description - what the model reads - says what it is for and shows the
 NGSI-LD syntax it must write (<code>q</code>'s operators, ranges, regular expressions, sub-attributes); the server's
@@ -100,7 +109,9 @@ tenant.</p>
   <code>observedAt</code>, <code>datasetId</code>, Property and Relationship all kept. <code>format: simplified</code>
   (<code>options=keyValues</code>, the values alone) or <code>normalized</code> when the model asks. <code>temporal</code>
   is <code>normalized</code> by default (or <code>temporalValues</code>, <code>concise</code>); with
-  <code>aggrMethods</code>, <code>options=aggregatedValues</code>.</li>
+  <code>aggrMethods</code> (<code>totalCount</code>, <code>distinctCount</code>, <code>sum</code>, <code>avg</code>,
+  <code>min</code>, <code>max</code>, <code>stddev</code>, <code>sumsq</code>), <code>options=aggregatedValues</code>, and
+  <code>format</code> is not used.</li>
   <li><code>pick</code> always keeps <code>id</code> and <code>type</code>.</li>
   <li>A list is <code>{ count, returned, more, &lt;items&gt; }</code>, <code>limit</code> 20 by default; the count is
   always asked for (<code>count=true</code>), and <code>more</code> says whether to page with

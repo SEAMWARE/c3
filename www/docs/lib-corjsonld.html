@@ -2,7 +2,7 @@
 <!-- docs/lib-corjsonld.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corJsonld</h1>
-<p class="lead">The JSON-LD layer of the broker: it parses <code>@context</code>s, keeps them in a cache, downloads
+<p class="lead">The JSON-LD layer of the broker (<a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener">SEAMWARE/corJsonld</a>): it parses <code>@context</code>s, keeps them in a cache, downloads
 the ones it has not seen through a callback, and expands and compacts the names and values of a parsed tree - term
 by term or a whole body in one pass. It never opens a socket, and it knows NGSI-LD only as far as the core context
 goes: the NGSI-LD rules sit above it, in <a href="#docs/lib-corngsild">corNgsild</a>.</p>
@@ -12,7 +12,7 @@ goes: the NGSI-LD rules sit above it, in <a href="#docs/lib-corngsild">corNgsild
   <tr><th>Thing</th><th>What it is</th></tr>
   <tr><td><code>CorLdItem</code></td><td>one term: its short <code>name</code>, its expanded <code>id</code>, its <code>@type</code> (<code>"@id"</code>, <code>"@vocab"</code>, <code>"@json"</code>, a datatype, or NULL), its parsed <code>@container</code> (a bit of <code>CorLdContainer</code>), the <code>KJF_*</code> <code>flags</code> and, for a core term, the caller's <code>termId</code></td></tr>
   <tr><td><code>CorLdContext</code></td><td>one parsed <code>@context</code>: a name table (expansion) and an IRI table (compaction), its <code>@vocab</code>, or - for an array <code>@context</code> - its child contexts. Plus what the cache needs: <code>url</code>, <code>id</code>, the raw <code>body</code>, its <code>kind</code> (<code>CorLdKindImplicit</code>, <code>CorLdKindCached</code>, <code>CorLdKindHosted</code> - NGSI-LD § 5.13.1), timestamps</td></tr>
-  <tr><td>the core context</td><td>the NGSI-LD core context v1.9, compiled in (<code>corLdCoreContextBody.h</code>, <code>CORLD_CORE_CONTEXT_URL</code>). It always takes part in an expansion, and it wins over every user context</td></tr>
+  <tr><td>the core context</td><td>the NGSI-LD core context v1.9, compiled in (<code>corLdCoreContextBody.h</code>, <code>CORLD_CORE_CONTEXT_URL</code>). It always takes part in an expansion, and it wins over every user context. Its cache entry is of kind <code>CorLdKindCached</code> - a local copy of the @context at its external URL (§ 5.13.1), compiled in instead of downloaded</td></tr>
   <tr><td>the cache</td><td>one per process: every context downloaded, hosted or minted, found by URL or id</td></tr>
 </table>
 <p>Everything works on <a href="#docs/lib-cortree">corTree</a>'s <code>CorNode</code> trees, as
@@ -75,6 +75,13 @@ kept for <code>GET /jsonldContexts/{id}</code>, and inserted. A downloaded <code
   <tr><td>a cycle</td><td>the asker that is itself downloading the URL - an array <code>@context</code> that leads back to itself - gets NULL at once, with <code>errorFn(400, "Cyclic @context", url)</code></td></tr>
   <tr><td>volatile contexts</td><td><code>volatileCtx</code>, <code>expiresAt</code>: a context the broker mints so a Link header can name an inline body by URL. Not dropped when fetched; <code>corLdCacheReapVolatile(now)</code> unlinks those past <code>expiresAt</code> (corNgsild runs it every second, <code>ldContextHost.h</code>)</td></tr>
 </table>
+<p><b>An application's own contexts.</b> An application that serves @contexts itself (coraine's
+<code>/jsonldContexts/{id}</code>) knows them by id, not by the URL a client names them with. It registers
+<code>corLdSetOwnContext(fn)</code>, <code>CorLdContext* fn(const char* url, bool* ownP)</code>: on every cache miss
+<code>corLdContextFromUrl</code> asks it first. <code>*ownP</code> false - not one of its URLs, downloaded as any other;
+<code>*ownP</code> true - its own, and the answer is <code>fn</code>'s context (NULL: none by that URL), never
+downloaded from the application itself and never cached a second time as a <code>Cached</code> copy. NULL (the
+default): every URL is downloaded.</p>
 <p>The rest of the cache API - <code>corLdCacheLookup</code>, <code>corLdCacheInsert</code>,
 <code>corLdCacheRemove</code>, <code>corLdCacheSnapshot</code> (the entries in insertion order, pointers into the
 cache, not copies) and <code>corLdIdGenerate</code> (a Hosted context's id,
@@ -128,21 +135,21 @@ unless its term keeps arrays (<code>@list</code>, <code>@set</code>, <code>@lang
 It is for entity data only - an API object (Subscription, Registration) keeps its arrays.</p>
 
 <h2 id="compacting">Compaction</h2>
-<pre>const char* corLdCompact(CorLdContext* contextP, const char* iri);
-void        corLdCompactTree(CorNode* treeP);                            // with the core context
-void        corLdCompactTreeWith(CorNode* treeP, CorLdContext* ctxP);   // with this one</pre>
+<pre>const char* corLdCompact(CorLdContext* contextP, const char* iri, CorAlloc* kaP);
+void        corLdCompactTree(CorNode* treeP, CorAlloc* kaP);                            // with the core context
+void        corLdCompactTreeWith(CorNode* treeP, CorLdContext* ctxP, CorAlloc* kaP);   // with this one</pre>
 <table class="gtable">
   <tr><th>#</th><th><code>corLdCompact</code> tries</th></tr>
   <tr><td>1</td><td>not an IRI: returned as it is</td></tr>
   <tr><td>2</td><td>a term of the user context with this IRI: its name</td></tr>
   <tr><td>3</td><td>a core term with this IRI: its name</td></tr>
   <tr><td>4</td><td>starts with the core <code>@vocab</code>: the rest - unless that name is a term of another IRI</td></tr>
-  <tr><td>5</td><td>only when 4 was refused for that reason: <code>prefix:rest</code>, the longest prefix of the user or core context</td></tr>
+  <tr><td>5</td><td>only when 4 was refused for that reason: <code>prefix:rest</code>, the longest prefix of the user or core context, built in <code>kaP</code></td></tr>
   <tr><td>6</td><td>the IRI, unchanged</td></tr>
 </table>
 <p>The tree functions mirror the expansion: names, <code>type</code> values, <code>@vocab</code>-typed values, the
-same opaque containers. The answer is a pointer into the IRI, the item, or a new string allocated from
-<code>corRest.kalloc</code> (step 5) - see <a href="#docs/lib-corjsonld/pitfalls">pitfalls</a>.</p>
+same opaque containers. The answer is a pointer into the IRI, the item, or a new string allocated in the
+caller's <code>kaP</code> (step 5) - it lives as long as <code>kaP</code> and the IRI do.</p>
 
 <h2 id="core">The core context</h2>
 <p>Every core term is stored, matched and rendered by its <b>short name</b>: at init the core context's ids are
@@ -241,19 +248,18 @@ int main(void)
 
   char*       iri   = corLdExpand(ctxP, "temperature", &amp;ka, NULL, NULL);   // "https://example.org/temperature"
   char*       other = corLdExpand(ctxP, "speed", &amp;ka, NULL, NULL);         // ".../default-context/speed"
-  const char* name  = corLdCompact(ctxP, iri);                               // "temperature"
+  const char* name  = corLdCompact(ctxP, iri, &amp;ka);                          // "temperature"
 
   corLdCleanup();
   return 0;
 }</pre>
-<p>It links with <code>libcorJsonld.a</code> and the libraries below it - and with corRest, whose
-<code>corRest.kalloc</code> <code>corLdCompact</code> refers to.</p>
+<p>It links with <code>libcorJsonld.a</code> and the libraries below it.</p>
 
 <h2 id="pitfalls">Rules and pitfalls</h2>
 <ul>
   <li><b>Pass the value of <code>@context</code></b> to <code>corLdContextFromTree</code>, not the document that holds it.</li>
   <li><b>The cache allocator is shared</b> and must be thread-safe; the <code>kaP</code> of the other calls only holds what lives as long as the call's result is used (an expanded name, a parse tree).</li>
-  <li><b><code>corLdCompact</code>'s compact-IRI form</b> (step 5) is allocated from <code>corRest.kalloc</code>, the calling thread's corRest arena: a thread that is not corRest's sets one up first.</li>
+  <li><b><code>corLdCompact</code>'s compact-IRI form</b> (step 5) is allocated in the <code>kaP</code> passed: the result must not outlive it.</li>
   <li><b>Never read a core IRI off a working-copy item</b> - its <code>id</code> is its name. Ask <code>corLdCorePristine()</code> or <code>corLdCoreItemByIri</code>.</li>
   <li><b>A cache entry is never freed</b>; a pointer from <code>corLdCacheSnapshot</code> stays valid until the entry is evicted.</li>
   <li><b>Trace levels</b> are 150-156 (<code>corLdTraceLevels.h</code>: init, parse, expand, compact, cache, download, prefix).</li>
@@ -267,8 +273,8 @@ int main(void)
 </ul>
 <p>Depends on <a href="#docs/lib-coralloc">corAlloc</a>, <a href="#docs/lib-cortree">corTree</a>,
 <a href="#docs/lib-corjson">corJson</a>, <a href="#docs/lib-corbase">corBase</a>,
-<a href="#docs/lib-corhash">corHash</a> (the name and IRI tables), <a href="#docs/lib-corlog">corLog</a>,
-<a href="#docs/lib-correst">corRest</a> (for <code>corRest.kalloc</code>) and pthreads. Used by
+<a href="#docs/lib-corhash">corHash</a> (the name and IRI tables), <a href="#docs/lib-corlog">corLog</a>
+and pthreads. Used by
 <a href="#docs/lib-corngsild">corNgsild</a>, whose request hooks expand every NGSI-LD body and compact every
 response, and by coraine itself - its startup, its <code>/jsonldContexts</code> endpoints, its bridges.</p>
 </article>

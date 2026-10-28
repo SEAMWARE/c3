@@ -4,7 +4,8 @@
 <h1>corBase</h1>
 <p class="lead">The library every other library of the stack stands on: the library log through which a library
 writes into its executable's log, the coroutines and their event-loop waits, and the small helpers - strings,
-files, time, the process's CPU and memory limits - that would otherwise be copied into each library.</p>
+files, time, the process's CPU and memory limits - that would otherwise be copied into each library.
+Repository: <a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener">SEAMWARE/corBase</a>.</p>
 
 <h2 id="parts">What is in it</h2>
 <p>One function, or one small family, per header, included as <code>"corBase/&lt;header&gt;.h"</code>:</p>
@@ -20,7 +21,7 @@ files, time, the process's CPU and memory limits - that would otherwise be copie
   <tr><td>corTime.h</td><td><code>corTimeGet</code> (<code>CLOCK_REALTIME</code>), <code>corTimeDiff</code>, <code>corTimeAccumulate</code> - <code>timespec</code>s, and optionally the seconds as a <code>float</code></td></tr>
   <tr><td>corTimeIso.h</td><td>epoch nanoseconds as ISO 8601 UTC, 0-9 fraction digits (truncated), trailing zeros dropped on request; no libc time or <code>printf</code> call. <code>buf</code> holds 31 bytes</td></tr>
   <tr><td>corCrc32c.h</td><td>CRC-32C, with the CPU's instruction where there is one (SSE4.2, the ARMv8 CRC extension), a table where not - the same value either way</td></tr>
-  <tr><td>corFloatTrim.h</td><td>a <code>double</code> as text without trailing zeros, at most 9 decimals; the shortest <code>%g</code> that reads back exactly for a value fixed point cannot hold. The buffer holds 31 bytes</td></tr>
+  <tr><td>corFloatTrim.h</td><td>a <code>double</code> as text without trailing zeros, at most 9 decimals; the shortest <code>%g</code> that reads back exactly for a value fixed point cannot hold. <code>inf</code>, <code>-inf</code> and <code>NaN</code>, which JSON cannot hold, are written <code>null</code>. The buffer holds 31 bytes</td></tr>
   <tr><td>corSizeText.h</td><td>a byte count as <code>"512 B"</code>, <code>"64 KiB"</code>, <code>"4096 MiB"</code> - whole units, rounded down, no GiB</td></tr>
   <tr><td>corUriPasswordMask.h</td><td>a URI with its password as <code>***</code>, for a log line or an error</td></tr>
   <tr><td>corHeaderIsCredential.h</td><td>is an HTTP header a credential (<code>Authorization</code>, <code>Cookie</code>, ...), in any case - no allocation, callable from a signal handler</td></tr>

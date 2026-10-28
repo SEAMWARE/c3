@@ -155,6 +155,36 @@ duplicates.</p>
   database) or ask each instance after its restart, and <code>DELETE</code> the extras.</li>
 </ol>
 
+<h2 id="ws-runs">WebSocket subscriptions of an instance gone</h2>
+<p>A subscription that notifies a WebSocket connection (<code>--transports ws</code>, <a href="#docs/websocket">WebSocket</a>)
+names the connection's run: <code>urn:ngsi-ld:WebSocket:&lt;run&gt;-&lt;n&gt;</code>, the run being the instance's boot id. A
+connection lives in one instance; its subscriptions are in the shared database, and every instance matches them. When the
+instance is killed, the runs' <b>beats</b> clean them up:</p>
+<ul>
+  <li>Every instance writes the beat of its run every <b>10 seconds</b>: a document <code>{ id: &lt;run&gt;, beat: &lt;ms&gt; }</code>
+  in the collection <code>runs</code> of the default tenant's database.</li>
+  <li>On each of its beats, an instance reads the beats of all runs. A run with <b>no beat for 60 seconds</b> is gone. Every
+  subscription, periodic subscription and context source subscription, in every tenant, that notifies a connection of a run
+  with no beat document, or of a run that is gone, is deleted; then the beat document of each run that is gone.
+  An instance killed is cleaned up 60 to 70 seconds later by any instance alive, also when it never comes back:
+  <pre><span class="o">I: ... HA: run 1a2b3c4d5e6f7a8b gone - no beat for 60 s; its WebSocket subscriptions deleted</span></pre></li>
+  <li>An instance whose own beat has not been written for 60 seconds (the database not reachable from it) is gone for the
+  others, and they delete its subscriptions. It closes all its WebSocket connections with status 1012 (<i>Service
+  Restart</i>); a client reconnects, maybe to another instance:
+  <pre><span class="o">W: ... HA: no beat of this run (1a2b3c4d5e6f7a8b) written for 60 s - the other instances take it for gone; every WebSocket connection closed (1012)</span></pre></li>
+  <li>An instance stopped (SIGTERM) closes its connections, which deletes their subscriptions, and deletes its beat
+  document.</li>
+</ul>
+<div class="g-callout warn">
+<p>The time of a beat is the clock of the instance that wrote it: <b>the clocks of the instances must agree to within a few
+tens of seconds</b>. A broker built without the switch <code>HA_RUNS</code> - or a version without it - writes no beats:
+next to an instance that writes them, its WebSocket subscriptions are deleted within 10 seconds. A rolling upgrade from
+such a version loses the WebSocket subscriptions of the instances not yet upgraded; their clients get notifications again
+once they subscribe again.</p>
+</div>
+<p>A subscription on an event stream (<a href="#docs/sse">Server-Sent Events</a>, the endpoint <code>urn:ngsi-ld:self</code>)
+names no run: one of an instance killed stays.</p>
+
 <h2 id="not-covered">Not synchronised: Snapshots</h2>
 <p>Each instance loads the Snapshots (NGSI-LD § 5.16) at start-up, but changes to them are not synchronised: a
 Snapshot created through one instance is known to the others only after they restart.</p>
