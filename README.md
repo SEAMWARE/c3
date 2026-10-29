@@ -77,6 +77,10 @@ down to the level chosen, then downloads it: from then on it is drawn from the f
 (`PREFIX=/usr/local`, `DESTDIR` for packaging) installs `bin/c3`, `share/c3/www` and the menu's and
 the dock's c³: `share/applications/com.seamware.c3.desktop` (`Exec` the installed `bin/c3`) and its icon,
 `share/icons/hicolor/{256x256,512x512}/apps/com.seamware.c3.png`; `make uninstall`; `make clean`.
+`DESKTOP_EXEC=<path>`: the desktop entry runs that instead of `bin/c3` - a launcher of one's own around it
+(environment, a log file). A c³ still running from the `bin/c3` the install replaced is stopped (SIGTERM,
+`tools/stopReplaced.sh`; not with `DESTDIR`): started again, it would only open the earlier build. The next
+start is the new one.
 
 A c³ started while one runs on its port has that one open its window and ends. When the running one is
 an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
