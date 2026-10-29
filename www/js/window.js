@@ -54,16 +54,35 @@ export async function windowInit() {
   window.matchMedia('(display-mode: fullscreen)').addEventListener('change', show);
 
   //
-  // Minimised, the window leaves full-screen (Chrome minimises none): shown again, it goes back
+  // Minimised, the window leaves full-screen (Chrome minimises none): shown again, it goes back.
+  // Shown again by the desktop (the dock's icon), on Wayland Chrome is not told - the protocol has no
+  // "un-minimised": it keeps the page hidden and paints nothing, the window looks frozen, and no
+  // visibilitychange comes. The focus the window gets is told: focus lost after the minimise and then had
+  // again counts as shown again - looked at on the events and every second, an event missed. Going
+  // full-screen, Chrome is told the state again (c3: minimised -> normal -> full-screen) and paints again.
   //
   let minimised = false;
-  document.addEventListener('visibilitychange', () => {
-    if (minimised && document.visibilityState === 'visible') {
+  let lostFocus = false;                         // since the minimise - the focus of the click is not "again"
+  const back = () => {
+    if (minimised) {
       minimised = false;
       act('fullscreen');
     }
-  });
+  };
+  const focusNow = () => {
+    if (!minimised) return;
+    if (!document.hasFocus()) lostFocus = true;
+    else if (lostFocus) back();
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') back(); });
+  window.addEventListener('blur', focusNow);
+  window.addEventListener('focus', focusNow);
+  setInterval(focusNow, 1000);
 
-  $('win-min').addEventListener('click', async () => { minimised = true; await act('minimize'); });
+  $('win-min').addEventListener('click', async () => {
+    minimised = true;
+    lostFocus = false;
+    await act('minimize');
+  });
   $('win-close').addEventListener('click', () => act('close'));
 }

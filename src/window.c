@@ -22,10 +22,17 @@
 //   POST /api/window/close/<nonce>      Target.closeTarget - the last window closed, Chrome exits. c3 itself
 //                                       keeps running, as when the window is closed by its own X
 //   POST /api/window/open               the window, for a c3 started again (the dock's button) that finds this
-//                                       one on its port: this c3's Chrome still there - its page activated,
-//                                       "normal" then "fullscreen"; gone - a new one, its pipes this c3's. The
-//                                       c3 started again exits at once, and a Chrome it started with the pipe
-//                                       would exit with it. 503: no screen here
+//                                       one on its port - {"activationToken": "<its $XDG_ACTIVATION_TOKEN>"}.
+//                                       This c3's Chrome gone: a new one, its pipes this c3's (the c3 started
+//                                       again exits at once, and a Chrome it started with the pipe would exit
+//                                       with it). Still there, with the token: a window comes to the front on
+//                                       Wayland only with the token of the click that asked - a Chrome started
+//                                       with it hands a new window to this c3's Chrome, the earlier pages are
+//                                       closed and the new one made full-screen (it opens on the last page the
+//                                       UI showed). Without a token: its first page activated only - the
+//                                       desktop may answer with "c3 is ready"; shown so, the page asks for
+//                                       full-screen itself (window.js).
+//                                       503: no screen here
 //
 #define _DEFAULT_SOURCE                          // usleep
 
@@ -40,6 +47,7 @@
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocBufferInit.h"         // corAllocBufferInit
 #include "corAlloc/corAllocBufferReset.h"        // corAllocBufferReset
+#include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corJson/corJsonCreate.h"               // corJsonCreate
 #include "corJson/corJsonParse.h"                // corJsonParse
 #include "corTree/corTreeLookup.h"               // corTreeLookup
@@ -318,8 +326,141 @@ static bool nonceOk(const char* nonce)
 
 // -----------------------------------------------------------------------------
 //
-// windowStateSet - the window of a page to windowState, by way of "normal": Chrome minimises no full-screen
-// window, and makes no minimised one full-screen
+// WindowBounds - the window's state, size and position as Chrome has them
+//
+typedef struct WindowBounds
+{
+  char      state[32];                           // "normal", "minimized", "maximized", "fullscreen"; "?": unknown
+  long long width;
+  long long height;
+  long long left;
+  long long top;
+} WindowBounds;
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowBounds - Browser.getWindowBounds; false: Chrome did not say
+//
+static bool windowBounds(CorAlloc* allocP, long long windowId, WindowBounds* bP)
+{
+  char err[256];
+  char params[64];
+
+  snprintf(bP->state, sizeof(bP->state), "?");
+  bP->width = bP->height = bP->left = bP->top = -1;
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld}", windowId);
+
+  CorNode* resultP = cdp(allocP, "Browser.getWindowBounds", params, err, sizeof(err));
+  CorNode* boundsP = (resultP != NULL) ? corTreeLookup(resultP, "bounds") : NULL;
+
+  if (boundsP == NULL)
+    return false;
+
+  CorNode* stateP = corTreeLookup(boundsP, "windowState");
+  CorNode* wP     = corTreeLookup(boundsP, "width");
+  CorNode* hP     = corTreeLookup(boundsP, "height");
+  CorNode* xP     = corTreeLookup(boundsP, "left");
+  CorNode* yP     = corTreeLookup(boundsP, "top");
+
+  if ((stateP != NULL) && (stateP->type == CorString))
+    snprintf(bP->state, sizeof(bP->state), "%s", stateP->value.s);
+  if ((wP != NULL) && (wP->type == CorInt)) bP->width  = wP->value.i;
+  if ((hP != NULL) && (hP->type == CorInt)) bP->height = hP->value.i;
+  if ((xP != NULL) && (xP->type == CorInt)) bP->left   = xP->value.i;
+  if ((yP != NULL) && (yP->type == CorInt)) bP->top    = yP->value.i;
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// boundsText - "fullscreen 3840x2160+0+0"
+//
+static const char* boundsText(const WindowBounds* bP, char* out, int outLen)
+{
+  snprintf(out, outLen, "%s %lldx%lld%+lld%+lld", bP->state, bP->width, bP->height, bP->left, bP->top);
+  return out;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// stateApplied - the window asked for state ask, and waited for: up to 1 s, until Chrome reports want (NULL:
+// any state but fromP's) and the desktop has carried it out - bounds other than fromP's, but for a window
+// leaving or going to "minimized", whose bounds Chrome keeps. The ms waited; -1: not within the second;
+// -2: refused (errBuf)
+//
+// On Wayland a state is a request the compositor carries out a moment later. Asked for the next one before
+// that, Chrome takes it for done and the desktop does not: a window "full-screen" in Chrome's eyes, its
+// earlier size on the screen, undecorated
+//
+static int stateApplied(CorAlloc* allocP, long long windowId, const char* ask, const char* want, const WindowBounds* fromP, WindowBounds* nowP, char* errBuf, int errLen)
+{
+  char params[256];
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, ask);
+  if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
+  {
+    *nowP = *fromP;
+    return -2;
+  }
+
+  bool minimisedSide = (strcmp(ask, "minimized") == 0) || (strcmp(fromP->state, "minimized") == 0);
+
+  for (int waited = 0; waited <= 1000; waited += 50)
+  {
+    windowBounds(allocP, windowId, nowP);
+
+    bool stateOk = (want != NULL) ? (strcmp(nowP->state, want) == 0) : (strcmp(nowP->state, fromP->state) != 0);
+    bool moved   = (nowP->width != fromP->width) || (nowP->height != fromP->height) || (nowP->left != fromP->left) || (nowP->top != fromP->top);
+
+    if (stateOk && (moved || minimisedSide))
+      return waited;
+
+    usleep(50 * 1000);
+  }
+
+  return -1;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// stepText - " -> maximized 3840x2160+0+0 (120 ms)" appended to the log line of a change
+//
+static void stepText(char* line, int lineLen, const char* ask, const WindowBounds* nowP, int waited, const char* errBuf)
+{
+  char b[96];
+  int  len = strlen(line);
+
+  if (waited >= 0)
+    snprintf(&line[len], lineLen - len, " -> %s: %s (%d ms)", ask, boundsText(nowP, b, sizeof(b)), waited);
+  else if (waited == -1)
+    snprintf(&line[len], lineLen - len, " -> %s: %s (NOT within 1 s)", ask, boundsText(nowP, b, sizeof(b)));
+  else
+    snprintf(&line[len], lineLen - len, " -> %s: refused (%s)", ask, errBuf);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// windowStateSet - the window of a page to windowState, in the steps Chrome takes (Chrome 156, measured):
+//
+//   - from "fullscreen" or "minimized" nothing but "normal" - which, from "minimized", restores the window to
+//     its state before (maximised, when it was)
+//   - "minimized" by way of "maximized": the desktop brings the window back maximised, and from there it is
+//     one step to full-screen - not a small window first
+//   - "fullscreen" from "maximized" or "normal" directly
+//
+// Each step waited for (stateApplied); already in the state: nothing. Every change written to the log
 //
 static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* windowState, char* errBuf, int errLen)
 {
@@ -337,14 +478,50 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
     return false;
   }
 
-  long long windowId = windowP->value.i;
+  long long    windowId = windowP->value.i;
+  WindowBounds cur;
+  WindowBounds next;
+  char         line[1024];
+  char         b[96];
+  int          waited = 0;
 
-  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"normal\"}}", windowId);
-  if (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) == NULL)
-    return false;
+  windowBounds(allocP, windowId, &cur);
+  snprintf(line, sizeof(line), "c3 window %lld -> %s: %s", windowId, windowState, boundsText(&cur, b, sizeof(b)));
 
-  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"windowState\": \"%s\"}}", windowId, windowState);
-  return (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) != NULL);
+  if (strcmp(cur.state, windowState) == 0)
+  {
+    printf("%s - already\n", line);
+    fflush(stdout);
+    return true;
+  }
+
+  if ((strcmp(cur.state, "fullscreen") == 0) || (strcmp(cur.state, "minimized") == 0))
+  {
+    waited = stateApplied(allocP, windowId, "normal", NULL, &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), "normal", &next, waited, errBuf);
+    cur = next;
+  }
+
+  if ((waited >= -1) && (strcmp(windowState, "minimized") == 0) && (strcmp(cur.state, "maximized") != 0))
+  {
+    waited = stateApplied(allocP, windowId, "maximized", "maximized", &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), "maximized", &next, waited, errBuf);
+    cur = next;
+  }
+
+  if ((waited >= -1) && (strcmp(cur.state, windowState) != 0))
+  {
+    waited = stateApplied(allocP, windowId, windowState, windowState, &cur, &next, errBuf, errLen);
+    stepText(line, sizeof(line), windowState, &next, waited, errBuf);
+    cur = next;
+  }
+
+  bool ok = (waited >= -1);
+
+  printf("%s%s\n", line, ok ? "" : " - FAILED");
+  fflush(stdout);
+
+  return ok;
 }
 
 
@@ -355,27 +532,45 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
 //
 static void windowOpen(CorHttpConn* connP)
 {
+  char        url[64];
+  const char* token = NULL;
+
+  snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
+
+  if ((connP->bodyRefused == false) && (connP->body.s != NULL) && (connP->body.len > 0))
+  {
+    CorJson json;
+
+    corJsonCreate(&json, &connP->alloc);
+
+    CorNode* bodyP  = corJsonParse(&json, corAllocStrdup(&connP->alloc, connP->body.s));
+    CorNode* tokenP = ((bodyP != NULL) && (bodyP->type == CorObject)) ? corTreeLookup(bodyP, "activationToken") : NULL;
+
+    if ((tokenP != NULL) && (tokenP->type == CorString))
+      token = activationToken(tokenP->value.s);
+  }
+
   if (pipesAlive() == false)
   {
-    char url[64];
-
-    snprintf(url, sizeof(url), "http://127.0.0.1:%d", c3Port);
-
-    if (browserOpen(url, false, true))
-      serveJson(connP, 200, "{}");
+    if (browserOpen(url, false, true, token))
+      serveJson(connP, 200, "{\"window\": \"opened\"}");
     else
       serveError(connP, 503, "The window", "no screen here");
     return;
   }
 
   //
-  // Chrome still there: a new one would hand the window over to it and exit - and windowPipesSet, closing
-  // the pipes of the one there, would end it. Its first page is brought back instead
+  // Chrome still there - not a new one with the pipe: it would hand the window over to this one and exit, and
+  // windowPipesSet, closing the pipes of the one there, would end it
   //
   char     err[512];
-  char     buf[8 * 1024];
+  char     buf[16 * 1024];
   CorAlloc alloc;
   bool     ok = false;
+  char     before[16][128];                      // this c3's pages before the new window
+  int      beforeN = 0;
+  char     answer[64];
+  char     firstId[128] = "";
 
   corAllocBufferInit(&alloc, buf, sizeof(buf), 1024 * 1024, NULL, "c3 window");
   snprintf(err, sizeof(err), "no page of c3's");
@@ -389,21 +584,84 @@ static void windowOpen(CorHttpConn* connP)
     CorNode* idP   = corTreeLookup(tP, "targetId");
 
     if ((typeP != NULL) && (typeP->type == CorString) && (strcmp(typeP->value.s, "page") == 0) &&
-        (idP != NULL) && (idP->type == CorString) && (strlen(idP->value.s) < 128))
-    {
-      char params[256];
+        (idP != NULL) && (idP->type == CorString) && (strlen(idP->value.s) < 128) && (beforeN < 16))
+      snprintf(before[beforeN++], 128, "%s", idP->value.s);
+  }
 
-      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", idP->value.s);
-      ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL) &&
-           windowStateSet(&alloc, idP->value.s, "fullscreen", err, sizeof(err));
-      break;
+  if (beforeN > 0)
+    snprintf(firstId, sizeof(firstId), "%s", before[0]);
+
+  //
+  // With the token: a new window, by way of a Chrome started with it - it hands the window to this c3's Chrome,
+  // the token with it, and the desktop shows it. Waited for up to 5 s; the earlier pages then closed
+  //
+  char newId[128] = "";
+
+  if ((token != NULL) && browserOpen(url, false, false, token))
+  {
+    for (int attempt = 0; (attempt < 50) && (newId[0] == 0); attempt++)
+    {
+      usleep(100 * 1000);
+
+      CorNode* nowP   = cdp(&alloc, "Target.getTargets", NULL, err, sizeof(err));
+      CorNode* nowsP  = (nowP != NULL) ? corTreeLookup(nowP, "targetInfos") : NULL;
+
+      for (CorNode* tP = ((nowsP != NULL) && (nowsP->type == CorArray)) ? nowsP->value.head : NULL; tP != NULL; tP = tP->next)
+      {
+        CorNode* typeP = corTreeLookup(tP, "type");
+        CorNode* idP   = corTreeLookup(tP, "targetId");
+        bool     seen  = false;
+
+        if ((typeP == NULL) || (typeP->type != CorString) || (strcmp(typeP->value.s, "page") != 0) ||
+            (idP == NULL) || (idP->type != CorString) || (strlen(idP->value.s) >= 128))
+          continue;
+
+        for (int ix = 0; ix < beforeN; ix++)
+        {
+          if (strcmp(before[ix], idP->value.s) == 0)
+            seen = true;
+        }
+
+        if (seen == false)
+        {
+          snprintf(newId, sizeof(newId), "%s", idP->value.s);
+          break;
+        }
+      }
     }
+  }
+
+  if (newId[0] != 0)
+  {
+    char params[256];
+
+    for (int ix = 0; ix < beforeN; ix++)
+    {
+      snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", before[ix]);
+      cdp(&alloc, "Target.closeTarget", params, err, sizeof(err));
+    }
+
+    ok = windowStateSet(&alloc, newId, "fullscreen", err, sizeof(err));
+    snprintf(answer, sizeof(answer), "{\"window\": \"new\", \"closed\": %d}", beforeN);
+  }
+  else if (firstId[0] != 0)
+  {
+    char params[256];
+
+    //
+    // Activated only: a minimised window made "normal" then "fullscreen" without the token is left half
+    // done on Wayland (big, undecorated, not full-screen). Shown again by the desktop ("c3 is ready"), the
+    // page asks for full-screen itself (window.js, on becoming visible)
+    //
+    snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", firstId);
+    ok = (cdp(&alloc, "Target.activateTarget", params, err, sizeof(err)) != NULL);
+    snprintf(answer, sizeof(answer), "{\"window\": \"activated\"}");
   }
 
   corAllocBufferReset(&alloc, false);
 
   if (ok)
-    serveJson(connP, 200, "{}");
+    serveJson(connP, 200, answer);
   else
     serveError(connP, 502, "The window", err);
 }

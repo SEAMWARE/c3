@@ -17,6 +17,11 @@
 //   The profile is c3's alone: a Chrome on it that no c3 holds the pipe to - a window opened without it, or
 //   one whose c3 was stopped - would take every new window over, and none of them could be shown again or
 //   minimised. Before c3 opens the window it keeps the pipe to, that Chrome is stopped (orphanStop).
+// - The activation token (Wayland's xdg-activation): a window comes to the front only with the token of the
+//   click that asked for it - the desktop gives it to the program it starts, in $XDG_ACTIVATION_TOKEN. A
+//   Chrome c3 starts gets the one c3 was asked with (its own, or a second c3's - window.c), in its
+//   environment and as --xdg-activation-token (which a Chrome handing over to the running one passes on),
+//   and no stale one: without it, the desktop says "c3 is ready" instead of showing the window.
 // - Otherwise the default browser: xdg-open, or open on macOS.
 // - No screen (no $DISPLAY, no $WAYLAND_DISPLAY, on Linux): the URL is printed, to open from another
 //   machine through ssh -L.
@@ -98,7 +103,7 @@ static bool headless(void)
 // devtools: Chrome's --remote-debugging-pipe - it reads the DevTools protocol on its fd 3 and writes on its
 // fd 4; c3 keeps the other ends (window.c)
 //
-static bool spawn(const char* prog, char* const argV[], bool devtools)
+static bool spawn(const char* prog, char* const argV[], bool devtools, const char* token)
 {
   int toChrome[2]   = { -1, -1 };
   int fromChrome[2] = { -1, -1 };
@@ -151,6 +156,11 @@ static bool spawn(const char* prog, char* const argV[], bool devtools)
     else
       close_range(3, ~0U, 0);
 
+    if (token != NULL)
+      setenv("XDG_ACTIVATION_TOKEN", token, 1);
+    else
+      unsetenv("XDG_ACTIVATION_TOKEN");             // c3's own, used once long ago
+
     execv(prog, argV);
     _exit(127);
   }
@@ -189,6 +199,53 @@ static void profileDir(char* out, int outLen)
   snprintf(out, outLen, "%s/c3", base);
   mkdir(out, 0700);
   snprintf(out, outLen, "%s/c3/chrome", base);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// activationToken - the token when it is one, else NULL: 255 bytes at most, no control character, space,
+// quote or backslash - it goes into an argument, the environment and a JSON string. Bytes above 127 are
+// kept: GNOME's token holds the launched application's name, UTF-8 ("c³")
+//
+const char* activationToken(const char* token)
+{
+  if ((token == NULL) || (token[0] == 0) || (strlen(token) > 255))
+    return NULL;
+
+  for (const unsigned char* cP = (const unsigned char*) token; *cP != 0; cP++)
+  {
+    if ((*cP <= ' ') || (*cP == 0x7F) || (*cP == '"') || (*cP == '\\') || (*cP == '\''))
+      return NULL;
+  }
+
+  return token;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// startToken - the activation token this c3 was started with: $XDG_ACTIVATION_TOKEN (Wayland), else
+// $DESKTOP_STARTUP_ID (X11 - GLib sets both, the same) - written to the log, its length, not the token
+//
+const char* startToken(void)
+{
+  const char* xdg    = getenv("XDG_ACTIVATION_TOKEN");
+  const char* x11    = getenv("DESKTOP_STARTUP_ID");
+  const char* token  = activationToken(xdg);
+
+  if (token == NULL)
+    token = activationToken(x11);
+
+  printf("c3: started with %s - $XDG_ACTIVATION_TOKEN %s, $DESKTOP_STARTUP_ID %s\n",
+         (token != NULL) ? "an activation token" : "no activation token",
+         (xdg == NULL) ? "unset" : (activationToken(xdg) != NULL) ? "set" : "set, not usable",
+         (x11 == NULL) ? "unset" : (activationToken(x11) != NULL) ? "set" : "set, not usable");
+  fflush(stdout);
+
+  return token;
 }
 
 
@@ -278,8 +335,9 @@ static void orphanStop(const char* profile)
 // browserOpen - true: a browser was started; false: the URL was printed only
 //
 // control: Chrome with the DevTools pipe, kept by this c3 (window.c) - only for a c3 that keeps running
+// token:   the activation token of the click that asked (NULL: none) - the window comes to the front with it
 //
-bool browserOpen(const char* url, bool noBrowser, bool control)
+bool browserOpen(const char* url, bool noBrowser, bool control, const char* token)
 {
   char prog[4096];
 
@@ -303,6 +361,7 @@ bool browserOpen(const char* url, bool noBrowser, bool control)
     char appArg[4200];
     char profileArg[4200];
     char profile[4096];
+    char tokenArg[256];
 
     profileDir(profile, sizeof(profile));
     if (control)
@@ -310,10 +369,17 @@ bool browserOpen(const char* url, bool noBrowser, bool control)
 
     snprintf(appArg,     sizeof(appArg),     "--app=%s", url);
     snprintf(profileArg, sizeof(profileArg), "--user-data-dir=%s", profile);
+    snprintf(tokenArg,   sizeof(tokenArg),   "--xdg-activation-token=%s", (token != NULL) ? token : "");
 
-    char* argV[] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", control ? (char*) "--remote-debugging-pipe" : NULL, NULL };
+    char* argV[9] = { prog, appArg, (char*) "--start-fullscreen", profileArg, (char*) "--no-first-run", (char*) "--no-default-browser-check", NULL, NULL, NULL };
+    int   argC    = 6;
 
-    if (spawn(prog, argV, control))
+    if (control)
+      argV[argC++] = (char*) "--remote-debugging-pipe";
+    if (token != NULL)
+      argV[argC++] = tokenArg;
+
+    if (spawn(prog, argV, control, token))
     {
       printf("c3: %s - opened in %s\n", url, prog);
       fflush(stdout);
@@ -331,7 +397,7 @@ bool browserOpen(const char* url, bool noBrowser, bool control)
   {
     char* argV[] = { prog, (char*) url, NULL };
 
-    if (spawn(prog, argV, false))
+    if (spawn(prog, argV, false, token))
     {
       printf("c3: %s - opened with %s\n", url, opener);
       fflush(stdout);

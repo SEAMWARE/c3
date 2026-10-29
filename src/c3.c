@@ -191,9 +191,11 @@ static bool otherC3(const char* url, int* pidP)
 // it (browser.c). A c3 without POST /api/window/open (an earlier version), or with no screen, answers
 // other than 200.
 //
-static bool otherC3Open(const char* url)
+static bool otherC3Open(const char* url, const char* token, char* answer, int answerLen)
 {
   char                openUrl[256];
+  char                body[512];
+  CorRestKeyValue     contentType = { (char*) "Content-Type", (char*) "application/json", 0 };
   CorRestClientMulti* multiP = corRestClientMultiCreate(1);
   bool                opened = false;
 
@@ -201,14 +203,19 @@ static bool otherC3Open(const char* url)
     return false;
 
   snprintf(openUrl, sizeof(openUrl), "%s/api/window/open", url);
+  if (token != NULL)
+    snprintf(body, sizeof(body), "{\"activationToken\": \"%s\"}", token);
+  else
+    snprintf(body, sizeof(body), "{}");
   corRestClientMultiMaxResponse(multiP, 64 * 1024);
 
-  if (corRestClientMultiAdd(multiP, CorVerbPost, openUrl, NULL, 0, NULL, 0, NULL, NULL) >= 0)
+  if (corRestClientMultiAdd(multiP, CorVerbPost, openUrl, &contentType, 1, body, strlen(body), NULL, NULL) >= 0)
   {
     corRestClientMultiPerform(multiP, 5000);
 
     CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
     opened = (respP != NULL) && (respP->statusCode == 200);
+    snprintf(answer, answerLen, "%s", ((respP != NULL) && (respP->body != NULL)) ? respP->body : "");
   }
 
   corRestClientMultiDestroy(multiP);
@@ -349,10 +356,13 @@ int main(int argC, char* argV[])
     {
       printf("c3: already running on port %d\n", c3Port);
 
-      if ((noBrowser == false) && otherC3Open(url))
-        printf("c3: %s - its window opened\n", url);
+      const char* token = startToken();
+      char        answer[256] = "";
+
+      if ((noBrowser == false) && otherC3Open(url, token, answer, sizeof(answer)))
+        printf("c3: %s - its window opened %s (%s)\n", url, answer, (token != NULL) ? "with the activation token of the start" : "no activation token: the desktop may say \"ready\" instead");
       else
-        browserOpen(url, noBrowser, false);  // no pipe: this c3 is gone in a moment, the window stays
+        browserOpen(url, noBrowser, false, token);  // no pipe: this c3 is gone in a moment, the window stays
 
       return 0;
     }
@@ -384,7 +394,7 @@ int main(int argC, char* argV[])
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);
 
-  browserOpen(url, noBrowser, true);
+  browserOpen(url, noBrowser, true, startToken());
 
   corHttpServe(&server);
   liveShutdown();                                // no subscription left behind on any broker

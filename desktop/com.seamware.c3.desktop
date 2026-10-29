@@ -6,5 +6,9 @@ Comment=Compile, operate and explore coraine brokers
 Exec=@EXEC@
 Icon=com.seamware.c3
 Terminal=false
+StartupNotify=true
+# The window c3 opens: Chrome's application window of http://127.0.0.1:<port> on c3's own profile -
+# its Wayland app id (X11 class). GNOME takes the window for c³'s: the icon shows it again.
+StartupWMClass=chrome-127.0.0.1__-Default
 Categories=Development;
 Keywords=coraine;NGSI-LD;broker;control;
