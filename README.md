@@ -135,6 +135,11 @@ window is the running c3's, so its minimise and close buttons work. A running c3
 version, or one with no screen, cannot: the second `c3` opens the window itself, without those
 buttons. Any other program on the port is an error.
 
+The Chrome profile in `~/.local/state/c3/chrome` is c³'s alone. A Chrome on it that no c3 controls - a
+window opened without the buttons, or one whose c3 was stopped - would take every new window over, and
+none could be shown again. Before c3 opens the window it controls, it stops that Chrome (SIGTERM; the
+one named in the profile's `SingletonLock`, on this host, its command line naming this profile).
+
 ## The configuration file
 
 `~/.config/c3/c3.json`, written by the backend as the user works - never by the page. It holds the
