@@ -153,6 +153,9 @@ export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' +
 export const runDdsDiscover   = (def) => call('POST', '/api/run/dds/discover', def);     // what its DDS domain announces (a few seconds)
 export const runDdsFiles      = () => call('GET', '/api/run/dds/files');                // the DDS configuration written, and its mapping
 export const runDdsFilesWrite = (mapping) => call('POST', '/api/run/dds/files', mapping); // the DDS configuration from a mapping
+export const runOpcuaDiscover   = (def) => call('POST', '/api/run/opcua/discover', def);     // the OPC UA server's address space (a few seconds)
+export const runOpcuaFiles      = () => call('GET', '/api/run/opcua/files');                // the OPC UA configuration written, and its mapping
+export const runOpcuaFilesWrite = (mapping) => call('POST', '/api/run/opcua/files', mapping); // the OPC UA configuration from a mapping
 
 //
 // brokerWrite - a POST, PATCH, PUT or DELETE to the broker's entities, through the backend's proxy
