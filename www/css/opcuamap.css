@@ -1,0 +1,28 @@
+/*
+ * opcuamap.css - the OPC UA mapper: the DDS mapper's layout (ddsmap.css) and what a tree of nodes adds to it
+ *
+ * Copyright 2026 Seamware
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+.om-tree > .om-node { margin-left: 0; }
+.om-kids { margin-top: 4px; }
+.om-kids > .om-node { margin-left: 18px; }
+.om-node:last-child { margin-bottom: 4px; }
+.om-leaf { display: inline-block; width: 28px; text-align: center; color: var(--muted); }
+.om-click { cursor: pointer; border-bottom: 1px dotted var(--muted); }
+.om-click:hover, .om-click:focus-visible { color: var(--text); }
+.om-folder > .dm-ephead .dm-name { color: var(--muted); }
+.om-method > .dm-ephead .dm-name { font-style: italic; }
+.om-node.inmodel { background: transparent; }
+.om-url { min-width: 260px; flex: 1 1 260px; }
+.om-user { width: 180px; }
+.om-sec { display: flex; flex-direction: column; gap: 6px; }
+.om-sec .dm-field { grid-template-columns: 130px minmax(0, 1fr); }
+.om-trust { resize: vertical; font-family: var(--mono, monospace); font-size: 13px; }
+.om-any { font-size: 13px; }
+
+@media (max-width: 700px) {
+  .om-kids > .om-node { margin-left: 10px; }
+  .om-url, .om-user { width: 100%; min-width: 0; }
+}
