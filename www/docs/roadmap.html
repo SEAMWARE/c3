@@ -141,6 +141,11 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   (<code>/admin/bridges/{bridge}/inventory</code>), with the DDS domain, the transport (UDP or shared memory) and the
   network interfaces to reach it; it writes the mapping file and the default user @context, and starts a broker with
   them (<a href="#docs/dds">DDS and ROS 2</a>).</li>
+  <li><b>c³: the OPC UA mapping tool</b> - an OPC UA server's Variables to attributes of entities and its Objects to
+  models (AssetChannels), the DDS tool's layout: in Operate and from Compile's Bridges, made from the opcua bridge's
+  inventory, the whole address space read at once, with the server's security and user; it writes the bridge
+  configuration and the default user @context, and starts a broker with them
+  (<a href="#docs/c3/opcua-mapper">the OPC UA mapper</a>).</li>
   <li><b>Subordinate subscriptions follow a registration's PATCH</b> (§ 10.5.2.4) - created, PATCHed, moved to the
   new endpoint or deleted as the registration changes (<code>--distributed</code>,
   <a href="#docs/options/distributed-ops">Command-line options - Distributed operations</a>).</li>
@@ -170,8 +175,8 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
   for the other: fewer threads, no per-thread caches in the tree heap, a smaller log allocated ahead, scans instead of
   indexes. For a broker with few requests on the cheapest hardware; where its RAM goes is measured first, and the
   resident set at a few store sizes is documented.</li>
-  <li><b>c³: the OPC UA mapping tool</b> - OPC UA variables, monitored items and methods to entities and attributes,
-  the same tool as for DDS: in Operate, and from Compile's Bridges, made from the OPC UA bridge's inventory
+  <li><b>c³: OPC UA methods in the mapper</b> - an Object's methods as the Service Registrations of its entity
+  (<code>opcua://&lt;Object&gt;/&lt;method&gt;</code>), made by the OPC UA mapper instead of by hand
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#c-the-coraine-control-center">more</a>).</li>
   <li><b>Live public transport: a GTFS-realtime bridge, and buses moving in c³</b> - a transit agency's routes (a
   <code>LineString</code> each), stops and trips from its static GTFS; its vehicles' live positions (GTFS-realtime,

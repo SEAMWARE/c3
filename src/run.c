@@ -24,6 +24,10 @@
 //                                               again (ddsDiscoverThread)
 //   GET    /api/run/dds/files                   the DDS configuration the mapper wrote: its files and mapping
 //   POST   /api/run/dds/files                   {domain, transport, interfaces, vocabulary, topics, services, actions}: written (ddsFiles)
+//   POST   /api/run/opcua/discover              {broker, its opcua server}: the server's address space - a broker of
+//                                               its own (opcuaDiscoverThread)
+//   GET    /api/run/opcua/files                 the OPC UA configuration the mapper wrote: its files and mapping
+//   POST   /api/run/opcua/files                 {url, security, user, vocabulary, channels, models, terms}: written (opcuaFiles)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
 //
@@ -77,6 +81,7 @@
 #include "corJson/corJsonRenderSize.h"           // corJsonRenderSize
 #include "corTree/CorNode.h"                     // CorNode
 #include "corTree/corTreeLookup.h"               // corTreeLookup
+#include "corTree/corTreeChildMove.h"            // corTreeChildMove
 #include "corRest/corRestClient.h"               // corRestClientMulti*
 
 #include "c3.h"
@@ -1511,6 +1516,27 @@ static void opcuaPasswordPath(const char* name, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
+// opcuaServerJson - the OPC UA server as the API has it, a broker's "opcua" and the mapper's mapping: "url",
+// "security", "user" - never the password: whether c3 keeps one (passwordSet)
+//
+static void opcuaServerJson(const Def* dP, Str* sP, bool passwordSet)
+{
+  strAdd(sP, "\"url\": ");                      strAddJson(sP, dP->opcua.url);
+  strAdd(sP, ", \"security\": {\"mode\": ");   strAddJson(sP, (dP->opcua.mode[0] != 0) ? dP->opcua.mode : "None");
+  strAdd(sP, ", \"policy\": ");                strAddJson(sP, (dP->opcua.policy[0] != 0) ? dP->opcua.policy : NULL);
+  strAdd(sP, ", \"certificate\": ");           strAddJson(sP, (dP->opcua.certificate[0] != 0) ? dP->opcua.certificate : NULL);
+  strAdd(sP, ", \"privateKey\": ");            strAddJson(sP, (dP->opcua.privateKey[0] != 0) ? dP->opcua.privateKey : NULL);
+  strAdd(sP, ", \"applicationUri\": ");        strAddJson(sP, (dP->opcua.applicationUri[0] != 0) ? dP->opcua.applicationUri : NULL);
+  strAdd(sP, ", \"trustList\": ");             linesJson(sP, dP->opcua.trustList);
+  strAddf(sP, ", \"trustAny\": %s}", dP->opcua.trustAny ? "true" : "false");
+  strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
+  strAddf(sP, ", \"passwordSet\": %s}", passwordSet ? "true" : "false");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // defRender - a broker's options as JSON (c3.json and the API)
 //
 static void defRender(const Def* dP, Str* sP)
@@ -1568,18 +1594,11 @@ static void defRender(const Def* dP, Str* sP)
 
     opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
 
-    strAdd(sP, ", \"opcua\": {\"url\": ");       strAddJson(sP, dP->opcua.url);
+    strAdd(sP, ", \"opcua\": {");
+    opcuaServerJson(dP, sP, (dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0));
     strAdd(sP, ", \"roots\": ");                 linesJson(sP, dP->opcua.roots);
     strAdd(sP, ", \"channels\": ");              channelsJson(sP, dP->opcua.channels, false);
-    strAdd(sP, ", \"security\": {\"mode\": ");   strAddJson(sP, (dP->opcua.mode[0] != 0) ? dP->opcua.mode : "None");
-    strAdd(sP, ", \"policy\": ");                strAddJson(sP, (dP->opcua.policy[0] != 0) ? dP->opcua.policy : NULL);
-    strAdd(sP, ", \"certificate\": ");           strAddJson(sP, (dP->opcua.certificate[0] != 0) ? dP->opcua.certificate : NULL);
-    strAdd(sP, ", \"privateKey\": ");            strAddJson(sP, (dP->opcua.privateKey[0] != 0) ? dP->opcua.privateKey : NULL);
-    strAdd(sP, ", \"applicationUri\": ");        strAddJson(sP, (dP->opcua.applicationUri[0] != 0) ? dP->opcua.applicationUri : NULL);
-    strAdd(sP, ", \"trustList\": ");             linesJson(sP, dP->opcua.trustList);
-    strAddf(sP, ", \"trustAny\": %s}", dP->opcua.trustAny ? "true" : "false");
-    strAdd(sP, ", \"user\": {\"username\": ");   strAddJson(sP, (dP->opcua.username[0] != 0) ? dP->opcua.username : NULL);
-    strAddf(sP, ", \"passwordSet\": %s}}", ((dP->opcua.username[0] != 0) && (stat(pwPath, &st) == 0)) ? "true" : "false");
+    strAdd(sP, "}");
   }
   if ((dP->dds.domain != 0) || (dP->dds.transport[0] != 0) || (dP->dds.interfaces[0] != 0) || (dP->dds.vocabulary[0] != 0) ||
       (dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0))
@@ -2640,10 +2659,13 @@ static bool ckanMember(const Def* dP, Str* sP, char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
-// opcuaMember - the opcua bridge's member of the bridge configuration: its "server" - the URL, the
-// SecureChannel, the user (the password as the file c3 keeps it in) - and an AssetChannel per model root
+// opcuaMemberWrite - the opcua bridge's member of a bridge configuration: its "server" - the URL, the
+// SecureChannel, the user (the password as the file pwPath) - its Channels, and an AssetChannel per model (a
+// line each: the Object's NodeId, attributeLayout, channelDirection - opcuaModelsJson)
 //
-static void opcuaMember(const Def* dP, Str* sP)
+static void opcuaModelsJson(Str* sP, const char* models, bool keyed);
+
+static void opcuaMemberWrite(const Def* dP, const char* pwPath, const char* models, Str* sP)
 {
   strAdd(sP, "\"opcua\": {\"server\": {\"url\": ");
   strAddJson(sP, dP->opcua.url);
@@ -2666,9 +2688,6 @@ static void opcuaMember(const Def* dP, Str* sP)
 
   if (dP->opcua.username[0] != 0)
   {
-    char pwPath[2400];
-
-    opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
     strAdd(sP, ", \"user\": {\"username\": ");      strAddJson(sP, dP->opcua.username);
     strAdd(sP, ", \"passwordFile\": ");             strAddJson(sP, pwPath);
     strAdd(sP, "}");
@@ -2676,22 +2695,32 @@ static void opcuaMember(const Def* dP, Str* sP)
 
   strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"topics\": ");
   channelsJson(sP, dP->opcua.channels, true);
-  strAdd(sP, ", \"assetChannels\": {");
+  strAdd(sP, ", \"assetChannels\": ");
+  opcuaModelsJson(sP, models, true);
+  strAdd(sP, "}}");
+}
 
+
+
+//
+// opcuaMember - a broker's opcua member: its password the file c3 keeps it in, an AssetChannel per model root,
+// every Object of it an entity, its attributes as the bridge names them, read-only
+//
+static void opcuaMember(const Def* dP, Str* sP)
+{
+  char  pwPath[2400];
+  char  models[8192] = "";
   char  copy[2048];
-  char* save  = NULL;
-  bool  first = true;
+  char* save = NULL;
+  int   len  = 0;
+
+  opcuaPasswordPath(dP->name, pwPath, sizeof(pwPath));
 
   snprintf(copy, sizeof(copy), "%s", dP->opcua.roots);
-  for (char* t = strtok_r(copy, "\n", &save); t != NULL; t = strtok_r(NULL, "\n", &save))
-  {
-    strAdd(sP, first ? "" : ", ");
-    strAddJson(sP, t);
-    strAdd(sP, ": {\"entities\": \"natural\"}");
-    first = false;
-  }
+  for (char* t = strtok_r(copy, "\n", &save); (t != NULL) && (len < (int) sizeof(models) - 1); t = strtok_r(NULL, "\n", &save))
+    len += snprintf(&models[len], sizeof(models) - len, "%s%s\tattributes\tin", (len > 0) ? "\n" : "", t);
 
-  strAdd(sP, "}}}");
+  opcuaMemberWrite(dP, pwPath, models, sP);
 }
 
 
@@ -4764,11 +4793,15 @@ static void* svcStopThread(void* vP)
 
 // -----------------------------------------------------------------------------
 //
-// DDS discovery - what a broker's DDS domain announces, for the mapping: a broker of its own for it, where the
-// form says (installed, a build or an image - a container on the host's network, argvMake) - the dds bridge
-// alone, in memory, the admin API, a free port, the form's domain, transport and interfaces and no mapping. One GET of the bridge's
-// inventory, which answers once discovery has gone quiet (corDdsBridge), and the broker is stopped again (a
+// Discovery - what a broker's bridge sees of its source, for a mapper: a broker of its own for it, where the form
+// says (installed, a build or an image - a container on the host's network, argvMake) - the one bridge, in memory,
+// the admin API, a free port. Its bridge's inventory is asked (discoverGet) and the broker is stopped again (a
 // container removed). Its log: <broker dir>.discover/broker.log.
+//
+//   DDS      the form's domain, transport and interfaces and no mapping - one GET of the dds bridge's inventory,
+//            which answers once discovery has gone quiet (corDdsBridge)
+//   OPC UA   the mapper's server, security and user and no Channels - the opcua bridge's inventory, asked again
+//            below every node it cut, until the address space is whole (opcuaCrawl)
 //
 typedef struct DiscoverJob
 {
@@ -4776,83 +4809,72 @@ typedef struct DiscoverJob
   Def  def;
 } DiscoverJob;
 
+typedef struct Discovery
+{
+  int   port;                                    // the broker's
+  pid_t pid;                                     // natively: the broker's; -1: none
+  char  name[96];                                // in a container: the container, while it runs; "": none
+  char  logPath[2400];
+} Discovery;
+
 static bool discovering = false;                 // rMutex - one discovery at a time
 
-static void* ddsDiscoverThread(void* vP)
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverStart - the discovery's broker, started and answering on its port: dP as discoverPrepare left it (its
+// name, store, bridge and switches); false: why, in err (and nothing left running)
+//
+static bool discoverStart(Def* dP, Discovery* xP, char* err, int errLen)
 {
-  DiscoverJob* djP = (DiscoverJob*) vP;
-  Def          d   = djP->def;
-  char         err[1024];
-  char         logPath[2400];
-  char         dir[2300];
-  Str          s   = { NULL, 0, 0 };
+  char dir[2300];
 
-  //
-  // The broker discovery runs: the form's, as little of it as finding the DDS domain needs
-  //
-  snprintf(d.name, sizeof(d.name), "%.50s.discover", djP->def.name);
-  snprintf(d.store, sizeof(d.store), "corDB");
-  snprintf(d.history, sizeof(d.history), "none");
-  snprintf(d.bridges, sizeof(d.bridges), "dds");
-  d.dbDir           = false;
-  d.healthPort      = 0;
-  d.ws              = false;
-  d.admin           = true;
-  d.distributed     = false;
-  d.verbose         = false;
-  d.bridgeConfig[0] = 0;
-  d.userContext[0]  = 0;
-  d.ckan[0]         = 0;
-  d.opcua.url[0]    = 0;
-  d.args[0]         = 0;
-  d.dds.vocabulary[0] = 0;
-  d.dds.topics[0]   = 0;
-  d.dds.services[0] = 0;
-  d.dds.actions[0]  = 0;
+  xP->pid     = -1;
+  xP->name[0] = 0;
+  dP->port    = 0;
 
-  d.port = 0;
-  for (int port = 39026; (port < 39126) && (d.port == 0); port++)
+  for (int port = 39026; (port < 39126) && (dP->port == 0); port++)
   {
     if (portFree(port))
-      d.port = port;
+      dP->port = port;
   }
+  xP->port = dP->port;
 
-  brokerDir(d.name, dir, sizeof(dir));
+  brokerDir(dP->name, dir, sizeof(dir));
   dirsMake(dir);
-  snprintf(logPath, sizeof(logPath), "%s/broker.log", dir);
+  snprintf(xP->logPath, sizeof(xP->logPath), "%s/broker.log", dir);
 
   Argv  a         = { { NULL }, 0 };
   int   fd        = -1;
-  pid_t pid       = -1;
-  bool  container = (strcmp(d.where, "container") == 0);
-  char  name[96]  = "";                          // the container, while it runs
+  bool  container = (strcmp(dP->where, "container") == 0);
   char  out[2048];
 
-  if (d.port == 0)
-    snprintf(err, sizeof(err), "no free port in 39026-39125 for the discovery's broker");
-  else if ((bridgesConfigWrite(&d, 0, err, sizeof(err)) == false) || (argvMake(&d, (int[KINDS]) { 0 }, true, &a, err, sizeof(err)) == false))
+  if (dP->port == 0)
+    snprintf(err, errLen, "no free port in 39026-39125 for the discovery's broker");
+  else if ((bridgesConfigWrite(dP, 0, err, errLen) == false) || (argvMake(dP, (int[KINDS]) { 0 }, true, &a, err, errLen) == false))
     ;
-  else if ((fd = open(logPath, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0600)) == -1)   // appended: logLine writes in it too
-    snprintf(err, sizeof(err), "cannot open %s: %s", logPath, strerror(errno));
+  else if ((fd = open(xP->logPath, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0600)) == -1)   // appended: logLine writes in it too
+    snprintf(err, errLen, "cannot open %s: %s", xP->logPath, strerror(errno));
   else if (container)
   {
     close(fd);
     fd = -1;
 
-    if (imageEnsure(d.image, logPath, err, sizeof(err)) == true)
+    if (imageEnsure(dP->image, xP->logPath, err, errLen) == true)
     {
       Str cmd = { NULL, 0, 0 };
       argCommand(&a, &cmd);
-      logLine(logPath, "%s", cmd.s);
+      logLine(xP->logPath, "%s", cmd.s);
       strFree(&cmd);
 
-      brokerContainer(d.name, name, sizeof(name));
-      engineRun(out, sizeof(out), 30, "rm", "-f", name, NULL);    // one a c3 that died left (it ends in 120 s anyway)
+      brokerContainer(dP->name, xP->name, sizeof(xP->name));
+      engineRun(out, sizeof(out), 30, "rm", "-f", xP->name, NULL);    // one a c3 that died left (it ends in 120 s anyway)
 
       if (engineArgv(&a, out, sizeof(out), 120) != 0)
       {
-        snprintf(err, sizeof(err), "%s run: %.600s", engineName, out);
-        name[0] = 0;
+        snprintf(err, errLen, "%s run: %.600s", engineName, out);
+        xP->name[0] = 0;
       }
     }
   }
@@ -4860,16 +4882,16 @@ static void* ddsDiscoverThread(void* vP)
   {
     Str cmd = { NULL, 0, 0 };
     argCommand(&a, &cmd);
-    logLine(logPath, "%s", cmd.s);
+    logLine(xP->logPath, "%s", cmd.s);
     strFree(&cmd);
 
     char**    env = cleanEnv();
     ProcSpawn sp  = { a.v, env, fd, dir, true, false, SIGKILL };   // its own group (stopped as one), dies with c3
-    pid = procSpawn(&sp);
+    xP->pid = procSpawn(&sp);
     free(env);
 
-    if (pid < 0)
-      snprintf(err, sizeof(err), "fork: %s", strerror(errno));
+    if (xP->pid < 0)
+      snprintf(err, errLen, "fork: %s", strerror(errno));
   }
 
   if (fd != -1)
@@ -4877,119 +4899,447 @@ static void* ddsDiscoverThread(void* vP)
   argFree(&a);
 
   //
-  // Up (it answers on its port) - then the one GET: the bridge waits for discovery to go quiet, at most 10 s
+  // Up: it answers on its port
   //
-  int status = 0;
-  bool up    = false;
+  int  status = 0;
+  bool up     = false;
 
-  for (int ix = 0; ((pid > 0) || (name[0] != 0)) && (ix < 300) && !up; ix++)
+  for (int ix = 0; ((xP->pid > 0) || (xP->name[0] != 0)) && (ix < 300) && !up; ix++)
   {
     bool ended = false;
 
-    if (pid > 0)
-      ended = (waitpid(pid, &status, WNOHANG) == pid);
+    if (xP->pid > 0)
+      ended = (waitpid(xP->pid, &status, WNOHANG) == xP->pid);
     else if ((ix % 10) == 9)                     // a container: asked once a second (--rm: gone when it ends)
-      ended = (engineRun(out, sizeof(out), 20, "inspect", "--format", "{{.State.Running}}", name, NULL) != 0) || (strcmp(out, "true") != 0);
+      ended = (engineRun(out, sizeof(out), 20, "inspect", "--format", "{{.State.Running}}", xP->name, NULL) != 0) || (strcmp(out, "true") != 0);
 
     if (ended)
     {
-      snprintf(err, sizeof(err), "the discovery's broker ended before it answered - its log: %s", logPath);
-      pid = -1;
-      break;
+      snprintf(err, errLen, "the discovery's broker ended before it answered - its log: %s", xP->logPath);
+      xP->pid     = -1;
+      xP->name[0] = 0;
+      return false;
     }
-    up = portAnswers(d.port);
+    up = portAnswers(dP->port);
     if (!up)
       usleep(100 * 1000);
   }
 
-  if (((pid > 0) || (name[0] != 0)) && !up)
-    snprintf(err, sizeof(err), "the discovery's broker did not answer on port %d in 30 s - its log: %s", d.port, logPath);
+  if (((xP->pid > 0) || (xP->name[0] != 0)) && !up)
+    snprintf(err, errLen, "the discovery's broker did not answer on port %d in 30 s - its log: %s", dP->port, xP->logPath);
 
-  int code = 0;
+  return up;
+}
 
-  if (up)
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverStop - the discovery's broker stopped: SIGTERM to its group, SIGKILL 5 s later; a container's output
+// into the log, and the container removed
+//
+static void discoverStop(Discovery* xP)
+{
+  int status = 0;
+
+  if (xP->pid > 0)
   {
-    char                url[128];
-    CorRestClientMulti* multiP = corRestClientMultiCreate(1);
-
-    snprintf(url, sizeof(url), "http://127.0.0.1:%d/admin/bridges/dds/inventory", d.port);
-    if (multiP != NULL)
-    {
-      corRestClientMultiMaxResponse(multiP, 16 * 1024 * 1024);
-      corRestClientMultiAdd(multiP, CorVerbGet, url, NULL, 0, NULL, 0, NULL, NULL);
-      corRestClientMultiPerform(multiP, 20000);
-
-      CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
-
-      if ((respP == NULL) || (respP->error != 0))
-        snprintf(err, sizeof(err), "the discovery's broker did not answer the inventory%s%s", ((respP != NULL) && (respP->errorDetail[0] != 0)) ? ": " : "", (respP != NULL) ? respP->errorDetail : "");
-      else
-      {
-        code = respP->statusCode;
-        if ((code == 200) && (respP->body != NULL))
-          strAddN(&s, respP->body, respP->bodyLen);
-        else
-          snprintf(err, sizeof(err), "the discovery's broker answered %d: %.700s", code, (respP->body != NULL) ? respP->body : "");
-      }
-      corRestClientMultiDestroy(multiP);
-    }
-    else
-      snprintf(err, sizeof(err), "no HTTP client for the inventory");
-  }
-
-  //
-  // Stopped: SIGTERM to its group, SIGKILL 5 s later
-  //
-  if (pid > 0)
-  {
-    kill(-pid, SIGTERM);
+    kill(-xP->pid, SIGTERM);
     for (int ix = 0; ix < 50; ix++)
     {
-      if (waitpid(pid, &status, WNOHANG) == pid)
+      if (waitpid(xP->pid, &status, WNOHANG) == xP->pid)
       {
-        pid = -1;
+        xP->pid = -1;
         break;
       }
       usleep(100 * 1000);
     }
-    if (pid > 0)
+    if (xP->pid > 0)
     {
-      kill(-pid, SIGKILL);
-      waitpid(pid, &status, 0);
+      kill(-xP->pid, SIGKILL);
+      waitpid(xP->pid, &status, 0);
+      xP->pid = -1;
     }
-    logLine(logPath, "stopped - the discovery is over");
+    logLine(xP->logPath, "stopped - the discovery is over");
   }
 
-  //
-  // A container: its output into the log, then removed
-  //
-  if (name[0] != 0)
+  if (xP->name[0] != 0)
   {
+    char out[2048];
     Argv l = { { NULL }, 0 };
+
     argAdd(&l, engine);
     argAdd(&l, "logs");
-    argAdd(&l, name);
-    engineToLog(logPath, 30, &l);
+    argAdd(&l, xP->name);
+    engineToLog(xP->logPath, 30, &l);
     argFree(&l);
 
-    engineRun(out, sizeof(out), 30, "rm", "-f", name, NULL);
-    logLine(logPath, "%s removed - the discovery is over", name);
+    engineRun(out, sizeof(out), 30, "rm", "-f", xP->name, NULL);
+    logLine(xP->logPath, "%s removed - the discovery is over", xP->name);
+    xP->name[0] = 0;
+  }
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverGet - a GET of the discovery's broker: its status code and body (in s, appended); 0: no answer (why, in
+// err)
+//
+static int discoverGet(const Discovery* xP, const char* path, int timeoutMs, Str* sP, char* err, int errLen)
+{
+  char                url[2048];
+  int                 code   = 0;
+  CorRestClientMulti* multiP = corRestClientMultiCreate(1);
+
+  if (multiP == NULL)
+  {
+    snprintf(err, errLen, "no HTTP client for the inventory");
+    return 0;
   }
 
+  snprintf(url, sizeof(url), "http://127.0.0.1:%d%s", xP->port, path);
+  corRestClientMultiMaxResponse(multiP, 16 * 1024 * 1024);
+  corRestClientMultiAdd(multiP, CorVerbGet, url, NULL, 0, NULL, 0, NULL, NULL);
+  corRestClientMultiPerform(multiP, timeoutMs);
+
+  CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
+
+  if ((respP == NULL) || (respP->error != 0))
+    snprintf(err, errLen, "the discovery's broker did not answer the inventory%s%s", ((respP != NULL) && (respP->errorDetail[0] != 0)) ? ": " : "", (respP != NULL) ? respP->errorDetail : "");
+  else
+  {
+    code = respP->statusCode;
+    if (respP->body != NULL)
+      strAddN(sP, respP->body, respP->bodyLen);
+  }
+
+  corRestClientMultiDestroy(multiP);
+  return code;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverPrepare - the form's broker, as little of it as the discovery needs: its own name, corDB in memory,
+// the one bridge and the admin API - no file of one's own, no mapping, no other bridge's source
+//
+static void discoverPrepare(Def* dP, const char* bridge)
+{
+  char name[64];
+
+  snprintf(name, sizeof(name), "%.50s.discover", dP->name);
+  snprintf(dP->name, sizeof(dP->name), "%s", name);
+  snprintf(dP->store, sizeof(dP->store), "corDB");
+  snprintf(dP->history, sizeof(dP->history), "none");
+  snprintf(dP->bridges, sizeof(dP->bridges), "%s", bridge);
+  dP->dbDir             = false;
+  dP->healthPort        = 0;
+  dP->ws                = false;
+  dP->admin             = true;
+  dP->distributed       = false;
+  dP->verbose           = false;
+  dP->bridgeConfig[0]   = 0;
+  dP->userContext[0]    = 0;
+  dP->ckan[0]           = 0;
+  dP->args[0]           = 0;
+  dP->dds.vocabulary[0] = 0;
+  dP->dds.topics[0]     = 0;
+  dP->dds.services[0]   = 0;
+  dP->dds.actions[0]    = 0;
+  dP->opcua.roots[0]    = 0;
+  dP->opcua.channels[0] = 0;
+
+  if (strcmp(bridge, "opcua") != 0)
+    dP->opcua.url[0] = 0;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverEnd - one discovery less, and its answer: the inventory (s), or why there is none
+//
+static void discoverEnd(DiscoverJob* djP, Str* sP, const char* err)
+{
   pthread_mutex_lock(&rMutex);
   discovering = false;
   pthread_mutex_unlock(&rMutex);
 
-  if (s.len > 0)
-    jobAnswer(&djP->job, 200, &s);
+  if (sP->len > 0)
+    jobAnswer(&djP->job, 200, sP);
   else
     jobError(&djP->job, 502, "No inventory", err);
 
-  strFree(&s);
+  strFree(sP);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// ddsDiscoverThread - the dds bridge's inventory: one GET, answered once discovery has gone quiet (at most 10 s)
+//
+static void* ddsDiscoverThread(void* vP)
+{
+  DiscoverJob* djP = (DiscoverJob*) vP;
+  Def          d   = djP->def;
+  Discovery    x;
+  char         err[1024] = "";
+  Str          s   = { NULL, 0, 0 };
+
+  discoverPrepare(&d, "dds");
+
+  if (discoverStart(&d, &x, err, sizeof(err)) == true)
+  {
+    int code = discoverGet(&x, "/admin/bridges/dds/inventory", 20000, &s, err, sizeof(err));
+
+    if ((code != 200) && (code != 0))
+    {
+      snprintf(err, sizeof(err), "the discovery's broker answered %d: %.700s", code, (s.s != NULL) ? s.s : "");
+      strFree(&s);
+    }
+  }
+
+  discoverStop(&x);
+  discoverEnd(djP, &s, err);
   return NULL;
 }
 
-static void ddsDiscover(CorHttpConn* connP)
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaCut - the nodes of a tree the inventory cut (hasChildren, no "children"), in a namespace of the server's
+// application: ns=0 - the server's own nodes, its Server object and its sessions - is not followed
+//
+static void opcuaCut(CorNode* nP, CorNode** cutV, int* cutsP, int max, int* nodesP, bool* fullP)
+{
+  (*nodesP)++;
+
+  CorNode* idP       = corTreeLookup(nP, "id");
+  CorNode* moreP     = corTreeLookup(nP, "hasChildren");
+  CorNode* childrenP = corTreeLookup(nP, "children");
+
+  if ((childrenP == NULL) && (moreP != NULL) && (moreP->type == CorBoolean) && moreP->value.b && (idP != NULL) && (idP->type == CorString) &&
+      (strncmp(idP->value.s, "ns=", 3) == 0) && (strncmp(idP->value.s, "ns=0;", 5) != 0))
+  {
+    if (*cutsP < max)
+      cutV[(*cutsP)++] = nP;
+    else
+      *fullP = true;
+  }
+
+  if ((childrenP != NULL) && (childrenP->type == CorArray))
+  {
+    for (CorNode* cP = childrenP->value.head; cP != NULL; cP = cP->next)
+      opcuaCut(cP, cutV, cutsP, max, nodesP, fullP);
+  }
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaCrawl - the server's address space, from its Objects folder: the inventory five levels at a time, asked
+// again below each node it cut, the answers grafted into one tree - at most 20 000 nodes and 400 requests (a
+// larger address space is cut there: "complete" false). The answer: { "url", "complete", "nodes", "objects" }
+//
+static bool opcuaCrawl(const Discovery* xP, const char* url, Str* sP, char* err, int errLen)
+{
+  CorAlloc  alloc;
+  char      buf[16 * 1024];
+  CorJson   json;
+  Str       body   = { NULL, 0, 0 };
+  CorNode*  rootP  = NULL;
+  bool      ok     = false;
+  int       code   = 0;
+
+  corAllocBufferInit(&alloc, buf, sizeof(buf), 4 * 1024 * 1024, NULL, "c3 opcua inventory");
+  corJsonCreate(&json, &alloc);
+
+  //
+  // The bridge answers 503 until it has a connection to the server - asked again for at most 20 s
+  //
+  for (int ix = 0; ix < 40; ix++)
+  {
+    strFree(&body);
+    code = discoverGet(xP, "/admin/bridges/opcua/inventory?depth=5", 20000, &body, err, errLen);
+    if (code != 503)
+      break;
+    usleep(500 * 1000);
+  }
+
+  if (code == 200)
+    rootP = corJsonParse(&json, corAllocStrdup(&alloc, (body.s != NULL) ? body.s : ""));
+
+  if (code == 0)
+    ;
+  else if (code == 503)
+    snprintf(err, errLen, "the opcua bridge has no connection to %s: %.700s", url, (body.s != NULL) ? body.s : "");
+  else if (code != 200)
+    snprintf(err, errLen, "the discovery's broker answered %d: %.700s", code, (body.s != NULL) ? body.s : "");
+  else if ((rootP == NULL) || (rootP->type != CorObject))
+    snprintf(err, errLen, "the opcua bridge's inventory is not a JSON object");
+  else
+  {
+    CorNode* cutV[512];
+    int      cuts      = 0;
+    int      nodes     = 0;
+    int      requests  = 1;
+    bool     complete  = true;
+    bool     full      = false;              // more cut than the list holds: those are not asked for
+
+    opcuaCut(rootP, cutV, &cuts, 512, &nodes, &full);
+
+    while ((cuts > 0) && complete)
+    {
+      CorNode* nP  = cutV[--cuts];
+      CorNode* idP = corTreeLookup(nP, "id");
+      char     path[1400];
+      int      len = snprintf(path, sizeof(path), "/admin/bridges/opcua/inventory?depth=5&from=");
+
+      for (const char* c = idP->value.s; (*c != 0) && (len < (int) sizeof(path) - 4); c++)
+      {
+        unsigned char u = (unsigned char) *c;
+        if (((u >= 'A') && (u <= 'Z')) || ((u >= 'a') && (u <= 'z')) || ((u >= '0') && (u <= '9')) || (u == '-') || (u == '.') || (u == '_') || (u == '~'))
+          path[len++] = *c;
+        else
+          len += snprintf(&path[len], sizeof(path) - len, "%%%02X", u);
+      }
+      path[len] = 0;
+
+      if ((nodes >= 20000) || (requests >= 400))
+      {
+        complete = false;
+        break;
+      }
+
+      Str more = { NULL, 0, 0 };
+      requests++;
+
+      if (discoverGet(xP, path, 20000, &more, err, errLen) == 200)
+      {
+        CorNode* subP      = corJsonParse(&json, corAllocStrdup(&alloc, (more.s != NULL) ? more.s : ""));
+        CorNode* childrenP = ((subP != NULL) && (subP->type == CorObject)) ? corTreeLookup(subP, "children") : NULL;
+
+        if (childrenP != NULL)
+        {
+          corTreeChildMove(subP, nP, childrenP);
+          nodes--;                                 // nP itself is counted again
+          opcuaCut(nP, cutV, &cuts, 512, &nodes, &full);
+        }
+      }
+      strFree(&more);
+    }
+
+    if ((cuts > 0) || full)
+      complete = false;
+
+    int   size = corJsonRenderSize(&json, rootP) + 2;
+    char* text = malloc(size);
+
+    if (text == NULL)
+      snprintf(err, errLen, "no room for the inventory");
+    else
+    {
+      corJsonRender(&json, rootP, text);
+      strAdd(sP, "{\"url\": ");          strAddJson(sP, url);
+      strAddf(sP, ", \"complete\": %s, \"nodes\": %d, \"objects\": ", complete ? "true" : "false", nodes);
+      strAdd(sP, text);
+      strAdd(sP, "}");
+      free(text);
+      ok = true;
+    }
+  }
+
+  strFree(&body);
+  corAllocBufferReset(&alloc, false);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaDiscoverThread - the opcua bridge's view of the server: its address space, whole (opcuaCrawl). The
+// user's password: the one the request gave, else the one the mapper keeps - for the discovery's broker in its
+// own directory (opcuaPasswordPath), as for any broker
+//
+static void opcuaPasswordWrite(const char* path, const char* password, char* err, int errLen);
+static void opcuaMapperPath(const char* file, char* out, int outLen);
+
+static void* opcuaDiscoverThread(void* vP)
+{
+  DiscoverJob* djP = (DiscoverJob*) vP;
+  Def          d   = djP->def;
+  Discovery    x   = { 0, -1, "", "" };
+  char         err[1024] = "";
+  Str          s   = { NULL, 0, 0 };
+
+  discoverPrepare(&d, "opcua");
+  memset(djP->def.opcua.password, 0, sizeof(djP->def.opcua.password));
+
+  if (d.opcua.url[0] == 0)
+    snprintf(err, sizeof(err), "the OPC UA server to discover: its URL (opc.tcp://host:port)");
+  else if (strcmp(d.where, "container") == 0)
+    snprintf(err, sizeof(err), "OPC UA discovery needs a native broker - an installed coraine or a build: the image has no opcua bridge");
+  else
+  {
+    if (d.opcua.username[0] != 0)
+    {
+      char dir[2300];
+      char path[2400];
+
+      brokerDir(d.name, dir, sizeof(dir));
+      dirsMake(dir);
+      opcuaPasswordPath(d.name, path, sizeof(path));
+
+      if (d.opcua.password[0] != 0)
+        opcuaPasswordWrite(path, d.opcua.password, err, sizeof(err));
+      else
+      {
+        char  kept[2400];
+        opcuaMapperPath("opcua.password", kept, sizeof(kept));
+        char* text = fileText(kept);
+
+        if (text != NULL)
+        {
+          char* nl = strchr(text, '\n');
+          if (nl != NULL)
+            *nl = 0;
+          opcuaPasswordWrite(path, text, err, sizeof(err));
+          memset(text, 0, strlen(text));
+          free(text);
+        }
+      }
+      memset(d.opcua.password, 0, sizeof(d.opcua.password));
+    }
+
+    if ((err[0] == 0) && (discoverStart(&d, &x, err, sizeof(err)) == true))
+      opcuaCrawl(&x, d.opcua.url, &s, err, sizeof(err));
+
+    discoverStop(&x);
+
+    char path[2400];                             // the discovery's copy of the password: gone with it
+    opcuaPasswordPath(d.name, path, sizeof(path));
+    unlink(path);
+  }
+
+  discoverEnd(djP, &s, err);
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// discoverRequest - POST /api/run/<bridge>/discover {broker}: the form's broker, its discovery in a thread of
+// its own - one at a time
+//
+static void discoverRequest(CorHttpConn* connP, void* (*thread)(void*))
 {
   DiscoverJob* djP = calloc(1, sizeof(DiscoverJob));
 
@@ -5012,6 +5362,7 @@ static void ddsDiscover(CorHttpConn* connP)
 
   if (busy)
   {
+    memset(djP->def.opcua.password, 0, sizeof(djP->def.opcua.password));
     free(djP);
     serveError(connP, 409, "A discovery runs", "one discovery at a time - wait for the one that runs");
     return;
@@ -5020,7 +5371,7 @@ static void ddsDiscover(CorHttpConn* connP)
   djP->job.connP = connP;
   corHttpSuspend(connP);
 
-  if (threadStart(ddsDiscoverThread, djP) == false)
+  if (threadStart(thread, djP) == false)
   {
     pthread_mutex_lock(&rMutex);
     discovering = false;
@@ -5028,6 +5379,7 @@ static void ddsDiscover(CorHttpConn* connP)
     jobError(&djP->job, 500, "No thread", "no thread for the discovery");
   }
 }
+
 
 
 
@@ -5178,6 +5530,438 @@ static void ddsFiles(CorHttpConn* connP, bool post)
 
 // -----------------------------------------------------------------------------
 //
+// opcuaMapperPath - a file of the OPC UA configuration the mapper writes: <data>/c3/opcua/<file>, beside run/
+//
+static void opcuaMapperPath(const char* file, char* out, int outLen)
+{
+  const char* slash = strrchr(runDir, '/');
+  int         len   = (slash != NULL) ? (int) (slash - runDir) : (int) strlen(runDir);
+
+  snprintf(out, outLen, "%.*s/opcua%s%s", len, runDir, (file != NULL) ? "/" : "", (file != NULL) ? file : "");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaPasswordWrite - a password, into a file only its owner reads (0600), and a newline after it - the
+// bridge's passwordFile reads its first line
+//
+static void opcuaPasswordWrite(const char* path, const char* password, char* err, int errLen)
+{
+  int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  int  n  = strlen(password);
+  bool ok = (fd != -1) && (fchmod(fd, 0600) == 0) && (write(fd, password, n) == n) && (write(fd, "\n", 1) == 1);
+
+  if (fd != -1)
+    close(fd);
+  if (!ok)
+    snprintf(err, errLen, "the OPC UA password cannot be kept in %s: %s", path, strerror(errno));
+}
+
+
+
+//
+// The models the mapper names: an Object each, its model an AssetChannel - a line each: NodeId, attributeLayout,
+// channelDirection, tab-separated (entities "natural": every Object of it an entity)
+//
+static const char* layouts[]    = { "attributes", "subAttributes", "value", NULL };
+static const char* directions[] = { "in", "both", NULL };
+
+static bool oneOf(const char* s, const char** allowed)
+{
+  for (int ix = 0; allowed[ix] != NULL; ix++)
+  {
+    if (strcmp(s, allowed[ix]) == 0)
+      return true;
+  }
+  return false;
+}
+
+static bool modelsParse(CorNode* nP, char* out, int outLen, char* err, int errLen)
+{
+  int len = 0;
+
+  out[0] = 0;
+
+  if ((nP == NULL) || (nP->type == CorNull))
+    return true;
+
+  if (nP->type != CorArray)
+  {
+    snprintf(err, errLen, "\"models\" is a list of { \"node\", \"attributeLayout\", \"channelDirection\" }");
+    return false;
+  }
+
+  for (CorNode* iP = nP->value.head; iP != NULL; iP = iP->next)
+  {
+    CorNode* nodeP   = (iP->type == CorObject) ? corTreeLookup(iP, "node") : NULL;
+    CorNode* layoutP = (iP->type == CorObject) ? corTreeLookup(iP, "attributeLayout") : NULL;
+    CorNode* dirP    = (iP->type == CorObject) ? corTreeLookup(iP, "channelDirection") : NULL;
+
+    if ((nodeP == NULL) || (nodeP->type != CorString) || (nodeP->value.s[0] == 0) || (strpbrk(nodeP->value.s, "\t\n") != NULL))
+    {
+      snprintf(err, errLen, "each of \"models\" has \"node\": an Object's NodeId (ns=2;s=Press17)");
+      return false;
+    }
+
+    const char* layout = ((layoutP != NULL) && (layoutP->type == CorString)) ? layoutP->value.s : "attributes";
+    const char* dir    = ((dirP != NULL) && (dirP->type == CorString)) ? dirP->value.s : "in";
+
+    if (!oneOf(layout, layouts))
+    {
+      snprintf(err, errLen, "the model of %s: \"attributeLayout\" is attributes, subAttributes or value", nodeP->value.s);
+      return false;
+    }
+    if (!oneOf(dir, directions))
+    {
+      snprintf(err, errLen, "the model of %s: \"channelDirection\" is in or both", nodeP->value.s);
+      return false;
+    }
+
+    int w = snprintf(&out[len], outLen - len, "%s%s\t%s\t%s", (len > 0) ? "\n" : "", nodeP->value.s, layout, dir);
+    if (w >= outLen - len)
+    {
+      snprintf(err, errLen, "\"models\" is longer than %d characters", outLen - 1);
+      return false;
+    }
+    len += w;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaModelsJson - the models as the bridge configuration's "assetChannels" (keyed: true) - or as the mapping
+// was posted, a list
+//
+static void opcuaModelsJson(Str* sP, const char* models, bool keyed)
+{
+  char  copy[8192];
+  char* save  = NULL;
+  bool  first = true;
+
+  snprintf(copy, sizeof(copy), "%s", models);
+  strAdd(sP, keyed ? "{" : "[");
+
+  for (char* line = strtok_r(copy, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+  {
+    char* f[3];
+    char* fsave = NULL;
+    int   n     = 0;
+
+    for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (n < 3); t = strtok_r(NULL, "\t", &fsave))
+      f[n++] = t;
+    if (n != 3)
+      continue;
+
+    strAdd(sP, first ? "" : ", ");
+    if (keyed)
+    {
+      strAddJson(sP, f[0]);
+      strAdd(sP, ": {\"entities\": \"natural\", \"attributeLayout\": ");
+    }
+    else
+    {
+      strAdd(sP, "{\"node\": ");
+      strAddJson(sP, f[0]);
+      strAdd(sP, ", \"attributeLayout\": ");
+    }
+    strAddJson(sP, f[1]);
+    strAdd(sP, ", \"channelDirection\": ");
+    strAddJson(sP, f[2]);
+    strAdd(sP, "}");
+    first = false;
+  }
+
+  strAdd(sP, keyed ? "}" : "]");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// termsAdd - a term to the @context being written, once
+//
+static bool termsAdd(Str* sP, Str* seenP, const char* vocabulary, const char* term, bool* firstP)
+{
+  char key[600];
+
+  snprintf(key, sizeof(key), "\n%s\n", term);
+  if ((seenP->s != NULL) && (strstr(seenP->s, key) != NULL))
+    return true;
+  strAdd(seenP, (seenP->len == 0) ? "\n" : "");
+  strAdd(seenP, term);
+  strAdd(seenP, "\n");
+
+  strAdd(sP, *firstP ? "\n    " : ",\n    ");
+  strAddJson(sP, term);
+  strAdd(sP, ": ");
+
+  char iri[1200];
+  snprintf(iri, sizeof(iri), "%s%s", vocabulary, term);
+  strAddJson(sP, iri);
+  *firstP = false;
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaContextText - the @context of an OPC UA mapping: each entity type and attribute its Channels name, and the
+// terms the mapper predicts its models make (their Objects' types, their attributes' and Relationships' names),
+// a term in the vocabulary
+//
+static void opcuaContextText(Str* sP, const char* vocabulary, const char* channels, const char* terms)
+{
+  Str  seen  = { NULL, 0, 0 };
+  bool first = true;
+
+  strAdd(sP, "{\n  \"@context\": {");
+
+  char* copy = strdup(channels);
+  char* save = NULL;
+
+  for (char* line = (copy != NULL) ? strtok_r(copy, "\n", &save) : NULL; line != NULL; line = strtok_r(NULL, "\n", &save))
+  {
+    char* f[4];
+    char* fsave = NULL;
+    int   n     = 0;
+
+    for (char* t = strtok_r(line, "\t", &fsave); (t != NULL) && (n < 4); t = strtok_r(NULL, "\t", &fsave))
+      f[n++] = t;
+
+    if (n == 4)
+    {
+      termsAdd(sP, &seen, vocabulary, f[2], &first);   // the entity type
+      termsAdd(sP, &seen, vocabulary, f[3], &first);   // the attribute
+    }
+  }
+  free(copy);
+
+  copy = strdup(terms);
+  save = NULL;
+  for (char* t = (copy != NULL) ? strtok_r(copy, "\n", &save) : NULL; t != NULL; t = strtok_r(NULL, "\n", &save))
+    termsAdd(sP, &seen, vocabulary, t, &first);
+  free(copy);
+
+  strAdd(sP, first ? "}\n}\n" : "\n  }\n}\n");
+  strFree(&seen);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaFilesAnswer - {"directory", "bridgeConfig", "userContext", "mapping"}: the files' paths, and the mapping
+// they were written from (mappingJson: JSON text; NULL: null - nothing written yet), "passwordSet" in its "user"
+// when c3 keeps a password for it
+//
+static void opcuaFilesAnswer(CorHttpConn* connP, int status, const char* mappingJson)
+{
+  char dir[2400];
+  char conf[2400];
+  char ctx[2400];
+  Str  s = { NULL, 0, 0 };
+
+  opcuaMapperPath(NULL, dir, sizeof(dir));
+  opcuaMapperPath("opcua-bridge.json", conf, sizeof(conf));
+  opcuaMapperPath("opcua-context.jsonld", ctx, sizeof(ctx));
+
+  strAdd(&s, "{\"directory\": ");      strAddJson(&s, dir);
+  strAdd(&s, ", \"bridgeConfig\": ");  strAddJson(&s, conf);
+  strAdd(&s, ", \"userContext\": ");   strAddJson(&s, ctx);
+  strAdd(&s, ", \"mapping\": ");       strAdd(&s, (mappingJson != NULL) ? mappingJson : "null");
+  strAdd(&s, "}");
+  respondStr(connP, status, &s);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// opcuaFiles - the OPC UA configuration the mapper makes, for a broker started with it (--bridges opcua
+// --bridgeConfig <bridgeConfig> --defaultUserContext <userContext>):
+//
+//   POST {url, security, user, vocabulary, channels, models, terms} - the server as a broker's "opcua" has it,
+//        the Channels, the models (AssetChannels) and the terms they make - writes
+//        opcua-bridge.json      the bridge configuration: the server, the Channels and the AssetChannels (opcuaMember's
+//                               shape; the password as the file below)
+//        opcua-context.jsonld   each entity type and attribute a term of the vocabulary (opcuaContextText) - with
+//                               no vocabulary, of the default context's: the terms expand as they would without it
+//        opcua-mapping.json     the mapping, the password left out - what GET answers, the mapper's to edit again
+//        opcua.password         the user's password, readable by its owner only (0600) - given once, kept
+//   GET  the paths, and the mapping last written (null: none)
+//
+static void opcuaFiles(CorHttpConn* connP, bool post)
+{
+  char mapping[2400];
+  char pwPath[2400];
+  char err[1024] = "";
+
+  opcuaMapperPath("opcua-mapping.json", mapping, sizeof(mapping));
+  opcuaMapperPath("opcua.password", pwPath, sizeof(pwPath));
+
+  if (!post)
+  {
+    char* text = fileText(mapping);
+    opcuaFilesAnswer(connP, 200, ((text != NULL) && (text[0] != 0)) ? text : NULL);
+    free(text);
+    return;
+  }
+
+  const char* shape = "a JSON object is expected as the body - the mapping: {url, security, user, vocabulary, channels, models, terms}";
+
+  if (connP->bodyRefused || (connP->body.s == NULL) || (connP->body.len == 0))
+  {
+    serveError(connP, 400, "Bad request", shape);
+    return;
+  }
+
+  CorJson json;
+  corJsonCreate(&json, &connP->alloc);
+  CorNode* bodyP = corJsonParse(&json, corAllocStrdup(&connP->alloc, connP->body.s));
+
+  if ((bodyP == NULL) || (bodyP->type != CorObject))
+  {
+    serveError(connP, 400, "Bad request", shape);
+    return;
+  }
+
+  Def*  dP     = calloc(1, sizeof(Def));
+  char* models = calloc(1, 8192);
+  char* terms  = calloc(1, 16384);
+  char  vocabulary[512] = "";
+
+  if ((dP == NULL) || (models == NULL) || (terms == NULL))
+    snprintf(err, sizeof(err), "no room for the mapping");
+  else if (!opcuaParse(bodyP, dP, err, sizeof(err)) ||
+           !modelsParse(corTreeLookup(bodyP, "models"), models, 8192, err, sizeof(err)) ||
+           !memberLines(bodyP, "terms", terms, 16384, err, sizeof(err)) ||
+           !memberString(bodyP, "vocabulary", vocabulary, sizeof(vocabulary), err, sizeof(err)))
+    ;
+  else if (dP->opcua.url[0] == 0)
+    snprintf(err, sizeof(err), "\"url\": the OPC UA server, opc.tcp://<host>:<port>");
+  else if ((dP->opcua.channels[0] == 0) && (models[0] == 0))
+    snprintf(err, sizeof(err), "nothing mapped: no \"channels\" and no \"models\"");
+  else if ((vocabulary[0] != 0) && (strstr(vocabulary, "://") == NULL) && (strncmp(vocabulary, "urn:", 4) != 0))
+    snprintf(err, sizeof(err), "\"vocabulary\" is a URI, the namespace of the terms mapped (https://example.org/plant/)");
+  else
+  {
+    for (char* t = terms; *t != 0; t++)
+    {
+      if (strchr(" <>\"'=;()\t", *t) != NULL)
+      {
+        snprintf(err, sizeof(err), "\"terms\": a term has a character NGSI-LD forbids in a name");
+        break;
+      }
+    }
+  }
+
+  if (err[0] != 0)
+  {
+    if (dP != NULL)
+      memset(dP->opcua.password, 0, sizeof(dP->opcua.password));
+    free(dP);
+    free(models);
+    free(terms);
+    serveError(connP, 400, "Bad request", err);
+    return;
+  }
+
+  char dir[2400];
+  char conf[2400];
+  char ctx[2400];
+  Str  s = { NULL, 0, 0 };
+  Str  c = { NULL, 0, 0 };
+  Str  m = { NULL, 0, 0 };
+  int  status = 500;
+
+  opcuaMapperPath(NULL, dir, sizeof(dir));
+  opcuaMapperPath("opcua-bridge.json", conf, sizeof(conf));
+  opcuaMapperPath("opcua-context.jsonld", ctx, sizeof(ctx));
+  dirsMake(dir);
+
+  //
+  // The password: given - kept; no user - none kept; a user and none given - the one kept, which must exist
+  //
+  struct stat st;
+
+  if (dP->opcua.username[0] == 0)
+    unlink(pwPath);
+  else if (dP->opcua.password[0] != 0)
+    opcuaPasswordWrite(pwPath, dP->opcua.password, err, sizeof(err));
+  else if (stat(pwPath, &st) != 0)
+  {
+    snprintf(err, sizeof(err), "the OPC UA user '%s' has no password: give it once, c3 keeps it", dP->opcua.username);
+    status = 400;
+  }
+  memset(dP->opcua.password, 0, sizeof(dP->opcua.password));
+
+  if (err[0] == 0)
+  {
+    if (vocabulary[0] == 0)
+      snprintf(vocabulary, sizeof(vocabulary), "https://uri.etsi.org/ngsi-ld/default-context/");
+
+    strAdd(&s, "{");
+    opcuaMemberWrite(dP, pwPath, models, &s);
+    strAdd(&s, "}\n");
+
+    opcuaContextText(&c, vocabulary, dP->opcua.channels, terms);
+
+    //
+    // The mapping, as posted but for the password
+    //
+    CorNode* vocP = corTreeLookup(bodyP, "vocabulary");
+
+    strAdd(&m, "{");
+    opcuaServerJson(dP, &m, (dP->opcua.username[0] != 0));
+    strAdd(&m, ", \"vocabulary\": ");   strAddJson(&m, ((vocP != NULL) && (vocP->type == CorString) && (vocP->value.s[0] != 0)) ? vocP->value.s : NULL);
+    strAdd(&m, ", \"channels\": ");     rowsJson(&m, dP->opcua.channels, opcuaChannelNames, 4, false);
+    strAdd(&m, ", \"models\": ");       opcuaModelsJson(&m, models, false);
+    strAdd(&m, ", \"terms\": [");
+    bool  first = true;
+    char* save  = NULL;
+    for (char* t = strtok_r(terms, "\n", &save); t != NULL; t = strtok_r(NULL, "\n", &save))
+    {
+      strAdd(&m, first ? "" : ", ");
+      strAddJson(&m, t);
+      first = false;
+    }
+    strAdd(&m, "]}\n");
+
+    if (textWrite(conf, s.s, s.len, err, sizeof(err)) &&
+        textWrite(ctx, c.s, c.len, err, sizeof(err)) &&
+        textWrite(mapping, m.s, m.len, err, sizeof(err)))
+      status = 201;
+  }
+
+  free(dP);
+  free(models);
+  free(terms);
+  strFree(&s);
+  strFree(&c);
+
+  if (status != 201)
+  {
+    strFree(&m);
+    serveError(connP, status, (status == 400) ? "Bad request" : "The OPC UA configuration was not written", err);
+    return;
+  }
+
+  opcuaFilesAnswer(connP, 201, m.s);
+  strFree(&m);
+}
+
+
+
+
+// -----------------------------------------------------------------------------
+//
 // runRequest - /api/run...
 //
 void runRequest(CorHttpConn* connP, const char* path)
@@ -5214,7 +5998,17 @@ void runRequest(CorHttpConn* connP, const char* path)
   }
   if (strcmp(path, "/api/run/dds/discover") == 0)
   {
-    if (post) ddsDiscover(connP); else serveError(connP, 405, "Method not allowed", path);
+    if (post) discoverRequest(connP, ddsDiscoverThread); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/opcua/discover") == 0)
+  {
+    if (post) discoverRequest(connP, opcuaDiscoverThread); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/opcua/files") == 0)
+  {
+    if (post || get) opcuaFiles(connP, post); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
   if (strcmp(path, "/api/run/dds/files") == 0)

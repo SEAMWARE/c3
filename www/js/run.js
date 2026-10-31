@@ -12,6 +12,7 @@
 import * as api from './api.js';
 import { Metrics } from './metrics.js';
 import { DdsMapper } from './ddsmap.js';
+import { OpcuaMapper } from './opcuamap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -136,6 +137,9 @@ export class Run {
     this.ddsMap = new DdsMapper(this);
     $('rn-dds-map').addEventListener('click', () => this.ddsMap.open());
     this.ddsMap.load().then(() => this.renderDds());
+    this.opcuaMap = new OpcuaMapper(this);
+    $('rn-opcua-map').addEventListener('click', () => this.opcuaMap.open());
+    this.opcuaMap.load().then(() => this.renderOpcuaMap());
   }
 
   //
@@ -317,6 +321,28 @@ export class Run {
     $('rn-dds-map').disabled = !on;
     $('rn-dds-map').title = on ? '' : 'tick the dds bridge first';
     $('rn-dds-note').textContent = this.ddsMap.note(on);
+  }
+
+  //
+  // opcuaMapFromCompile - Compile's way in to the OPC UA mapper: the opcua bridge ticked, the mapper open with
+  // its way back
+  //
+  opcuaMapFromCompile() {
+    if (!this.f.bridges.includes('opcua')) {
+      this.f.bridges = [...this.f.bridges, 'opcua'];
+      this.renderForm();
+      this.changed(false);
+    }
+    this.renderOpcuaMap();
+    this.opcuaMap.open('compile');
+  }
+
+  // renderOpcuaMap - the OPC UA mapper's button, live when the opcua bridge is ticked; under it, the configuration made
+  renderOpcuaMap() {
+    const on = this.f.bridges.includes('opcua');
+    $('rn-opcua-map').disabled = !on;
+    $('rn-opcua-map').title = on ? '' : 'tick the opcua bridge first';
+    $('rn-opcua-note').textContent = this.opcuaMap.note(on);
   }
 
   defaults() {
@@ -1128,6 +1154,7 @@ export class Run {
     this.renderCkan(cont);
     this.renderOpcua();
     this.renderDds();
+    this.renderOpcuaMap();
     if ($('rn-args').value !== f.args) $('rn-args').value = f.args;
 
     this.renderName();

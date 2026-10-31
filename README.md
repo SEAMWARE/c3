@@ -754,6 +754,9 @@ pulled at the start, its progress in the broker's log. Images are named by their
   attribute its path from the Object), so that both write the same entity; every name stays editable. An
   Object's **+ model root** adds it to the model roots. What is picked takes effect when the broker is
   stopped and started again.
+  **Map an OPC UA server**, under the DDS mapper's button, active with the opcua bridge ticked: the OPC UA
+  mapper (below) - the whole address space at once, before a broker runs, written into a bridge
+  configuration file of its own.
 - **More options** - anything else, as typed (quotes keep words together).
 - What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
   without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
@@ -901,6 +904,73 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
   and closes the mapper; **Put it in the broker form** fills the form only. A broker given both c³'s DDS
   vocabulary and a `--defaultUserContext` of its own is refused: one default user `@context`.
 
+### The OPC UA mapper
+
+Operate's left side, given to the mapping of an OPC UA server to NGSI-LD - from Operate's **Map an OPC UA
+server**, or from Compile's, under its Bridges with opcua on: that one asks first, then shows Operate with
+the opcua bridge ticked in its form and the mapper open, with **← Back to Compile**. The DDS mapper's
+layout and ways; what differs is the server's: a tree of nodes, not three lists of endpoints. A Variable
+mapped is one attribute of an entity (a Channel - the bridge's `topics`); an Object mapped is a model (an
+AssetChannel - the bridge's `assetChannels`). What was written is read back when c³ opens
+(`GET /api/run/opcua/files`), and the mapper opens on it.
+
+- **How c³ reaches your OPC UA server** - its URL (`opc.tcp://host:port`), the security mode (None, Sign,
+  SignAndEncrypt) and, secured, the policy (Basic256Sha256 unless chosen), the client's certificate and
+  private key (files), the application URI the certificate names, the server certificates to trust (a file a
+  line) or "trust any"; a username and password, empty: anonymous. The first time, the broker form's server
+  fills them. The password is sent once: c³ keeps it in `opcua/opcua.password` (mode 600) and the bridge
+  configuration names that file (`passwordFile`) - it is in no file the mapper writes, and the API says only
+  `passwordSet`; empty keeps the one kept. Discover's broker and the broker Done starts use them alike.
+- **A vocabulary** and **proposals' type** - as the DDS mapper's; the proposals' type is given an Object
+  whose TypeDefinition says nothing (BaseObjectType, FolderType) - Machine.
+- **Discover** - reads the server's address space: c³ starts a broker of its own for it
+  (`POST /api/run/opcua/discover`): the form's source - native only, the image has no opcua bridge - the
+  opcua bridge alone, connected to the server with the fields above, no Channels and no models, corDB in
+  memory, no history, the admin API, a free port from 39026, its directory `<run>/<name>.discover/`. It asks
+  the bridge's inventory (`GET /admin/bridges/opcua/inventory?depth=5`, coraine with bridge ABI 14) while it
+  answers 503 - not connected yet - for at most 20 s; then asks again from each node the answer cut at depth
+  5 (`&from=<NodeId>`) and grafts what it gets, namespace 0 left out, at most 20 000 nodes and 400 requests -
+  "cut" when the server has more. The broker is stopped again; a few seconds in all, one discovery at a time.
+  **Import inventory.json** reads the same tree from a file: c³'s answer, or the bridge's inventory as a
+  broker answers it (`curl '<broker>/admin/bridges/opcua/inventory?depth=5' > inventory.json`).
+  **show the server's own nodes** - namespace 0: the Server object, its diagnostics and sessions, aliases,
+  locations - hidden otherwise.
+- **The tree** - the Objects folder's content, a line a node: ▸ opens what it contains (the application's
+  top level open), the name and what it is - a Variable's DataType, unit and whether it can be written, an
+  Object's TypeDefinition, a folder, a method.
+- **A Variable** - not mapped, its proposal greyed: the entity the nearest Object above it, named as an
+  AssetChannel on its Objects would name it - `urn:ngsi-ld:<TypeDefinition>:<the Objects' names from the
+  top>` (`urn:ngsi-ld:PressType:Press17`), the attribute its path from that Object camelCased
+  (Hydraulics/Pressure: `hydraulicsPressure`) - so that both write the same entity. **✓** accepts it into
+  the fields still empty. Its name opens the fields: Attribute name, Entity ID, Entity type (optional, once
+  per entity, as the DDS mapper's), **its value** as discovered with its SourceTimestamp, **not mapped**. A
+  write of the attribute writes the Variable when the server lets it be written.
+- **An Object** - **✓** maps it as a model: the Object and every Object in it entities, named by their
+  TypeDefinitions (`entities: natural`), their Variables attributes named by their paths, their parts and
+  references Relationships - as the bridge makes them. The line says how many entities and attributes;
+  opened, **Containers** (`attributeLayout`: an attribute per Variable; a folder one attribute, its Variables
+  sub-attributes; a folder one JsonProperty), **Direction** (`channelDirection`: values in; both - a write of
+  an attribute writes its Variable), **what it makes** (the entities and the attribute names), and
+  **✓ its Variables (N)**: each Variable in it a Channel as proposed, instead of the model. A node inside a
+  model says so and is not mapped again; a model inside another is refused.
+- **A method** - shown, not mapped: a method is a service of its entity, a Service Registration with the
+  endpoint `opcua://<Object NodeId>/<method NodeId>` (the opcua bridge's guide).
+- **Done** - refused, the node saying why, for what the DDS mapper refuses, and a URL that is not
+  `opc.tcp://`, a security mode without its certificate, key, application URI or trust, a user without a
+  password. `POST /api/run/opcua/files` writes `$XDG_DATA_HOME/c3/opcua/` (else `~/.local/share/c3/opcua/`):
+
+  ```
+  opcua-bridge.json     the bridge configuration: {"opcua": {"server": {url, security, user}, "ngsild": {"defaultEntity": false, topics, assetChannels}}}
+  opcua-context.jsonld  the @context: each Channel's entity type and attribute, and each model's types and attributes as the mapper reads them, a term
+  opcua-mapping.json    the mapping as posted, the password left out - what the mapper reads back
+  opcua.password        the user's password, mode 600 - none without a user
+  ```
+
+- **The files screen** - as the DDS mapper's, with the opcua bridge: **Start the broker** and **Put it in
+  the broker form** make the form a native broker with `--bridges opcua`, `--bridgeConfig
+  <opcua-bridge.json>`, `--defaultUserContext <opcua-context.jsonld>`, and its own OPC UA server, model roots
+  and Channels emptied - the server is in the file, and a broker given both is refused.
+
 **Containers** go through `docker`, else `podman` (the same commands), found in `$PATH` and asked for its
 version. Without either, or with a daemon that does not answer, the container parts are greyed with what
 to install. c³ creates only `c3-*` containers, volumes and the network `c3`, all labelled `c3=run`, and
@@ -916,6 +986,7 @@ touches nothing else.
 <name>/dds-context.jsonld  the DDS mapping's terms, the broker's --defaultUserContext (a DDS vocabulary given)
 <name>.discover/      the broker DDS discovery runs: its bridges.json and broker.log
 dds/                  the DDS mapper's: dds-bridge.json, dds-context.jsonld, dds-mapping.json, dds-types/ (next to run/)
+opcua/                the OPC UA mapper's: opcua-bridge.json, opcua-context.jsonld, opcua-mapping.json, opcua.password (next to run/)
 <name>/opcua.password the OPC UA user's password, mode 600 - never in c3.json
 services/<container>.log
 ```
@@ -979,6 +1050,9 @@ The backend's API, used by the pages:
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
+| `POST /api/run/opcua/discover` `{broker}` | the OPC UA server's address space - the opcua bridge's inventory, crawled (`GET /admin/bridges/opcua/inventory`), from a broker of its own started and stopped for it: `200` `{url, complete, nodes, objects}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not reach |
+| `GET /api/run/opcua/files` | the OPC UA mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done; its `user` says `passwordSet`, never the password) |
+| `POST /api/run/opcua/files` `{url, security, user, vocabulary, channels, models, terms}` | write them from a mapping: `201` with the same answer; `400` with why |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
 | `POST /api/maps/estimate` `{"bbox", "maxzoom"}` | tiles and bytes of an area, from the planet's directories (`422` past 1 000 000 tiles) |
 | `POST /api/maps/download` `{"name", "bbox", "maxzoom"}` | start the download (`202`; `409` while one runs); `GET` its progress, `DELETE` cancels it |

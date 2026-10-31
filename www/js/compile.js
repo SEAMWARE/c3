@@ -280,6 +280,40 @@ function ddsMapAsk() {
 }
 
 //
+// opcuaMapAsk - before Operate is shown for the OPC UA mapping: what is left here stays as it is, the way back is
+// the Compile tab
+//
+function opcuaMapAsk() {
+  const ov = el('div', 'overlay cp-modal');
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.setAttribute('aria-label', 'Map an OPC UA server');
+  const card = el('div', 'card cp-help-card');
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const cancel = el('button', 'btn', 'Stay here');
+  cancel.type = 'button';
+  cancel.addEventListener('click', close);
+  const go = el('button', 'btn primary', 'Go to Operate');
+  go.type = 'button';
+  go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:opcuamap')); });
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  const actions = el('div', 'actions');
+  actions.append(cancel, go);
+  card.append(el('h3', '', 'The OPC UA mapping is in Operate'),
+    el('p', '', 'The mapper opens in the Operate tab, with the opcua bridge ticked in its broker form. What is chosen here stays as it is: '
+      + 'the Compile tab brings you back, to build.'),
+    el('p', '', 'Discover reads your OPC UA server\'s address space: c³ connects to it from this machine, so it must reach its opc.tcp:// URL. '
+      + 'Where c³ does not reach it, import an inventory.json read where it runs. Discover uses a native broker with the opcua bridge: an '
+      + 'installed coraine or a build.'),
+    actions);
+  ov.append(card);
+  document.body.append(ov);
+  go.focus();
+}
+
+//
 // helpButton - the '?' of a box; null when the source's doc has no section for it
 //
 function helpButton(section, inline) {
@@ -737,6 +771,15 @@ export class Compile {
         map.disabled = !(dds.available && this.isBridgeOn(dds));
         map.title = map.disabled ? 'switch the dds bridge on first' : 'in Operate - the Compile tab brings you back';
         map.addEventListener('click', ddsMapAsk);
+        sections.push(map);
+      }
+      const opcua = this.bridges.find((br) => br.name === 'opcua');
+      if (opcua) {
+        const map = el('button', 'btn primary cp-ddsmap', 'Map an OPC UA server');
+        map.type = 'button';
+        map.disabled = !(opcua.available && this.isBridgeOn(opcua));
+        map.title = map.disabled ? 'switch the opcua bridge on first' : 'in Operate - the Compile tab brings you back';
+        map.addEventListener('click', opcuaMapAsk);
         sections.push(map);
       }
     }

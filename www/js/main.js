@@ -159,6 +159,14 @@ async function main() {
     location.hash = '#run';
   });
 
+  //
+  // Compile's "Map an OPC UA server": Operate, its form with the opcua bridge, the mapper open
+  //
+  window.addEventListener('c3:opcuamap', () => {
+    window.addEventListener('hashchange', () => run.opcuaMapFromCompile(), { once: true });
+    location.hash = '#run';
+  });
+
   await new Promise((r) => setTimeout(r, 250));
   $('app').hidden = false;
   $('splash').classList.add('leaving');
