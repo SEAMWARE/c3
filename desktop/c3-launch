@@ -10,9 +10,17 @@
 # build of the same file). One running from ANOTHER file would be opened instead of the newest, so it is stopped
 # first (SIGTERM, as a stop by hand; 10 s at most).
 #
+# The environment c³ gets: ${XDG_CONFIG_HOME:-~/.config}/c3/launch.env, sourced when it is there (shell lines,
+# e.g. export C3_TOKEN=...) - a desktop session starts the launcher without one's shell profile.
+#
 # Installed by `make install-launcher` (into $(PREFIX)/bin, with the menu entry running it).
 #
 export PATH="$HOME/.local/bin:$PATH"
+
+ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/c3/launch.env"
+if [ -f "$ENV_FILE" ]; then
+  . "$ENV_FILE"
+fi
 
 LOG="$HOME/.local/state/c3/c3.log"
 mkdir -p "$(dirname "$LOG")"

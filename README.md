@@ -83,7 +83,7 @@ the dock's c³: `share/applications/com.seamware.c3.desktop` (`Exec` the install
 start is the new one.
 `make install-launcher` installs `bin/c3-launch` (`desktop/c3-launch`) as well, and the desktop entry runs it:
 the newest c3 installed anywhere (`$PATH`, `~/.local/bin`, `/usr/local/bin`, `/usr/bin`, `/opt/*/bin`, the file
-written last), a c³ running from another file stopped first, the log in `~/.local/state/c3/c3.log`.
+written last), a c³ running from another file stopped first, the log in `~/.local/state/c3/c3.log`, the environment from `~/.config/c3/launch.env` when it is there.
 
 A c³ started while one runs on its port has that one open its window and ends. When the running one is
 an earlier build of the same file - started from `bin/c3`, the file replaced by an install since
