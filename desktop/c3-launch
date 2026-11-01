@@ -1,0 +1,62 @@
+#!/bin/sh
+#
+# c3-launch - the dock's c³ button: the NEWEST installed c³, its log in ~/.local/state/c3.
+#
+# Installed c³s: every c3 on $PATH, plus ~/.local/bin, /usr/local/bin, /usr/bin and /opt/*/bin - the one whose
+# file was written last wins (c3 has no --version; an install writes the file). Each finds its own pages
+# (<bin>/../share/c3/www). A checkout's build is not an install and is never picked: make install PREFIX=$HOME/.local
+#
+# A c³ already running from the chosen file is just opened again (c3 does that itself, and replaces an earlier
+# build of the same file). One running from ANOTHER file would be opened instead of the newest, so it is stopped
+# first (SIGTERM, as a stop by hand; 10 s at most).
+#
+# The environment c³ gets: ${XDG_CONFIG_HOME:-~/.config}/c3/launch.env, sourced when it is there (shell lines,
+# e.g. export C3_TOKEN=...) - a desktop session starts the launcher without one's shell profile.
+#
+# Installed by `make install-launcher` (into $(PREFIX)/bin, with the menu entry running it).
+#
+export PATH="$HOME/.local/bin:$PATH"
+
+ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/c3/launch.env"
+if [ -f "$ENV_FILE" ]; then
+  . "$ENV_FILE"
+fi
+
+LOG="$HOME/.local/state/c3/c3.log"
+mkdir -p "$(dirname "$LOG")"
+
+newest=""
+for c in $(echo "$PATH" | tr ':' ' ' | sed 's|\([^ ]*\)|\1/c3|g') "$HOME/.local/bin/c3" /usr/local/bin/c3 /usr/bin/c3 /opt/*/bin/c3; do
+  [ -f "$c" ] && [ -x "$c" ] || continue
+  c=$(readlink -f "$c")
+  if [ -z "$newest" ] || [ "$c" -nt "$newest" ]; then
+    newest=$c
+  fi
+done
+
+if [ -z "$newest" ]; then
+  echo "$(date '+%F %T') c3-launch: no c3 installed" >> "$LOG"
+  notify-send "c³" "No c3 installed - make install PREFIX=\$HOME/.local in a c3 checkout" 2>/dev/null
+  exit 1
+fi
+
+for exe in /proc/[0-9]*/exe; do
+  target=$(readlink "$exe" 2>/dev/null) || continue
+  case "$target" in
+    */c3|*"/c3 (deleted)") ;;
+    *) continue ;;
+  esac
+  [ "$target" = "$newest" ] || [ "$target" = "$newest (deleted)" ] && continue
+  pid=${exe#/proc/}
+  pid=${pid%/exe}
+  echo "$(date '+%F %T') c3-launch: stopping c3 (pid $pid, $target) - starting $newest" >> "$LOG"
+  kill -TERM "$pid" 2>/dev/null || continue
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ $n -lt 20 ]; do
+    sleep 0.5
+    n=$((n + 1))
+  done
+done
+
+echo "$(date '+%F %T') c3-launch: $newest" >> "$LOG"
+exec "$newest" >> "$LOG" 2>&1
