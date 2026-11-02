@@ -96,8 +96,17 @@ install: c3
 	install -m 644 desktop/com.seamware.c3-512.png $(ICONS)/512x512/apps/com.seamware.c3.png
 	@[ -n "$(DESTDIR)" ] || tools/stopReplaced.sh $(abspath $(PREFIX))/bin/c3
 
+#
+# install-launcher - c3 with desktop/c3-launch around it: the menu's and the dock's c³ run the NEWEST installed
+# c3, wherever it is installed, and log to ~/.local/state/c3/c3.log. For a machine with several c3 installs (a
+# developer's); a package installs plain c3.
+#
+install-launcher:
+	$(MAKE) install DESKTOP_EXEC=$(abspath $(PREFIX))/bin/c3-launch
+	install -m 755 desktop/c3-launch $(DESTDIR)$(PREFIX)/bin/c3-launch
+
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/c3
+	rm -f $(DESTDIR)$(PREFIX)/bin/c3 $(DESTDIR)$(PREFIX)/bin/c3-launch
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3
 	rm -f $(APPS)/com.seamware.c3.desktop $(ICONS)/256x256/apps/com.seamware.c3.png $(ICONS)/512x512/apps/com.seamware.c3.png
 
@@ -121,6 +130,6 @@ site:
 clean:
 	rm -rf obj c3 build
 
-.PHONY: all run install uninstall clean site
+.PHONY: all run install install-launcher uninstall clean site
 
 -include $(DEPS)
