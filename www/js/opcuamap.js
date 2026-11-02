@@ -174,12 +174,20 @@ export class OpcuaMapper {
     this.box.setAttribute('aria-label', 'OPC UA mapping');
     this.box.hidden = true;
     main.append(this.box);
-    this.onKey = (e) => { if (e.key === 'Escape' && !e.target.closest('input, select, textarea')) this.close(); };
+    // Escape on Operate only: the listener is the document's, and the mapper stays open while another page is shown
+    this.onKey = (e) => {
+      if (e.key === 'Escape' && !e.target.closest('input, select, textarea') && !$('page-run').hidden) this.close();
+    };
   }
 
   open(from) {
     this.from = from || '';
     if (!this.box) this.build();
+    if (!this.box.hidden) {                    // open already (Compile's way in, the mapper left open): only its way back
+      this.show('map');
+      return;
+    }
+    this.run.ddsMap.close();                   // one mapper at a time: the other one's sides restored first
     if (!this.server.url && this.run.f.opcua && this.run.f.opcua.url) {     // the form's server, the first time
       const o = this.run.f.opcua;
       Object.assign(this.server, { url: o.url, mode: o.mode || 'None', policy: o.policy || '', certificate: o.certificate || '',

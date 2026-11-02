@@ -166,12 +166,20 @@ export class DdsMapper {
     this.box.setAttribute('aria-label', 'DDS mapping');
     this.box.hidden = true;
     main.append(this.box);
-    this.onKey = (e) => { if (e.key === 'Escape' && !e.target.closest('input, select, textarea')) this.close(); };
+    // Escape on Operate only: the listener is the document's, and the mapper stays open while another page is shown
+    this.onKey = (e) => {
+      if (e.key === 'Escape' && !e.target.closest('input, select, textarea') && !$('page-run').hidden) this.close();
+    };
   }
 
   open(from) {
     this.from = from || '';
     if (!this.box) this.build();
+    if (!this.box.hidden) {                    // open already (Compile's way in, the mapper left open): only its way back
+      this.show('map');
+      return;
+    }
+    this.run.opcuaMap.close();                 // one mapper at a time: the other one's sides restored first
     const main = this.box.parentElement;
     for (const c of main.children) if (c !== this.box) { c.dataset.dmHidden = c.hidden ? '1' : ''; c.hidden = true; }
     this.box.hidden = false;
