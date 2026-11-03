@@ -95,7 +95,7 @@ attribute, as for every bridge:</p>
 </table>
 
 <h2 id="build">Building the plugin</h2>
-<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corModbusBridge">corModbusBridge</a>; the
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE-cor/corModbusBridge">corModbusBridge</a>; the
 corLibs umbrella clones and builds it with the rest. It needs nothing beyond libc: Modbus TCP is a socket and a
 seven-byte header, and the client is the plugin's own.</p>
 <pre>make                  <span class="c"># modbus.so, debug (traces compiled in)</span>
@@ -108,7 +108,7 @@ make contract         <span class="c"># does it still satisfy BridgeDriver.h?</s
 are set and read over HTTP (<code>test/funcTests/tools/ftModbus.py</code>): polling, change-only reporting, writes,
 exceptions and timeouts, deterministic.</p>
 <p>A demo - an OpenPLC water tank on Modbus and an MQTT temperature sensor, one NGSI-LD entity, read and controlled
-over NGSI-LD - is <a href="https://github.com/SEAMWARE/corModbusBridge/blob/main/DEMO.md">DEMO.md</a> in the
+over NGSI-LD - is <a href="https://github.com/SEAMWARE-cor/corModbusBridge/blob/main/DEMO.md">DEMO.md</a> in the
 bridge's repository.</p>
 <p class="muted">The full design, with its open questions:
 <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/modbus-bridge.md">doc/modbus-bridge.md</a>. Other bridges:

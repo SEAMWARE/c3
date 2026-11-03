@@ -6,7 +6,7 @@
 lock: an update is one atomic operation on a fixed-point <code>int64_t</code> (a histogram: one per bucket it falls in,
 and two more). Rendering happens only when the metrics are asked for - as the Prometheus text format, or as a
 <a href="#docs/lib-cortree">corTree</a>. Repository:
-<a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener">SEAMWARE/corProm</a>.</p>
+<a href="https://github.com/SEAMWARE-cor/corProm" target="_blank" rel="noopener">SEAMWARE-cor/corProm</a>.</p>
 
 <h2 id="metrics">The three kinds</h2>
 <pre>CorPromMetric* corPromCounterCreate(const char* name, const char* help);
@@ -118,7 +118,7 @@ are written after corProm's text, by coraine itself: they carry labels, which co
 <h2 id="more">API, repository, dependencies</h2>
 <ul class="g-cards">
   <li><a href="#docs/api-corprom"><b>corProm API</b><span>the one header, entry by entry</span></a></li>
-  <li><a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener"><b>SEAMWARE/corProm</b><span>the repository - a sibling checkout: <code>-I..</code> and <code>../corProm/libcorProm.a</code>; <code>make di</code></span></a></li>
+  <li><a href="https://github.com/SEAMWARE-cor/corProm" target="_blank" rel="noopener"><b>SEAMWARE-cor/corProm</b><span>the repository - a sibling checkout: <code>-I..</code> and <code>../corProm/libcorProm.a</code>; <code>make di</code></span></a></li>
 </ul>
 <p>corProm depends on <a href="#docs/lib-cortree">corTree</a> (for <code>corPromMetrics</code>) and
 <a href="#docs/lib-coralloc">corAlloc</a>'s header, and uses <code>pthread</code> and <code>libm</code>, which its

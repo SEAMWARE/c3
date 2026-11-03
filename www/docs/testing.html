@@ -6,8 +6,8 @@
 the sanitizer, soak and pre-release runs a release is checked with.</p>
 
 <p>Everything here assumes a build - <a href="#docs/building">Building from source</a>. The functional tests are
-under <code>test/funcTests/cases/</code>, and run through <b><a href="https://github.com/SEAMWARE/corTest">corTest</a></b>, which the
-<a href="https://github.com/SEAMWARE/corLibs"><code>corLibs</code></a> umbrella
+under <code>test/funcTests/cases/</code>, and run through <b><a href="https://github.com/SEAMWARE-cor/corTest">corTest</a></b>, which the
+<a href="https://github.com/SEAMWARE-cor/corLibs"><code>corLibs</code></a> umbrella
 installs as <code>~/git/corLibs/bin/corTest</code>.</p>
 
 <h2 id="run">Running the suite</h2>
@@ -327,7 +327,7 @@ gh workflow run prerelease.yml -f ref=release/0.5.0 -f only=soak -f soakMinutes=
 <ul>
   <li>The full text: <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/testing.md">doc/testing.md</a>, with the
   list of mirrored images.</li>
-  <li>The harness: <a href="https://github.com/SEAMWARE/corTest">corTest</a> - its README has every option and the
+  <li>The harness: <a href="https://github.com/SEAMWARE-cor/corTest">corTest</a> - its README has every option and the
   companion tools (corDiff, corDiffGui, corRegenExpect).</li>
 </ul>
 </article>

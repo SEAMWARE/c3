@@ -55,12 +55,20 @@ async function contentsRead() {
 }
 
 //
+// repoOrg - the GitHub organisation a repository is in: coraine, c3, corApisixNgsild and the two sites (docs,
+// apt) are SEAMWARE's, every other cor repository is SEAMWARE-cor's
+//
+function repoOrg(name) {
+  return ['coraine', 'c3', 'corApisixNgsild', 'docs', 'apt'].includes(name) ? 'SEAMWARE' : 'SEAMWARE-cor';
+}
+
+//
 // repoItem - a component's line in the list: its name opens its guide here (guides.json "guide"), else its
 // repository on GitHub; beside the description its API reference ("api") and the repository
 //
 function repoItem(name, desc, isPrivate, guide, api) {
   const li = el('li');
-  const repoUrl = 'https://github.com/SEAMWARE/' + encodeURIComponent(name);
+  const repoUrl = 'https://github.com/' + repoOrg(name) + '/' + encodeURIComponent(name);
   const ext = (a) => { a.target = '_blank'; a.rel = 'noopener'; return a; };
   const a = el('a');
   a.href = guide ? '#docs/' + guide : repoUrl;
@@ -250,8 +258,8 @@ function sourcesRender(id, box) {
   const p = el('p', 'docs-source muted', repos.length === 1 ? 'Source: ' : 'Sources: ');
   repos.forEach((repo, ix) => {
     if (ix > 0) p.append(' · ');
-    const a = el('a', null, 'SEAMWARE/' + repo + ' ↗');
-    a.href = 'https://github.com/SEAMWARE/' + encodeURIComponent(repo);
+    const a = el('a', null, repoOrg(repo) + '/' + repo + ' ↗');
+    a.href = 'https://github.com/' + repoOrg(repo) + '/' + encodeURIComponent(repo);
     a.target = '_blank';
     a.rel = 'noopener';
     p.append(a);

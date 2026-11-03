@@ -89,7 +89,7 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   <code>--fdscNgsild</code>, notifications decided for the subscription's owner; the ODRL-PAP's <code>/policy</code> API
   served by the broker (<code>--policyApiPort</code>) (<a href="#docs/authorization">Authorization</a>).</li>
   <li><b>The CKAN bridge and DataChannels</b> - a CKAN portal's DataStore resources read into entities
-  (<code>ckan.so</code>, <a href="https://github.com/SEAMWARE/corCkanBridge">corCkanBridge</a>); a DataChannel makes each record (a row) into the entities its mapping names
+  (<code>ckan.so</code>, <a href="https://github.com/SEAMWARE-cor/corCkanBridge">corCkanBridge</a>); a DataChannel makes each record (a row) into the entities its mapping names
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/bridge-channels.md#datachannels">DataChannels</a>). A
   bridge reports a Channel's status, and why, at any time (<code>channelStatusIn</code>).</li>
   <li><b><a href="https://github.com/SEAMWARE/c3">c³</a>, the coraine Control Center - Compile</b> - a broker built for a deployment from a web page: the features
@@ -113,7 +113,7 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   (<a href="#docs/performance/stored-trees">Performance - The stored trees</a>).</li>
   <li><b>The OPC UA bridge</b> - Variables as attributes, Methods as Service Executions, the server's node tree as the
   bridge's inventory, SignAndEncrypt with certificates (<code>--bridges opcua</code>,
-  <a href="https://github.com/SEAMWARE/corOpcuaBridge">corOpcuaBridge</a>).</li>
+  <a href="https://github.com/SEAMWARE-cor/corOpcuaBridge">corOpcuaBridge</a>).</li>
   <li><b>The FIWARE IoT Agents as bridge plugins - prototypes</b> - JSON, UltraLight 2.0, LwM2M, LoRaWAN, Sigfox and
   ISOXML, each a public repository of its own (corIota*Bridge); OPC UA is the OPC UA bridge
   (<a href="#docs/iot-agents">FIWARE IoT Agents</a>).</li>
@@ -232,7 +232,7 @@ implements its own objects now and adapts to whatever TC DATA settles on.</p>
 timeframe; they are here so that potential contributors can see where the product is heading and may wish to get
 involved.</p>
 <ul>
-  <li><b><a href="https://github.com/SEAMWARE/corDB">corDB</a> standalone</b> - corDB as a server of its own beside the brokers, for high availability (the haaux
+  <li><b><a href="https://github.com/SEAMWARE-cor/corDB">corDB</a> standalone</b> - corDB as a server of its own beside the brokers, for high availability (the haaux
   role), with backups of current state and history
   (<a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md#cordb-standalone---and-as-haaux">more</a>).</li>
   <li><b>Our own string collation, replacing ICU</b> - root collation without 39&nbsp;MiB of libicu

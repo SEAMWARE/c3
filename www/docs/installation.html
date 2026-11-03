@@ -115,9 +115,9 @@ On a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
 
 <!-- ======================================================================= -->
 <h2 id="source">Install from source</h2>
-<p>The broker is built against the Cor-Libs, its libraries; <a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener">corLibs</a>
+<p>The broker is built against the Cor-Libs, its libraries; <a href="https://github.com/SEAMWARE-cor/corLibs" target="_blank" rel="noopener">corLibs</a>
 clones and builds them, and <a href="https://github.com/SEAMWARE/coraine" target="_blank" rel="noopener">coraine</a> is the broker's own repository.</p>
-<pre>git clone git@github.com:SEAMWARE/corLibs.git
+<pre>git clone git@github.com:SEAMWARE-cor/corLibs.git
 ./corLibs/bootstrap.sh          <span class="c"># clones and builds every Cor-Lib at its pinned version</span>
 cd coraine
 make i                          <span class="c"># release build + install</span></pre>
@@ -208,7 +208,7 @@ refused with 503 <code>PersistenceUnavailable</code> and reads are served, until
 - a history log that failed (<code>--troe corDB</code>) is written anew from memory the same way, and the pause ends by itself
 (<a href="#docs/administration/store-paused">A store that cannot write its log</a>).</p>
 <p>What it costs: <a href="#docs/performance">Performance</a>. How it works:
-<a href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">corDB's persistence</a>.</p>
+<a href="https://github.com/SEAMWARE-cor/corDB/blob/main/doc/persistence.md">corDB's persistence</a>.</p>
 
 <h3 id="ramdb">ramDB</h3>
 <p><code>--database ramDB</code> is the same store and the same API as corDB, with nothing written anywhere - for a

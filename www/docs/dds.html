@@ -3,7 +3,7 @@
 <article class="guide">
 <h1>DDS and ROS 2</h1>
 <p class="lead">coraine speaks DDS, and so ROS 2, through its DDS bridge
-(<a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>), built on
+(<a href="https://github.com/SEAMWARE-cor/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>), built on
 eProsima's DDS Enabler: topics, services and actions become
 entity attributes. A robot's pose is an NGSI-LD attribute, and writing an attribute publishes a sample, calls a
 service or sends a goal.</p>
@@ -146,7 +146,7 @@ after the answer is in the next one. The list is flat: <code>?from</code> is ans
 <code>?depth</code> is not used. The bridge fills the slot from bridge ABI 14.</p>
 
 <h2 id="build">Building the plugin</h2>
-<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>, and is
+<p>The bridge is its own repository, <a href="https://github.com/SEAMWARE-cor/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>, and is
 part of no umbrella build: the DDS stack it links is 21.4&nbsp;MiB across nine libraries (<code>libfastdds</code>
 alone 16&nbsp;MiB), about five times the whole broker. Only a deployment that wants DDS clones and builds it.</p>
 <pre>make            <span class="c"># build</span>
@@ -159,7 +159,7 @@ make contract   <span class="c"># does it still satisfy BridgeDriver.h? needs no
   <code>corTree/CorNode.h</code>; the broker stays C. <code>libstdc++</code> enters the broker's
   process when the plugin is loaded.</li>
   <li><b>What it fills of the contract</b> (<code>BridgeDriver.h</code> in
-  <a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>): topics -
+  <a href="https://github.com/SEAMWARE-cor/corBridge" target="_blank" rel="noopener">corBridge</a>): topics -
   samples in (<code>sampleIn</code> and its qualified / meta forms), <code>publish</code> out; services - a
   request sent with <code>serviceInvoke</code> / <code>serviceInvokeTracked</code>, its reply back as
   <code>replyIn</code>; actions - goals sent with <code>actionGoalSend</code>, cancelled with

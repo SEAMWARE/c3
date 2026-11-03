@@ -26,9 +26,9 @@ coraine, to run it where no image suits, or to compile out the features a deploy
 <p>coraine links the Cor-Libs - <code>corBase corLog corAlloc corArgs corHash corTree corJson corProm corRest
 corNgsild corJsonld corPlugin</code> - and they must sit as <b>siblings</b> of <code>coraine</code> under one
 parent directory (by default <code>~/git</code>): the build references <code>../&lt;lib&gt;/lib&lt;lib&gt;.a</code>.
-The <a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener"><code>corLibs</code></a> umbrella's bootstrap clones every one of them, and <code>corTest</code>, beside itself,
+The <a href="https://github.com/SEAMWARE-cor/corLibs" target="_blank" rel="noopener"><code>corLibs</code></a> umbrella's bootstrap clones every one of them, and <code>corTest</code>, beside itself,
 and builds them:</p>
-<pre>git clone git@github.com:SEAMWARE/corLibs.git
+<pre>git clone git@github.com:SEAMWARE-cor/corLibs.git
 ./corLibs/bootstrap.sh</pre>
 <p>It works wherever it is cloned - the layout comes from the umbrella's own location. Later, <code>make</code>
 in coraine rebuilds <code>corRest</code>, <code>corNgsild</code> and <code>corJsonld</code> by itself; the other

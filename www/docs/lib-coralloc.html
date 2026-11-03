@@ -5,7 +5,7 @@
 <p class="lead">An arena allocator: memory is handed out from a buffer by moving a pointer, nothing is freed one
 allocation at a time, and everything an arena gave out goes at once. A request's parse tree, its rendered
 response, a downloaded document - all of it lives in a <code>CorAlloc</code> and is dropped with it.
-Repository: <a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener">SEAMWARE/corAlloc</a>.</p>
+Repository: <a href="https://github.com/SEAMWARE-cor/corAlloc" target="_blank" rel="noopener">SEAMWARE-cor/corAlloc</a>.</p>
 
 <h2 id="model">The model</h2>
 <p>A <code>CorAlloc</code> starts on a buffer the caller gives it - usually a <code>char</code> array on the
@@ -150,7 +150,7 @@ context store, into which every thread that downloads or parses an <code>@contex
 <h2 id="more">API, repository, dependencies</h2>
 <ul class="g-cards">
   <li><a href="#docs/api-coralloc"><b>corAlloc API</b><span>every header and entry</span></a></li>
-  <li><a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener"><b>SEAMWARE/corAlloc</b><span>the repository</span></a></li>
+  <li><a href="https://github.com/SEAMWARE-cor/corAlloc" target="_blank" rel="noopener"><b>SEAMWARE-cor/corAlloc</b><span>the repository</span></a></li>
   <li><a href="#docs/lib-corbase"><b>corBase</b><span>what it depends on: the library log; and pthreads</span></a></li>
 </ul>
 <p>Used by nearly everything above it: <a href="#docs/lib-cortree">corTree</a> and
