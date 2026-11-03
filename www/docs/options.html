@@ -62,7 +62,7 @@ and its options are also documented with the plugin. An option of a plugin that 
 <p>Each plugin's entries are also in the plugin's own doc, copied from coraine's <code>doc/options.md</code> by
 <code>tools/pluginOptions.sh</code> - an entry is changed there, and CI fails while a copy differs: mongoc's <a
 href="https://github.com/SEAMWARE/coraine/blob/main/src/plugins/currentState/mongoc/README.md" target="_blank"
-rel="noopener">README</a>, corDB's <a href="https://github.com/SEAMWARE/corDB/blob/main/README.md#options"
+rel="noopener">README</a>, corDB's <a href="https://github.com/SEAMWARE-cor/corDB/blob/main/README.md#options"
 target="_blank" rel="noopener">README</a> (written, not checked - another repository), timescale's <a
 href="https://github.com/SEAMWARE/coraine/blob/main/src/plugins/temporal/timescale/README.md" target="_blank"
 rel="noopener">README</a>, oidc's and fdsc's in <a href="#docs/authorization/oidc-options">Authorization - oidc</a> and
@@ -967,10 +967,10 @@ coraine --dbURI "mongodb://db1,db2,db3/?replicaSet=rs0" --high-availability mong
 plugin. The options here load them, name their configuration file, and set how a write that calls a service on the
 other side waits for its reply. The configuration file itself is documented with each bridge: <a href="#docs/dds">DDS
 and ROS 2</a>, <a href="#docs/mqtt-bridge">The MQTT bridge</a>, <a href="#docs/modbus-bridge">The Modbus bridge</a>,
-and the bridge repositories (<a href="https://github.com/SEAMWARE/corDdsBridge">corDdsBridge</a>, <a
-href="https://github.com/SEAMWARE/corMqttBridge">corMqttBridge</a>, <a
-href="https://github.com/SEAMWARE/corModbusBridge">corModbusBridge</a>, <a
-href="https://github.com/SEAMWARE/corCkanBridge">corCkanBridge</a>).</p>
+and the bridge repositories (<a href="https://github.com/SEAMWARE-cor/corDdsBridge">corDdsBridge</a>, <a
+href="https://github.com/SEAMWARE-cor/corMqttBridge">corMqttBridge</a>, <a
+href="https://github.com/SEAMWARE-cor/corModbusBridge">corModbusBridge</a>, <a
+href="https://github.com/SEAMWARE-cor/corCkanBridge">corCkanBridge</a>).</p>
 
 <h3 id="bridges"><code>--bridges</code></h3>
 <table class="g-opts">
@@ -1360,8 +1360,8 @@ acknowledged, a machine that dies at most the last sync interval. With <code>--t
 the history. The plugin lives in the corDB library, which also builds <b>ramDB</b> (<code>--database ramDB</code>):
 the same store without the disk, whose only options are <code>--dbLockPrefer</code> and <code>--dbValueIndexes</code>
 - the disk options are unknown options there, and <code>--troe corDB</code> is refused.</p>
-<p>Also documented in: corDB's <a href="https://github.com/SEAMWARE/corDB#readme">README</a> and <a
-href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md">persistence design</a>; <a
+<p>Also documented in: corDB's <a href="https://github.com/SEAMWARE-cor/corDB#readme">README</a> and <a
+href="https://github.com/SEAMWARE-cor/corDB/blob/main/doc/persistence.md">persistence design</a>; <a
 href="#docs/installation/cordb">corDB on disk</a> and its cost in <a
 href="#docs/performance/durable">Performance</a>.</p>
 
@@ -1473,7 +1473,7 @@ a start with it compresses the finished segments a run without it left. libzstd 
 only then; missing, the start is refused: <code>corDB: --dbCompress needs libzstd.so.1 (zstd) - not found</code>.
 Given without <code>--dbDir</code> it stops the start: <code>corDB: --dbCompress without --dbDir - the store is in RAM
 only, there is no disk for it to act on</code>. On disk, 100 000 Entities: 74 MB plain, 1.4 MB compressed (<a
-href="https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md#6a---dbcompress">persistence § 6a</a>).</p>
+href="https://github.com/SEAMWARE-cor/corDB/blob/main/doc/persistence.md#6a---dbcompress">persistence § 6a</a>).</p>
 <pre>coraine --database corDB --dbDir /var/lib/coraine --dbCompress</pre>
 
 <h3 id="cordb-dbLockPrefer"><code>--dbLockPrefer</code></h3>
@@ -1504,7 +1504,7 @@ on disk: built by the first query that can use it, again after every start; a ch
 API) builds every index again. The format, the expanded names, and the start refused for a short name (<code>corDB:
 --dbValueIndexes: 'speed' is not an IRI - ...</code>) are as for mongoc's option of the same name. Needs a build with
 <code>COR_FEATURE_DB_INDEXES</code> (on by default). <a href="#docs/database-indexes">Database indexes</a>, <a
-href="https://github.com/SEAMWARE/corDB#queries-by-value---declared-indexes">corDB's README</a>.</p>
+href="https://github.com/SEAMWARE-cor/corDB#queries-by-value---declared-indexes">corDB's README</a>.</p>
 <pre>coraine --database corDB --dbValueIndexes https://example.org/speed</pre>
 
 <h3 id="cordb-troeInstanceCap"><code>--troeInstanceCap</code></h3>

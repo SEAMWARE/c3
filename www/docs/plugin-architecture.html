@@ -204,7 +204,7 @@ switch.</p>
 <h3 id="abi-versions">Contract versions</h3>
 <table class="gtable">
   <tr><th>Kind</th><th>Contract</th><th>A mismatch</th></tr>
-  <tr><td>bridge</td><td><code>BRIDGE_ABI_VERSION</code>, in <a href="https://github.com/SEAMWARE/corBridge">corBridge</a> - 16 today</td><td>logged (INFO), not refused: the structs are append-only, an older plugin leaves the newer slots NULL, and a plugin checks the broker's <code>abiVersion</code> and the pointer before calling a slot added after ABI 1</td></tr>
+  <tr><td>bridge</td><td><code>BRIDGE_ABI_VERSION</code>, in <a href="https://github.com/SEAMWARE-cor/corBridge">corBridge</a> - 16 today</td><td>logged (INFO), not refused: the structs are append-only, an older plugin leaves the newer slots NULL, and a plugin checks the broker's <code>abiVersion</code> and the pointer before calling a slot added after ABI 1</td></tr>
   <tr><td>auth</td><td><code>AUTH_ABI_VERSION</code> (<code>src/lib/plugin/AuthDriver.h</code>)</td><td>not refused: the broker writes its version before <code>authRegister</code>, the plugin writes back its own, and the broker calls a slot only when the plugin's version has it</td></tr>
   <tr><td>transport</td><td><code>TRANSPORT_ABI_VERSION</code> (<code>src/lib/plugin/TransportDriver.h</code>)</td><td>the same hand-over, in <code>transportRegister</code>; the version is logged at load</td></tr>
 </table>
@@ -224,8 +224,8 @@ switch.</p>
   values out.</li>
 </ul>
 <p>A bridge may use the Cor-Libs directly - logging, corJson and corTree for its configuration, in an allocator of
-its own. The contract is its own library, <a href="https://github.com/SEAMWARE/corBridge">corBridge</a>;
-<a href="https://github.com/SEAMWARE/corBridgeTemplate">corBridgeTemplate</a> is where a new bridge starts.</p>
+its own. The contract is its own library, <a href="https://github.com/SEAMWARE-cor/corBridge">corBridge</a>;
+<a href="https://github.com/SEAMWARE-cor/corBridgeTemplate">corBridgeTemplate</a> is where a new bridge starts.</p>
 
 <h2 id="interfaces">The driver interfaces</h2>
 <p>The contracts are documented function by function in their headers - read them before writing a plugin.</p>

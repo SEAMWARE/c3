@@ -4,8 +4,8 @@
 <h1>Writing a bridge</h1>
 <p class="lead">A bridge is a plugin, <code>&lt;alias&gt;.so</code>, that carries values between the broker and a
 transport that is not NGSI-LD - an MQTT server, a Modbus device, a DDS network, a CKAN portal. The contract it
-satisfies is <a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>; a new
-bridge starts from <a href="https://github.com/SEAMWARE/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>,
+satisfies is <a href="https://github.com/SEAMWARE-cor/corBridge" target="_blank" rel="noopener">corBridge</a>; a new
+bridge starts from <a href="https://github.com/SEAMWARE-cor/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>,
 which builds, loads into a broker and moves a value both ways before a line of the new protocol is written.</p>
 
 <figure class="g-fig">
@@ -349,6 +349,6 @@ siblings, as on a workstation: the bridge in <code>stack/bridge</code>, corLibs 
 </ul>
 <p>The broker's own <code>src/plugins/bridge/loopback</code> has no transport and fills in every entry point, services
 and actions included - the tests' instrument. Repositories:
-<a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>,
-<a href="https://github.com/SEAMWARE/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>.</p>
+<a href="https://github.com/SEAMWARE-cor/corBridge" target="_blank" rel="noopener">corBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corBridgeTemplate" target="_blank" rel="noopener">corBridgeTemplate</a>.</p>
 </article>

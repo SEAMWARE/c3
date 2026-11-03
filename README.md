@@ -19,9 +19,9 @@ neighbourhood), editing, the entities **on a map** (online, or offline from down
 values** over the broker's WebSocket transport or HTTP notifications. [doc/design.md](doc/design.md) is
 the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
 
-**Demos** - [seamware.github.io/c3-demos](https://seamware.github.io/c3-demos/): AI Assist on video, and the
+**Demos** - [seamware-cor.github.io/c3-demos](https://seamware-cor.github.io/c3-demos/): AI Assist on video, and the
 factory floor, Boston's bike stations and Madrid to run on your machine
-([SEAMWARE/c3-demos](https://github.com/SEAMWARE/c3-demos)).
+([SEAMWARE-cor/c3-demos](https://github.com/SEAMWARE-cor/c3-demos)).
 
 ## Try it
 
@@ -547,7 +547,7 @@ Not yet: a rectangle drawn on the map as a `georel=within` query, saved views.
 
 A name in the broker field instead of a URL - **`CDMAD`**, Explore - is a demo: c³ asks the backend for
 it (`GET /api/demos/<name>`), the backend looks the name up in the configuration's `demos` (any case;
-`CDMAD`, [c3-demo-madrid](https://github.com/SEAMWARE/c3-demo-madrid), is built in as
+`CDMAD`, [c3-demo-madrid](https://github.com/SEAMWARE-cor/c3-demo-madrid), is built in as
 `http://127.0.0.1:7990/c3.json`) and fetches the demo's descriptor from it:
 
 ```json
@@ -852,7 +852,7 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
   (shared memory and UDP - DDS's default; UDP only, `udp`; shared memory only, `shm`) and **interfaces** -
   the IPv4 addresses of this host's interfaces UDP is kept to, comma-separated; empty: all; none with `shm`
   (refused). In the bridge configuration: `dds.ddsmodule.dds` `domain`, `transport`, `whitelist-interfaces`
-  (a list of addresses needs corDdsBridge with SEAMWARE/corDdsBridge#21 - before it, the DDS Enabler refused
+  (a list of addresses needs corDdsBridge with SEAMWARE-cor/corDdsBridge#21 - before it, the DDS Enabler refused
   a list of plain values and the broker did not start). Discover's broker and the broker Done starts use
   them alike. DDS discovery reaches this host and its network segment, not across a router, a VPN or a NAT;
   shared memory reaches this host alone, and a container only sharing its `/dev/shm`. A ROS 2 Discovery

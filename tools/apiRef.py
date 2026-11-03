@@ -240,7 +240,7 @@ def pageRender(item, repo, sha, headers):
     parts.append('<p class="lead">%s</p>' % item['about'])     # hand-written in guides.json: what the library solves
     if item.get('guide'):
         parts.append('<p>How its parts fit and how it is used: <a href="#docs/%s">the %s guide</a>.</p>' % (item['guide'], esc(lib)))
-    parts.append('<p class="api-src">Below: every header of <a href="https://github.com/SEAMWARE/%s" target="_blank" rel="noopener">%s</a> '
+    parts.append('<p class="api-src">Below: every header of <a href="https://github.com/SEAMWARE-cor/%s" target="_blank" rel="noopener">%s</a> '
                  'at <code>%s</code> - %d headers, %d entries, each with its declarations as written and its comment. '
                  'Included as <code>&quot;%s/&lt;header&gt;&quot;</code>.</p>' % (lib, lib, sha[:8], len(headers), count, lib))
 

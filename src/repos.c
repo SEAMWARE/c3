@@ -4,12 +4,12 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// The private repositories of SEAMWARE that the user of this machine can read - for the Documentation page,
+// The private repositories of SEAMWARE-cor that the user of this machine can read - for the Documentation page,
 // which lists them only then, and names none of them in its own source
 //
 //   GET /api/repos/private   [ { "name", "description" }, ... ] - [] without gh, or not logged in with it
 //
-// Asked of GitHub as the user: gh repo list SEAMWARE --visibility private - the repositories their
+// Asked of GitHub as the user: gh repo list SEAMWARE-cor --visibility private - the repositories their
 // account may read, and no other. Kept ten minutes: gh takes about a second, and c3 serves nothing
 // else meanwhile.
 //
@@ -42,7 +42,7 @@ void reposRequest(CorHttpConn* connP, const char* path)
   if ((cacheAt == 0) || (time(NULL) - cacheAt > 600))
   {
     char  gh[4096];
-    char* argv[] = { gh, (char*) "repo", (char*) "list", (char*) "SEAMWARE", (char*) "--visibility", (char*) "private",
+    char* argv[] = { gh, (char*) "repo", (char*) "list", (char*) "SEAMWARE-cor", (char*) "--visibility", (char*) "private",
                      (char*) "--limit", (char*) "300", (char*) "--json", (char*) "name,description", NULL };
     int   status = -1;
 

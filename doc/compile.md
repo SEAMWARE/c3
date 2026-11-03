@@ -58,7 +58,7 @@ As in the design (`design/Main.dc.html`):
    in "Other".
 2. **Phase markers in `coraine-build`'s output** (coraine #316) - `coraine-build: phase <name>`: `build`,
    `tools` and `train` (`--pgo`, `--tune`), `install`, `bridges`, `check`, `done`.
-3. **A streamed response in corHttp** ([corHttp#13](https://github.com/SEAMWARE/corHttp/pull/13)) -
+3. **A streamed response in corHttp** ([corHttp#13](https://github.com/SEAMWARE-cor/corHttp/pull/13)) -
    `corHttpResponseStream`: a chunked body written from any thread. The build's output reaches the page
    as server-sent events over it (`EventSource`: no library, reconnects by itself, `Last-Event-ID` to go
    on from where it was).

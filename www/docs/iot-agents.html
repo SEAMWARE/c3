@@ -114,13 +114,13 @@ its agent takes, the same way, with the same answers. None of them has the provi
 <div class="g-scroll">
 <table class="gtable">
   <tr><th>Agent</th><th>Bridge</th><th>Loaded with</th><th>What it does</th></tr>
-  <tr><td>JSON</td><td><a href="https://github.com/SEAMWARE/corIotaJsonBridge">corIotaJsonBridge</a></td><td><code>--bridges iotajson</code></td><td>measures over HTTP and MQTT; commands over MQTT, HTTP, or held until the device polls for them</td></tr>
-  <tr><td>UltraLight 2.0</td><td><a href="https://github.com/SEAMWARE/corIotaUlBridge">corIotaUlBridge</a></td><td><code>--bridges iotaul</code></td><td>the same, with UltraLight 2.0 payloads</td></tr>
-  <tr><td>LWM2M</td><td><a href="https://github.com/SEAMWARE/corIotaLwm2mBridge">corIotaLwm2mBridge</a></td><td><code>--bridges iotalwm2m</code></td><td>an LwM2M server, CoAP over UDP of its own: observed resources in, a written attribute as a Write, a Service Execution as an Execute</td></tr>
-  <tr><td>LoRaWAN</td><td><a href="https://github.com/SEAMWARE/corIotaLoraBridge">corIotaLoraBridge</a></td><td><code>--bridges iotalora</code></td><td>uplinks from the MQTT integrations of The Things Stack v3 and ChirpStack v4 (Cayenne LPP, CBOR, or the server's decoder); a written attribute as a downlink</td></tr>
-  <tr><td>Sigfox</td><td><a href="https://github.com/SEAMWARE/corIotaSigfoxBridge">corIotaSigfoxBridge</a></td><td><code>--bridges iotasigfox</code></td><td>the Sigfox backend's callbacks, decoded by the backend's payload grammar; a written attribute as the device's next downlink</td></tr>
-  <tr><td>ISOXML</td><td><a href="https://github.com/SEAMWARE/corIotaIsoxmlBridge">corIotaIsoxmlBridge</a></td><td><code>--bridges iotaisoxml</code></td><td>the task data (<code>TASKDATA.XML</code>) a MICS POSTs, each element a record; a written attribute as task data POSTed back</td></tr>
-  <tr><td>OPC-UA</td><td><a href="https://github.com/SEAMWARE/corOpcuaBridge">corOpcuaBridge</a></td><td><code>--bridges opcua</code></td><td>a client of one OPC UA server: a Variable's value into an attribute and back</td></tr>
+  <tr><td>JSON</td><td><a href="https://github.com/SEAMWARE-cor/corIotaJsonBridge">corIotaJsonBridge</a></td><td><code>--bridges iotajson</code></td><td>measures over HTTP and MQTT; commands over MQTT, HTTP, or held until the device polls for them</td></tr>
+  <tr><td>UltraLight 2.0</td><td><a href="https://github.com/SEAMWARE-cor/corIotaUlBridge">corIotaUlBridge</a></td><td><code>--bridges iotaul</code></td><td>the same, with UltraLight 2.0 payloads</td></tr>
+  <tr><td>LWM2M</td><td><a href="https://github.com/SEAMWARE-cor/corIotaLwm2mBridge">corIotaLwm2mBridge</a></td><td><code>--bridges iotalwm2m</code></td><td>an LwM2M server, CoAP over UDP of its own: observed resources in, a written attribute as a Write, a Service Execution as an Execute</td></tr>
+  <tr><td>LoRaWAN</td><td><a href="https://github.com/SEAMWARE-cor/corIotaLoraBridge">corIotaLoraBridge</a></td><td><code>--bridges iotalora</code></td><td>uplinks from the MQTT integrations of The Things Stack v3 and ChirpStack v4 (Cayenne LPP, CBOR, or the server's decoder); a written attribute as a downlink</td></tr>
+  <tr><td>Sigfox</td><td><a href="https://github.com/SEAMWARE-cor/corIotaSigfoxBridge">corIotaSigfoxBridge</a></td><td><code>--bridges iotasigfox</code></td><td>the Sigfox backend's callbacks, decoded by the backend's payload grammar; a written attribute as the device's next downlink</td></tr>
+  <tr><td>ISOXML</td><td><a href="https://github.com/SEAMWARE-cor/corIotaIsoxmlBridge">corIotaIsoxmlBridge</a></td><td><code>--bridges iotaisoxml</code></td><td>the task data (<code>TASKDATA.XML</code>) a MICS POSTs, each element a record; a written attribute as task data POSTed back</td></tr>
+  <tr><td>OPC-UA</td><td><a href="https://github.com/SEAMWARE-cor/corOpcuaBridge">corOpcuaBridge</a></td><td><code>--bridges opcua</code></td><td>a client of one OPC UA server: a Variable's value into an attribute and back</td></tr>
 </table>
 </div>
 <p>Each repository's README is its reference: endpoints, payloads, configuration, and what is not built.</p>

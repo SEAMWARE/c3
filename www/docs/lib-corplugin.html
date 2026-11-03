@@ -2,7 +2,7 @@
 <!-- docs/lib-corplugin.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corPlugin - loading plugins</h1>
-<p class="lead"><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener">SEAMWARE/corPlugin</a> - a small loader over <code>dlopen</code> and <code>dlsym</code>: it turns a plugin's short name into
+<p class="lead"><a href="https://github.com/SEAMWARE-cor/corPlugin" target="_blank" rel="noopener">SEAMWARE-cor/corPlugin</a> - a small loader over <code>dlopen</code> and <code>dlsym</code>: it turns a plugin's short name into
 the path of a <code>.so</code> under a base directory, opens it, finds its register symbol, refuses one built against
 another tree-node layout, and closes every handle at shutdown. coraine loads its database, history, API, transport,
 auth and bridge plugins through it; the library itself knows none of those kinds.</p>
@@ -71,7 +71,7 @@ there are (the list grows); a failed open closes its handle at once and is not t
 <h2 id="layout">The layout check</h2>
 <p>A plugin reads and builds the host's tree nodes by their fields - every kind does. Built against another
 <a href="#docs/lib-cortree/layout"><code>CorNode</code> layout</a>, it would read every node at the wrong offsets.
-Every object compiled with corTree's <code>CorNode.h</code> (<a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener">SEAMWARE/corTree</a>) carries the layout's number, <code>corNodeLayout</code>
+Every object compiled with corTree's <code>CorNode.h</code> (<a href="https://github.com/SEAMWARE-cor/corTree" target="_blank" rel="noopener">SEAMWARE-cor/corTree</a>) carries the layout's number, <code>corNodeLayout</code>
 (2), as an exported weak symbol - a plugin built with <code>-fvisibility=hidden</code> too. After the
 <code>dlsym</code>, <code>corPluginOpen</code> looks up <code>corNodeLayout</code> in the handle and compares it with
 the host's own:</p>
@@ -124,7 +124,7 @@ a directory with no plugin leaves the description as it was.</p>
 <h2 id="more">API, repository, dependencies</h2>
 <ul class="g-cards">
   <li><a href="#docs/api-corplugin"><b>corPlugin API</b><span>the one header, entry by entry</span></a></li>
-  <li><a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener"><b>SEAMWARE/corPlugin</b><span>the repository - <code>make</code> builds libcorPlugin.a and .so; consumers link the archive</span></a></li>
+  <li><a href="https://github.com/SEAMWARE-cor/corPlugin" target="_blank" rel="noopener"><b>SEAMWARE-cor/corPlugin</b><span>the repository - <code>make</code> builds libcorPlugin.a and .so; consumers link the archive</span></a></li>
   <li><a href="#docs/plugin-architecture"><b>Plugin architecture</b><span>coraine's six plugin kinds, where they live, how they are loaded and checked</span></a></li>
 </ul>
 <p>corPlugin depends on <a href="#docs/lib-corargs">corArgs</a> (for <code>corPluginArgUpdate</code>),

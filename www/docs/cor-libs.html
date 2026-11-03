@@ -2,7 +2,7 @@
 <!-- docs/cor-libs.html - a guide of the Documentation page, loaded into it (docs.js) -->
 <article class="guide">
 <h1>corLibs - the umbrella</h1>
-<p class="lead"><a href="https://github.com/SEAMWARE/corLibs" target="_blank" rel="noopener">corLibs</a> holds no
+<p class="lead"><a href="https://github.com/SEAMWARE-cor/corLibs" target="_blank" rel="noopener">corLibs</a> holds no
 library. It holds what assembling the stack takes: which repositories make it up and in which order they build
 (<code>bootstrap.sh</code>, the makefile), and the environment that build needs (the CI image every cor repository's
 CI runs in).</p>
@@ -26,7 +26,7 @@ the siblings; it does not vendor them.</p>
 fast-forwards (<code>pull --ff-only</code>, never a merge) - then builds and installs the whole stack with
 <code>make di</code> in the umbrella. The base directory is the parent of the script's own checkout, so a clone
 anywhere works.</p>
-<pre>git clone https://github.com/SEAMWARE/corLibs.git
+<pre>git clone https://github.com/SEAMWARE-cor/corLibs.git
 ./corLibs/bootstrap.sh                 <span class="c"># clone or update, then build</span>
 cd coraine &amp;&amp; make di                  <span class="c"># the broker - coraine itself is not cloned by it</span></pre>
 <table class="g-opts">
@@ -39,28 +39,28 @@ cd coraine &amp;&amp; make di                  <span class="c"># the broker - co
   retrying. The pause between attempts doubles from 3 s up to a minute.</td></tr>
 </table>
 <p>It clones 22 repositories, each at <code>main</code> - it pins nothing:
-<a href="https://github.com/SEAMWARE/corBase" target="_blank" rel="noopener">corBase</a>,
-<a href="https://github.com/SEAMWARE/corLog" target="_blank" rel="noopener">corLog</a>,
-<a href="https://github.com/SEAMWARE/corAlloc" target="_blank" rel="noopener">corAlloc</a>,
-<a href="https://github.com/SEAMWARE/corArgs" target="_blank" rel="noopener">corArgs</a>,
-<a href="https://github.com/SEAMWARE/corHash" target="_blank" rel="noopener">corHash</a>,
-<a href="https://github.com/SEAMWARE/corTree" target="_blank" rel="noopener">corTree</a>,
-<a href="https://github.com/SEAMWARE/corJson" target="_blank" rel="noopener">corJson</a>,
-<a href="https://github.com/SEAMWARE/corProm" target="_blank" rel="noopener">corProm</a>,
-<a href="https://github.com/SEAMWARE/corPlugin" target="_blank" rel="noopener">corPlugin</a>,
-<a href="https://github.com/SEAMWARE/corBridge" target="_blank" rel="noopener">corBridge</a>,
-<a href="https://github.com/SEAMWARE/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>,
-<a href="https://github.com/SEAMWARE/corModbusBridge" target="_blank" rel="noopener">corModbusBridge</a>,
-<a href="https://github.com/SEAMWARE/corMqttBridge" target="_blank" rel="noopener">corMqttBridge</a>,
-<a href="https://github.com/SEAMWARE/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>,
-<a href="https://github.com/SEAMWARE/corOpcuaBridge" target="_blank" rel="noopener">corOpcuaBridge</a>,
-<a href="https://github.com/SEAMWARE/corHttp" target="_blank" rel="noopener">corHttp</a>,
-<a href="https://github.com/SEAMWARE/corRest" target="_blank" rel="noopener">corRest</a>,
-<a href="https://github.com/SEAMWARE/corJsonld" target="_blank" rel="noopener">corJsonld</a>,
-<a href="https://github.com/SEAMWARE/corNgsild" target="_blank" rel="noopener">corNgsild</a>,
-<a href="https://github.com/SEAMWARE/corDB" target="_blank" rel="noopener">corDB</a>,
-<a href="https://github.com/SEAMWARE/corTools" target="_blank" rel="noopener">corTools</a>,
-<a href="https://github.com/SEAMWARE/corTest" target="_blank" rel="noopener">corTest</a>.</p>
+<a href="https://github.com/SEAMWARE-cor/corBase" target="_blank" rel="noopener">corBase</a>,
+<a href="https://github.com/SEAMWARE-cor/corLog" target="_blank" rel="noopener">corLog</a>,
+<a href="https://github.com/SEAMWARE-cor/corAlloc" target="_blank" rel="noopener">corAlloc</a>,
+<a href="https://github.com/SEAMWARE-cor/corArgs" target="_blank" rel="noopener">corArgs</a>,
+<a href="https://github.com/SEAMWARE-cor/corHash" target="_blank" rel="noopener">corHash</a>,
+<a href="https://github.com/SEAMWARE-cor/corTree" target="_blank" rel="noopener">corTree</a>,
+<a href="https://github.com/SEAMWARE-cor/corJson" target="_blank" rel="noopener">corJson</a>,
+<a href="https://github.com/SEAMWARE-cor/corProm" target="_blank" rel="noopener">corProm</a>,
+<a href="https://github.com/SEAMWARE-cor/corPlugin" target="_blank" rel="noopener">corPlugin</a>,
+<a href="https://github.com/SEAMWARE-cor/corBridge" target="_blank" rel="noopener">corBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corDdsBridge" target="_blank" rel="noopener">corDdsBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corModbusBridge" target="_blank" rel="noopener">corModbusBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corMqttBridge" target="_blank" rel="noopener">corMqttBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corCkanBridge" target="_blank" rel="noopener">corCkanBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corOpcuaBridge" target="_blank" rel="noopener">corOpcuaBridge</a>,
+<a href="https://github.com/SEAMWARE-cor/corHttp" target="_blank" rel="noopener">corHttp</a>,
+<a href="https://github.com/SEAMWARE-cor/corRest" target="_blank" rel="noopener">corRest</a>,
+<a href="https://github.com/SEAMWARE-cor/corJsonld" target="_blank" rel="noopener">corJsonld</a>,
+<a href="https://github.com/SEAMWARE-cor/corNgsild" target="_blank" rel="noopener">corNgsild</a>,
+<a href="https://github.com/SEAMWARE-cor/corDB" target="_blank" rel="noopener">corDB</a>,
+<a href="https://github.com/SEAMWARE-cor/corTools" target="_blank" rel="noopener">corTools</a>,
+<a href="https://github.com/SEAMWARE-cor/corTest" target="_blank" rel="noopener">corTest</a>.</p>
 
 <h2 id="build">Building the stack</h2>
 <p>The umbrella's <code>COR_DIRS</code> is the build order, and <code>make &lt;target&gt;</code> runs the target in each
