@@ -38,7 +38,7 @@ and its options are also documented with the plugin. An option of a plugin that 
   <tr><th>Part</th><th>Options</th></tr>
   <tr><td colspan="2"><b>The broker</b></td></tr>
   <tr><td><a href="#docs/options" data-scroll="program">The program</a></td><td>11</td></tr>
-  <tr><td><a href="#docs/options" data-scroll="listening">Listening</a></td><td>12</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="listening">Listening</a></td><td>15</td></tr>
   <tr><td><a href="#docs/options" data-scroll="limits">Limits and memory</a></td><td>7</td></tr>
   <tr><td><a href="#docs/options" data-scroll="corhttp">Built-in HTTP server (corHttp)</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="mhd">libmicrohttpd HTTP server (the default build)</a></td><td>1</td></tr>
@@ -299,10 +299,53 @@ of the machine. 1026 is the port NGSI-LD brokers use by convention. A port anoth
 MHD_start_daemon failed on port 1026</code>).</p>
 <pre>coraine -db corDB -p 1027</pre>
 
+<h3 id="https"><code>--https</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-https</code> · <code>CORAINE_HTTPS</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td><code>true</code>, <code>false</code></td></tr>
+  <tr><th>Plugin</th><td>core (the libmicrohttpd HTTP server)</td></tr>
+</table>
+<p>The NGSI-LD API over HTTPS (TLS) instead of HTTP, on the same <code>--port</code> - the whole port, the API
+plugins' paths (<code>/admin/...</code>) and <code>/version</code> with it. The server's private key and certificate
+are <code>--key</code> and <code>--cert</code>, both required; they are read at start, and a file that cannot be read,
+or holds no PEM block, stops the start with exit code 1 - as <code>--https</code> without them does, and
+<code>--key</code> or <code>--cert</code> without <code>--https</code>. Plain HTTP on the port gets no answer.</p>
+<p>The default of <code>--httpEndpoint</code> then begins with <code>https://</code>, so the URLs the broker hands out -
+its hosted <code>@context</code> documents, the <code>Link</code> header of a forwarded request, the notification
+endpoint of a distributed subscription - name the scheme it serves.</p>
+<p>libmicrohttpd does the TLS (GnuTLS): a build with the built-in HTTP server (<code>coraine -V</code> says
+<code>httpServer: builtin</code>) has none, and refuses <code>--https</code> at start. The other ports - cor://, the
+health probes, the policy API, a bridge's own port - stay as they are.</p>
+<pre>openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 365 \
+        -keyout key.pem -out cert.pem -subj /CN=broker.example.com
+coraine -db corDB --https --key key.pem --cert cert.pem
+curl --cacert cert.pem https://broker.example.com:1026/ngsi-ld/v1/types</pre>
+
+<h3 id="key"><code>--key</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-key</code> · <code>CORAINE_KEY</code> · String</td></tr>
+  <tr><th>Default</th><td>none</td></tr>
+  <tr><th>Values</th><td>a file, the private key in PEM</td></tr>
+  <tr><th>Plugin</th><td>core (the libmicrohttpd HTTP server)</td></tr>
+</table>
+<p>The HTTPS server's private key (<code>--https</code>), a PEM file - RSA or EC, not encrypted with a passphrase. It
+is read once, at start; the broker keeps it in memory.</p>
+
+<h3 id="cert"><code>--cert</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-cert</code> · <code>CORAINE_CERT</code> · String</td></tr>
+  <tr><th>Default</th><td>none</td></tr>
+  <tr><th>Values</th><td>a file, the certificate in PEM</td></tr>
+  <tr><th>Plugin</th><td>core (the libmicrohttpd HTTP server)</td></tr>
+</table>
+<p>The HTTPS server's certificate (<code>--https</code>), a PEM file, matching <code>--key</code>. A certificate a CA
+issued goes with its chain: the server's certificate first, then the intermediates, in the one file.</p>
+
 <h3 id="httpEndpoint"><code>--httpEndpoint</code></h3>
 <table class="g-opts">
   <tr><th>Short · variable · type</th><td><code>-he</code> · <code>CORAINE_HTTPENDPOINT</code> · String</td></tr>
-  <tr><th>Default</th><td><code>http://&lt;the LAN address found&gt;:&lt;port&gt;</code>, else <code>http://localhost:&lt;port&gt;</code></td></tr>
+  <tr><th>Default</th><td><code>http://&lt;the LAN address found&gt;:&lt;port&gt;</code>, else <code>http://localhost:&lt;port&gt;</code> - <code>https://</code> with <code>--https</code></td></tr>
   <tr><th>Values</th><td>a base URL, <code>http://broker.example.com:1026</code></td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
