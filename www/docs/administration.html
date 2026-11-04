@@ -61,7 +61,10 @@ installation's directories:</p>
   <tr><td>--pretty-print / -pp<span class="env">CORAINE_PRETTY_PRINT</span></td><td>0 (compact) - JSON indentation</td></tr>
   <tr><td>--corsOrigin<span class="env">CORAINE_CORSORIGIN</span></td><td>none (no CORS) - the allowed origin; <code>__ALL</code> for any</td></tr>
   <tr><td>--corsMaxAge<span class="env">CORAINE_CORSMAXAGE</span></td><td>86400 - seconds a preflight is cached</td></tr>
-  <tr><td>--httpEndpoint / -he<span class="env">CORAINE_HTTPENDPOINT</span></td><td>the LAN address detected, else <code>http://localhost:&lt;port&gt;</code> - the externally reachable base URL</td></tr>
+  <tr><td>--https<span class="env">CORAINE_HTTPS</span></td><td>off - the API over HTTPS (TLS) on <code>--port</code>, with <code>--key</code> and <code>--cert</code>; libmicrohttpd only, the built-in server refuses it (<a href="#docs/options" data-scroll="https">--https</a>)</td></tr>
+  <tr><td>--key<span class="env">CORAINE_KEY</span></td><td>none - <code>--https</code>: the server's private key, a PEM file</td></tr>
+  <tr><td>--cert<span class="env">CORAINE_CERT</span></td><td>none - <code>--https</code>: the server's certificate (its chain, the server's first), a PEM file</td></tr>
+  <tr><td>--httpEndpoint / -he<span class="env">CORAINE_HTTPENDPOINT</span></td><td>the LAN address detected, else <code>http://localhost:&lt;port&gt;</code> (<code>https://</code> with <code>--https</code>) - the externally reachable base URL</td></tr>
 </table>
 
 <h3 id="opts-ngsild">NGSI-LD behaviour</h3>
