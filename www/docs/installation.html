@@ -109,6 +109,9 @@ docker run --rm -p 1026:1026 quay.io/seamware/coraine:&lt;tag&gt; --database mon
   <li><b>Building one</b>: <code>make docker</code> in the coraine repository (<code>DOCKER_BUILD=debug</code> for the debug
   flavour). It stages each Cor-Lib's <b>committed</b> state - uncommitted work in a sibling repository is not in the image.
   <code>docker/docker-compose.yml</code> is a broker with MongoDB.</li>
+  <li><b>HTTPS.</b> The image's libmicrohttpd is built with TLS (GnuTLS), so <a href="#docs/options/https">--https</a> works in
+  the container: mount the key and the certificate and pass <code>--https --key ... --cert ...</code> - see
+  <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#https">doc/installation.md, HTTPS</a>.</li>
 </ul>
 <p>The image's own page: <a href="https://github.com/SEAMWARE/coraine/blob/main/docker/README.md">docker/README.md</a>.
 On a cluster: <a href="#docs/kubernetes">Kubernetes</a>.</p>
