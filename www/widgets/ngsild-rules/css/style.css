@@ -1,0 +1,31 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+html, body { height: 100%; }
+body { margin: 0; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+#view { height: 100%; overflow: auto; box-sizing: border-box; }
+.form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; padding: 10px; }
+.form label { color: #555; }
+.form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
+.acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
+button { padding: 3px 10px; font: inherit; cursor: pointer; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px; border-bottom: 1px solid #e3e3e3; position: sticky; top: 0; background: #fff; z-index: 1; }
+.head .what { font-weight: 600; }
+.head .meta { color: #777; flex: 1; overflow-wrap: anywhere; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+col.c-rule { width: 46%; } col.c-fired { width: 9%; } col.c-when { width: 13%; } col.c-err { width: 32%; }
+th, td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+th { color: #666; font-weight: 600; white-space: nowrap; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td .name { font-weight: 600; overflow-wrap: anywhere; }
+td .sub { color: #777; overflow-wrap: anywhere; }
+td .error { color: #b3261e; overflow-wrap: anywhere; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: #fbeef3; }
+tbody tr.sel { background: #f6d6e3; }
+tr.off td { color: #999; }
+tr.flash { animation: flash 2.5s ease-out; }
+@keyframes flash { from { background: #ffd54a; } to { background: transparent; } }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2a9d8f; margin-right: 6px; vertical-align: 1px; }
+.dot.off { background: #bbb; }
+.dot.bad { background: #d1495b; }
+.wait, .err { padding: 10px; color: #777; }
+.err { color: #b3261e; overflow-wrap: anywhere; }

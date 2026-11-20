@@ -1021,7 +1021,8 @@ it is part of c³.
 - **c³'s widgets** (`www/widgets/`, vendor `Seamware`, plain JS): every start installs each one WireCloud
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
   and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
-  `config.xml`. A widget's file `c3-include` names files of `www/` packed into its `.wgt`
+  `config.xml`. The source, rules and alarms widgets read a broker themselves (their own form: one of
+  c³'s brokers, a tenant); the others take the entities wired to them. A widget's file `c3-include` names files of `www/` packed into its `.wgt`
   (`<path under www/> <path in the .wgt>`): the map takes maplibre and c³'s `basemap.js` this way, since
   maplibre's worker must load from the widget's own origin. In WireCloud: add them from *Add widget*,
   connect them in *Wiring*.
@@ -1033,6 +1034,8 @@ it is part of c³.
   | NGSI-LD value | in `entities` | one attribute of one entity, large, with its `unitCode` and `observedAt` |
 | NGSI-LD chart | in `entities` | a numeric attribute over the last *hours*, a line per entity (8 at most): the history from the broker's temporal API (`GET /temporal/entities/{id}`, `options=temporalValues`), then each new read's values |
 | NGSI-LD map | in `entities`, out `selected` | the entities on c³'s map, by their GeoProperty (`location`, else the first), fitted to them; one clicked is sent on `selected` |
+| corCep rules | out `selected` | corCep's Rule entities at a broker (its rules tenant, `cep` by default), with the statistics corCep writes on them: what each watches and does, `fired`, `firedAt`, `lastError`, `droppedActions`; a rule that fired since the last read flashes, a disabled one is grey |
+| NGSI-LD alarms | out `selected` | the entities of a type at a broker (`Alert` by default - a corCep rule's `create`), newest first by the broker's `createdAt` (`options=sysAttrs`), coloured by `severity`; one come since the widget opened is marked new for a minute |
 
 - **The widgets read the brokers through c³** (`/api/proxy`, as Explore - c³ adds each broker's token,
   headers and tenant). c³ answers CORS for WireCloud's origin only - `http://localhost:<port>` or

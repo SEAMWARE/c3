@@ -27,7 +27,8 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "Esperando entidades - conecta una fuente NGSI-LD a este widget",
       "Attribute": "Atributo", "Entity": "Entidad", "the first": "la primera", "No such attribute": "No existe ese atributo",
       "all": "todos", "any type": "cualquier tipo", "no value": "sin valor",
-      "Hours": "Horas", "last {h} h": "últimas {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "El broker no tiene historial - no lo guarda (TRoE), o no para este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}"
+      "Hours": "Horas", "last {h} h": "últimas {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "El broker no tiene historial - no lo guarda (TRoE), o no para este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}",
+      "Rules tenant": "Tenant de las reglas", "Alarm type": "Tipo de alarma", "{n} rules": "{n} reglas", "{n} alarms": "{n} alarmas", "{n} new": "{n} nuevas", "never": "nunca", "disabled": "desactivada", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Ninguna regla en este tenant - corCep las lee del tenant de las reglas (cep)", "No alarm": "Ninguna alarma", "{n} s ago": "hace {n} s", "{n} min ago": "hace {n} min", "{n} h ago": "hace {n} h", "{n} d ago": "hace {n} d", "fired": "disparada", "last error": "último error"
     },
     fr: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "par défaut", "Type": "Type", "Query (q)": "Requête (q)",
@@ -39,7 +40,8 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "En attente d'entités - reliez une source NGSI-LD à ce widget",
       "Attribute": "Attribut", "Entity": "Entité", "the first": "la première", "No such attribute": "Attribut introuvable",
       "all": "tous", "any type": "tout type", "no value": "pas de valeur",
-      "Hours": "Heures", "last {h} h": "dernières {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Pas d'historique dans le broker - il n'en garde pas (TRoE), ou pas pour cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}"
+      "Hours": "Heures", "last {h} h": "dernières {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Pas d'historique dans le broker - il n'en garde pas (TRoE), ou pas pour cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}",
+      "Rules tenant": "Tenant des règles", "Alarm type": "Type d'alarme", "{n} rules": "{n} règles", "{n} alarms": "{n} alarmes", "{n} new": "{n} nouvelles", "never": "jamais", "disabled": "désactivée", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Aucune règle dans ce tenant - corCep les lit dans le tenant des règles (cep)", "No alarm": "Aucune alarme", "{n} s ago": "il y a {n} s", "{n} min ago": "il y a {n} min", "{n} h ago": "il y a {n} h", "{n} d ago": "il y a {n} j", "fired": "déclenchée", "last error": "dernière erreur"
     },
     de: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "Standard", "Type": "Typ", "Query (q)": "Abfrage (q)",
@@ -51,7 +53,8 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "Warte auf Entitäten - verbinden Sie eine NGSI-LD-Quelle mit diesem Widget",
       "Attribute": "Attribut", "Entity": "Entität", "the first": "die erste", "No such attribute": "Kein solches Attribut",
       "all": "alle", "any type": "jeder Typ", "no value": "kein Wert",
-      "Hours": "Stunden", "last {h} h": "letzte {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Keine Historie im Broker - er speichert keine (TRoE), oder nicht für dieses Attribut", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}"
+      "Hours": "Stunden", "last {h} h": "letzte {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Keine Historie im Broker - er speichert keine (TRoE), oder nicht für dieses Attribut", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}",
+      "Rules tenant": "Tenant der Regeln", "Alarm type": "Alarmtyp", "{n} rules": "{n} Regeln", "{n} alarms": "{n} Alarme", "{n} new": "{n} neu", "never": "nie", "disabled": "deaktiviert", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Keine Regel in diesem Tenant - corCep liest sie aus dem Tenant der Regeln (cep)", "No alarm": "Kein Alarm", "{n} s ago": "vor {n} s", "{n} min ago": "vor {n} min", "{n} h ago": "vor {n} h", "{n} d ago": "vor {n} T", "fired": "ausgelöst", "last error": "letzter Fehler"
     }
   };
 
@@ -166,6 +169,46 @@ var C3 = (function () {
     return { broker: from.broker, tenant: from.tenant, type: from.type, entities: entities };
   }
 
+  //
+  // ago - how long ago a time (ms) was, short
+  //
+  function ago(ms) {
+    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 60) return t("{n} s ago", { n: s });
+    if (s < 3600) return t("{n} min ago", { n: Math.floor(s / 60) });
+    if (s < 86400) return t("{n} h ago", { n: Math.floor(s / 3600) });
+    return t("{n} d ago", { n: Math.floor(s / 86400) });
+  }
+
+  //
+  // brokerPicker - a broker select (the brokers c³ knows) and a tenant select (the broker's tenants, the
+  // default one, and 'extra' - the rules tenant cep, say); 'current' {broker, tenant}. Resolves when filled.
+  //
+  function brokerPicker(brokerSel, tenantSel, current, extra) {
+    var known = [];
+    function option(sel, value, label, selected) {
+      var o = el("option", "", label);
+      o.value = value;
+      if (selected) o.selected = true;
+      sel.append(o);
+    }
+    function tenants() {
+      tenantSel.replaceChildren();
+      var b = known.filter(function (x) { return x.url === brokerSel.value; })[0];
+      var names = (b ? (b.tenants || []).slice() : []).concat(b && b.tenant ? [b.tenant] : [], extra || [], current.tenant ? [current.tenant] : []);
+      option(tenantSel, "", t("default"), !current.tenant);
+      names.filter(function (n, i) { return n && names.indexOf(n) === i; }).forEach(function (n) { option(tenantSel, n, n, n === current.tenant); });
+    }
+    brokerSel.addEventListener("change", tenants);
+    return brokers().then(function (list) {
+      known = list;
+      list.forEach(function (b) { option(brokerSel, b.url, b.name, b.url === current.broker); });
+      if (current.broker && !list.some(function (b) { return b.url === current.broker; })) option(brokerSel, current.broker, current.broker, true);
+      tenants();
+      return list;
+    });
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -173,5 +216,5 @@ var C3 = (function () {
     return e;
   }
 
-  return { t: t, base: base, request: request, brokers: brokers, get: get, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, el: el };
+  return { t: t, base: base, request: request, brokers: brokers, get: get, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el };
 })();

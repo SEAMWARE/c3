@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-table" version="0.2.0">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-table" version="0.2.1">
   <details>
     <title>NGSI-LD table</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
@@ -18,5 +18,5 @@
     <outputendpoint name="selected" type="text" label="Selected entity" description="{broker, tenant, type, entities: [the entity clicked]}" friendcode="ngsild-entities"/>
   </wiring>
   <contents src="index.html" cacheable="false" useplatformstyle="true"/>
-  <rendering height="20" width="8"/>
+  <rendering height="36" width="8"/>
 </widget>
