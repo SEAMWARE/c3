@@ -29,3 +29,14 @@ tr.flash { animation: flash 2.5s ease-out; }
 .dot.bad { background: #d1495b; }
 .wait, .err { padding: 10px; color: #777; }
 .err { color: #b3261e; overflow-wrap: anywhere; }
+.head button { margin-left: 4px; }
+input.onoff { margin: 0 6px 0 0; vertical-align: -2px; cursor: pointer; }
+button.pen { margin-left: 6px; padding: 0 6px; border: 0; background: none; color: #999; cursor: pointer; font-size: 13px; }
+button.pen:hover { color: #e0457b; }
+button.danger { color: #b3261e; }
+.editor .form { grid-template-columns: max-content 1fr; }
+.editor textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, monospace; padding: 4px 6px; }
+.note { padding: 0 10px; }
+.c3-confirm { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff4d6; border-bottom: 1px solid #f0d58a; position: fixed; top: 0; left: 0; right: 0; z-index: 5; }
+.c3-confirm span { flex: 1; }
+input[type=checkbox] { accent-color: #e0457b; }

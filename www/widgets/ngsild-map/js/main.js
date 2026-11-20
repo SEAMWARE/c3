@@ -23,7 +23,7 @@ let from = {};
 let selected = null;
 let shownIds = '';
 
-const pref = (name) => MashupPlatform.prefs.get(name);
+const pref = C3.pref;
 
 function note(text) {
   const n = document.getElementById('note');
@@ -159,6 +159,6 @@ MashupPlatform.wiring.registerCallback('entities', (data) => {
   from = C3.fromOf(data);
   show();
 });
-MashupPlatform.prefs.registerCallback(() => show());
+C3.onPrefs(() => show());
 
 open().catch((e) => note(e.message));

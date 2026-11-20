@@ -1,11 +1,11 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-alarms" version="0.1.0">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-alarms" version="0.2.1">
   <details>
     <title>NGSI-LD alarms</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
     <authors>Seamware</authors>
     <image>images/icon.svg</image>
-    <description>The alarms at a broker c³ knows - the entities of a type (a corCep rule's create, say), newest first, by severity - read through c³</description>
+    <description>The alarms at a broker c³ knows - the entities of a type (a corCep rule's create, say), newest first, by severity - read through c³; acknowledged or deleted too</description>
     <license>Apache-2.0</license>
   </details>
   <preferences>
@@ -15,6 +15,7 @@
     <preference name="q" type="text" label="Query (q)" description="Only the alarms matching it" default=""/>
     <preference name="text" type="text" label="Text" description="The attribute shown - empty: message, description or name, else the first text" default=""/>
     <preference name="severity" type="text" label="Severity" description="The attribute giving the colour: critical, high, error / warning, medium / low, info" default="severity"/>
+    <preference name="hideAcknowledged" type="boolean" label="Hide acknowledged" description="Leave the acknowledged alarms out" default="false"/>
     <preference name="rows" type="number" label="Rows" description="The most alarms shown" default="50"/>
     <preference name="refresh" type="number" label="Refresh" description="Read again every so many seconds (0: never)" default="10"/>
   </preferences>

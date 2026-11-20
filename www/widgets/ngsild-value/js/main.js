@@ -16,7 +16,7 @@
   var view = document.getElementById("view");
   var entities = null;
 
-  function pref(name) { return MashupPlatform.prefs.get(name); }
+  var pref = C3.pref;
 
   function entity() {
     if (!entities || !entities.length) return null;
@@ -47,7 +47,7 @@
       attr.append(x);
     });
     var save = el("button", "", t("Save"));
-    save.addEventListener("click", function () { MashupPlatform.prefs.set({ entity: ent.value, attribute: attr.value }); });
+    save.addEventListener("click", function () { C3.setPrefs({ entity: ent.value, attribute: attr.value }); });
     box.append(el("label", "label", t("Entity")), ent, el("label", "label", t("Attribute")), attr, save);
     view.replaceChildren(box);
   }
@@ -82,6 +82,6 @@
     entities = C3.entitiesIn(data);
     render();
   });
-  MashupPlatform.prefs.registerCallback(render);
+  C3.onPrefs(render);
   render();
 })();

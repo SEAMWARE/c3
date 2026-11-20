@@ -475,44 +475,70 @@ void serveRequest(CorHttpConn* connP)
   //
   // The Dashboard's widgets (WireCloud's origin, run.c): they read the brokers through c3 - the brokers' list
   // and GETs of the NGSI-LD API through the proxy - and the map's downloaded areas (their list, the .pmtiles
-  // by Range, the fonts), nothing else. Their requests carry X-C3-Broker, so the
-  // browser asks first (a preflight): c3 answers it for WireCloud's origin only, and for GET only - a widget
-  // cannot write through c3 (the proxy's write check takes any Origin of this machine; the preflight is what
-  // keeps a write out). Every other origin still gets no preflight answer at all.
+  // by Range, the fonts). They write entities too - POST, PATCH, DELETE of /ngsi-ld/v1/entities... through the
+  // proxy - while the Dashboard's switch "Widgets may write" is on (config "dashboard": {"widgetsWrite"},
+  // default on); each write is logged in the Dashboard's log. Nothing else: no subscription, no /admin.
+  // Their requests carry X-C3-Broker, so the browser asks first (a preflight): c3 answers it for WireCloud's
+  // origin only - the methods above, on those paths. Every other origin still gets no preflight answer at all.
+  // The switch is kept here as well, not only in the preflight: a client that is no browser sends no preflight.
   //
   const char* origin = corHttpHeader(connP, "Origin");
   if ((origin != NULL) && runDashboardOrigin(origin))
   {
-    bool widgetPath = (strncmp(path, "/api/proxy/ngsi-ld/v1/", 22) == 0)    ||
+    bool readPath   = (strncmp(path, "/api/proxy/ngsi-ld/v1/", 22) == 0)    ||
                       (strcmp(path, "/api/run/dashboard/brokers") == 0)     ||
                       (strcmp(path, "/api/run/dashboard/maps") == 0)        ||
                       (strncmp(path, "/api/maps/areas/", 16) == 0)          ||
                       (strncmp(path, "/api/maps/fonts/", 16) == 0);
+    bool entityPath = (strcmp(path, "/api/proxy/ngsi-ld/v1/entities") == 0) || (strncmp(path, "/api/proxy/ngsi-ld/v1/entities/", 31) == 0);
+    bool writes     = entityPath && configDashboardWrites();
+    bool isWrite    = (strcmp(method, "POST") == 0) || (strcmp(method, "PATCH") == 0) || (strcmp(method, "DELETE") == 0);
 
-    if (widgetPath && (strcmp(method, "OPTIONS") == 0))
+    if (readPath && (strcmp(method, "OPTIONS") == 0))
     {
-      const char* want = corHttpHeader(connP, "Access-Control-Request-Method");
-      if ((want == NULL) || (strcmp(want, "GET") != 0))
+      const char* want    = corHttpHeader(connP, "Access-Control-Request-Method");
+      bool        wantGet = (want != NULL) && (strcmp(want, "GET") == 0);
+      bool        wantW   = (want != NULL) && ((strcmp(want, "POST") == 0) || (strcmp(want, "PATCH") == 0) || (strcmp(want, "DELETE") == 0));
+
+      if ((wantGet == false) && ((wantW == false) || (writes == false)))
       {
-        serveError(connP, 403, "Forbidden", "WireCloud's widgets read through c3 - GET only");
+        serveError(connP, 403, "Forbidden", (wantW && entityPath) ? "the Dashboard's widgets may not write now - c3's Dashboard page: Widgets may write" :
+                                            "WireCloud's widgets read through c3, and write entities only");
         return;
       }
       corHttpResponseStatus(connP, 204);
       corHttpResponseHeader(connP, "Access-Control-Allow-Origin", corAllocStrdup(&connP->alloc, origin));
-      corHttpResponseHeader(connP, "Access-Control-Allow-Methods", "GET");
-      corHttpResponseHeader(connP, "Access-Control-Allow-Headers", "X-C3-Broker, NGSILD-Tenant, Accept, Link, Range");
+      corHttpResponseHeader(connP, "Access-Control-Allow-Methods", writes ? "GET, POST, PATCH, DELETE" : "GET");
+      corHttpResponseHeader(connP, "Access-Control-Allow-Headers", "X-C3-Broker, NGSILD-Tenant, Accept, Link, Range, Content-Type");
       corHttpResponseHeader(connP, "Access-Control-Max-Age", "600");
       corHttpResponseHeader(connP, "Vary", "Origin");
       corHttpResponseBody(connP, (char*) "", 0);
       return;
     }
 
-    if (widgetPath && (strcmp(method, "GET") == 0))
+    if (readPath && isWrite)
+    {
+      if (writes == false)
+      {
+        serveError(connP, 403, "Forbidden", entityPath ? "the Dashboard's widgets may not write now - c3's Dashboard page: Widgets may write" :
+                                            "WireCloud's widgets read through c3, and write entities only");
+        return;
+      }
+      runDashboardWidgetWrite(method, corHttpHeader(connP, "X-C3-Broker"), corHttpHeader(connP, "NGSILD-Tenant"), &path[10]);
+    }
+
+    if (readPath && ((strcmp(method, "GET") == 0) || isWrite))
     {
       corHttpResponseHeader(connP, "Access-Control-Allow-Origin", corAllocStrdup(&connP->alloc, origin));
-      corHttpResponseHeader(connP, "Access-Control-Expose-Headers", "NGSILD-Results-Count, Link, Content-Range, Content-Length, ETag");
+      corHttpResponseHeader(connP, "Access-Control-Expose-Headers", "NGSILD-Results-Count, Link, Content-Range, Content-Length, ETag, Location");
       corHttpResponseHeader(connP, "Vary", "Origin");
     }
+  }
+
+  if ((strcmp(path, "/api/run/dashboard/settings") == 0) && (strcmp(method, "PUT") == 0))
+  {
+    serveConfigChange(connP, configDashboardSet);
+    return;
   }
 
   if (strncmp(path, "/api/", 5) != 0)

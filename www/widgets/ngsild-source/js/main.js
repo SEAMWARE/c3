@@ -17,8 +17,9 @@
   var view = document.getElementById("view");
   var timer = null;
   var last = null;                               // {count, at, error}
+  var formOpen = false;                          // the form is shown: the reads do not redraw
 
-  function pref(name) { return MashupPlatform.prefs.get(name); }
+  var pref = C3.pref;
 
   function configured() { return !!(pref("broker") && pref("type")); }
 
@@ -53,6 +54,7 @@
   // showStatus - what it reads and how the last read went
   //
   function showStatus() {
+    if (formOpen) return;
     var box = el("div", "status");
     if (!configured()) {
       box.append(el("div", "what", t("Not configured")));
@@ -79,6 +81,7 @@
   // showForm - the broker (c³'s), its tenant, a type of the broker's, q, attrs, the period
   //
   function showForm() {
+    formOpen = true;
     var form = el("div", "form");
     var err = el("div", "err");
     var broker = el("select");
@@ -153,12 +156,13 @@
     broker.addEventListener("change", function () { tenants(); types(); });
     tenant.addEventListener("change", types);
     save.addEventListener("click", function () {
-      MashupPlatform.prefs.set({ broker: broker.value, tenant: tenant.value, type: type.value, q: q.value.trim(), attrs: attrs.value.trim(), refresh: Number(every.value) || 0 });
+      formOpen = false;
+      C3.setPrefs({ broker: broker.value, tenant: tenant.value, type: type.value, q: q.value.trim(), attrs: attrs.value.trim(), refresh: Number(every.value) || 0 });
     });
-    cancel.addEventListener("click", showStatus);
+    cancel.addEventListener("click", function () { formOpen = false; showStatus(); });
   }
 
-  MashupPlatform.prefs.registerCallback(function () {
+  C3.onPrefs(function () {
     last = null;
     showStatus();
     schedule();

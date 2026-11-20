@@ -26,6 +26,7 @@
 .db-bar .db-url { font-size: 0.975rem; color: var(--muted); }
 .db-bar .grow { flex: 1; }
 .db-bar a.btn { text-decoration: none; }
+.db-bar .db-write { display: inline-flex; align-items: center; gap: 6px; font-size: 0.975rem; color: var(--text-2); cursor: pointer; }
 
 .db-framewrap { flex: 1; display: flex; min-height: 480px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
 .db-frame { flex: 1; width: 100%; border: 0; }

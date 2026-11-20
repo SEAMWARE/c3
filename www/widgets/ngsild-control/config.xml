@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-control" version="0.1.1">
+  <details>
+    <title>NGSI-LD control</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>A switch, a button, a slider or a number that sets one attribute of an entity at a broker c³ knows, through c³ - a light on, a setpoint</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="broker" type="text" label="Broker" description="The broker's URL, as c³ knows it (picked in the widget)" default=""/>
+    <preference name="tenant" type="text" label="Tenant" description="The entity's tenant" default=""/>
+    <preference name="entity" type="text" label="Entity" description="The entity's id - a selection wired to the widget replaces it" default=""/>
+    <preference name="attribute" type="text" label="Attribute" description="The attribute set" default=""/>
+    <preference name="kind" type="text" label="Control" description="switch (a boolean), button (sends Value), slider or number" default="switch"/>
+    <preference name="label" type="text" label="Label" description="Shown above the control - empty: the attribute's name" default=""/>
+    <preference name="value" type="text" label="Value sent" description="The button's value, as JSON (true, 42, &quot;open&quot;)" default="true"/>
+    <preference name="min" type="number" label="Min" description="The slider's least value" default="0"/>
+    <preference name="max" type="number" label="Max" description="The slider's greatest value" default="100"/>
+    <preference name="step" type="number" label="Step" description="The slider's and the number's step" default="1"/>
+    <preference name="refresh" type="number" label="Refresh" description="Read the value again every so many seconds (0: never)" default="10"/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entity" type="text" label="Entity" description="{broker, tenant, entities: [the entity set]} - a table's or a map's selection" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="18" width="3"/>
+</widget>
