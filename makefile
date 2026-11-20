@@ -37,7 +37,7 @@ C3_CLONES  ?= $(abspath $(COR_LIBS))
 
 CFLAGS      = $(OPT) -Wall -Werror -Wundef -Wno-format-truncation -fstack-protector-all -I$(COR_LIBS) -DC3_CLONES='"$(C3_CLONES)"' -MMD -MP $(EXTRA_CFLAGS)
 
-SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/creds.c src/oidc.c src/vc.c src/browser.c src/maps.c src/live.c src/demo.c src/ws.c src/util.c src/compile.c src/run.c src/window.c src/repos.c
+SOURCES     = src/c3.c src/config.c src/serve.c src/proxy.c src/creds.c src/oidc.c src/vc.c src/browser.c src/maps.c src/live.c src/demo.c src/ws.c src/util.c src/compile.c src/run.c src/window.c src/repos.c src/assist.c src/assistLocal.c src/assistService.c
 OBJDIR      = obj/$(BUILD)
 OBJECTS     = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 DEPS        = $(OBJECTS:.o=.d)

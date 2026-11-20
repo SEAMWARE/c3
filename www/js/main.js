@@ -122,7 +122,6 @@ async function main() {
   const boot = await splash();
   if (!boot) return;
 
-  assistInit();
   docsInit();
   windowInit();
   const connect = new Connect();
@@ -142,6 +141,8 @@ async function main() {
       connect.connect(url);
     },
   });
+
+  assistInit({ connect, compile, run });
 
   //
   // Compile's "Run it": Run, with that build in the form

@@ -39,7 +39,7 @@
       <a href="#docs" id="nav-docs">Documentation</a>
     </nav>
     <div class="top-right">
-      <button class="aibtn" type="button" id="ai-btn" aria-haspopup="dialog" aria-expanded="false" title="AI Assist - coming soon">✦ AI Assist</button>
+      <button class="aibtn" type="button" id="ai-btn" aria-haspopup="dialog" aria-expanded="false" title="AI Assist">✦ AI Assist</button>
       <span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware">
       <div class="winctl" id="win-ctl" hidden>
         <button type="button" id="win-min" title="Minimise" aria-label="Minimise the window"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.5h10"/></svg></button>
@@ -47,17 +47,42 @@
       </div>
     </div>
     <div class="aipop" id="ai-pop" role="dialog" aria-labelledby="ai-title" hidden>
-      <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">coming soon</span></h2><button class="iconbtn" type="button" id="ai-close" aria-label="Close">✕</button></div>
-      <p>Ask about the connected broker in your own words - <em>which vehicles near the depot were above 90 today?</em> - and c³ answers by querying it, with the entities of the answer highlighted in Explore.</p>
-      <p>When it comes, this is where you set it up:</p>
-      <ul>
-        <li><strong>Provider</strong> and <strong>model</strong> - the model is reached with your own key; c³ is the client.</li>
-        <li><strong>API key</strong> - kept by c³'s backend on this machine (with <em>remember</em>, beside <span class="mono">c3.json</span>, mode 600), never sent to the page. Or from the environment when c³ starts.</li>
-        <li><strong>A monthly limit</strong> - and the tokens each answer used, shown under it.</li>
-      </ul>
-      <p>The broker's own access token and tenant - <strong>Token</strong> and the tenant field in Explore - are what the assistant uses: it can do exactly what you can, and asks you before anything it would change.</p>
+      <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">not available here</span></h2><button class="iconbtn" type="button" id="ai-close" aria-label="Close">✕</button></div>
+      <p>Ask about the connected broker in your own words - <em>which vehicles near the depot were above 90 today?</em> - and the Coraine Assistant answers by querying it, with the entities of the answer highlighted in Explore.</p>
+      <p class="why" id="ai-why"></p>
+      <p>While it is being developed it runs on your own Claude login: <span class="mono">claude</span> (Claude Code, logged in) and <span class="mono">corMcp</span> on this machine, and c³ started with <span class="mono">C3_DEV=1</span>. The assistant's instructions come from Seamware's <span class="mono">coraine-assistant</span> repository, when it is checked out.</p>
     </div>
   </header>
+
+  <aside class="aipanel" id="ai-panel" aria-labelledby="ai-ptitle" hidden>
+    <div class="aip-head">
+      <h2 id="ai-ptitle">AI Assist</h2>
+      <span class="aip-prov" id="ai-prov"></span>
+      <button class="btn small" type="button" id="ai-tokbtn" title="The AI Assist token - change or forget it">Token</button>
+      <button class="btn small" type="button" id="ai-new" title="A new conversation - the model forgets this one">New</button>
+      <button class="iconbtn" type="button" id="ai-pclose" aria-label="Close the assistant">✕</button>
+    </div>
+    <div class="aip-ctx" id="ai-ctx"></div>
+    <form class="aip-token" id="ai-token" hidden>
+      <p>AI Assist is Seamware's Coraine Assistant. Give the <strong>AI Assist token</strong> Seamware gave you - c³'s backend keeps it on this machine and never shows it to the page.</p>
+      <input type="password" id="ai-tok" autocomplete="off" spellcheck="false" placeholder="cah_..." aria-label="AI Assist token">
+      <label class="chk"><input type="checkbox" id="ai-tok-rem" checked> Remember it on this machine <span class="mono">(assist.json beside c3.json, mode 600)</span></label>
+      <div class="aip-row">
+        <span class="aip-tok-msg" id="ai-tok-msg"></span>
+        <button class="btn small" type="button" id="ai-tok-forget">Forget it</button>
+        <button class="btn primary small" type="submit" id="ai-tok-use">Use it</button>
+      </div>
+    </form>
+    <div class="aip-log" id="ai-log" aria-live="polite"></div>
+    <form class="aip-form" id="ai-form">
+      <textarea id="ai-q" rows="3" placeholder="Ask about the broker - Enter sends, Shift+Enter a new line" aria-label="Your question" spellcheck="true"></textarea>
+      <div class="aip-row">
+        <span class="aip-usage" id="ai-usage"></span>
+        <button class="btn" type="button" id="ai-stop" hidden>Stop</button>
+        <button class="btn primary" type="submit" id="ai-send">Ask</button>
+      </div>
+    </form>
+  </aside>
 
   <main class="page" id="page-compile" hidden>
     <div class="cp-wrap">

@@ -45,13 +45,14 @@ const HOOD_IN_MAX = 300;
 const PALETTE = ['#5FB4E8', '#F2B84B', '#6FDCA0', '#B48CFF', '#FF8A9A', '#6FA8FF', '#C9D46A', '#4FD1C5', '#F59E6B', '#E58AB1', '#7FA3BC', '#A6ADBA'];
 
 let colors = new Map();
+let ownColors = new Map();                       // the types given a colour of their own (AI Assist), per broker
 
 function setTypeColors(types) {
   colors = new Map([...new Set(types)].sort().map((t, i) => [t, PALETTE[i % PALETTE.length]]));
 }
 
 export function typeColor(type) {
-  return colors.get(type) || PALETTE[0];
+  return ownColors.get(type) || colors.get(type) || PALETTE[0];
 }
 
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -142,6 +143,7 @@ export class Connect {
     this.view = 'graph';                         // 'graph' or 'map' - kept per broker
     this.mapView = null;                         // the map's view kept for the broker: {center, zoom, ...}
     this.colourBy = 'type';                      // the map's markers: by type, or by a Relationship's target
+    this.highlighted = new Set();                // entities ringed (AI Assist)
     this.edges = [];
 
     this.graph = new Graph({
@@ -831,6 +833,10 @@ export class Connect {
       $('rel-mode').value = this.relMode;
       this.emap.setRelationships(this.relMode);
       this.alerts.setBroker(url, tenant, validRules(rules || []));
+      ownColors = new Map(c.typeColours && typeof c.typeColours === 'object' ? Object.entries(c.typeColours) : []);
+      this.highlighted = new Set();
+      this.graph.setHighlight([]);
+      this.emap.highlight([]);
     } catch (e) {
       console.warn('c3: the configuration was not saved:', e.message);
     }
@@ -970,8 +976,8 @@ export class Connect {
   }
 
   loadPicks(save) {
-    if (!this.broker) return;
-    this.load([...this.picks], save);
+    if (!this.broker) return Promise.resolve();
+    return this.load([...this.picks], save);
   }
 
   setPicks(types) {
@@ -1351,6 +1357,50 @@ export class Connect {
     const counts = new Map();
     for (const e of this.entities) for (const t of typesOf(e)) counts.set(t, (counts.get(t) || 0) + 1);
     return counts;
+  }
+
+  //
+  // The types' own colours: {type: '#rrggbb'} - the whole set; 'save' keeps it for the broker
+  //
+  typeColours() {
+    return Object.fromEntries(ownColors);
+  }
+
+  colourOf(type) {
+    return typeColor(type);
+  }
+
+  saveConnect(patch) {
+    if (this.broker) api.brokerConnect(this.broker, patch).catch(() => {});
+  }
+
+  setTypeColours(own, save) {
+    ownColors = new Map(Object.entries(own));
+    this.repaint();
+    if (save && this.broker) api.brokerConnect(this.broker, { typeColours: this.typeColours() }).catch(() => {});
+  }
+
+  //
+  // highlight - entities ringed in the graph and on the map until another highlight replaces them
+  //
+  highlight(ids) {
+    this.highlighted = new Set(ids);
+    this.graph.setHighlight(this.highlighted);
+    this.emap.highlight([...this.highlighted]);
+  }
+
+  //
+  // repaint - everything drawn in the types' colours, drawn again: the boxes (where they are), the map,
+  // the side panels
+  //
+  repaint() {
+    const nodes = this.entities.map((e) => this.nodeOf(e));
+    const at = new Map([...this.graph.nodes.values()].map((n) => [n.id, { x: n.x, y: n.y, pinned: n.pinned }]));
+    this.graph.patch(nodes, this.edges, null, at);
+    this.renderMapChrome();
+    this.renderDiscovery();
+    this.renderRels();
+    if (this.shownId) this.showEntity(this.shownId);
   }
 
   setHidden(types) {

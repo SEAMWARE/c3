@@ -391,6 +391,8 @@ int main(int argC, char* argV[])
   if (runInit() == false)
     fprintf(stderr, "c3: no $HOME and no $XDG_DATA_HOME - Run has nowhere to keep its brokers' logs and data\n");
 
+  assistInit();
+
   printf("c3 %s - backend on port %d (this machine only), pages from %s, configuration %s\n", C3_VERSION, c3Port, c3WwwDir, c3ConfigPath);
   fflush(stdout);
 
