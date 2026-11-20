@@ -1103,7 +1103,7 @@ The backend's API, used by the pages:
 | `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
-| `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s |
+| `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
 | `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |

@@ -596,6 +596,15 @@
       </div>
     </div>
 
+    <dialog class="db-progress" id="db-progress" aria-labelledby="db-ptitle">
+      <h2 id="db-ptitle">Starting the Dashboard</h2>
+      <div class="db-pbar" role="progressbar" aria-labelledby="db-ptitle" id="db-pbar"><div id="db-pfill"></div></div>
+      <div class="db-pcount" id="db-pcount"></div>
+      <ol class="db-steps" id="db-steps"></ol>
+      <p class="db-pwhy" id="db-pwhy" hidden></p>
+      <details class="db-plog" id="db-plog"><summary>The log</summary><pre id="db-plogtext"></pre></details>
+      <div class="db-pacts"><button type="button" class="btn" id="db-pclose">Close</button></div>
+    </dialog>
     <div class="db-bar" id="db-bar" hidden>
       <span class="rdot ok"></span>
       <span class="db-name">WireCloud</span>

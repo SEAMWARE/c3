@@ -43,6 +43,9 @@ const DOING = [
   [/^first start: making/, () => t('first start: making WireCloud\'s user admin - its password made by c³, kept in secrets.json')],
   [/^making WireCloud's search indexes/, () => t('making WireCloud\'s search indexes')],
   [/^installing the widget (\S+) (\S+) in WireCloud$/, (m) => t('installing the widget {widget} {version} in WireCloud', { widget: m[1], version: m[2] })],
+  [/^checking WireCloud's image$/, () => t('checking WireCloud\'s image')],
+  [/^logging in to WireCloud$/, () => t('logging in to WireCloud')],
+  [/^checking c3's widgets in WireCloud$/, () => t('checking c³\'s widgets in WireCloud')],
   [/^starting$/, () => t('starting')],
   [/^stopping$/, () => t('stopping')],
 ];
@@ -66,6 +69,9 @@ export class Dashboard {
     $('db-stop').addEventListener('click', () => this.act('stop'));
     $('db-stop-bar').addEventListener('click', () => this.act('stop'));
     $('db-reload').addEventListener('click', () => { this.frameFor = null; this.render(); });
+    this.progress = null;          // the dialog's: {what: 'start' | 'stop', error} while it is open
+    $('db-pclose').addEventListener('click', () => this.progressClose());
+    $('db-progress').addEventListener('cancel', () => { this.progress = null; });
   }
 
   refresh() {
@@ -84,24 +90,123 @@ export class Dashboard {
     try {
       this.state = await api.dashboard();
       this.error = null;
+      this.errorStatus = null;
     } catch (e) {
       this.error = e.message;
+      this.errorStatus = e.status || null;
     }
     this.render();
+    this.progressRender();
     if (this.state && (this.state.busy || this.state.state === 'failed' || this.state.state === 'partly')) this.logShow();
-    if (this.shown) this.timer = setTimeout(() => this.poll(), 2000);
+    if (this.shown) this.timer = setTimeout(() => this.poll(), this.progress ? 1000 : 2000);
   }
 
   async act(what) {
     $('db-start').disabled = $('db-stop').disabled = $('db-stop-bar').disabled = true;
+    this.progressOpen(what);
     try {
       await (what === 'start' ? api.dashboardStart() : api.dashboardStop());
+      if (this.progress) this.progress.accepted = true;     // the backend's steps are this one's from now on
       if (what === 'stop') this.frameFor = null;
       this.loginWhy = null;
     } catch (e) {
-      this.error = e.message;
+      //
+      // c³ did not take it: the dialog says why. A 404: the c³ running is older than this page (c³ serves the
+      // page from its directory - a newer page, an older binary)
+      //
+      if (this.progress) this.progress.error = e.status === 404
+        ? t('This c³ does not know the Dashboard\'s API ({error}) - it is older than its page: restart c³ from the current build', { error: e.message })
+        : t('c³ did not take it: {error}', { error: e.message });
     }
     this.poll();
+  }
+
+  //
+  // The progress dialog: open from Start or Stop until it is closed - by hand, or by itself a moment after a
+  // start or a stop went through
+  //
+  progressOpen(what) {
+    this.progress = { what, error: null, accepted: false, since: Date.now() };
+    $('db-ptitle').textContent = what === 'start' ? t('Starting the Dashboard') : t('Stopping the Dashboard');
+    $('db-steps').replaceChildren();
+    $('db-pwhy').hidden = true;
+    $('db-plog').open = false;
+    $('db-plogtext').textContent = '';
+    $('db-pfill').style.width = '0';
+    $('db-pbar').classList.remove('failed');
+    $('db-pcount').textContent = t('asking c³…');
+    const d = $('db-progress');
+    if (!d.open) d.showModal();
+  }
+
+  progressClose() {
+    this.progress = null;
+    clearTimeout(this.progressTimer);
+    const d = $('db-progress');
+    if (d.open) d.close();
+  }
+
+  progressRender() {
+    const p = this.progress;
+    if (!p) return;
+    const s = this.state;
+    const steps = s && s.steps && s.steps.of === p.what ? s.steps : null;
+    //
+    // Until the backend took it (its answer: the steps reset then), the steps it has are the last start's
+    //
+    const fresh = steps && p.accepted ? steps : null;
+    const list = fresh ? fresh.list : [];
+    const failed = !!p.error || (fresh && list.some((x) => x.failed)) || (!s?.busy && !!s?.why && p.what === 'start' && fresh);
+    const over = !!p.error || (fresh && !s.busy);
+
+    $('db-steps').replaceChildren(...list.map((x) => {
+      const li = document.createElement('li');
+      li.className = x.failed ? 'failed' : x.done ? 'done' : 'run';
+      const ic = document.createElement('span');
+      ic.className = 'ic';
+      ic.textContent = x.failed ? '✗' : x.done ? '✓' : '';
+      const tx = document.createElement('span');
+      tx.className = 'tx';
+      tx.textContent = doingText(x.text);
+      const sec = document.createElement('span');
+      sec.className = 'sec';
+      sec.textContent = x.seconds + ' s';
+      li.append(ic, tx, sec);
+      return li;
+    }));
+    const box = $('db-steps');
+    box.scrollTop = box.scrollHeight;
+
+    const total = fresh ? Math.max(fresh.total, list.length) : 0;
+    const done = list.filter((x) => x.done).length;
+    $('db-pfill').style.width = (over && !failed ? 100 : total ? Math.round(100 * done / total) : 0) + '%';
+    $('db-pbar').classList.toggle('failed', failed);
+    $('db-pbar').setAttribute('aria-valuenow', String(total ? Math.round(100 * done / total) : 0));
+    const secs = Math.round((Date.now() - p.since) / 1000);
+    $('db-pcount').textContent = p.error ? '' : !fresh ? t('asking c³…')
+      : over ? (failed ? t('stopped at step {n} of {total}', { n: list.length, total }) : (p.what === 'start' ? t('done - WireCloud runs ({s} s)', { s: secs }) : t('done - stopped, its data kept ({s} s)', { s: secs })))
+      : t('step {n} of about {total} - {s} s so far', { n: list.length, total, s: secs });
+
+    const why = p.error || (failed && s?.why ? t('The last start failed: {why}', { why: s.why }) : '');
+    $('db-pwhy').hidden = !why;
+    $('db-pwhy').textContent = why;
+    if (failed && !p.error) $('db-plog').open = true;           // a start that failed: the log says why
+    if ($('db-plog').open) this.progressLog();
+
+    $('db-plog').hidden = !!p.error;                              // c³ never took it: no log of it
+    $('db-pclose').textContent = over ? t('Close') : t('Hide');
+    if (over && !failed && !this.progressTimer) {
+      this.progressTimer = setTimeout(() => { this.progressTimer = null; this.progressClose(); }, 2500);
+    }
+  }
+
+  async progressLog() {
+    try {
+      const text = await api.dashboardLog();
+      const pre = $('db-plogtext');
+      pre.textContent = text.split('\n').slice(-80).join('\n');
+      pre.scrollTop = pre.scrollHeight;
+    } catch (e) { /* the log as it was */ }
   }
 
   //
@@ -150,7 +255,9 @@ export class Dashboard {
     $('db-framewrap').hidden = !runs || this.frameFor !== s.port;
 
     if (!s) {
-      $('db-doing').textContent = this.error ? t('The backend does not answer: {error}', { error: this.error }) : '';
+      $('db-doing').textContent = !this.error ? ''
+        : this.errorStatus === 404 ? t('This c³ does not know the Dashboard\'s API ({error}) - it is older than its page: restart c³ from the current build', { error: this.error })
+        : t('The backend does not answer: {error}', { error: this.error });
       return;
     }
 
