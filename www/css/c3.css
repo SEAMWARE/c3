@@ -991,3 +991,5 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 0.9rem; }
 .guide.api pre.api-decl { margin: 6px 0 10px; color: var(--text); }
 .guide.api pre.api-note { background: none; border: none; border-left: 2px solid var(--line); border-radius: 0; padding: 2px 12px; color: var(--muted); }
 .doclist .dmore { display: inline-flex; gap: 14px; margin-left: 14px; font-size: 0.975rem; white-space: nowrap; }
+
+.aip-tool .tkind { font-size: 0.75rem; padding: 0 6px; border-radius: 4px; background: var(--accent-2); color: #fff; }

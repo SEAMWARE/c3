@@ -201,6 +201,25 @@ function render(box, text, onEntity) {
 //
 // The server-sent events of a POST's response
 //
+//
+// workspacesIn - the WireCloud workspaces a wirecloud tool's answer names ({id, owner, name} anywhere in it) into
+// 'map' as id -> "owner/name"; 'made' is told of one create_workspace or clone_workspace made (an answer that is one)
+//
+function workspacesIn(text, map, made) {
+  let v;
+  try { v = JSON.parse(text); } catch { return; }
+  const walk = (o, top) => {
+    if (Array.isArray(o)) { o.forEach((x) => walk(x, false)); return; }
+    if (!o || typeof o !== 'object') return;
+    if (typeof o.id === 'string' && typeof o.owner === 'string' && typeof o.name === 'string') {
+      map.set(o.id, encodeURIComponent(o.owner) + '/' + encodeURIComponent(o.name));
+      if (top) made(o.id);
+    }
+    Object.values(o).forEach((x) => walk(x, false));
+  };
+  walk(v, true);
+}
+
 async function* events(response) {
   const reader = response.body.getReader();
   const dec = new TextDecoder();
@@ -458,6 +477,7 @@ function panelInit(info, connect, compile, run) {
   const empty = () => {
     log.textContent = '';
     log.append(el('div', 'aip-empty', t('Ask in your own words - which entities, how many, what changed, what is related to what - or tell it what to show: "paint the Stores green", "only the vehicles, on the map", "highlight the ones above 90". It reads the broker and cannot change anything in it; what it does to the view has an Undo, and "undo that" works too. Click an entity id in an answer to see it in Explore.')));
+    log.append(el('div', 'aip-empty', t("While c³'s Dashboard runs, it builds dashboards there too: \"a dashboard of the rooms' temperatures - a table, a chart and a map\". It does not delete any.")));
   };
 
   const newConversation = (note) => {
@@ -522,6 +542,10 @@ function panelInit(info, connect, compile, run) {
     let frame = 0;
     const toolLines = new Map();               // a broker tool call's id -> its line
     let calls = 0;
+    let dashboardChanged = false;                // a wirecloud tool that changes something ran
+    let dashboardWs = null;
+    const toolKinds = new Map();                 // tool call id -> 'dashboard'                      // the workspace id it changed last
+    const workspaces = new Map();                // workspace id -> "owner/name", from the wirecloud tools' answers
 
     const textBox = () => {
       if (!answer) {
@@ -565,7 +589,9 @@ function panelInit(info, connect, compile, run) {
           cancelAnimationFrame(frame);
           frame = requestAnimationFrame(() => { if (answer) { render(answer, text, onEntity); scroll(); } });
         } else if (event === 'serverDown') {
-          log.append(el('div', 'aip-err', data.server === 'c3' ? t('The c³ commands are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status }) : t('The broker tools are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status })));
+          log.append(el('div', 'aip-err', data.server === 'c3' ? t('The c³ commands are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status })
+            : data.server === 'wirecloud' ? t('The Dashboard\'s tools are missing from this answer - WireCloud\'s MCP server did not connect ({status}).', { status: data.status })
+            : t('The broker tools are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status })));
         } else if (event === 'ui') {
           textDone();
           runCommand(data);
@@ -576,6 +602,14 @@ function panelInit(info, connect, compile, run) {
           calls++;
           const d = el('details', 'aip-tool');
           const s = el('summary');
+          if (data.kind === 'dashboard') {
+            s.append(el('span', 'tkind', t('Dashboard')), ' ');
+            if (!/^(get_|list_|export_|validate_)/.test(data.name)) {
+              dashboardChanged = true;           // the frame shows it after the answer
+              if (data.input && data.input.workspace_id) dashboardWs = data.input.workspace_id;
+            }
+            toolKinds.set(data.id, 'dashboard');
+          }
           s.append(el('span', 'tname', data.name), ' ' + JSON.stringify(data.input));
           s.title = data.name + ' ' + JSON.stringify(data.input);
           const pre = el('pre', null, '…');
@@ -584,6 +618,7 @@ function panelInit(info, connect, compile, run) {
           toolLines.set(data.id, { d, pre });
           scroll();
         } else if (event === 'toolResult') {
+          if (toolKinds.get(data.id) === 'dashboard') workspacesIn(data.text, workspaces, (id) => { if (!dashboardWs) dashboardWs = id; });
           const tl = toolLines.get(data.id);
           if (tl) {
             let shown = data.text;
@@ -594,6 +629,7 @@ function panelInit(info, connect, compile, run) {
         } else if (event === 'usage') {
           $('ai-usage').textContent = usageText(data);
         } else if (event === 'end') {
+          if (dashboardChanged) window.dispatchEvent(new CustomEvent('c3-dashboard-changed', { detail: { path: workspaces.get(dashboardWs) || null } }));
           if (!text && data.answer) { textBox(); text = data.answer; }
           textDone();
           const meta = [plural(calls, '{n} tool call', '{n} tool calls'), data.seconds + ' s', t('{n} tokens', { n: data.input + data.output + data.cacheRead })];

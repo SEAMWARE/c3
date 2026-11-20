@@ -171,6 +171,7 @@ extern int    credsHeaders(const char* broker, CorRestKeyValue* kv, int max);  /
 extern void   credsHeadersFree(CorRestKeyValue* kv, int n);
 extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s), /headers
 extern bool   credsDashboard(char* password, int passwordLen, char* jwtKey, int jwtKeyLen, char* secretKey, int secretKeyLen, char* err, int errLen);
+extern bool   credsDashboardAssist(char* secret, int secretLen, char* err, int errLen);   // WireCloud's OAuth client c3-assist
 
 
 
@@ -236,6 +237,7 @@ extern bool  runInit(void);                       // after configLoad: the broke
 extern void  runRequest(CorHttpConn* connP, const char* path);
 extern void  runCapabilities(Str* sP);            // "run": {...} of GET /api/capabilities
 extern void  runShutdown(void);                   // c3 stops: the brokers keep running; c3's own helpers stop
+extern bool  runDashboardMcp(char* url, int urlLen, char* token, int tokenLen, char* why, int whyLen);   // AI Assist: WireCloud's MCP server + a token
 extern bool  runDashboardOrigin(const char* origin);   // WireCloud's Origin, while the Dashboard runs
 extern void  runDashboardWidgetWrite(const char* method, const char* broker, const char* tenant, const char* path);  // in the Dashboard's log
 
