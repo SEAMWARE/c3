@@ -14,6 +14,8 @@ import { Run } from './run.js';
 import { assistInit } from './assist.js';
 import { windowInit } from './window.js';
 import { docsInit, docsShow } from './docs.js';
+import { i18nInit, t, LANGUAGES, language, setLanguage } from './i18n.js';
+import { openMenu } from './menu.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -118,7 +120,24 @@ function pageShow(page, compile, run) {
   api.uiSet({ lastPage: page }).catch(() => {});
 }
 
+//
+// The language button: the four languages, the one in use checked
+//
+function languageButton() {
+  const b = $('lang-btn');
+  b.textContent = language().toUpperCase();
+  b.addEventListener('click', () => {
+    const r = b.getBoundingClientRect();
+    openMenu({
+      x: r.left, y: r.bottom + 4, label: t('Language'), returnFocus: b,
+      items: Object.entries(LANGUAGES).map(([code, name]) => ({ label: (code === language() ? '✓ ' : '\u2003') + name, action: () => setLanguage(code) })),
+    });
+  });
+}
+
 async function main() {
+  await i18nInit();
+  languageButton();
   const boot = await splash();
   if (!boot) return;
 

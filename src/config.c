@@ -30,7 +30,7 @@
 //     "demos":   { "CDMAD": { "url": "http://127.0.0.1:7990/c3.json", "hint": "start it, then Start broker + populate" } },
 //     "maps":    { "areas": [ { "id": "area-20261009-190012", "name": "Boston", "bbox": [w, s, e, n],
 //                               "maxzoom": 15, "bytes": 31457280, "created": "...", "build": "20261009" } ] },
-//     "ui":      { "lastPage": "connect" }
+//     "ui":      { "lastPage": "connect", "lang": "es" }
 //   }
 //
 // No access token is ever in it - those are in secrets.json beside it, when remembered (creds.c).
@@ -762,13 +762,31 @@ bool configBrokerForget(char* body, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
-// configUiSet - PUT /api/ui {"lastPage": "connect"}
+// configUiSet - PUT /api/ui {"lastPage": "connect", "lang": "es"} - either or both
 //
+// lang: the language c³ is shown in - en, es, fr, de
+//
+static void uiMember(Doc* docP, const char* name, const char* value, bool* changedP)
+{
+  CorNode* uiP  = corTreeLookup(docP->treeP, "ui");
+  CorNode* oldP = corTreeLookup(uiP, name);
+
+  if ((value == NULL) || ((oldP != NULL) && (oldP->type == CorString) && (strcmp(oldP->value.s, value) == 0)))
+    return;                                      // not given, or unchanged
+
+  if (oldP != NULL)
+    corTreeChildRemove(uiP, oldP);
+  corTreeChildAdd(uiP, corTreeString(&docP->alloc, name, value));
+  *changedP = true;
+}
+
 bool configUiSet(char* body, char* errBuf, int errLen)
 {
   Doc         doc;
   const char* lastPage;
-  bool        ok = false;
+  const char* lang;
+  bool        ok      = false;
+  bool        changed = false;
 
   docInit(&doc);
   doc.treeP = docParse(&doc, cfgText);
@@ -777,23 +795,24 @@ bool configUiSet(char* body, char* errBuf, int errLen)
   if (bodyP == NULL)
     goto done;
 
-  if (stringMember(bodyP, "lastPage", true, 64, &lastPage, errBuf, errLen) == false)
+  if (stringMember(bodyP, "lastPage", false, 64, &lastPage, errBuf, errLen) == false)
     goto done;
-
-  CorNode* uiP   = corTreeLookup(doc.treeP, "ui");
-  CorNode* oldP  = corTreeLookup(uiP, "lastPage");
-
-  if ((oldP != NULL) && (oldP->type == CorString) && (strcmp(oldP->value.s, lastPage) == 0))
+  if (stringMember(bodyP, "lang", false, 8, &lang, errBuf, errLen) == false)
+    goto done;
+  if ((lastPage == NULL) && (lang == NULL))
   {
-    ok = true;                                   // unchanged: nothing to write
+    snprintf(errBuf, errLen, "\"lastPage\" or \"lang\" is needed");
+    goto done;
+  }
+  if ((lang != NULL) && (strcmp(lang, "en") != 0) && (strcmp(lang, "es") != 0) && (strcmp(lang, "fr") != 0) && (strcmp(lang, "de") != 0))
+  {
+    snprintf(errBuf, errLen, "\"lang\": en, es, fr or de");
     goto done;
   }
 
-  if (oldP != NULL)
-    corTreeChildRemove(uiP, oldP);
-
-  corTreeChildAdd(uiP, corTreeString(&doc.alloc, "lastPage", lastPage));
-  ok = commit(&doc, errBuf, errLen);
+  uiMember(&doc, "lastPage", lastPage, &changed);
+  uiMember(&doc, "lang",     lang,     &changed);
+  ok = changed ? commit(&doc, errBuf, errLen) : true;
 
  done:
   docRelease(&doc);

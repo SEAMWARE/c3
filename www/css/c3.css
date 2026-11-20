@@ -165,6 +165,8 @@ nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600;
   max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .top-right .sw { height: 18px; width: auto; opacity: 0.85; }
+.langbtn { font: inherit; font-size: 12px; letter-spacing: 0.04em; background: transparent; color: inherit; border: 1px solid var(--line, rgba(127,127,127,0.35)); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.langbtn:hover, .langbtn[aria-expanded="true"] { border-color: var(--accent-2); }
 
 /* Minimise and close - full-screen only, where the window has no title bar (window.js) */
 .winctl { display: flex; gap: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
