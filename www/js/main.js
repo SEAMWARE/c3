@@ -141,11 +141,48 @@ function languageButton() {
   });
 }
 
+//
+// The text size: c³'s text in percent of its own (its sizes are in rem: the root's size scales them all), kept in
+// c3.json as ui.textSize - and in this browser too, so a page opened again starts at it before the config comes
+//
+const TEXT_SIZES = ['90', '100', '115', '130', '150', '175', '200'];
+
+function textSizeApply(size) {
+  if (!TEXT_SIZES.includes(size)) size = '100';
+  document.documentElement.style.fontSize = size === '100' ? '' : size + '%';
+  try { localStorage.setItem('c3.textSize', size); } catch { /* the config keeps it */ }
+  window.dispatchEvent(new Event('resize'));          // what measures itself, again
+  return size;
+}
+
+function textSizeButton(initial) {
+  let size = textSizeApply(initial);
+  const b = $('size-btn');
+  b.title = b.ariaLabel = `${t('Text size')}: ${size} %`;
+  b.addEventListener('click', () => {
+    const r = b.getBoundingClientRect();
+    openMenu({
+      x: r.left, y: r.bottom + 4, label: t('Text size'), returnFocus: b,
+      items: TEXT_SIZES.map((s) => ({
+        label: s + ' %' + (s === size ? '  ✓' : ''),
+        action: () => {
+          size = textSizeApply(s);
+          b.title = b.ariaLabel = `${t('Text size')}: ${size} %`;
+          api.uiSet({ textSize: size }).catch(() => {});
+        },
+      })),
+    });
+  });
+}
+
+try { textSizeApply(localStorage.getItem('c3.textSize') || '100'); } catch { /* 100 % */ }
+
 async function main() {
   await i18nInit();
   languageButton();
   const boot = await splash();
   if (!boot) return;
+  textSizeButton((boot.config.ui || {}).textSize || (() => { try { return localStorage.getItem('c3.textSize'); } catch { return null; } })() || '100');
 
   docsInit();
   windowInit();

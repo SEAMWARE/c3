@@ -762,9 +762,10 @@ bool configBrokerForget(char* body, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
-// configUiSet - PUT /api/ui {"lastPage": "connect", "lang": "es"} - either or both
+// configUiSet - PUT /api/ui {"lastPage": "connect", "lang": "es", "textSize": "130"} - any of them
 //
-// lang: the language c³ is shown in - en, es, fr, de
+// lang:     the language c³ is shown in - en, es, fr, de
+// textSize: the size of c³'s text, in percent of its own - 90, 100, 115, 130, 150, 175, 200
 //
 static void uiMember(Doc* docP, const char* name, const char* value, bool* changedP)
 {
@@ -785,6 +786,7 @@ bool configUiSet(char* body, char* errBuf, int errLen)
   Doc         doc;
   const char* lastPage;
   const char* lang;
+  const char* textSize;
   bool        ok      = false;
   bool        changed = false;
 
@@ -799,10 +801,25 @@ bool configUiSet(char* body, char* errBuf, int errLen)
     goto done;
   if (stringMember(bodyP, "lang", false, 8, &lang, errBuf, errLen) == false)
     goto done;
-  if ((lastPage == NULL) && (lang == NULL))
-  {
-    snprintf(errBuf, errLen, "\"lastPage\" or \"lang\" is needed");
+  if (stringMember(bodyP, "textSize", false, 8, &textSize, errBuf, errLen) == false)
     goto done;
+  if ((lastPage == NULL) && (lang == NULL) && (textSize == NULL))
+  {
+    snprintf(errBuf, errLen, "\"lastPage\", \"lang\" or \"textSize\" is needed");
+    goto done;
+  }
+  if (textSize != NULL)
+  {
+    const char* sizes[] = { "90", "100", "115", "130", "150", "175", "200" };
+    bool        known   = false;
+
+    for (unsigned int ix = 0; ix < sizeof(sizes) / sizeof(sizes[0]); ix++)
+      known = known || (strcmp(textSize, sizes[ix]) == 0);
+    if (known == false)
+    {
+      snprintf(errBuf, errLen, "\"textSize\": 90, 100, 115, 130, 150, 175 or 200");
+      goto done;
+    }
   }
   if ((lang != NULL) && (strcmp(lang, "en") != 0) && (strcmp(lang, "es") != 0) && (strcmp(lang, "fr") != 0) && (strcmp(lang, "de") != 0))
   {
@@ -812,6 +829,7 @@ bool configUiSet(char* body, char* errBuf, int errLen)
 
   uiMember(&doc, "lastPage", lastPage, &changed);
   uiMember(&doc, "lang",     lang,     &changed);
+  uiMember(&doc, "textSize", textSize, &changed);
   ok = changed ? commit(&doc, errBuf, errLen) : true;
 
  done:

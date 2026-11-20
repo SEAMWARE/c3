@@ -7,13 +7,13 @@
 #page-dashboard { gap: 12px; }
 
 .db-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.db-doing { font-size: 14px; color: var(--muted); }
+.db-doing { font-size: 1.05rem; color: var(--muted); }
 .db-log {
-  margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; font-family: var(--mono); font-size: 12px; line-height: 17px;
+  margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; font-family: var(--mono); font-size: 0.9rem; line-height: 1.1875rem;
   white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2);
 }
 
-.db-powered { font-size: 12px; color: var(--dim); }
+.db-powered { font-size: 0.9rem; color: var(--dim); }
 .db-powered a { color: var(--muted); }
 
 /* WireCloud runs: a bar, then the frame filling the rest of the page */
@@ -23,7 +23,7 @@
 }
 .db-bar .rdot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .db-bar .db-name { font-weight: 600; }
-.db-bar .db-url { font-size: 13px; color: var(--muted); }
+.db-bar .db-url { font-size: 0.975rem; color: var(--muted); }
 .db-bar .grow { flex: 1; }
 .db-bar a.btn { text-decoration: none; }
 
