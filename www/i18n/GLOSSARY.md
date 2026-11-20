@@ -21,6 +21,9 @@ Claude, Claude Code, corMcp, corCep, AI Assist, Coraine Assistant, Docker, Podma
 
 ## The terms
 
+A broker is started, kept running and stopped - never "executed": *ejecutar* / *exécuter* / *ausführen* only
+for what ends by itself (`ls`, a build).
+
 | English | Spanish | French | German |
 |---|---|---|---|
 | entity | entidad | entité | Entität |
@@ -44,6 +47,9 @@ Claude, Claude Code, corMcp, corCep, AI Assist, Coraine Assistant, Docker, Podma
 | build (noun) | compilación | compilation | Build |
 | to build / compile | compilar | compiler | bauen |
 | feature switch | opción de compilación | option de compilation | Build-Option |
+| run (a broker, a service, c³ - something long-lived) | arrancar / parar; funciona, en marcha | démarrer / arrêter; tourne, en marche | starten / stoppen; läuft |
+| run, execute (a command, a build - it ends by itself) | ejecutar | exécuter | ausführen |
+| Run brokers (Operate's heading) | Arrancar y parar brokers | Démarrer et arrêter des brokers | Broker betreiben |
 | Explore (page) | Explorar | Explorer | Erkunden |
 | Compile (page) | Compilar | Compiler | Kompilieren |
 | Operate (page) | Operar | Exploiter | Betreiben |
