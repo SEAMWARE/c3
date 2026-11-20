@@ -111,6 +111,45 @@ export function c3Tools(connect, ctx = {}) {
 
   const shown = (id) => connect.byId.has(id);
 
+  //
+  // The broker of this conversation: a read, a write (an error the model reads, unless 'soft'), a subscription's
+  // dry run - the entities it matches now
+  //
+  const short = (id) => String(id).split(':').pop();
+  const plain = (p) => decodeURIComponent(p);                  // a path as the user reads it
+  const brokerError = (r) => new Error(`the broker answered ${r.status}: ${(r.body && (r.body.title || '')) || ''}${r.body && r.body.detail ? ' - ' + r.body.detail : ''}`);
+  const read = async (path) => { const r = await api.brokerGet(connect.broker, path); if (!r.ok) throw brokerError(r); return r.body; };
+  const write = async (method, path, body, soft = false) => {
+    const ct = body && body['@context'] ? 'application/ld+json' : 'application/json';
+    const r = await api.brokerWrite(connect.broker, method, path, body, ct);
+    if (!r.ok && !soft) throw brokerError(r);
+    return r;
+  };
+  const SYSTEM = ['createdAt', 'modifiedAt', 'status', 'notification.timesSent', 'notification.timesFailed', 'notification.lastNotification', 'notification.lastFailure', 'notification.lastSuccess', 'notification.status', 'notification.lastErrorReason', 'notification.consecutiveErrors'];
+  const clean = (sub) => {
+    const c = JSON.parse(JSON.stringify(sub));
+    for (const k of SYSTEM) { const [a, b] = k.split('.'); if (b) { if (c[a]) delete c[a][b]; } else delete c[a]; }
+    return c;
+  };
+  const recreate = async (path, sub) => { await write('DELETE', path); await write('POST', '/ngsi-ld/v1/subscriptions', clean(sub)); };
+  const undoCreate = (ids) => (ids.length ? async () => { for (const id of ids) await write('DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id), undefined, true); return `${ids.length} deleted`; } : null);
+  const matchesNow = async (sub) => {
+    const out = [];
+    for (const e of sub.entities || []) {
+      if (!e.type) continue;
+      const q = new URLSearchParams({ type: e.type, count: 'true', limit: '0' });
+      if (e.id) q.set('id', e.id);
+      if (e.idPattern) q.set('idPattern', e.idPattern);
+      if (sub.q) q.set('q', sub.q);
+      try {
+        const r = await api.brokerGet(connect.broker, '/ngsi-ld/v1/entities?' + q);
+        const n = r.ok ? r.headers.get('NGSILD-Results-Count') : null;
+        out.push(n !== null ? `dry run: ${n} ${e.type} entit${n === '1' ? 'y matches' : 'ies match'}${sub.q ? ' (with its q)' : ''} now` : `dry run: the broker answered ${r.status} to the query of ${e.type}${sub.q ? ' with its q' : ''}`);
+      } catch { /* no dry run */ }
+    }
+    return out;
+  };
+
   const COMMANDS = [
     {
       name: 'get_view',
@@ -422,6 +461,116 @@ export function c3Tools(connect, ctx = {}) {
         await api.runStop(name);
         if (ctx.run) ctx.run.refresh();
         return { text: `${name} stopping`, undo: async () => { await api.runStartKept(name); if (ctx.run) ctx.run.refresh(); return `${name} started again`; } };
+      },
+    },
+    //
+    // Writes to the broker - each one shown to the user as the exact request, with what it would do now (the
+    // dry run: the entities a subscription matches, an index's cost), and done only on "Do it"; undo takes it back
+    //
+    {
+      name: 'create_subscription',
+      description: 'Create a subscription on the broker of this conversation. The user sees the exact request, and how many entities it matches now, and says yes or no. Names as in the broker\'s data: the short names of the core @context, or full IRIs, or the body\'s own "@context". Undo deletes it.',
+      inputSchema: { type: 'object', properties: { subscription: { type: 'object', description: 'The NGSI-LD Subscription (type "Subscription"; an id is given when it has none)' } }, required: ['subscription'] },
+      async run({ subscription }) {
+        const sub = { type: 'Subscription', ...subscription };
+        if (!sub.id) sub.id = 'urn:ngsi-ld:Subscription:' + Math.random().toString(36).slice(2, 10);
+        const lines = [`POST /ngsi-ld/v1/subscriptions${connect.tenant ? '   (tenant ' + connect.tenant + ')' : ''}`, JSON.stringify(sub, null, 2), ...(await matchesNow(sub))];
+        if (!(await ctx.confirm({ title: 'Create this subscription?', lines }))) return { text: 'the user declined - not created', declined: true };
+        await write('POST', '/ngsi-ld/v1/subscriptions', sub);
+        return { text: `created: ${sub.id}`, undo: async () => { await write('DELETE', '/ngsi-ld/v1/subscriptions/' + encodeURIComponent(sub.id)); return `${sub.id} deleted`; } };
+      },
+    },
+    {
+      name: 'update_subscription',
+      description: 'Change a subscription: a fix (the watched attribute, the q, the entity type, the endpoint), isActive true or false, a new expiresAt. Only the members given change. The user sees the subscription before and after and says yes or no. Undo puts the old members back.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' }, changes: { type: 'object', description: 'The members to change, e.g. {"watchedAttributes": ["temperature"]}' } }, required: ['id', 'changes'] },
+      async run({ id, changes }) {
+        const path = '/ngsi-ld/v1/subscriptions/' + encodeURIComponent(id);
+        const was = await read(path);
+        const before = {};
+        for (const k of Object.keys(changes)) before[k] = k in was ? was[k] : null;
+        const lines = [`PATCH ${plain(path)}`, 'now:   ' + JSON.stringify(before), 'after: ' + JSON.stringify(changes), ...(await matchesNow({ ...was, ...changes }))];
+        if (!(await ctx.confirm({ title: `Change the subscription ${short(id)}?`, lines }))) return { text: 'the user declined - unchanged', declined: true };
+        await write('PATCH', path, changes);
+        const back = {};
+        const gone = [];
+        for (const [k, v] of Object.entries(before)) { if (v === null) gone.push(k); else back[k] = v; }
+        return {
+          text: `${short(id)} changed`,
+          undo: async () => {
+            if (Object.keys(back).length) await write('PATCH', path, back);
+            if (gone.length) { const now = await read(path); for (const k of gone) delete now[k]; await recreate(path, now); }
+            return `${short(id)} as it was`;
+          },
+        };
+      },
+    },
+    {
+      name: 'delete_subscription',
+      description: 'Delete a subscription (the user is asked first). Undo creates it again, as it was.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      async run({ id }) {
+        const path = '/ngsi-ld/v1/subscriptions/' + encodeURIComponent(id);
+        const was = await read(path);
+        if (!(await ctx.confirm({ title: `Delete the subscription ${short(id)}?`, lines: [`DELETE ${plain(path)}`, JSON.stringify(was, null, 2)] }))) return { text: 'the user declined - not deleted', declined: true };
+        await write('DELETE', path);
+        return { text: `${short(id)} deleted`, undo: async () => { await write('POST', '/ngsi-ld/v1/subscriptions', clean(was)); return `${short(id)} created again`; } };
+      },
+    },
+    {
+      name: 'create_index',
+      description: 'Declare an index on an attribute (coraine\'s admin API, POST /admin/indexes) - after you have read when one pays off (search_docs "declared index"). The user sees the request and its cost and says yes or no. On corDB a change rebuilds every declared index while writes wait: for a permanent one, advise --dbValueIndexes at start as well. Undo drops it.',
+      inputSchema: { type: 'object', properties: { attribute: { type: 'string' }, type: { type: 'string', description: 'Only this entity type\'s queries (optional)' }, tenant: { type: 'string', description: 'Only this tenant (optional; default: every tenant)' } }, required: ['attribute'] },
+      async run({ attribute, type, tenant }) {
+        const body = { attribute };
+        if (type) body.type = type;
+        if (tenant) body.tenant = tenant;
+        const have = await read('/admin/indexes').catch(() => null);
+        const n = Array.isArray(have) ? have.length : null;
+        const lines = ['POST /admin/indexes', JSON.stringify(body),
+          'The index is built now, in every tenant it covers; a large store takes a while.' + (n ? ` On corDB the ${n} declared already are rebuilt with it, writes waiting meanwhile.` : '')];
+        if (!(await ctx.confirm({ title: `Declare an index on ${attribute}?`, lines }))) return { text: 'the user declined - not declared', declined: true };
+        const r = await write('POST', '/admin/indexes', body);
+        const loc = r.location || '';
+        return { text: `declared${loc ? ': ' + loc : ''} - GET /admin/indexes (list_indexes) shows its accesses`, undo: loc ? async () => { await write('DELETE', loc.replace(/^https?:\/\/[^/]+/, '')); return `the index on ${attribute} dropped`; } : null };
+      },
+    },
+    {
+      name: 'update_entity',
+      description: 'Change attributes of one entity (PATCH its attrs) - e.g. a value set right, an attribute added. The user sees the values before and after and says yes or no. Undo writes the old values back (an added attribute is deleted).',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' }, attrs: { type: 'object', description: 'NGSI-LD attributes: {"temperature": {"type": "Property", "value": 21}}' } }, required: ['id', 'attrs'] },
+      async run({ id, attrs }) {
+        const path = '/ngsi-ld/v1/entities/' + encodeURIComponent(id);
+        const was = await read(path + '?attrs=' + Object.keys(attrs).map(encodeURIComponent).join(','));
+        const before = {};
+        for (const k of Object.keys(attrs)) before[k] = k in was ? was[k] : null;
+        const lines = [`PATCH ${plain(path)}/attrs`, 'now:   ' + JSON.stringify(before), 'after: ' + JSON.stringify(attrs)];
+        if (!(await ctx.confirm({ title: `Change ${short(id)}?`, lines }))) return { text: 'the user declined - unchanged', declined: true };
+        await write('PATCH', path + '/attrs', attrs);
+        return {
+          text: `${short(id)} changed`,
+          undo: async () => {
+            const back = Object.fromEntries(Object.entries(before).filter(([, v]) => v !== null));
+            if (Object.keys(back).length) await write('PATCH', path + '/attrs', back);
+            for (const [k, v] of Object.entries(before)) if (v === null) await write('DELETE', path + '/attrs/' + encodeURIComponent(k));
+            return `${short(id)} as it was`;
+          },
+        };
+      },
+    },
+    {
+      name: 'create_entities',
+      description: 'Create entities (up to 100) - e.g. after modelling the user\'s data on a Smart Data Model. The user sees them and says yes or no. Undo deletes them.',
+      inputSchema: { type: 'object', properties: { entities: { type: 'array', items: { type: 'object' }, minItems: 1, maxItems: 100 } }, required: ['entities'] },
+      async run({ entities }) {
+        const lines = [`POST /ngsi-ld/v1/entityOperations/create - ${entities.length} entit${entities.length === 1 ? 'y' : 'ies'}`, JSON.stringify(entities.length > 3 ? [...entities.slice(0, 3), `... ${entities.length - 3} more`] : entities, null, 2)];
+        if (!(await ctx.confirm({ title: `Create ${entities.length === 1 ? short(entities[0].id || '') || 'this entity' : entities.length + ' entities'}?`, lines }))) return { text: 'the user declined - not created', declined: true };
+        const made = [];
+        for (const e of entities) {
+          const r = await write('POST', '/ngsi-ld/v1/entities', e, true);
+          if (r.ok) made.push(e.id); else return { text: `created ${made.length}; ${e.id} refused: ${r.status} ${r.body && (r.body.title || '')} ${r.body && (r.body.detail || '')}`, undo: undoCreate(made) };
+        }
+        return { text: `created ${made.length}`, undo: undoCreate(made) };
       },
     },
     {
