@@ -101,13 +101,13 @@ export const buildDelete         = (name) => call('DELETE', '/api/builds/' + enc
 // goes with it as NGSILD-Tenant, its token the backend adds. The answer:
 //   { ok, status, headers, body, reached }
 // reached is false when the backend could not reach the broker at all (the proxy's own 502); body is
-// the parsed JSON, or null.
+// the parsed JSON, or null. 'tenant' given: that tenant instead ('' the default one) - corCep's rules tenant.
 //
-export async function brokerGet(broker, pathAndQuery) {
+export async function brokerGet(broker, pathAndQuery, tenant) {
   let response;
   try {
     const headers = { 'X-C3-Broker': broker };
-    if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
+    if (tenant !== undefined) { if (tenant) headers['NGSILD-Tenant'] = tenant; } else if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
     response = await fetch('/api/proxy' + pathAndQuery, { headers });
   } catch (e) {
     return { ok: false, status: 0, headers: new Headers(), body: { title: 'c3 backend not reachable', detail: String(e.message || e) }, reached: false };
@@ -162,13 +162,13 @@ export const runOpcuaFilesWrite = (mapping) => call('POST', '/api/run/opcua/file
 //
 // pathAndQuery starts with /ngsi-ld/v1/entities; 'body' (an object, or undefined) is sent as JSON - with
 // 'contentType' (application/json by default; application/merge-patch+json for a merge). The answer as
-// brokerGet's, with 'location' (a create's Location).
+// brokerGet's, with 'location' (a create's Location). 'tenant' as brokerGet's.
 //
-export async function brokerWrite(broker, method, pathAndQuery, body, contentType = 'application/json') {
+export async function brokerWrite(broker, method, pathAndQuery, body, contentType = 'application/json', tenant) {
   let response;
   try {
     const headers = { 'X-C3-Broker': broker };
-    if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
+    if (tenant !== undefined) { if (tenant) headers['NGSILD-Tenant'] = tenant; } else if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
     const init = { method, headers };
     if (body !== undefined) {
       headers['Content-Type'] = contentType;

@@ -574,6 +574,39 @@ export function c3Tools(connect, ctx = {}) {
       },
     },
     {
+      name: 'save_rule',
+      description: 'Save a corCep automation rule (a Rule entity, in corCep\'s rules tenant - "cep" unless the user says otherwise): created, or replaced when it is there. '
+        + 'Always dry_run_rule it first when corMcp can; tell the user what the dry run showed. The user sees the rule (and the one it replaces) and says yes or no. '
+        + 'corCep picks it up within a second. Undo deletes a new rule, or puts the old one back. enabled false keeps a rule without running it.',
+      inputSchema: { type: 'object', properties: {
+        rule: { type: 'object', description: 'The Rule entity, normalized: {"id": "urn:ngsi-ld:Rule:<name>", "type": "Rule", "name": {"type": "Property", "value": "..."}, "when": {"type": "JsonProperty", "json": {...}}, "then": {"type": "JsonProperty", "json": [...]}}' },
+        rulesTenant: { type: 'string', description: 'corCep\'s --rules-tenant, default cep' },
+      }, required: ['rule'] },
+      async run({ rule, rulesTenant }) {
+        const tenant = rulesTenant || 'cep';
+        if (!rule || rule.type !== 'Rule' || typeof rule.id !== 'string' || !rule.when || !rule.then) throw new Error('a Rule entity with id, type "Rule", when and then is needed');
+        const path = '/ngsi-ld/v1/entities/' + encodeURIComponent(rule.id);
+        const old = await api.brokerGet(connect.broker, path, tenant);
+        const was = old.ok ? old.body : null;
+        const lines = [`${was ? 'DELETE ' + plain(path) + ', then POST /ngsi-ld/v1/entities' : 'POST /ngsi-ld/v1/entities'}   (tenant ${tenant})`, JSON.stringify(rule, null, 2)];
+        if (was) lines.push('replaces:', JSON.stringify(clean(was), null, 2));
+        if (!(await ctx.confirm({ title: `${was ? 'Replace' : 'Save'} the rule ${short(rule.id)}?`, lines }))) return { text: 'the user declined - not saved', declined: true };
+        const put = async (method, p, body) => {
+          const r = await api.brokerWrite(connect.broker, method, p, body, 'application/json', tenant);
+          if (!r.ok) throw brokerError(r);
+        };
+        if (was) { await put('DELETE', path); await put('POST', '/ngsi-ld/v1/entities', rule); } else await put('POST', '/ngsi-ld/v1/entities', rule);
+        return {
+          text: `the rule ${short(rule.id)} ${was ? 'replaced' : 'saved'} in tenant ${tenant} - corCep reads it again; list_rules shows its fired count and lastError`,
+          undo: async () => {
+            await put('DELETE', path);
+            if (was) await put('POST', '/ngsi-ld/v1/entities', clean(was));
+            return was ? `the rule ${short(rule.id)} as it was` : `the rule ${short(rule.id)} deleted`;
+          },
+        };
+      },
+    },
+    {
       name: 'connect_explore',
       description: 'Explore connects to a broker (its URL; a tenant, or the default one) - e.g. one just started. The conversation goes on with that broker. Undo connects Explore back.',
       inputSchema: { type: 'object', properties: { url: { type: 'string' }, tenant: { type: 'string' } }, required: ['url'] },

@@ -220,14 +220,22 @@ bool assistLocalInit(void)
     snprintf(docsDirs, sizeof(docsDirs), "%s", docs);
   else
   {
-    char d1[1200];
-    char d2[1300];
-    snprintf(d1, sizeof(d1), "%s/coraine/doc", C3_CLONES_DIR);
-    snprintf(d2, sizeof(d2), "%.*s/knowledge", (int) (strlen(path) - strlen("/system.md")), path);
-    if ((C3_CLONES_DIR[0] != 0) && (access(d1, R_OK) == 0))
-      snprintf(docsDirs, sizeof(docsDirs), "%s", d1);
-    if (access(d2, R_OK) == 0)
-      snprintf(docsDirs + strlen(docsDirs), sizeof(docsDirs) - strlen(docsDirs), "%s%s", (docsDirs[0] != 0) ? ":" : "", d2);
+    //
+    // coraine's manual, its release notes (CHANGELOG.md, and changelog.d/: what is merged but not released) - for
+    // "what changes if I upgrade" - corCep's README (the rule language), and the knowledge base
+    //
+    static const char* clone[] = { "coraine/doc", "coraine/CHANGELOG.md", "coraine/changelog.d", "corCep/README.md" };
+    char               d[1300];
+
+    for (unsigned int ix = 0; (C3_CLONES_DIR[0] != 0) && (ix < sizeof(clone) / sizeof(clone[0])); ix++)
+    {
+      snprintf(d, sizeof(d), "%s/%s", C3_CLONES_DIR, clone[ix]);
+      if (access(d, R_OK) == 0)
+        snprintf(docsDirs + strlen(docsDirs), sizeof(docsDirs) - strlen(docsDirs), "%s%s", (docsDirs[0] != 0) ? ":" : "", d);
+    }
+    snprintf(d, sizeof(d), "%.*s/knowledge", (int) (strlen(path) - strlen("/system.md")), path);
+    if (access(d, R_OK) == 0)
+      snprintf(docsDirs + strlen(docsDirs), sizeof(docsDirs) - strlen(docsDirs), "%s%s", (docsDirs[0] != 0) ? ":" : "", d);
   }
 
   instructions = fileText(path);                 // there now? (read again with every question: a git pull takes effect at once)
@@ -759,6 +767,21 @@ static bool cfgWrite(Ask* aP, char* errBuf, int errLen)
   {
     strAdd(&s, ", \"--docs\", ");
     strAddJson(&s, docsDirs);
+  }
+  //
+  // corCep: the tenant its rules are in (list_rules), and where it answers (dry_run_rule) - $C3_CEP_RULES_TENANT, $C3_CEP
+  //
+  const char* cep         = getenv("C3_CEP");
+  const char* rulesTenant = getenv("C3_CEP_RULES_TENANT");
+  if ((cep != NULL) && (cep[0] != 0))
+  {
+    strAdd(&s, ", \"--cep\", ");
+    strAddJson(&s, cep);
+  }
+  if ((rulesTenant != NULL) && (rulesTenant[0] != 0))
+  {
+    strAdd(&s, ", \"--rules-tenant\", ");
+    strAddJson(&s, rulesTenant);
   }
   if (aP->tenant[0] != 0)
   {
