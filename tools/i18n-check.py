@@ -101,7 +101,7 @@ def suspects():
         s = m.group(1)[1:-1]
         if re.search(r"[A-Za-z]{3,} [A-Za-z]", s) or re.match(r"^[A-Z][a-z]{2,}", s):
           before = line[:m.start(1)]
-          if not re.search(r"(?<![\w.$])tk?\(\s*$", before):
+          if not re.search(r"(?<![\w.$])(tk?\(\s*|plural\([^()]*,\s*(" + STR + r"\s*,\s*)?)$", before):
             out.append(f"{f}:{n}: {s[:90]}")
   return out
 

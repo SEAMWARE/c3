@@ -10,6 +10,7 @@
 // TRoE) shows the live values only, from the moment it was selected.
 //
 import * as api from './api.js';
+import { t, plural } from './i18n.js';
 
 const WINDOW_MS = 10 * 60 * 1000;
 const POINTS_MAX = 600;                          // per attribute
@@ -74,7 +75,7 @@ export class History {
     if (id !== this.id || broker !== this.broker) return;
     if (!r.ok || !r.body || typeof r.body !== 'object') {
       this.state = 'live';
-      this.why = r.status === 0 || r.reached === false ? 'the broker is not reachable' : `the broker has no history for it (${r.status}${r.body && r.body.title ? ' ' + r.body.title : ''})`;
+      this.why = r.status === 0 || r.reached === false ? t('the broker is not reachable') : t('the broker has no history for it ({status})', { status: `${r.status}${r.body && r.body.title ? ' ' + r.body.title : ''}` });
       this.onLoaded();
       return;
     }
@@ -112,12 +113,12 @@ export class History {
     const box = el('details', 'history');
     box.open = this.open !== false;
     box.addEventListener('toggle', () => { this.open = box.open; });
-    const sum = el('summary', null, 'History');
+    const sum = el('summary', null, t('History'));
     box.append(sum);
     if (!e || e.id !== this.id) return box;
-    if (this.state === 'none') { sum.append(el('span', 'hnote', 'no numeric Properties')); return box; }
-    sum.append(el('span', 'hnote', this.state === 'loading' ? 'reading…' : this.state === 'live' ? 'since selected' : 'last 10 minutes'));
-    if (this.state === 'live') box.append(el('p', 'hwhy', `Live values only: ${this.why}. A broker with TRoE (coraine --troe corDB) answers the last 10 minutes.`));
+    if (this.state === 'none') { sum.append(el('span', 'hnote', t('no numeric Properties'))); return box; }
+    sum.append(el('span', 'hnote', this.state === 'loading' ? t('reading…') : this.state === 'live' ? t('since selected') : t('last 10 minutes')));
+    if (this.state === 'live') box.append(el('p', 'hwhy', t('Live values only: {why}. A broker with TRoE (coraine --troe corDB) answers the last 10 minutes.', { why: this.why })));
 
     const now = Date.now();
     const t0 = now - WINDOW_MS;
@@ -158,12 +159,12 @@ export class History {
         dot.setAttribute('r', '2.5');
         dot.setAttribute('class', 'sd');
         svg.append(area, line, dot);
-        svg.setAttribute('aria-label', `${a}: ${pts.length} values, from ${fmt(lo)} to ${fmt(hi)}`);
-        const range = el('div', 'hrange', `${fmt(Math.min(...pts.map((p) => p[1])))} – ${fmt(Math.max(...pts.map((p) => p[1])))}${unit} · ${pts.length} value${pts.length === 1 ? '' : 's'}`);
+        svg.setAttribute('aria-label', plural(pts.length, '{attr}: {n} value, from {lo} to {hi}', '{attr}: {n} values, from {lo} to {hi}', { attr: a, lo: fmt(lo), hi: fmt(hi) }));
+        const range = el('div', 'hrange', `${fmt(Math.min(...pts.map((p) => p[1])))} – ${fmt(Math.max(...pts.map((p) => p[1])))}${unit} · ` + plural(pts.length, '{n} value', '{n} values'));
         row.append(svg, range);
       } else {
-        svg.setAttribute('aria-label', `${a}: no values in the last 10 minutes`);
-        row.append(svg, el('div', 'hrange', 'no values in the last 10 minutes'));
+        svg.setAttribute('aria-label', t('{attr}: no values in the last 10 minutes', { attr: a }));
+        row.append(svg, el('div', 'hrange', t('no values in the last 10 minutes')));
       }
       box.append(row);
     }

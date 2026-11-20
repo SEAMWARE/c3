@@ -1,0 +1,58 @@
+# c³'s words in Spanish, French and German
+
+The catalogs (`es.json`, `fr.json`, `de.json`) and the Coraine Assistant use these words, so that c³ and its
+assistant say the same thing. Change a word here first, then everywhere.
+
+## Address
+
+| | Spanish | French | German |
+|---|---|---|---|
+| the user | *tú* (as most software in Spain) | *vous* | *Sie* |
+| buttons | infinitive: *Conectar*, *Guardar* | infinitive: *Connecter*, *Enregistrer* | infinitive: *Verbinden*, *Speichern* |
+
+## Kept in English
+
+Product and protocol names: c³, coraine, Seamware, NGSI-LD, FIWARE, Smart Data Models, MQTT, DDS, ROS 2, OPC UA,
+Claude, Claude Code, corMcp, corCep, AI Assist, Coraine Assistant, Docker, Podman.
+**broker** and **tenant** (the FIWARE community writes them so in all three languages), **bridge** (as the
+`--bridges` option), **build** in German. Everything that is code: option names (`--port`), feature switches
+(`COR_FEATURE_X`), HTTP methods and paths, JSON members, NGSI-LD keywords used as such (`Property`,
+`Relationship`, `GeoProperty`, `observedAt`, `keyValues`), entity ids, types and attribute names.
+
+## The terms
+
+| English | Spanish | French | German |
+|---|---|---|---|
+| entity | entidad | entité | Entität |
+| attribute | atributo | attribut | Attribut |
+| property (in prose) | propiedad | propriété | Eigenschaft |
+| relationship (in prose) | relación | relation | Beziehung |
+| type (entity type) | tipo | type | Typ |
+| subscription | suscripción | abonnement | Abonnement |
+| notification | notificación | notification | Benachrichtigung |
+| registration (context source) | registro | enregistrement | Registrierung |
+| context source | fuente de contexto | source de contexte | Kontextquelle |
+| query | consulta | requête | Abfrage |
+| index | índice | index | Index |
+| temporal history | histórico temporal | historique temporel | zeitlicher Verlauf |
+| store (the database) | almacén | stockage | Speicher |
+| plugin | plugin | plugin | Plugin |
+| channel (of a bridge) | canal | canal | Kanal |
+| rule (corCep) | regla | règle | Regel |
+| dry run | simulación | simulation | Probelauf |
+| token | token | jeton | Token |
+| build (noun) | compilación | compilation | Build |
+| to build / compile | compilar | compiler | bauen |
+| feature switch | opción de compilación | option de compilation | Build-Option |
+| Explore (page) | Explorar | Explorer | Erkunden |
+| Compile (page) | Compilar | Compiler | Kompilieren |
+| Operate (page) | Operar | Exploiter | Betreiben |
+| Documentation (page) | Documentación | Documentation | Dokumentation |
+| graph / map (views) | grafo / mapa | graphe / carte | Graph / Karte |
+| highlight | resaltar | mettre en évidence | hervorheben |
+| Connect | Conectar | Connecter | Verbinden |
+| Undo | Deshacer | Annuler | Rückgängig |
+| Do it (confirm a change) | Hacerlo | Exécuter | Ausführen |
+| No (decline a change) | No | Non | Nein |
+| Settings | Ajustes | Paramètres | Einstellungen |
+| Language | Idioma | Langue | Sprache |

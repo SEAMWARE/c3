@@ -23,6 +23,7 @@ import { Live, isNullAttr } from './live.js';
 import { EntityEditor, NULL } from './editor.js';
 import { Alerts } from './alerts.js';
 import { History } from './history.js';
+import { t, plural } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -79,10 +80,9 @@ function el(tag, cls, text) {
   return e;
 }
 
-function plural(n, word, words = word + 's') {
-  return `${n} ${n === 1 ? word : words}`;
-}
-const entityCount = (n) => plural(n, 'entity', 'entities');
+const entityCount = (n) => plural(n, '{n} entity', '{n} entities');
+const typeCount = (n) => plural(n, '{n} type', '{n} types');
+const relCount = (n) => plural(n, '{n} relationship', '{n} relationships');
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -236,12 +236,12 @@ export class Connect {
     //
     this.graph.onBackMenu = (at) => {
       if (!this.broker) return;
-      openMenu({ x: at.x, y: at.y, label: 'The graph', items: [{ label: 'Create entity…', action: () => this.create() }] });
+      openMenu({ x: at.x, y: at.y, label: t('The graph'), items: [{ label: t('Create entity…'), action: () => this.create() }] });
     };
     this.emap.onBackMenu = (ll, at) => {
       if (!this.broker) return;
-      openMenu({ x: at.x, y: at.y, label: 'The map', items: [
-        { label: 'Create entity here…', hint: `${ll[0]}, ${ll[1]}`, action: () => this.create({ location: { type: 'GeoProperty', value: { type: 'Point', coordinates: ll } } }) },
+      openMenu({ x: at.x, y: at.y, label: t('The map'), items: [
+        { label: t('Create entity here…'), hint: `${ll[0]}, ${ll[1]}`, action: () => this.create({ location: { type: 'GeoProperty', value: { type: 'Point', coordinates: ll } } }) },
       ] });
     };
     this.offline = new OfflinePanel({ map: this.emap, toast: (t) => this.toast(t), onAreas: (areas, fonts) => this.emap.setAreas(areas, fonts) });
@@ -325,7 +325,7 @@ export class Connect {
     $('id-clear').onclick = () => idApply('');
     $('mode-back').onclick = () => this.back();
     $('json-close').onclick = () => this.closeJson();
-    $('json-copy').onclick = () => this.copy($('json-pre').textContent, 'the JSON');
+    $('json-copy').onclick = () => this.copy($('json-pre').textContent, t('the JSON'));
     $('jsonpanel').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeJson(); }
     });
@@ -337,7 +337,7 @@ export class Connect {
       if (e.target === document.body && !$('app').hidden && this.view === 'graph') this.graph.onKey(e);
     });
 
-    this.empty('Connect to a broker', 'Enter its URL above - for example http://localhost:1026. c³ reads its entities with ordinary NGSI-LD queries, through the backend.');
+    this.empty(t('Connect to a broker'), t('Enter its URL above - for example http://localhost:1026. c³ reads its entities with ordinary NGSI-LD queries, through the backend.'));
   }
 
   //
@@ -389,7 +389,7 @@ export class Connect {
   // tenantText - "the default tenant", or "tenant <name>"
   //
   tenantText() {
-    return this.tenant ? `tenant ${this.tenant}` : 'the default tenant';
+    return this.tenant ? t('tenant {tenant}', { tenant: this.tenant }) : t('the default tenant');
   }
 
   //
@@ -423,27 +423,38 @@ export class Connect {
   }
 
   tokenText(st) {
-    if (!st) return 'c³ could not say.';
-    const tail = (i) => (i.tail ? ` (…${i.tail}, ${i.length} characters)` : '');
+    if (!st) return t('c³ could not say.');
+    const tail = (i) => (i.tail ? ' ' + t('(…{tail}, {n} characters)', { tail: i.tail, n: i.length }) : '');
     if (st.login) {
-      const who = st.login.user ? ` as ${st.login.user}` : '';
+      const user = st.login.user;
+      const issuer = st.login.issuer;
+      const error = st.login.error ? ` ${st.login.error}.` : '';
       if (st.login.credential) {
         const until = new Date(st.login.credential.expiresAt * 1000).toLocaleString();
-        return `Logged in${who} at ${st.login.issuer}, with the credential ${st.login.credential.type} (until ${until}) - c³ presents it to the verifier, held by ${st.login.credential.holder.slice(0, 20)}…, and renews the token.` + (st.login.error ? ` ${st.login.error}.` : '');
+        const v = { user, issuer, credential: st.login.credential.type, until, holder: st.login.credential.holder.slice(0, 20) };
+        return (user
+          ? t('Logged in as {user} at {issuer}, with the credential {credential} (until {until}) - c³ presents it to the verifier, held by {holder}…, and renews the token.', v)
+          : t('Logged in at {issuer}, with the credential {credential} (until {until}) - c³ presents it to the verifier, held by {holder}…, and renews the token.', v)) + error;
       }
-      const renew = st.login.refreshes ? 'renewed by c³ until the provider ends the session' : 'not renewable - log in again when it expires';
-      return `Logged in${who} at ${st.login.issuer} - its token ${renew}.` + (st.login.error ? ` ${st.login.error}.` : '');
+      if (st.login.refreshes) {
+        return (user
+          ? t('Logged in as {user} at {issuer} - its token renewed by c³ until the provider ends the session.', { user, issuer })
+          : t('Logged in at {issuer} - its token renewed by c³ until the provider ends the session.', { issuer })) + error;
+      }
+      return (user
+        ? t('Logged in as {user} at {issuer} - its token not renewable - log in again when it expires.', { user, issuer })
+        : t('Logged in at {issuer} - its token not renewable - log in again when it expires.', { issuer })) + error;
     }
-    if (st.own) return st.own.source === 'remembered' ? `Its own token, remembered on this machine${tail(st.own)}.` : `Its own token, for as long as c³ runs${tail(st.own)}.`;
-    if (st.def) return st.def.source === 'file' ? `c³'s default, from ${st.tokenFile}${tail(st.def)} - read again when the file changes.` : `c³'s default, from $C3_TOKEN${tail(st.def)}.`;
-    return st.tokenFile ? `None - ${st.tokenFile} holds no token. Requests go without one.` : 'None - requests go without one.';
+    if (st.own) return st.own.source === 'remembered' ? t('Its own token, remembered on this machine{tail}.', { tail: tail(st.own) }) : t('Its own token, for as long as c³ runs{tail}.', { tail: tail(st.own) });
+    if (st.def) return st.def.source === 'file' ? t("c³'s default, from {file}{tail} - read again when the file changes.", { file: st.tokenFile, tail: tail(st.def) }) : t("c³'s default, from $C3_TOKEN{tail}.", { tail: tail(st.def) });
+    return st.tokenFile ? t('None - {file} holds no token. Requests go without one.', { file: st.tokenFile }) : t('None - requests go without one.');
   }
 
   async tokenShow() {
     const st = await this.tokenState();
     const set = !!(st && (st.login || st.own || st.def));
     $('token-btn').classList.toggle('set', set);
-    $('token-btn').title = set ? 'An access token is sent to this broker' : 'No access token is sent to this broker';
+    $('token-btn').title = set ? t('An access token is sent to this broker') : t('No access token is sent to this broker');
     if (!$('tokenpop').hidden) {
       $('tp-state').textContent = this.tokenText(st);
       $('tp-forget').disabled = !(st && st.own);
@@ -473,7 +484,7 @@ export class Connect {
 
   async tokenOpen(why) {
     let url = $('broker-url').value.trim().replace(/\/+$/, '') || this.broker;
-    if (!url) { this.toast('Enter the broker\'s URL first'); $('broker-url').focus(); return; }
+    if (!url) { this.toast(t("Enter the broker's URL first")); $('broker-url').focus(); return; }
     if (!/^https?:\/\//.test(url)) url = 'http://' + url;
     this.tokenUrl = url;                         // the broker in the URL field - connected to or not yet
     $('tp-broker').textContent = url;
@@ -499,12 +510,12 @@ export class Connect {
     try {
       await api.brokerTokenSet(this.tokenUrl, token, $('tp-remember').checked);
     } catch (e) {
-      $('tp-state').textContent = 'Not taken: ' + e.message;
+      $('tp-state').textContent = t('Not taken: {error}', { error: e.message });
       return;
     }
     $('tp-token').value = '';
     this.tokenClose();
-    this.toast('The token is sent to ' + this.tokenUrl + ' from now on');
+    this.toast(t('The token is sent to {url} from now on', { url: this.tokenUrl }));
     this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
   }
 
@@ -529,17 +540,17 @@ export class Connect {
     const card = actions.parentElement;
     if (!card) return;
     if (md.coraine_auth === 'oidc' && issuer) {
-      card.insertBefore(el('p', null, `It takes the tokens of the OpenID provider ${issuer} - log in there.`), actions);
-      const login = el('button', 'btn primary', 'Log in…');
+      card.insertBefore(el('p', null, t('It takes the tokens of the OpenID provider {issuer} - log in there.', { issuer })), actions);
+      const login = el('button', 'btn primary', t('Log in…'));
       login.type = 'button';
-      login.onclick = () => this.tokenOpen(`The broker takes the tokens of ${issuer}.`);
+      login.onclick = () => this.tokenOpen(t('The broker takes the tokens of {issuer}.', { issuer }));
       actions.prepend(login);
       for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
     } else if (md.coraine_auth === 'fdsc') {
-      card.insertBefore(el('p', null, `It takes the Data Space Connector's tokens - from the verifier ${issuer || '(not named)'}, for a Verifiable Credential.`), actions);
-      const login = el('button', 'btn primary', 'Log in with a credential…');
+      card.insertBefore(el('p', null, t("It takes the Data Space Connector's tokens - from the verifier {verifier}, for a Verifiable Credential.", { verifier: issuer || t('(not named)') })), actions);
+      const login = el('button', 'btn primary', t('Log in with a credential…'));
       login.type = 'button';
-      login.onclick = () => this.tokenOpen('The broker takes the verifier\'s tokens: log in at the consumer\'s Keycloak, c³ gets the credential and presents it.');
+      login.onclick = () => this.tokenOpen(t("The broker takes the verifier's tokens: log in at the consumer's Keycloak, c³ gets the credential and presents it."));
       actions.prepend(login);
       for (const b of actions.querySelectorAll('.btn.primary')) if (b !== login) b.classList.remove('primary');
     }
@@ -553,14 +564,14 @@ export class Connect {
     const issuer = $('tp-issuer').value.trim().replace(/\/+$/, '');
     const clientId = $('tp-client').value.trim();
     const scope = $('tp-scope').value.trim() || 'openid';
-    if (!/^https?:\/\//.test(issuer)) { $('tp-state').textContent = 'The issuer: the provider\'s URL, e.g. https://keycloak.example.org/realms/city'; $('tp-issuer').focus(); return; }
-    if (!clientId) { $('tp-state').textContent = 'The client id: the provider\'s client c³ logs in as - a public one'; $('tp-client').focus(); return; }
+    if (!/^https?:\/\//.test(issuer)) { $('tp-state').textContent = t("The issuer: the provider's URL, e.g. https://keycloak.example.org/realms/city"); $('tp-issuer').focus(); return; }
+    if (!clientId) { $('tp-state').textContent = t("The client id: the provider's client c³ logs in as - a public one"); $('tp-client').focus(); return; }
     const login = { issuer, clientId, scope };
     if ($('tp-vc-on').checked) {
       const verifier = $('tp-verifier').value.trim();
       const credentialType = $('tp-cred').value.trim();
-      if (!/^https?:\/\//.test(verifier)) { $('tp-state').textContent = 'The verifier: its discovery document, e.g. https://verifier.example.org/services/data-service/.well-known/openid-configuration'; $('tp-verifier').focus(); return; }
-      if (!credentialType) { $('tp-state').textContent = 'The credential: its type at the issuer (credential_configuration_id), e.g. user-credential'; $('tp-cred').focus(); return; }
+      if (!/^https?:\/\//.test(verifier)) { $('tp-state').textContent = t('The verifier: its discovery document, e.g. https://verifier.example.org/services/data-service/.well-known/openid-configuration'); $('tp-verifier').focus(); return; }
+      if (!credentialType) { $('tp-state').textContent = t('The credential: its type at the issuer (credential_configuration_id), e.g. user-credential'); $('tp-cred').focus(); return; }
       login.fdsc = { verifier, credentialType, scope: $('tp-vpscope').value.trim() || 'default' };
     }
     const w = window.open('', 'c3-login', 'popup,width=520,height=720');
@@ -568,17 +579,17 @@ export class Connect {
       await api.brokerLoginSet(this.tokenUrl, login).catch(() => {});    // kept for next time - a broker not in the list yet keeps none
       const r = await api.oidcStart(this.tokenUrl, login);
       if (w) w.location = r.authorize; else location.href = r.authorize;
-      $('tp-state').textContent = 'Log in in the provider\'s window - this one hears when it is done.';
+      $('tp-state').textContent = t("Log in in the provider's window - this one hears when it is done.");
     } catch (e) {
       if (w) w.close();
-      $('tp-state').textContent = 'Not begun: ' + e.message;
+      $('tp-state').textContent = t('Not begun: {error}', { error: e.message });
     }
   }
 
   async loginDone(broker, ok) {
     if (!ok) { this.tokenShow(); return; }
     const st = await this.tokenShow();
-    if (st && st.login) this.toast(`Logged in${st.login.user ? ' as ' + st.login.user : ''} - its token goes to ${broker} from now on`);
+    if (st && st.login) this.toast(st.login.user ? t('Logged in as {user} - its token goes to {broker} from now on', { user: st.login.user, broker }) : t('Logged in - its token goes to {broker} from now on', { broker }));
     this.tokenClose();
     this.connect(broker, broker === this.broker ? this.tenant : undefined);
   }
@@ -587,17 +598,17 @@ export class Connect {
     try {
       await api.oidcLogout(this.tokenUrl);
     } catch (e) {
-      $('tp-state').textContent = 'Not logged out: ' + e.message;
+      $('tp-state').textContent = t('Not logged out: {error}', { error: e.message });
       return;
     }
     await this.tokenShow();
-    this.toast('Logged out - c³ forgot the tokens (the provider\'s session ends on its own)');
+    this.toast(t("Logged out - c³ forgot the tokens (the provider's session ends on its own)"));
   }
 
   //
   // ask - a question in a box of its own, answered by a button: true for the first
   //
-  ask(text, yes, no = 'Cancel') {
+  ask(text, yes, no = t('Cancel')) {
     return new Promise((resolve) => {
       const pop = document.createElement('div');
       pop.className = 'askpop';
@@ -632,7 +643,7 @@ export class Connect {
   async openWrite(what) {
     const st = await this.tokenState(this.broker);
     if (!st || st.login || st.own || st.def) return true;
-    return this.ask(`${this.broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete ${what}?`, 'Delete');
+    return this.ask(t('{broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete {what}?', { broker: this.broker, what }), t('Delete'));
   }
 
   //
@@ -647,20 +658,20 @@ export class Connect {
     const secret = el('label', null);
     const remove = el('button', 'iconbtn', '✕');
 
-    name.placeholder = 'name - X-API-Key';
+    name.placeholder = t('name - X-API-Key');
     name.value = h.name || '';
-    name.setAttribute('aria-label', 'Header name');
+    name.setAttribute('aria-label', t('Header name'));
     value.type = h.secret ? 'password' : 'text';
     value.value = h.secret ? '' : (h.value || '');
-    value.placeholder = (h.secret && h.kept) ? (h.tail ? `kept - …${h.tail}` : `kept - ${h.length} characters`) : 'value';
-    value.setAttribute('aria-label', 'Header value');
+    value.placeholder = (h.secret && h.kept) ? (h.tail ? t('kept - …{tail}', { tail: h.tail }) : t('kept - {n} characters', { n: h.length })) : t('value');
+    value.setAttribute('aria-label', t('Header value'));
     secretBox.type = 'checkbox';
     secretBox.checked = !!h.secret;
     secretBox.onchange = () => { value.type = secretBox.checked ? 'password' : 'text'; };
-    secret.append(secretBox, 'secret');
-    secret.title = 'A secret header\'s value stays in c³\'s backend';
+    secret.append(secretBox, t('secret'));
+    secret.title = t("A secret header's value stays in c³'s backend");
     remove.type = 'button';
-    remove.setAttribute('aria-label', 'Remove the header');
+    remove.setAttribute('aria-label', t('Remove the header'));
     remove.onclick = () => row.remove();
     for (const i of [name, value]) { i.autocomplete = 'off'; i.spellcheck = false; }
     row.kept = !!h.kept;                         // a secret value the backend has: an empty field keeps it
@@ -670,13 +681,13 @@ export class Connect {
 
   async headersShow() {
     let r;
-    try { r = await api.brokerHeaders(); } catch (e) { $('tp-hdr-state').textContent = 'c³ could not say: ' + e.message; return; }
+    try { r = await api.brokerHeaders(); } catch (e) { $('tp-hdr-state').textContent = t('c³ could not say: {error}', { error: e.message }); return; }
     const own = (r.brokers && r.brokers[this.tokenUrl]) || null;
     $('tp-hdr-rows').textContent = '';
     for (const h of own ? own.headers : []) this.headerRow({ ...h, kept: h.secret });
     $('tp-hdr-remember').checked = !!(own && own.remembered);
     $('tp-hdr-forget').disabled = !own;
-    $('tp-hdr-state').textContent = own ? `${own.headers.length} sent with every request${own.remembered ? ', remembered on this machine' : ', for as long as c³ runs'}.` : 'None.';
+    $('tp-hdr-state').textContent = !own ? t('None.') : own.remembered ? t('{n} sent with every request, remembered on this machine.', { n: own.headers.length }) : t('{n} sent with every request, for as long as c³ runs.', { n: own.headers.length });
   }
 
   async headersSet() {
@@ -692,11 +703,11 @@ export class Connect {
     try {
       await api.brokerHeadersSet(this.tokenUrl, headers, $('tp-hdr-remember').checked);
     } catch (e) {
-      $('tp-hdr-state').textContent = 'Not taken: ' + e.message;
+      $('tp-hdr-state').textContent = t('Not taken: {error}', { error: e.message });
       return;
     }
     await this.headersShow();
-    this.toast(headers.length ? `${plural(headers.length, 'header')} sent to ${this.tokenUrl} from now on` : 'No headers of its own');
+    this.toast(headers.length ? plural(headers.length, '{n} header sent to {url} from now on', '{n} headers sent to {url} from now on', { url: this.tokenUrl }) : t('No headers of its own'));
     this.connect(this.tokenUrl, this.tokenUrl === this.broker ? this.tenant : undefined);
   }
 
@@ -704,22 +715,22 @@ export class Connect {
     try {
       await api.brokerHeadersForget(this.tokenUrl);
     } catch (e) {
-      $('tp-hdr-state').textContent = 'Not forgotten: ' + e.message;
+      $('tp-hdr-state').textContent = t('Not forgotten: {error}', { error: e.message });
       return;
     }
     await this.headersShow();
-    this.toast('The headers are forgotten');
+    this.toast(t('The headers are forgotten'));
   }
 
   async tokenForget() {
     try {
       await api.brokerTokenForget(this.tokenUrl);
     } catch (e) {
-      $('tp-state').textContent = 'Not forgotten: ' + e.message;
+      $('tp-state').textContent = t('Not forgotten: {error}', { error: e.message });
       return;
     }
     await this.tokenShow();
-    this.toast('The token is forgotten');
+    this.toast(t('The token is forgotten'));
   }
 
   toast(text) {
@@ -776,15 +787,15 @@ export class Connect {
     $('reload-btn').disabled = false;
     $('notice').hidden = true;
     $('counts').textContent = '';
-    this.setState('busy', 'Discovering');
+    this.setState('busy', t('Discovering'));
 
-    const card = this.progressCard('Discovering', url + (tenant ? ` - tenant ${tenant}` : ''), 'Asking for the entity types…');
+    const card = this.progressCard(t('Discovering'), tenant ? t('{url} - tenant {tenant}', { url, tenant }) : url, t('Asking for the entity types…'));
     this.tokenShow();
 
     let disc;
     try {
       disc = await discover(url, (n, of) => {
-        if (ticket === this.loading) card.set(`${n} of ${plural(of, 'type')}`, n / Math.max(of, 1));
+        if (ticket === this.loading) card.set(plural(of, '{done} of {n} type', '{done} of {n} types', { done: n }), n / Math.max(of, 1));
       });
     } catch (err) {
       if (ticket !== this.loading) return;
@@ -874,13 +885,13 @@ export class Connect {
     this.loadedPicks = [];
     this.liveWatch();
     this.renderDiscovery();
-    this.setState('ok', 'Connected');
-    $('counts').textContent = `${plural(disc.types.length, 'type')} · ${entityCount(disc.total)}`;
+    this.setState('ok', t('Connected'));
+    $('counts').textContent = `${typeCount(disc.types.length)} · ${entityCount(disc.total)}`;
     const why = saved !== undefined
-      ? 'No types are picked for this broker.'
-      : `${url} holds ${entityCount(disc.total)} of ${plural(disc.types.length, 'type')} - more than c³ loads without asking (${SMALL_BROKER}).`;
-    if (disc.types.length === 0) this.empty('No entities', `${url} answered, and has no entities (in ${this.tenantText()}).`);
-    else this.overlay({ children: [el('h3', null, 'Choose what to see'), el('p', null, why), el('p', null, 'Tick the types on the left and press Load. The choice is kept for this broker.')] });
+      ? t('No types are picked for this broker.')
+      : t('{url} holds {entities} of {types} - more than c³ loads without asking ({max}).', { url, entities: entityCount(disc.total), types: typeCount(disc.types.length), max: SMALL_BROKER });
+    if (disc.types.length === 0) this.empty(t('No entities'), t('{url} answered, and has no entities (in {tenant}).', { url, tenant: this.tenantText() }));
+    else this.overlay({ children: [el('h3', null, t('Choose what to see')), el('p', null, why), el('p', null, t('Tick the types on the left and press Load. The choice is kept for this broker.'))] });
   }
 
   //
@@ -889,8 +900,8 @@ export class Connect {
   //
   async connectDemo(name) {
     const ticket = ++this.loading;
-    this.setState('busy', 'Demo');
-    this.progressCard('Demo ' + name, '', 'Asking for its descriptor…').set('Asking for its descriptor…', null);
+    this.setState('busy', t('Demo'));
+    this.progressCard(t('Demo {name}', { name }), '', t('Asking for its descriptor…')).set(t('Asking for its descriptor…'), null);
     let d;
     try {
       d = await api.demo(name);
@@ -899,13 +910,13 @@ export class Connect {
       if (e.status === 404) return false;
       this.live.unwatch();
       this.liveStatus(null);
-      this.setState('bad', 'Demo not running');
-      const retry = el('button', 'btn primary', 'Retry');
+      this.setState('bad', t('Demo not running'));
+      const retry = el('button', 'btn primary', t('Retry'));
       retry.type = 'button';
       retry.onclick = () => this.connect(name);
       const actions = el('div', 'actions');
       actions.append(retry);
-      this.overlay({ cls: 'bad', children: [el('h3', null, `${name} is not running`), el('p', null, e.message), actions] });
+      this.overlay({ cls: 'bad', children: [el('h3', null, t('{name} is not running', { name })), el('p', null, e.message), actions] });
       return true;
     }
     if (ticket !== this.loading) return true;
@@ -924,15 +935,15 @@ export class Connect {
     this.mode = null;
     $('modebar').hidden = true;
     $('notice').hidden = true;
-    this.setState('busy', 'Loading');
-    const card = this.progressCard('Loading', url, types ? `Asking for the entities of ${plural(types.length, 'type')}…` : 'Asking for the entities…');
+    this.setState('busy', t('Loading'));
+    const card = this.progressCard(t('Loading'), url, types ? plural(types.length, 'Asking for the entities of {n} type…', 'Asking for the entities of {n} types…') : t('Asking for the entities…'));
 
     let result;
     try {
       result = await loadEntities(url, (n, total) => {
         if (ticket !== this.loading) return;
         const of = total !== null ? Math.min(total, ENTITY_CAP) : null;
-        card.set(of ? `${n} of ${of} entities` : entityCount(n), of ? n / Math.max(of, 1) : null);
+        card.set(of ? plural(of, '{done} of {n} entity', '{done} of {n} entities', { done: n }) : entityCount(n), of ? n / Math.max(of, 1) : null);
       }, types, this.idPattern ? '&idPattern=' + encodeURIComponent(this.idPattern) : '');
     } catch (err) {
       if (ticket !== this.loading) return;
@@ -949,21 +960,22 @@ export class Connect {
     this.draw(this.loaded);
     this.alerts.scan(this.loaded);
     this.renderDiscovery();
-    this.setState('ok', 'Connected');
+    this.setState('ok', t('Connected'));
 
     const edges = this.graph.edges.length;
-    const of = types && this.disc ? ` of ${plural(types.length, 'type')}` : '';
-    $('counts').textContent = `${entityCount(result.entities.length)}${of} · ${plural(edges, 'relationship')}`;
+    const shown = types && this.disc ? t('{entities} of {types}', { entities: entityCount(result.entities.length), types: typeCount(types.length) }) : entityCount(result.entities.length);
+    $('counts').textContent = `${shown} · ${relCount(edges)}`;
     if (result.truncated) {
       $('notice').hidden = false;
-      $('notice').textContent = `showing the first ${result.entities.length} of ${result.total} - c³ loads at most ${ENTITY_CAP}`;
+      $('notice').textContent = t('showing the first {n} of {total} - c³ loads at most {max}', { n: result.entities.length, total: result.total, max: ENTITY_CAP });
     }
 
     this.liveWatch();
 
     if (result.entities.length === 0) {
-      if (types && types.length === 0) this.empty('Nothing picked', 'Tick the types to see on the left and press Load.');
-      else this.empty('No entities', `${url} answered, and has no entities${types ? ' of the types picked' : ''} (in ${this.tenantText()}).`);
+      if (types && types.length === 0) this.empty(t('Nothing picked'), t('Tick the types to see on the left and press Load.'));
+      else if (types) this.empty(t('No entities'), t('{url} answered, and has no entities of the types picked (in {tenant}).', { url, tenant: this.tenantText() }));
+      else this.empty(t('No entities'), t('{url} answered, and has no entities (in {tenant}).', { url, tenant: this.tenantText() }));
     } else this.overlay(null);
 
     if (save) {
@@ -988,30 +1000,30 @@ export class Connect {
   failed(url, err) {
     this.live.unwatch();
     this.liveStatus(null);
-    this.setState('bad', err.reached === false ? 'Not reachable' : 'Error');
+    this.setState('bad', err.reached === false ? t('Not reachable') : t('Error'));
     this.draw([]);
     this.renderDiscovery();
-    const retry = el('button', 'btn primary', 'Retry');
+    const retry = el('button', 'btn primary', t('Retry'));
     retry.type = 'button';
     retry.onclick = () => this.connect(url);
     const actions = el('div', 'actions');
     actions.append(retry);
     const children = [
-      el('h3', null, err.reached === false ? 'The broker cannot be reached' : `The broker answered ${err.status || ''}`.trim()),
+      el('h3', null, err.reached === false ? t('The broker cannot be reached') : err.status ? t('The broker answered {status}', { status: err.status }) : t('The broker answered')),
       el('p', 'mono', url),
       el('p', null, [err.title, err.detail].filter(Boolean).join(' - ') || String(err.message || err)),
     ];
-    if (err.reached === false && this.demo && this.demo.broker === url) children.push(el('p', null, `It is the broker of the demo ${this.demo.name} - start it there (Start broker + populate), then Retry.`));
-    else if (err.reached === false) children.push(el('p', null, 'Is it running, and is the URL right? c³ reaches the broker from the machine c³ runs on.'));
+    if (err.reached === false && this.demo && this.demo.broker === url) children.push(el('p', null, t('It is the broker of the demo {name} - start it there (Start broker + populate), then Retry.', { name: this.demo.name })));
+    else if (err.reached === false) children.push(el('p', null, t('Is it running, and is the URL right? c³ reaches the broker from the machine c³ runs on.')));
     if (err.status === 401) {
-      children.push(el('p', null, 'The broker wants an access token - or did not accept the one c³ sent.'));
-      const tok = el('button', 'btn', 'Token…');
+      children.push(el('p', null, t('The broker wants an access token - or did not accept the one c³ sent.')));
+      const tok = el('button', 'btn', t('Token…'));
       tok.type = 'button';
-      tok.onclick = () => this.tokenOpen('The broker answered 401.');
+      tok.onclick = () => this.tokenOpen(t('The broker answered 401.'));
       actions.append(tok);
       this.securityShow(url, children, actions);
     } else if (err.status === 403) {
-      children.push(el('p', null, `The broker knows who is asking, and does not allow it - for ${this.tenantText()}.`));
+      children.push(el('p', null, t('The broker knows who is asking, and does not allow it - for {tenant}.', { tenant: this.tenantText() })));
     }
     children.push(actions);
     this.overlay({ cls: 'bad', children });
@@ -1107,16 +1119,17 @@ export class Connect {
     const how = st.mode === 'ws' ? 'WebSocket' : 'HTTP';
     let label, title;
     if (ok && st.subscription) {
-      label = `Live · ${how}`;
+      label = t('Live · {how}', { how });
+      const sub = t('Subscription {id}', { id: st.subscription });
       title = st.mode === 'ws'
-        ? `Changes arrive over the broker's WebSocket transport (GET /ngsi-ld/v1/ws).\nSubscription ${st.subscription}`
-        : `Changes arrive as HTTP notifications to the c³ backend.\nSubscription ${st.subscription}\nWhy not the WebSocket: ${st.why}`;
+        ? [t("Changes arrive over the broker's WebSocket transport (GET /ngsi-ld/v1/ws)."), sub].join('\n')
+        : [t('Changes arrive as HTTP notifications to the c³ backend.'), sub, t('Why not the WebSocket: {why}', { why: st.why })].join('\n');
     } else if (ok) {
-      label = `Live · ${how}`;
-      title = 'Nothing to watch: no types loaded';
+      label = t('Live · {how}', { how });
+      title = t('Nothing to watch: no types loaded');
     } else {
-      label = st.retrying ? 'Live · reconnecting' : 'Not live';
-      title = st.detail || 'No subscription';
+      label = st.retrying ? t('Live · reconnecting') : t('Not live');
+      title = st.detail || t('No subscription');
       if (st.why) title += `\n(${st.why})`;
     }
     chip.className = 'live ' + (ok ? 'ok' : st.retrying ? 'busy' : 'bad');
@@ -1177,7 +1190,8 @@ export class Connect {
       for (const id of changed) if (this.graph.nodes.has(id)) this.graph.update(id, boxAttrs(this.byId.get(id)));
       this.emap.flash([...changed]);
       this.renderDiscovery();
-      $('counts').textContent = `${entityCount(this.loaded.length)}${this.loadedPicks && this.disc ? ` of ${plural(this.loadedPicks.length, 'type')}` : ''} · ${plural(this.graph.edges.length, 'relationship')}`;
+      const shown = this.loadedPicks && this.disc ? t('{entities} of {types}', { entities: entityCount(this.loaded.length), types: typeCount(this.loadedPicks.length) }) : entityCount(this.loaded.length);
+      $('counts').textContent = `${shown} · ${relCount(this.graph.edges.length)}`;
       if (this.loaded.length) this.overlay(null);
     } else {
       for (const id of changed) this.graph.update(id, boxAttrs(this.byId.get(id)));
@@ -1315,7 +1329,7 @@ export class Connect {
     this.colourTargets = known ? this.targetsOf(this.colourBy) : null;
     const sel = $('colour-by');
     sel.textContent = '';
-    const o = el('option', null, 'type');
+    const o = el('option', null, t('type'));
     o.value = 'type';
     sel.append(o);
     for (const [name] of opts) {
@@ -1344,10 +1358,10 @@ export class Connect {
     const off = this.emap.notOnMap.length;
     const shownCount = this.entities.filter((e) => this.emap.visible(e)).length;
     const nm = $('not-on-map');
-    nm.textContent = shownCount ? `on the map: ${shownCount - off} · not on the map: ${off}` : '';
+    nm.textContent = shownCount ? t('on the map: {on} · not on the map: {off}', { on: shownCount - off, off }) : '';
     const byType = new Map();
     for (const e of this.emap.notOnMap) for (const t of typesOf(e)) byType.set(typeLabel(t), (byType.get(typeLabel(t)) || 0) + 1);
-    nm.title = off ? 'No GeoProperty: ' + [...byType].map(([t, n]) => `${t} ${n}`).join(', ') : '';
+    nm.title = off ? t('No GeoProperty: {types}', { types: [...byType].map(([ty, n]) => `${ty} ${n}`).join(', ') }) : '';
   }
 
   //
@@ -1430,8 +1444,8 @@ export class Connect {
     rows.sort((a, b) => cmp(typeLabel(a.name), typeLabel(b.name)) || cmp(a.name, b.name));
 
     $('disc-sum').textContent = !this.broker ? '' : disc
-      ? `${plural(disc.types.length, 'type')} · ${entityCount(disc.total)}`
-      : (this.loadedPicks === null ? 'no discovery - every entity loaded' : '');
+      ? `${typeCount(disc.types.length)} · ${entityCount(disc.total)}`
+      : (this.loadedPicks === null ? t('no discovery - every entity loaded') : '');
     $('typeall').hidden = !disc || disc.types.length < 2;
 
     for (const r of rows) {
@@ -1443,8 +1457,8 @@ export class Connect {
         const pick = el('input');
         pick.type = 'checkbox';
         pick.checked = this.picks.includes(r.name);
-        pick.setAttribute('aria-label', `Load ${typeLabel(r.name)}`);
-        pick.title = 'Load this type';
+        pick.setAttribute('aria-label', t('Load {type}', { type: typeLabel(r.name) }));
+        pick.title = t('Load this type');
         pick.onchange = () => {
           const p = new Set(this.picks);
           if (pick.checked) p.add(r.name); else p.delete(r.name);
@@ -1455,7 +1469,9 @@ export class Connect {
 
       const b = el('button', 'type');
       b.type = 'button';
-      b.title = r.name + (isShown ? ` - ${shown.get(r.name)} shown; click to ${this.hidden.has(r.name) ? 'show' : 'hide'}` : ' - none shown');
+      b.title = !isShown ? t('{type} - none shown', { type: r.name })
+        : this.hidden.has(r.name) ? t('{type} - {n} shown; click to show', { type: r.name, n: shown.get(r.name) })
+          : t('{type} - {n} shown; click to hide', { type: r.name, n: shown.get(r.name) });
       b.disabled = !isShown;
       b.setAttribute('aria-pressed', isShown && !this.hidden.has(r.name) ? 'true' : 'false');
       if (!isShown) b.classList.add('unloaded');
@@ -1474,7 +1490,7 @@ export class Connect {
       const more = el('button', 'more', '▸');
       more.type = 'button';
       more.setAttribute('aria-expanded', this.open.has(r.name) ? 'true' : 'false');
-      more.setAttribute('aria-label', `Attributes of ${typeLabel(r.name)}`);
+      more.setAttribute('aria-label', t('Attributes of {type}', { type: typeLabel(r.name) }));
       more.onclick = () => {
         if (this.open.has(r.name)) this.open.delete(r.name); else this.open.add(r.name);
         this.renderDiscovery();
@@ -1497,15 +1513,15 @@ export class Connect {
       const sum = this.picks.reduce((s, t) => s + (counts.get(t) || 0), 0);
       const dirty = this.loadedPicks === undefined || this.loadedPicks === null || !sameList(this.picks, this.loadedPicks);
       lb.disabled = !dirty;
-      lb.textContent = !dirty ? 'Loaded' : this.picks.length === 0 ? 'Load nothing'
-        : `Load ${plural(this.picks.length, 'type')} · ${sum}${sum > ENTITY_CAP ? ` (first ${ENTITY_CAP})` : ''}`;
+      lb.textContent = !dirty ? t('Loaded') : this.picks.length === 0 ? t('Load nothing')
+        : plural(this.picks.length, 'Load {n} type · {sum}', 'Load {n} types · {sum}', { sum }) + (sum > ENTITY_CAP ? ' ' + t('(first {max})', { max: ENTITY_CAP }) : '');
     }
 
     this.renderRels();
 
     const notes = $('disc-notes');
     notes.textContent = '';
-    if (this.broker && !disc && this.loadedPicks === null) notes.append(el('p', null, 'The broker did not answer GET /ngsi-ld/v1/types: every entity is loaded (up to ' + ENTITY_CAP + '), with no picking.'));
+    if (this.broker && !disc && this.loadedPicks === null) notes.append(el('p', null, t('The broker did not answer GET /ngsi-ld/v1/types: every entity is loaded (up to {max}), with no picking.', { max: ENTITY_CAP })));
     for (const n of (disc && disc.notes) || []) notes.append(el('p', null, n));
   }
 
@@ -1520,7 +1536,7 @@ export class Connect {
     const attrs = [...r.attrs];
     for (const [name, ks] of loadedK) if (!names.has(name)) attrs.push({ name, kinds: [...ks] });
     attrs.sort((a, b) => cmp(a.name, b.name));
-    if (!attrs.length) box.append(el('div', 'dim', 'no attributes'));
+    if (!attrs.length) box.append(el('div', 'dim', t('no attributes')));
 
     for (const a of attrs) {
       const line = el('div', 'tattr');
@@ -1536,7 +1552,7 @@ export class Connect {
       const info = this.disc && this.disc.attributes.get(a.name);
       if (info && info.typeNames.length > 1) {
         const others = info.typeNames.filter((t) => t !== r.name).map(typeLabel);
-        line.append(el('span', 'also', 'also in ' + others.join(', ')));
+        line.append(el('span', 'also', t('also in {types}', { types: others.join(', ') })));
       }
       box.append(line);
     }
@@ -1548,21 +1564,21 @@ export class Connect {
     box.textContent = '';
     if (!this.broker) return;
     if (!this.loaded.length) {
-      box.append(el('p', 'dim', 'Which types a Relationship points to is known from the entities: load some types to see.'));
+      box.append(el('p', 'dim', t('Which types a Relationship points to is known from the entities: load some types to see.')));
       return;
     }
-    if (!this.typeRels.length) box.append(el('p', 'dim', 'No Relationship between the loaded entities.'));
+    if (!this.typeRels.length) box.append(el('p', 'dim', t('No Relationship between the loaded entities.')));
     for (const r of this.typeRels) {
       const line = el('div', 'trel');
       const f = el('span', 'tf', typeLabel(r.from));
       f.style.color = typeColor(r.from);
-      const t = el('span', 'tt', typeLabel(r.to));
-      t.style.color = typeColor(r.to);
-      line.append(f, el('span', 'tn', r.name + ' →'), t, el('span', 'n', String(r.n)));
-      line.title = `${r.n} ${r.name} Relationship${r.n === 1 ? '' : 's'} from ${r.from} to ${r.to}`;
+      const to = el('span', 'tt', typeLabel(r.to));
+      to.style.color = typeColor(r.to);
+      line.append(f, el('span', 'tn', r.name + ' →'), to, el('span', 'n', String(r.n)));
+      line.title = plural(r.n, '{n} {name} Relationship from {from} to {to}', '{n} {name} Relationships from {from} to {to}', { name: r.name, from: r.from, to: r.to });
       box.append(line);
     }
-    if (this.unresolved) box.append(el('p', 'dim', `${plural(this.unresolved, 'Relationship')} to entities not loaded - their types show once those are loaded.`));
+    if (this.unresolved) box.append(el('p', 'dim', plural(this.unresolved, '{n} Relationship to entities not loaded - their types show once those are loaded.', '{n} Relationships to entities not loaded - their types show once those are loaded.')));
   }
 
   //
@@ -1581,7 +1597,7 @@ export class Connect {
     if (this.view === 'map') {
       this.graph.select(id);
       if (this.emap.has(id)) this.emap.centerOn(id);
-      else this.toast(`${shortId(e)} has no location - not on the map`);
+      else this.toast(t('{entity} has no location - not on the map', { entity: shortId(e) }));
       return;
     }
     this.graph.select(id, { center: true });
@@ -1603,35 +1619,35 @@ export class Connect {
         const here = this.byId.get(to);
         follows.push({
           label: `${name} → ${here ? shortId(here) : targetLabel(to)}`,
-          hint: here ? '' : 'not loaded',
+          hint: here ? '' : t('not loaded'),
           action: () => this.follow(to),
         });
       }
     }
 
     const items = [];
-    if (this.graph.expanded === id) items.push({ label: 'Close linked entities', action: () => this.collapse(id) });
+    if (this.graph.expanded === id) items.push({ label: t('Close linked entities'), action: () => this.collapse(id) });
     items.push({
-      label: 'With linked entities',
-      items: [1, 2, 3].map((l) => ({ label: `Level ${l}`, hint: l === 1 ? 'its targets' : `${l} Relationships deep`, action: () => this.expandLinked(id, l) })),
+      label: t('With linked entities'),
+      items: [1, 2, 3].map((l) => ({ label: t('Level {level}', { level: l }), hint: l === 1 ? t('its targets') : t('{n} Relationships deep', { n: l }), action: () => this.expandLinked(id, l) })),
     });
-    if (this.mode && this.mode.id === id) items.push({ label: 'Back to the picked types', action: () => this.back() });
-    else items.push({ label: 'Neighbourhood', hint: 'one Relationship away', action: () => this.neighbourhood(id) });
-    items.push({ label: 'Follow', items: follows });
+    if (this.mode && this.mode.id === id) items.push({ label: t('Back to the picked types'), action: () => this.back() });
+    else items.push({ label: t('Neighbourhood'), hint: t('one Relationship away'), action: () => this.neighbourhood(id) });
+    items.push({ label: t('Follow'), items: follows });
     items.push({ separator: true });
-    for (const t of types) items.push({ label: `Hide type ${typeLabel(t)}`, action: () => this.setHidden([...this.hidden, t]) });
-    if (this.view === 'map') items.push({ label: 'Show in the graph', action: () => { this.setView('graph', true); this.graph.select(id, { center: true }); } });
-    else if (geometries(e).length) items.push({ label: 'Show on the map', action: async () => { await this.setView('map', true); this.graph.select(id); this.emap.centerOn(id); } });
-    items.push({ label: 'Copy id', action: () => this.copy(id, 'the id') });
-    items.push({ label: 'Show JSON', action: () => this.showJson(id) });
+    for (const ty of types) items.push({ label: t('Hide type {type}', { type: typeLabel(ty) }), action: () => this.setHidden([...this.hidden, ty]) });
+    if (this.view === 'map') items.push({ label: t('Show in the graph'), action: () => { this.setView('graph', true); this.graph.select(id, { center: true }); } });
+    else if (geometries(e).length) items.push({ label: t('Show on the map'), action: async () => { await this.setView('map', true); this.graph.select(id); this.emap.centerOn(id); } });
+    items.push({ label: t('Copy id'), action: () => this.copy(id) });
+    items.push({ label: t('Show JSON'), action: () => this.showJson(id) });
     items.push({ separator: true });
-    items.push({ label: 'Edit…', hint: 'attributes, as rows', action: () => this.edit(id) });
-    items.push({ label: 'Replace…', hint: 'the whole entity', action: () => this.edit(id, null, 'replace') });
+    items.push({ label: t('Edit…'), hint: t('attributes, as rows'), action: () => this.edit(id) });
+    items.push({ label: t('Replace…'), hint: t('the whole entity'), action: () => this.edit(id, null, 'replace') });
     items.push({
-      label: 'Delete entity…',
+      label: t('Delete entity…'),
       items: [
-        { label: `Delete ${shortId(e)} - at the broker`, action: () => this.deleteEntity(id) },
-        { label: 'Cancel', action: () => {} },
+        { label: t('Delete {entity} - at the broker', { entity: shortId(e) }), action: () => this.deleteEntity(id) },
+        { label: t('Cancel'), action: () => {} },
       ],
     });
 
@@ -1641,7 +1657,9 @@ export class Connect {
   //
   // copy - text to the clipboard
   //
-  async copy(text, what) {
+  // 'what': what is copied, as said in the toast - none: the text itself (an id)
+  //
+  async copy(text, what = null) {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -1653,9 +1671,9 @@ export class Connect {
       ta.select();
       const ok = document.execCommand('copy');
       ta.remove();
-      if (!ok) { this.toast('Could not copy ' + what); return; }
+      if (!ok) { this.toast(t('Could not copy {what}', { what: what || t('the id') })); return; }
     }
-    this.toast('Copied ' + (what === 'the id' ? text : what));
+    this.toast(t('Copied {what}', { what: what || text }));
   }
 
   //
@@ -1668,7 +1686,7 @@ export class Connect {
     try {
       e = await entityGet(this.broker, id);
     } catch (err) {
-      this.toast(`The broker answered ${err.status || ''}: ${[err.title, err.detail].filter(Boolean).join(' - ')}`);
+      this.toast(t('The broker answered {status}: {detail}', { status: err.status || '', detail: [err.title, err.detail].filter(Boolean).join(' - ') }));
       return;
     }
     this.closeJson();
@@ -1728,18 +1746,18 @@ export class Connect {
     if (cur) for (const k of Object.keys(cur)) if (!(k in e) && k !== 'id' && k !== 'type') n[k] = { type: 'Property', value: NULL };
     this.applyLive([n]);
     if (this.shownId === id) this.showEntity(id);
-    if (!this.loadedById.has(id) && !this.byId.has(id)) this.toast(`Saved ${id} - not shown: its type is not among the types loaded`);
+    if (!this.loadedById.has(id) && !this.byId.has(id)) this.toast(t('Saved {id} - not shown: its type is not among the types loaded', { id }));
   }
 
   async deleteEntity(id) {
     if (!(await this.openWrite(id))) return;
     const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
     if (!r.ok) {
-      this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
+      this.toast(t('Not deleted - the broker answered {status}: {detail}', { status: r.status, detail: [r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ') }));
       return;
     }
     if (this.editor.isOpen && this.editor.id === id) this.editor.close();
-    this.toast('Deleted ' + id);
+    this.toast(t('Deleted {what}', { what: id }));
     this.applyLive([{ id, deletedAt: new Date().toISOString() }]);
   }
 
@@ -1750,28 +1768,28 @@ export class Connect {
     const ds = v && typeof v === 'object' && typeof v.datasetId === 'string' ? v.datasetId : null;
     const e = this.byId.get(id);
     const several = e && Array.isArray(e[name]) && e[name].length > 1;
-    const what = ds ? `${name} (${ds})` : (several ? `${name} - the default instance` : name);
+    const what = ds ? `${name} (${ds})` : (several ? t('{name} - the default instance', { name }) : name);
     const del = async (query) => {
       if (!(await this.openWrite(what))) return;
       const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '/attrs/' + encodeURIComponent(name) + query);
       if (!r.ok) {
-        this.toast(`Not deleted - the broker answered ${r.status}: ${[r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ')}`);
+        this.toast(t('Not deleted - the broker answered {status}: {detail}', { status: r.status, detail: [r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ') }));
         return;
       }
-      this.toast(`Deleted ${what}`);
+      this.toast(t('Deleted {what}', { what }));
       this.refetch(id);
     };
     const items = [
-      { label: `Edit ${name}…`, action: () => this.edit(id, name) },
+      { label: t('Edit {name}…', { name }), action: () => this.edit(id, name) },
       { separator: true },
-      { label: `Delete ${what}…`, items: [
-        { label: `Delete it - at the broker`, action: () => del(ds ? '?datasetId=' + encodeURIComponent(ds) : '') },
-        { label: 'Cancel', action: () => {} },
+      { label: t('Delete {what}…', { what }), items: [
+        { label: t('Delete it - at the broker'), action: () => del(ds ? '?datasetId=' + encodeURIComponent(ds) : '') },
+        { label: t('Cancel'), action: () => {} },
       ] },
     ];
-    if (several) items.push({ label: `Delete every instance of ${name}…`, items: [
-      { label: 'Delete them all - at the broker', action: () => del('?deleteAll=true') },
-      { label: 'Cancel', action: () => {} },
+    if (several) items.push({ label: t('Delete every instance of {name}…', { name }), items: [
+      { label: t('Delete them all - at the broker'), action: () => del('?deleteAll=true') },
+      { label: t('Cancel'), action: () => {} },
     ] });
     openMenu({ x: at.x, y: at.y, items, label: name, returnFocus: target });
   }
@@ -1803,12 +1821,12 @@ export class Connect {
     if (this.view !== 'graph') this.setView('graph', true);         // the linked entities open in the graph
     const ticket = this.linkTicket = (this.linkTicket || 0) + 1;
     const e = this.byId.get(id);
-    this.toast(`Asking for ${e ? shortId(e) : id} with its linked entities, level ${level}…`);
+    this.toast(t('Asking for {entity} with its linked entities, level {level}…', { entity: e ? shortId(e) : id, level }));
     let full;
     try {
       full = await entityGet(this.broker, id, `join=inline&joinLevel=${level}`);
     } catch (err) {
-      if (ticket === this.linkTicket) this.toast(`The broker answered ${err.status || ''}: ${[err.title, err.detail].filter(Boolean).join(' - ')}`);
+      if (ticket === this.linkTicket) this.toast(t('The broker answered {status}: {detail}', { status: err.status || '', detail: [err.title, err.detail].filter(Boolean).join(' - ') }));
       return;
     }
     if (ticket !== this.linkTicket || !this.graph.nodes.has(id)) return;
@@ -1817,12 +1835,12 @@ export class Connect {
     const box = this.linkedCard(full, 0, level);
     box.tabIndex = 0;
     box.setAttribute('role', 'group');
-    box.setAttribute('aria-label', `${typesOf(full).map(typeLabel).join(', ')} ${full.id} with its linked entities, level ${level}`);
+    box.setAttribute('aria-label', t('{entity} with its linked entities, level {level}', { entity: `${typesOf(full).map(typeLabel).join(', ')} ${full.id}`, level }));
     const head = box.querySelector('.lhead');
-    head.append(el('span', 'lv', `linked · level ${level}`));
+    head.append(el('span', 'lv', t('linked · level {level}', { level })));
     const close = el('button', 'lclose', '×');
     close.type = 'button';
-    close.setAttribute('aria-label', 'Close linked entities');
+    close.setAttribute('aria-label', t('Close linked entities'));
     close.onclick = () => this.collapse(id);
     head.append(close);
     this.graph.expand(id, box);
@@ -1845,9 +1863,9 @@ export class Connect {
     const card = el('div', depth === 0 ? 'lcard root' : 'lcard');
     card.style.setProperty('--c', typeColor(types[0]));
     const head = el('div', 'lhead');
-    const t = el('span', 't', types.map(typeLabel).join(', '));
-    t.style.color = typeColor(types[0]);
-    head.append(t, el('span', 'id', shortId(e)));
+    const tl = el('span', 't', types.map(typeLabel).join(', '));
+    tl.style.color = typeColor(types[0]);
+    head.append(tl, el('span', 'id', shortId(e)));
     head.title = e.id;
     card.append(head);
 
@@ -1870,7 +1888,7 @@ export class Connect {
         // A Relationship of a card at depth d is at level d + 1: past joinLevel it is not embedded; within
         // it, the target was not there to embed
         //
-        const why = depth + 1 > level ? `deeper than level ${level}` : 'not embedded by the broker';
+        const why = depth + 1 > level ? t('deeper than level {level}', { level }) : t('not embedded by the broker');
         const ids = relationshipTargets(v).map(targetLabel).join(', ');
         const miss = el('div', 'miss');
         miss.append(el('span', 'mono', ids), el('span', 'why', ' ' + why));
@@ -1892,8 +1910,8 @@ export class Connect {
     closeMenu(false);
     const ticket = ++this.loading;
     const url = this.broker;
-    this.setState('busy', 'Loading');
-    const card = this.progressCard('Neighbourhood', id, 'Asking for the entity…');
+    this.setState('busy', t('Loading'));
+    const card = this.progressCard(t('Neighbourhood'), id, t('Asking for the entity…'));
 
     try {
       const have = new Map();
@@ -1907,7 +1925,7 @@ export class Connect {
         const known = this.loadedById.get(t) || this.byId.get(t);
         if (known) have.set(t, known); else missing.push(t);
       }
-      card.set(`${plural(outIds.length, 'target')}…`, 0.3);
+      card.set(plural(outIds.length, '{n} target…', '{n} targets…'), 0.3);
       for (let i = 0; i < missing.length; i += 50) {
         const chunk = missing.slice(i, i + 50);
         const r = await entitiesQuery(url, 'id=' + typeParam(chunk), 50);
@@ -1916,7 +1934,7 @@ export class Connect {
       if (ticket !== this.loading) return;
       const outFound = outIds.filter((t) => have.has(t)).length;
 
-      card.set('the entities pointing at it…', 0.6);
+      card.set(t('the entities pointing at it…'), 0.6);
       const incoming = new Set();
       for (const x of [...this.loaded, ...this.entities]) {
         if (x.id === id) continue;
@@ -1948,11 +1966,11 @@ export class Connect {
             inTotal += r.total;
           }
         } catch (err) {
-          const why = err.reached === false ? `c³ could not send it: ${err.detail || err.title}` : `the broker answered ${err.status}`;
-          inNote = ` (the q query for the entities pointing at it failed - ${why}; only the loaded ones are shown)`;
+          const why = err.reached === false ? t('c³ could not send it: {error}', { error: err.detail || err.title }) : t('the broker answered {status}', { status: err.status });
+          inNote = ' ' + t('(the q query for the entities pointing at it failed - {why}; only the loaded ones are shown)', { why });
         }
       } else if (this.disc === null) {
-        inNote = ' (no discovery: only the loaded entities pointing at it)';
+        inNote = ' ' + t('(no discovery: only the loaded entities pointing at it)');
       }
       if (ticket !== this.loading) return;
 
@@ -1960,20 +1978,21 @@ export class Connect {
       this.draw([...have.values()]);
       this.renderDiscovery();
       this.overlay(null);
-      this.setState('ok', 'Connected');
+      this.setState('ok', t('Connected'));
       const types = typesOf(center).map(typeLabel).join(', ');
-      const more = inTotal !== null && inTotal > HOOD_IN_MAX ? ` (the first ${HOOD_IN_MAX} of ${inTotal})` : '';
-      $('mode-text').textContent = `Neighbourhood of ${types} ${shortId(center)} · ${outFound} out · ${incoming.size} in${more}${inNote}${missing.length && outFound < outIds.length ? ` · ${outIds.length - outFound} target${outIds.length - outFound === 1 ? '' : 's'} not found` : ''}`;
+      const more = inTotal !== null && inTotal > HOOD_IN_MAX ? ' ' + t('(the first {max} of {total})', { max: HOOD_IN_MAX, total: inTotal }) : '';
+      const notFound = missing.length && outFound < outIds.length ? ' · ' + plural(outIds.length - outFound, '{n} target not found', '{n} targets not found') : '';
+      $('mode-text').textContent = t('Neighbourhood of {entity} · {out} out · {incoming} in', { entity: `${types} ${shortId(center)}`, out: outFound, incoming: incoming.size }) + more + inNote + notFound;
       $('modebar').hidden = false;
-      $('counts').textContent = `${entityCount(have.size)} · ${plural(this.graph.edges.length, 'relationship')}`;
+      $('counts').textContent = `${entityCount(have.size)} · ${relCount(this.graph.edges.length)}`;
       this.graph.select(id);
       const n = this.graph.nodes.get(id);
       if (n) n.el.focus({ preventScroll: true });
     } catch (err) {
       if (ticket !== this.loading) return;
-      this.setState('ok', 'Connected');
+      this.setState('ok', t('Connected'));
       this.overlay(null);
-      this.toast(`The broker answered ${err.status || ''}: ${[err.title, err.detail].filter(Boolean).join(' - ')}`);
+      this.toast(t('The broker answered {status}: {detail}', { status: err.status || '', detail: [err.title, err.detail].filter(Boolean).join(' - ') }));
     }
   }
 
@@ -1988,9 +2007,9 @@ export class Connect {
     this.draw(this.loaded);
     this.renderDiscovery();
     const edges = this.graph.edges.length;
-    $('counts').textContent = `${entityCount(this.loaded.length)} · ${plural(edges, 'relationship')}`;
+    $('counts').textContent = `${entityCount(this.loaded.length)} · ${relCount(edges)}`;
     if (this.byId.has(id)) this.graph.select(id);
-    if (!this.loaded.length) this.empty('Nothing loaded', 'Tick the types to see on the left and press Load.');
+    if (!this.loaded.length) this.empty(t('Nothing loaded'), t('Tick the types to see on the left and press Load.'));
   }
 
   //
@@ -2007,9 +2026,9 @@ export class Connect {
 
     const head = el('div', 'eidrow');
     head.append(el('div', 'eid', e.id));
-    const eb = el('button', 'btn small', 'Edit…');
+    const eb = el('button', 'btn small', t('Edit…'));
     eb.type = 'button';
-    eb.title = 'Edit the attributes';
+    eb.title = t('Edit the attributes');
     eb.onclick = () => this.edit(id);
     head.append(eb);
     body.append(head);
@@ -2037,8 +2056,8 @@ export class Connect {
         pick.type = 'radio';
         pick.name = 'maplabel';
         pick.checked = this.emap.labelAttr === name;
-        pick.title = 'Show this attribute on the map';
-        pick.setAttribute('aria-label', 'Show ' + name + ' on the map');
+        pick.title = t('Show this attribute on the map');
+        pick.setAttribute('aria-label', t('Show {name} on the map', { name }));
         pick.addEventListener('click', () => {
           const on = this.emap.labelAttr !== name;
           this.emap.setLabelAttr(on ? name : null);
@@ -2055,7 +2074,7 @@ export class Connect {
           b.onclick = () => this.follow(target);
           if (!this.byId.has(target)) {
             b.classList.add('missing');
-            b.title = 'Not loaded - opens its neighbourhood';
+            b.title = t('Not loaded - opens its neighbourhood');
           }
           row.append(b);
         }

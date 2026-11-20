@@ -15,13 +15,9 @@
 // the mapper opens on it.
 //
 import * as api from './api.js';
+import { t, tk, plural } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
-
-// count - '1 topic', '3 topics'
-function count(n, one, many) {
-  return n + ' ' + (n === 1 ? one : many);
-}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -72,7 +68,11 @@ function rosType(t) {
 const FORBIDDEN = /[\s<>"'=;()]/;
 const RESERVED  = ['id', 'type', '@id', '@type', '@context', 'scope', 'createdAt', 'modifiedAt', 'deletedAt'];
 
-const KINDS = [['topic', 'topics', 'Topics'], ['service', 'services', 'Services'], ['action', 'actions', 'Actions']];
+// a kind, its plural (the configuration's key), its label, the group's title (one, many), its ✓ all's title
+const KINDS = [
+  ['topic', 'topics', tk('Topics'), tk('{n} DDS Topic'), tk('{n} DDS Topics'), tk('accept the proposals of every topic shown and not mapped - each name stays editable')],
+  ['service', 'services', tk('Services'), tk('{n} DDS Service'), tk('{n} DDS Services'), tk('accept the proposals of every service shown and not mapped - each name stays editable')],
+  ['action', 'actions', tk('Actions'), tk('{n} DDS Action'), tk('{n} DDS Actions'), tk('accept the proposals of every action shown and not mapped - each name stays editable')]];
 
 //
 // housekeeping - what ROS 2 itself has on every domain, rarely worth mapping: its discovery and log topics, and
@@ -138,8 +138,8 @@ export class DdsMapper {
     this.interfaces = [].concat(m.interfaces || []).join(', ');   // a list - or a string, as the API also takes
     this.vocab  = m.vocabulary || '';
     this.rows.clear();
-    for (const [kind, plural] of KINDS) {
-      for (const x of m[plural] || []) {
+    for (const [kind, many] of KINDS) {
+      for (const x of m[many] || []) {
         const r = { kind, name: x[kind], attribute: x.attribute || '', entityId: x.entityId || '', entityType: x.entityType || '' };
         if (kind === 'service') Object.assign(r, { requestType: x.requestType || '', replyType: x.replyType || '' });
         if (kind === 'action') r.type = x.type || '';
@@ -151,11 +151,10 @@ export class DdsMapper {
   // note - the line under the form's button
   note(on) {
     const m = this.files && this.files.mapping;
-    if (!m) return on ? 'nothing mapped yet - a broker with the dds bridge alone shows what it sees on one entity, urn:ngsi-ld:dds:default' : '';
+    if (!m) return on ? t('nothing mapped yet - a broker with the dds bridge alone shows what it sees on one entity, urn:ngsi-ld:dds:default') : '';
     const n = (k) => (m[k] || []).length;
-    return 'the DDS configuration: ' + count(n('topics'), 'topic', 'topics') + ', ' + count(n('services'), 'service', 'services') + ', '
-      + count(n('actions'), 'action', 'actions') + ' mapped - '
-      + this.files.bridgeConfig;
+    return t('the DDS configuration: {topics}, {services}, {actions} mapped - {file}', { topics: plural(n('topics'), '{n} topic', '{n} topics'),
+      services: plural(n('services'), '{n} service', '{n} services'), actions: plural(n('actions'), '{n} action', '{n} actions'), file: this.files.bridgeConfig });
   }
 
   // ------------------------------------------------------------------ open, close
@@ -163,7 +162,7 @@ export class DdsMapper {
   build() {
     const main = document.querySelector('#page-run .cp-main');
     this.box = el('section', 'dm');
-    this.box.setAttribute('aria-label', 'DDS mapping');
+    this.box.setAttribute('aria-label', t('DDS mapping'));
     this.box.hidden = true;
     main.append(this.box);
     // Escape on Operate only: the listener is the document's, and the mapper stays open while another page is shown
@@ -200,10 +199,10 @@ export class DdsMapper {
   // closeButtons - the × of a screen, and, opened from Compile, the way back to it
   closeButtons() {
     const out = [];
-    if (this.from === 'compile') out.push(button('← Back to Compile', 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
+    if (this.from === 'compile') out.push(button(t('← Back to Compile'), 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
     const close = button('×', 'dm-close', () => this.close());
-    close.title = 'back to the brokers';
-    close.setAttribute('aria-label', 'close the DDS mapping');
+    close.title = t('back to the brokers');
+    close.setAttribute('aria-label', t('close the DDS mapping'));
     out.push(close);
     return out;
   }
@@ -225,7 +224,7 @@ export class DdsMapper {
 
   async discover(btn) {
     btn.disabled = true;
-    this.status = 'discovering - a broker of c³\'s own on domain ' + this.domain + ', for a few seconds ...';
+    this.status = t('discovering - a broker of c³\'s own on domain {domain}, for a few seconds ...', { domain: this.domain });
     this.renderStatus();
     try {
       const def = this.run.def();
@@ -233,7 +232,7 @@ export class DdsMapper {
       delete def.bridgeConfig;
       delete def.userContext;
       const inv = await api.runDdsDiscover(def);
-      this.inventorySet(inv, 'domain ' + this.domain + ', discovered ' + new Date().toLocaleTimeString());
+      this.inventorySet(inv, t('domain {domain}, discovered {time}', { domain: this.domain, time: new Date().toLocaleTimeString() }));
     } catch (e) {
       this.status = e.message;
     }
@@ -245,8 +244,8 @@ export class DdsMapper {
     if (!file) return;
     try {
       const inv = JSON.parse(await file.text());
-      if (!Array.isArray(inv.topics) && !Array.isArray(inv.services) && !Array.isArray(inv.actions)) throw new Error('not an inventory: no "topics", "services" or "actions"');
-      this.inventorySet(inv, file.name + (inv.discoveredAt ? ', discovered ' + inv.discoveredAt : ''));
+      if (!Array.isArray(inv.topics) && !Array.isArray(inv.services) && !Array.isArray(inv.actions)) throw new Error(t('not an inventory: no "topics", "services" or "actions"'));
+      this.inventorySet(inv, inv.discoveredAt ? t('{url}, discovered {time}', { url: file.name, time: inv.discoveredAt }) : file.name);
     } catch (e) {
       this.status = file.name + ': ' + e.message;
     }
@@ -256,9 +255,9 @@ export class DdsMapper {
   inventorySet(inv, from) {
     this.inv = { topics: inv.topics || [], services: inv.services || [], actions: inv.actions || [], types: inv.types || {} };
     const n = this.inv.topics.length + this.inv.services.length + this.inv.actions.length;
-    this.status = from + ' - ' + count(n, 'endpoint', 'endpoints')
-      + (inv.settled === false ? '; the domain was still announcing more when it answered - Discover again for the rest' : '');
-    for (const [kind, plural] of KINDS) if (this.inv[plural].some((e) => !housekeeping(kind, e.name))) this.open_[kind] = true;
+    this.status = from + ' - ' + plural(n, '{n} endpoint', '{n} endpoints')
+      + (inv.settled === false ? t('; the domain was still announcing more when it answered - Discover again for the rest') : '');
+    for (const [kind, many] of KINDS) if (this.inv[many].some((e) => !housekeeping(kind, e.name))) this.open_[kind] = true;
   }
 
   renderStatus() {
@@ -272,10 +271,10 @@ export class DdsMapper {
 
   // endpoints - of a kind: the discovered (housekeeping hidden unless asked) and the mapped not discovered
   endpoints(kind) {
-    const plural = kind + 's';
+    const many = kind + 's';
     const seen = new Set();
     const out = [];
-    for (const e of (this.inv && this.inv[plural]) || []) {
+    for (const e of (this.inv && this.inv[many]) || []) {
       seen.add(e.name);
       if (this.house || !housekeeping(kind, e.name) || this.rows.has(this.key(kind, e.name))) out.push({ e, seen: true });
     }
@@ -340,17 +339,17 @@ export class DdsMapper {
 
     for (const [k, r] of this.rows) {
       if (!this.mapped(r)) continue;
-      if (!r.attribute) add(k, 'no attribute name');
-      else if (FORBIDDEN.test(r.attribute)) add(k, 'the attribute name has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))');
-      else if (RESERVED.includes(r.attribute)) add(k, '"' + r.attribute + '" is a member of every entity, not an attribute name');
-      if (!r.entityId) add(k, 'no entity id');
-      else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(r.entityId)) add(k, 'the entity id is not a URI (urn:ngsi-ld:Robot:1)');
-      else if (!types.has(r.entityId)) add(k, 'the entity ' + r.entityId + ' has no type - give it one here, or on another of its endpoints');
-      if (r.entityType && FORBIDDEN.test(r.entityType)) add(k, 'the entity type has a character NGSI-LD forbids in a name');
-      if (r.entityType && types.get(r.entityId) && r.entityType !== types.get(r.entityId)) add(k, 'another endpoint gives ' + r.entityId + ' the type ' + types.get(r.entityId));
+      if (!r.attribute) add(k, t('no attribute name'));
+      else if (FORBIDDEN.test(r.attribute)) add(k, t('the attribute name has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))'));
+      else if (RESERVED.includes(r.attribute)) add(k, t('"{name}" is a member of every entity, not an attribute name', { name: r.attribute }));
+      if (!r.entityId) add(k, t('no entity id'));
+      else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(r.entityId)) add(k, t('the entity id is not a URI (urn:ngsi-ld:Robot:1)'));
+      else if (!types.has(r.entityId)) add(k, t('the entity {id} has no type - give it one here, or on another of its endpoints', { id: r.entityId }));
+      if (r.entityType && FORBIDDEN.test(r.entityType)) add(k, t('the entity type has a character NGSI-LD forbids in a name'));
+      if (r.entityType && types.get(r.entityId) && r.entityType !== types.get(r.entityId)) add(k, t('another endpoint gives {id} the type {type}', { id: r.entityId, type: types.get(r.entityId) }));
       if (r.attribute && r.entityId) {
         const a = r.entityId + '\n' + r.attribute;
-        if (attrs.has(a)) add(k, r.entityId + ' has the attribute ' + r.attribute + ' already, from ' + attrs.get(a));
+        if (attrs.has(a)) add(k, t('{id} has the attribute {attribute} already, from {from}', { id: r.entityId, attribute: r.attribute, from: attrs.get(a) }));
         else attrs.set(a, r.name);
       }
     }
@@ -365,31 +364,31 @@ export class DdsMapper {
     const row = el('div', 'dm-row');
     const lab = (text, ctl) => { const l = el('label', 'dm-plabel'); l.append(el('span', '', text), ctl); return l; };
 
-    const dom = input(String(this.domain), '0', 'DDS domain', (v) => { this.domain = parseInt(v, 10) || 0; });
+    const dom = input(String(this.domain), '0', t('DDS domain'), (v) => { this.domain = parseInt(v, 10) || 0; });
     dom.inputMode = 'numeric';
     dom.classList.add('dm-domain');
-    dom.title = 'the DDS domain - ROS 2: ROS_DOMAIN_ID';
+    dom.title = t('the DDS domain - ROS 2: ROS_DOMAIN_ID');
 
     const tr = el('select', 'cp-input dm-transport');
-    tr.setAttribute('aria-label', 'Transport');
-    for (const [v, t] of [['', 'shared memory and UDP'], ['udp', 'UDP only'], ['shm', 'shared memory only']]) {
-      const o = el('option', '', t);
+    tr.setAttribute('aria-label', t('Transport'));
+    for (const [v, text] of [['', t('shared memory and UDP')], ['udp', t('UDP only')], ['shm', t('shared memory only')]]) {
+      const o = el('option', '', text);
       o.value = v;
       o.selected = (this.transport === v);
       tr.append(o);
     }
 
-    const ifs = input(this.interfaces, 'all of this host\'s', 'Interfaces - IPv4 addresses', (v) => { this.interfaces = v; });
+    const ifs = input(this.interfaces, t('all of this host\'s'), t('Interfaces - IPv4 addresses'), (v) => { this.interfaces = v; });
     ifs.classList.add('dm-ifs');
-    ifs.title = 'the addresses of this host\'s interfaces UDP uses, comma-separated - empty: all';
+    ifs.title = t('the addresses of this host\'s interfaces UDP uses, comma-separated - empty: all');
     ifs.disabled = (this.transport === 'shm');
     tr.addEventListener('change', () => { this.transport = tr.value; ifs.disabled = (tr.value === 'shm'); });
 
-    row.append(el('span', 'dm-reachtitle', 'How c³ reaches your DDS system'), lab('domain', dom), lab('transport', tr), lab('interfaces', ifs));
-    box.append(row, el('p', 'cp-note', 'DDS discovery reaches this host and its network segment - not across a router, a VPN or a NAT. '
+    row.append(el('span', 'dm-reachtitle', t('How c³ reaches your DDS system')), lab(t('domain'), dom), lab(t('transport'), tr), lab(t('interfaces'), ifs));
+    box.append(row, el('p', 'cp-note', t('DDS discovery reaches this host and its network segment - not across a router, a VPN or a NAT. '
       + 'Shared memory reaches this host alone, and a container only sharing its /dev/shm. Interfaces: the addresses UDP is kept to, '
       + 'where this host has several networks. Where c³ cannot reach the system, import an inventory.json written where it runs. '
-      + 'The broker Done starts reaches it the same way.'));
+      + 'The broker Done starts reaches it the same way.')));
     return box;
   }
 
@@ -398,28 +397,28 @@ export class DdsMapper {
 
     const head = el('div', 'cp-card dm-head');
     const top = el('div', 'dm-top');
-    top.append(el('h2', 'section', 'Map DDS topics, services and actions'), ...this.closeButtons());
-    head.append(top, el('p', 'cp-note', 'Each topic, service or action mapped is one attribute of an entity: its name, the entity\'s id, and the '
-      + 'entity\'s type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.'));
+    top.append(el('h2', 'section', t('Map DDS topics, services and actions')), ...this.closeButtons());
+    head.append(top, el('p', 'cp-note', t('Each topic, service or action mapped is one attribute of an entity: its name, the entity\'s id, and the '
+      + 'entity\'s type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.')));
 
     head.append(this.reachRow());
 
     const row = el('div', 'dm-row');
-    const voc = input(this.vocab, 'vocabulary - the terms\' namespace (https://example.org/robots/); empty: the default context\'s', 'Vocabulary',
+    const voc = input(this.vocab, t('vocabulary - the terms\' namespace (https://example.org/robots/); empty: the default context\'s'), t('Vocabulary'),
       (v) => { this.vocab = v; });
     voc.classList.add('dm-vocab');
-    const pt = input(this.propType, 'Robot', 'Entity type of the proposals', (v) => { this.propType = v; this.refresh(); });
+    const pt = input(this.propType, 'Robot', t('Entity type of the proposals'), (v) => { this.propType = v; this.refresh(); });
     pt.classList.add('dm-ptype');
-    pt.title = 'the entity type the proposals give - urn:ngsi-ld:<type>:<the name\'s segments>';
+    pt.title = t('the entity type the proposals give - urn:ngsi-ld:<type>:<the name\'s segments>');
     const ptl = el('label', 'dm-plabel');
-    ptl.append(el('span', '', 'proposals\' type'), pt);
-    const disc = button('Discover', 'primary', () => this.discover(disc));
+    ptl.append(el('span', '', t('proposals\' type')), pt);
+    const disc = button(t('Discover'), 'primary', () => this.discover(disc));
     const file = el('input');
     file.type = 'file';
     file.accept = '.json,application/json';
     file.hidden = true;
     file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; this.importFile(f); });
-    const imp = button('Import inventory.json', '', () => file.click());
+    const imp = button(t('Import inventory.json'), '', () => file.click());
     row.append(voc, ptl, disc, imp, file);
     const st = el('div', 'dm-row');
     const house = el('label', 'rn-check');
@@ -427,9 +426,9 @@ export class DdsMapper {
     hc.type = 'checkbox';
     hc.checked = this.house;
     hc.addEventListener('change', () => { this.house = hc.checked; this.render(); });
-    house.title = 'ROS 2 discovery and log topics, every node\'s parameter services';
-    house.append(hc, document.createTextNode(' show ROS 2 housekeeping'));
-    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : 'Discover asks your DDS system what it announces - or import an inventory.json written where it runs')), house);
+    house.title = t('ROS 2 discovery and log topics, every node\'s parameter services');
+    house.append(hc, document.createTextNode(' ' + t('show ROS 2 housekeeping')));
+    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : t('Discover asks your DDS system what it announces - or import an inventory.json written where it runs'))), house);
     head.append(row, st);
     out.push(head);
 
@@ -445,7 +444,7 @@ export class DdsMapper {
 
     const card = el('div', 'cp-card dm-groups');
     card.append(listIds, listTypes);
-    for (const [kind, , label] of KINDS) card.append(this.group(kind, label, problems));
+    for (const k of KINDS) card.append(this.group(k, problems));
     out.push(card);
 
     // Done
@@ -454,37 +453,37 @@ export class DdsMapper {
     const nProblems = [...problems.values()].reduce((n, l) => n + l.length, 0);
     const ents = new Set(mapped.map((r) => r.entityId).filter(Boolean));
     const sum = el('span', 'dm-sum', mapped.length
-      ? mapped.length + ' mapped, ' + count(ents.size, 'entity', 'entities') + (nProblems ? ' - ' + nProblems + ' to fix first' : '')
-      : 'nothing mapped yet');
-    const done = button('Done', 'primary dm-done', () => this.done(done));
+      ? t('{n} mapped, {entities}', { n: mapped.length, entities: plural(ents.size, '{n} entity', '{n} entities') }) + (nProblems ? ' - ' + t('{n} to fix first', { n: nProblems }) : '')
+      : t('nothing mapped yet'));
+    const done = button(t('Done'), 'primary dm-done', () => this.done(done));
     done.disabled = !mapped.length || nProblems > 0;
     foot.append(sum, el('span', 'dm-err'), done);
     out.push(foot);
     return out;
   }
 
-  group(kind, label, problems) {
+  group([kind, , label, one, many, allTitle], problems) {
     const g = el('div', 'dm-group');
     const list = this.endpoints(kind);
     const nMapped = list.filter(({ e }) => this.mapped(this.rows.get(this.key(kind, e.name)))).length;
     const open = this.open_[kind];
     const head = el('div', 'dm-ghead');
-    const tog = toggle(open, label, () => { this.open_[kind] = !open; this.render(); });
-    const title = el('span', 'dm-gtitle', list.length + ' DDS ' + label);
+    const tog = toggle(open, t(label), () => { this.open_[kind] = !open; this.render(); });
+    const title = el('span', 'dm-gtitle', plural(list.length, one, many));
     title.addEventListener('click', () => tog.click());
-    head.append(tog, title, el('span', 'dm-gcount', nMapped ? nMapped + ' mapped' : ''));
+    head.append(tog, title, el('span', 'dm-gcount', nMapped ? t('{n} mapped', { n: nMapped }) : ''));
     const unmapped = list.filter(({ e }) => !this.mapped(this.rows.get(this.key(kind, e.name))));
     if (open && unmapped.length) {
-      const all = button('✓ all (' + unmapped.length + ')', 'small dm-all', () => {
+      const all = button(t('✓ all ({n})', { n: unmapped.length }), 'small dm-all', () => {
         for (const { e } of unmapped) this.accept(kind, e);
         this.render();
       });
-      all.title = 'accept the proposals of every ' + kind + ' shown and not mapped - each name stays editable';
+      all.title = t(allTitle);
       head.append(all);
     }
     g.append(head);
     if (!open) return g;
-    if (!list.length) g.append(el('div', 'dm-empty', this.inv ? 'none announced' + (this.house ? '' : ' but ROS 2 housekeeping') : 'nothing discovered yet'));
+    if (!list.length) g.append(el('div', 'dm-empty', !this.inv ? t('nothing discovered yet') : this.house ? t('none announced') : t('none announced but ROS 2 housekeeping')));
     for (const { e, seen } of list) g.append(this.endpoint(kind, e, seen, problems.get(this.key(kind, e.name)) || []));
     return g;
   }
@@ -498,21 +497,21 @@ export class DdsMapper {
     const tog = toggle(open, e.name, () => { if (open) this.openEp.delete(k); else this.openEp.add(k); this.render(); });
     const name = el('span', 'dm-name', e.name);
     name.addEventListener('click', () => tog.click());
-    head.append(tog, name, el('span', 'dm-type', seen ? rosType(typeOf(kind, e)) : 'not in the last discovery'));
+    head.append(tog, name, el('span', 'dm-type', seen ? rosType(typeOf(kind, e)) : t('not in the last discovery')));
     const chip = el('span', 'dm-chip');
     const complete = r && r.attribute && r.entityId && (r.entityType || this.entityTypes().has(r.entityId));
-    if (this.mapped(r)) chip.textContent = (r.attribute || '?') + ' of ' + (r.entityId || '?');
+    if (this.mapped(r)) chip.textContent = t('{attribute} of {id}', { attribute: r.attribute || '?', id: r.entityId || '?' });
     head.append(chip);
     if (!complete) {
       // the proposal, greyed, and its tick: the empty fields as proposed
       const p = this.proposal(kind, e);
       if (!this.mapped(r)) {
-        chip.textContent = p.attribute + ' of ' + p.entityId;
+        chip.textContent = t('{attribute} of {id}', { attribute: p.attribute, id: p.entityId });
         chip.classList.add('prop');
       }
       const ok = button('✓', 'dm-ok', () => { this.accept(kind, e); this.render(); });
-      ok.title = 'accept the proposal' + (this.mapped(r) ? ' for the empty fields' : ': ' + p.attribute + ' of ' + p.entityId);
-      ok.setAttribute('aria-label', 'accept the proposal for ' + e.name);
+      ok.title = this.mapped(r) ? t('accept the proposal for the empty fields') : t('accept the proposal: {attribute} of {id}', { attribute: p.attribute, id: p.entityId });
+      ok.setAttribute('aria-label', t('accept the proposal for {name}', { name: e.name }));
       head.append(ok);
     }
     node.append(head);
@@ -523,7 +522,7 @@ export class DdsMapper {
     const prop = this.proposal(kind, e);
     const f = (label, key, ph, list, hint) => {
       const l = el('label', 'dm-field');
-      const i = input(r ? r[key] : '', ph, label + ' of ' + e.name, (v) => {
+      const i = input(r ? r[key] : '', ph, t('{label} of {name}', { label, name: e.name }), (v) => {
         const row = this.row(kind, e);
         row[key] = v;
         this.refresh();
@@ -535,9 +534,9 @@ export class DdsMapper {
     };
     const inherited = r && r.entityId && !r.entityType && types.get(r.entityId);
     fields.append(
-      f('Attribute name', 'attribute', prop.attribute || 'value', null),
-      f('Entity ID', 'entityId', (r && r.entityId) ? '' : prop.entityId, 'dm-ids'),
-      f('Entity type', 'entityType', inherited || prop.entityType || this.propType, 'dm-types', inherited ? 'optional - ' + r.entityId + ' is a ' + inherited : 'optional, if another endpoint of the entity gives it'));
+      f(t('Attribute name'), 'attribute', prop.attribute || 'value', null),
+      f(t('Entity ID'), 'entityId', (r && r.entityId) ? '' : prop.entityId, 'dm-ids'),
+      f(t('Entity type'), 'entityType', inherited || prop.entityType || this.propType, 'dm-types', inherited ? t('optional - {id} is a {type}', { id: r.entityId, type: inherited }) : t('optional, if another endpoint of the entity gives it')));
     node.append(fields);
 
     const tools = el('div', 'dm-eptools');
@@ -545,25 +544,25 @@ export class DdsMapper {
     if (sample) {
       const pre = el('pre', 'dm-sample', sample);
       pre.hidden = true;
-      const b = button(kind === 'topic' ? 'the topic\'s payload' : kind === 'service' ? 'the request and reply' : 'the goal, feedback and result',
+      const b = button(kind === 'topic' ? t('the topic\'s payload') : kind === 'service' ? t('the request and reply') : t('the goal, feedback and result'),
         'small', () => { pre.hidden = !pre.hidden; });
-      b.title = 'a sample of its DDS type - the value of the attribute it is mapped to';
+      b.title = t('a sample of its DDS type - the value of the attribute it is mapped to');
       tools.append(b);
       node.append(tools, pre);
     }
-    if (this.mapped(r)) tools.append(button('not mapped', 'small', () => { this.rows.delete(k); this.render(); }));
+    if (this.mapped(r)) tools.append(button(t('not mapped'), 'small', () => { this.rows.delete(k); this.render(); }));
     if (!tools.parentElement) node.append(tools);
     node.append(el('div', 'dm-probs', probs.join(' · ')));
     return node;
   }
 
   sample(kind, e) {
-    const t = (name) => ((this.inv && this.inv.types) || {})[name];
+    const type = (name) => ((this.inv && this.inv.types) || {})[name];
     const parts = [];
-    const add = (label, name) => { if (t(name) && t(name).sample !== undefined) parts.push([label, t(name).sample]); };
-    if (kind === 'topic') add('sample', e.type);
-    else if (kind === 'service') { add('request', (e.request || {}).type); add('reply', (e.reply || {}).type); }
-    else { add('goal', ((e.goal || {}).request || {}).type); add('feedback', (e.feedback || {}).type); add('result', ((e.result || {}).reply || {}).type); }
+    const add = (label, name) => { if (type(name) && type(name).sample !== undefined) parts.push([label, type(name).sample]); };
+    if (kind === 'topic') add(t('sample'), e.type);
+    else if (kind === 'service') { add(t('request'), (e.request || {}).type); add(t('reply'), (e.reply || {}).type); }
+    else { add(t('goal'), ((e.goal || {}).request || {}).type); add(t('feedback'), (e.feedback || {}).type); add(t('result'), ((e.result || {}).reply || {}).type); }
     return parts.map(([l, s]) => (parts.length > 1 ? l + ':\n' : '') + JSON.stringify(s, null, 2)).join('\n') || null;
   }
 
@@ -633,18 +632,20 @@ export class DdsMapper {
 
     const head = el('div', 'cp-card dm-head');
     const top = el('div', 'dm-top');
-    top.append(el('h2', 'section', 'The DDS configuration is written'), ...this.closeButtons());
-    head.append(top, el('p', 'cp-note', count(n('topics'), 'topic', 'topics') + ', ' + count(n('services'), 'service', 'services') + ' and '
-      + count(n('actions'), 'action', 'actions') + ', as attributes of ' + count(ents.size, 'entity', 'entities') + ' - domain ' + (m.domain || 0)
-      + (m.transport ? ', ' + (m.transport === 'udp' ? 'UDP only' : 'shared memory only') : '') + ([].concat(m.interfaces || []).length ? ', on ' + [].concat(m.interfaces).join(', ') : '')
-      + '. Two files, in ' + f.directory + ':'));
+    top.append(el('h2', 'section', t('The DDS configuration is written')), ...this.closeButtons());
+    head.append(top, el('p', 'cp-note', t('{topics}, {services} and {actions}, as attributes of {entities} - domain {domain}', {
+      topics: plural(n('topics'), '{n} topic', '{n} topics'), services: plural(n('services'), '{n} service', '{n} services'),
+      actions: plural(n('actions'), '{n} action', '{n} actions'), entities: plural(ents.size, '{n} entity', '{n} entities'), domain: m.domain || 0 })
+      + (m.transport ? ', ' + (m.transport === 'udp' ? t('UDP only') : t('shared memory only')) : '')
+      + ([].concat(m.interfaces || []).length ? ', ' + t('on {interfaces}', { interfaces: [].concat(m.interfaces).join(', ') }) : '')
+      + '. ' + t('Two files, in {dir}:', { dir: f.directory })));
 
     const fileCard = (title, path, what, flag) => {
       const c = el('div', 'dm-file');
       const p = el('code', 'dm-path', path);
-      const copy = button('Copy', 'small', async () => {
-        try { await navigator.clipboard.writeText(path); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'select it and copy'; }
-        setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      const copy = button(t('Copy'), 'small', async () => {
+        try { await navigator.clipboard.writeText(path); copy.textContent = t('Copied'); } catch (e) { copy.textContent = t('select it and copy'); }
+        setTimeout(() => { copy.textContent = t('Copy'); }, 1500);
       });
       const line = el('div', 'dm-fileline');
       line.append(p, copy);
@@ -652,18 +653,18 @@ export class DdsMapper {
       return c;
     };
     head.append(
-      fileCard('The bridge configuration', f.bridgeConfig, 'how the dds bridge reaches the DDS system, and the mapping the broker reads', '--bridgeConfig'),
-      fileCard('The @context', f.userContext, 'each entity type and attribute a term of ' + (m.vocabulary || 'the default context\'s namespace')
-        + ', so clients use the short names', '--defaultUserContext'));
+      fileCard(t('The bridge configuration'), f.bridgeConfig, t('how the dds bridge reaches the DDS system, and the mapping the broker reads'), '--bridgeConfig'),
+      fileCard(t('The @context'), f.userContext, m.vocabulary ? t('each entity type and attribute a term of {vocabulary}, so clients use the short names', { vocabulary: m.vocabulary })
+        : t('each entity type and attribute a term of the default context\'s namespace, so clients use the short names'), '--defaultUserContext'));
     out.push(head);
 
     // a broker with them
     const start = el('div', 'cp-card dm-start');
-    start.append(el('h2', 'section', 'Start a broker with it'));
-    start.append(el('p', 'cp-note', 'The broker of the form on the right - its name, port, store and where it runs - with the dds bridge and the two files. '
-      + 'More options are added as typed.'));
+    start.append(el('h2', 'section', t('Start a broker with it')));
+    start.append(el('p', 'cp-note', t('The broker of the form on the right - its name, port, store and where it runs - with the dds bridge and the two files. '
+      + 'More options are added as typed.')));
     const cmd = el('pre', 'cp-cmd dm-cmd');
-    const more = input(this.run.f.args || '', '--memoryLimit 512 --ddsSync', 'More options for the broker', () => show());
+    const more = input(this.run.f.args || '', '--memoryLimit 512 --ddsSync', t('More options for the broker'), () => show());
     more.classList.add('dm-more');
     const show = () => {
       cmd.textContent = 'coraine --bridges dds \\\n  --bridgeConfig ' + f.bridgeConfig + ' \\\n  --defaultUserContext ' + f.userContext
@@ -671,18 +672,18 @@ export class DdsMapper {
     };
     show();
     const ml = el('label', 'dm-field');
-    ml.append(el('span', 'dm-flabel', 'More options'), more);
-    const go = button('Start the broker', 'primary dm-go', () => this.startBroker(more.value.trim(), go));
-    const fill = button('Put it in the broker form', '', () => { this.applyToForm(more.value.trim()); this.close(); });
-    fill.title = 'the form on the right gets the dds bridge, the two files and the options - to change more before Start';
+    ml.append(el('span', 'dm-flabel', t('More options')), more);
+    const go = button(t('Start the broker'), 'primary dm-go', () => this.startBroker(more.value.trim(), go));
+    const fill = button(t('Put it in the broker form'), '', () => { this.applyToForm(more.value.trim()); this.close(); });
+    fill.title = t('the form on the right gets the dds bridge, the two files and the options - to change more before Start');
     const btns = el('div', 'dm-row');
     btns.append(go, fill, el('span', 'dm-err'));
     start.append(cmd, ml, btns);
     out.push(start);
 
     const back = el('div', 'dm-row');
-    back.append(button('Edit the mapping', '', () => this.show('map')), button('Close', '', () => this.close()));
-    if (this.from === 'compile') back.append(button('← Back to Compile', '', () => { this.close(); location.hash = '#compile'; }));
+    back.append(button(t('Edit the mapping'), '', () => this.show('map')), button(t('Close'), '', () => this.close()));
+    if (this.from === 'compile') back.append(button(t('← Back to Compile'), '', () => { this.close(); location.hash = '#compile'; }));
     out.push(back);
     return out;
   }

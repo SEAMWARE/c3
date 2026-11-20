@@ -4,11 +4,12 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
+import { t } from './i18n.js';
 
 async function json(response) {
   const text = await response.text();
   if (!text) return null;
-  try { return JSON.parse(text); } catch { return { title: 'Not JSON', detail: text.slice(0, 300) }; }
+  try { return JSON.parse(text); } catch { return { title: t('Not JSON'), detail: text.slice(0, 300) }; }
 }
 
 async function call(method, path, body) {
@@ -110,7 +111,7 @@ export async function brokerGet(broker, pathAndQuery, tenant) {
     if (tenant !== undefined) { if (tenant) headers['NGSILD-Tenant'] = tenant; } else if (tenants.has(broker)) headers['NGSILD-Tenant'] = tenants.get(broker);
     response = await fetch('/api/proxy' + pathAndQuery, { headers });
   } catch (e) {
-    return { ok: false, status: 0, headers: new Headers(), body: { title: 'c3 backend not reachable', detail: String(e.message || e) }, reached: false };
+    return { ok: false, status: 0, headers: new Headers(), body: { title: t('c3 backend not reachable'), detail: String(e.message || e) }, reached: false };
   }
   const body = await json(response);
   const reached = !(body && body.broker === false);
@@ -176,7 +177,7 @@ export async function brokerWrite(broker, method, pathAndQuery, body, contentTyp
     }
     response = await fetch('/api/proxy' + pathAndQuery, init);
   } catch (e) {
-    return { ok: false, status: 0, headers: new Headers(), body: { title: 'c3 backend not reachable', detail: String(e.message || e) }, reached: false, location: null };
+    return { ok: false, status: 0, headers: new Headers(), body: { title: t('c3 backend not reachable'), detail: String(e.message || e) }, reached: false, location: null };
   }
   const data = await json(response);
   const reached = !(data && data.broker === false);

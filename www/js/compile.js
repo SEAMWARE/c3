@@ -11,6 +11,7 @@
 // when it is over.
 //
 import * as api from './api.js';
+import { t, tk, plural } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,20 +35,32 @@ const PHASES = {
 const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, done: 0 };
 
 const MODES = [
-  ['release', 'Release',              'Optimised build, no training. Traces compiled out.'],
-  ['pgo',     'Profile-guided',       'Built instrumented, trained on the standard request shapes, rebuilt with the profile.'],
-  ['tune',    'Tuned for a workload', 'Trained on your workload; allocator and lock policy measured on it.'],
-  ['debug',   'Debug',                'Traces compiled in (--traceLevels works) - for reproducing a crash report.'],
+  ['release', tk('Release'),              tk('Optimised build, no training. Traces compiled out.')],
+  ['pgo',     tk('Profile-guided'),       tk('Built instrumented, trained on the standard request shapes, rebuilt with the profile.')],
+  ['tune',    tk('Tuned for a workload'), tk('Trained on your workload; allocator and lock policy measured on it.')],
+  ['debug',   tk('Debug'),                tk('Traces compiled in (--traceLevels works) - for reproducing a crash report.')],
 ];
 const MODE_LABEL = Object.fromEntries(MODES.map(([id, label]) => [id, label]));
 
 const mib = (b) => (b / (1024 * 1024)).toFixed(1) + ' MiB';
+
+//
+// The states of a build, as the backend names them - shown in the user's language
+//
+const STATES = { running: tk('running'), succeeded: tk('succeeded'), failed: tk('failed'), cancelled: tk('cancelled'), interrupted: tk('interrupted') };
+const stateText = (s) => (STATES[s] ? t(STATES[s]) : s);
+
+//
+// orList / andList - names joined into one phrase: "a, b or c" in the user's language
+//
+const orList = (items) => (items.length ? items.reduce((a, b) => t('{a} or {b}', { a, b })) : '');
+const andList = (items) => (items.length ? items.reduce((a, b) => t('{a} and {b}', { a, b })) : '');
 const when = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 };
-const duration = (s) => (s >= 60 ? Math.floor(s / 60) + ' min ' : '') + (s % 60) + ' s';
+const duration = (s) => (s >= 60 ? t('{m} min {s} s', { m: Math.floor(s / 60), s: s % 60 }) : t('{s} s', { s }));
 
 //
 // shellQuote - as the backend quotes the command it runs
@@ -56,8 +69,8 @@ const duration = (s) => (s >= 60 ? Math.floor(s / 60) + ' min ' : '') + (s % 60)
 // The HTTP servers coraine-build builds with (--http-server); mhd is its default
 //
 const HTTP_SERVERS = [
-  ['mhd',     'libmicrohttpd',      'An external library (libmicrohttpd 1.0.10). Everything is built.'],
-  ['builtin', 'corHttp (built in)', 'No external library. One listener - what needs a second port is not built.'],
+  ['mhd',     'libmicrohttpd',          tk('An external library (libmicrohttpd 1.0.10). Everything is built.')],
+  ['builtin', tk('corHttp (built in)'), tk('No external library. One listener - what needs a second port is not built.')],
 ];
 const HTTP_LABEL = Object.fromEntries(HTTP_SERVERS.map(([id, label]) => [id, label]));
 
@@ -67,11 +80,17 @@ const HTTP_LABEL = Object.fromEntries(HTTP_SERVERS.map(([id, label]) => [id, lab
 //
 const SETTINGS = {
   'HTTP_SERVER=mhd': {
-    label: 'the libmicrohttpd HTTP server',
-    why:   'it listens on a port of its own, and only libmicrohttpd has a second listener - corHttp has one',
-    give:  'choose libmicrohttpd under HTTP server',
+    label: tk('the libmicrohttpd HTTP server'),
+    why:   tk('it listens on a port of its own, and only libmicrohttpd has a second listener - corHttp has one'),
+    give:  tk('choose libmicrohttpd under HTTP server'),
   },
 };
+
+//
+// The groups c³ names itself (the others come from the source's CMake): kept in English, shown translated
+//
+const GROUP_NAMES = { Other: tk('Other'), Bridges: tk('Bridges') };
+const groupName = (name) => (GROUP_NAMES[name] ? t(GROUP_NAMES[name]) : name);
 
 //
 // openGroupsKey - the groups the Features card has open, remembered in this browser
@@ -150,6 +169,8 @@ function docSize(text) {
   if (/Size:\s+under a page/.test(text)) return '< 4 KiB';
   return '';
 }
+
+const sizeText = (size) => (size === 'no effect yet' ? t('no effect yet') : size);
 
 //
 // mdInline / mdRender - the little Markdown the doc's sections use: paragraphs, "- " lists, ``` blocks,
@@ -230,7 +251,7 @@ function helpShow(title, text) {
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const ok = el('button', 'btn', 'Close');
+  const ok = el('button', 'btn', t('Close'));
   ok.type = 'button';
   ok.addEventListener('click', close);
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
@@ -253,26 +274,23 @@ function ddsMapAsk() {
   const ov = el('div', 'overlay cp-modal');
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');
-  ov.setAttribute('aria-label', 'Map DDS topics, services and actions');
+  ov.setAttribute('aria-label', t('Map DDS topics, services and actions'));
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const cancel = el('button', 'btn', 'Stay here');
+  const cancel = el('button', 'btn', t('Stay here'));
   cancel.type = 'button';
   cancel.addEventListener('click', close);
-  const go = el('button', 'btn primary', 'Go to Operate');
+  const go = el('button', 'btn primary', t('Go to Operate'));
   go.type = 'button';
   go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:ddsmap')); });
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const actions = el('div', 'actions');
   actions.append(cancel, go);
-  card.append(el('h3', '', 'The DDS mapping is in Operate'),
-    el('p', '', 'The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: '
-      + 'the Compile tab brings you back, to build.'),
-    el('p', '', 'Discover asks your DDS system what it announces: c³ joins its DDS domain from this machine, so it must reach it - DDS '
-      + 'discovery is multicast, on this host or its network. Where c³ does not reach it, import an inventory.json written where it runs. '
-      + 'Discover uses a broker with the dds bridge: an installed coraine, a build, or an image with it.'),
+  card.append(el('h3', '', t('The DDS mapping is in Operate')),
+    el('p', '', t('The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.')),
+    el('p', '', t('Discover asks your DDS system what it announces: c³ joins its DDS domain from this machine, so it must reach it - DDS discovery is multicast, on this host or its network. Where c³ does not reach it, import an inventory.json written where it runs. Discover uses a broker with the dds bridge: an installed coraine, a build, or an image with it.')),
     actions);
   ov.append(card);
   document.body.append(ov);
@@ -287,26 +305,23 @@ function opcuaMapAsk() {
   const ov = el('div', 'overlay cp-modal');
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');
-  ov.setAttribute('aria-label', 'Map an OPC UA server');
+  ov.setAttribute('aria-label', t('Map an OPC UA server'));
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const cancel = el('button', 'btn', 'Stay here');
+  const cancel = el('button', 'btn', t('Stay here'));
   cancel.type = 'button';
   cancel.addEventListener('click', close);
-  const go = el('button', 'btn primary', 'Go to Operate');
+  const go = el('button', 'btn primary', t('Go to Operate'));
   go.type = 'button';
   go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:opcuamap')); });
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const actions = el('div', 'actions');
   actions.append(cancel, go);
-  card.append(el('h3', '', 'The OPC UA mapping is in Operate'),
-    el('p', '', 'The mapper opens in the Operate tab, with the opcua bridge ticked in its broker form. What is chosen here stays as it is: '
-      + 'the Compile tab brings you back, to build.'),
-    el('p', '', 'Discover reads your OPC UA server\'s address space: c³ connects to it from this machine, so it must reach its opc.tcp:// URL. '
-      + 'Where c³ does not reach it, import an inventory.json read where it runs. Discover uses a native broker with the opcua bridge: an '
-      + 'installed coraine or a build.'),
+  card.append(el('h3', '', t('The OPC UA mapping is in Operate')),
+    el('p', '', t('The mapper opens in the Operate tab, with the opcua bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.')),
+    el('p', '', t('Discover reads your OPC UA server\'s address space: c³ connects to it from this machine, so it must reach its opc.tcp:// URL. Where c³ does not reach it, import an inventory.json read where it runs. Discover uses a native broker with the opcua bridge: an installed coraine or a build.')),
     actions);
   ov.append(card);
   document.body.append(ov);
@@ -320,7 +335,7 @@ function helpButton(section, inline) {
   if (!section) return null;
   const q = el('button', 'cp-q' + (inline ? ' inline' : ''), '?');
   q.type = 'button';
-  q.title = 'What is ' + section.title.replace(/`/g, '') + '?';
+  q.title = t('What is {what}?', { what: section.title.replace(/`/g, '') });
   q.setAttribute('aria-label', q.title);
   q.addEventListener('click', (e) => { e.stopPropagation(); helpShow(section.title, section.text); });
   return q;
@@ -394,11 +409,11 @@ export class Compile {
     try {
       this.caps = await api.capabilities();
     } catch (e) {
-      this.caps = { compile: { available: false, why: 'the backend does not answer: ' + e.message } };
+      this.caps = { compile: { available: false, why: t('the backend does not answer: {error}', { error: e.message }) } };
     }
     const cc = this.caps.compile;
 
-    $('cp-host').textContent = 'build host · ' + (this.caps.host || 'this machine');
+    $('cp-host').textContent = t('build host · {host}', { host: this.caps.host || t('this machine') });
     $('page-compile').classList.toggle('cp-off', !cc.available);
     $('cp-unavail').hidden = !!cc.available;
     $('cp-unavail-why').textContent = cc.why ? cc.why.charAt(0).toUpperCase() + cc.why.slice(1) + '.' : '';
@@ -474,17 +489,17 @@ export class Compile {
   // reqLabel - a requirement's name; of a "requiresAny", its switches with "or"
   //
   reqLabel(r) {
-    if (Array.isArray(r)) return r.map((x) => this.reqLabel(x)).join(' or ');
-    return (r.indexOf('=') < 0) ? r : ((SETTINGS[r] && SETTINGS[r].label) || r);
+    if (Array.isArray(r)) return orList(r.map((x) => this.reqLabel(x)));
+    return (r.indexOf('=') < 0) ? r : ((SETTINGS[r] && t(SETTINGS[r].label)) || r);
   }
 
   //
   // offLabel - the requirements that do not hold, for "... is off" / "... are off"
   //
   offLabel(forced) {
-    const label = forced.map((r) => !Array.isArray(r) ? this.reqLabel(r)
-                                  : (r.length === 2 ? 'both ' + r.join(' and ') : 'all of ' + r.join(', '))).join(' and ');
-    return label + ((forced.length > 1 || Array.isArray(forced[0])) ? ' are' : ' is') + ' off';
+    const what = andList(forced.map((r) => !Array.isArray(r) ? this.reqLabel(r)
+                                  : (r.length === 2 ? t('both {a} and {b}', { a: r[0], b: r[1] }) : t('all of {list}', { list: r.join(', ') }))));
+    return (forced.length > 1 || Array.isArray(forced[0])) ? t('{what} are off', { what }) : t('{what} is off', { what });
   }
 
   //
@@ -492,10 +507,13 @@ export class Compile {
   //
   forcedWhy(f, forced) {
     return forced.map((r) => {
-      if (Array.isArray(r)) return `${f.name} needs ${r.join(' or ')} - one of them is enough, and ${r.length === 2 ? 'both are' : 'all are'} off. To have it, switch one of them on.`;
+      if (Array.isArray(r)) {
+        return r.length === 2 ? t('{name} needs {list} - one of them is enough, and both are off. To have it, switch one of them on.', { name: f.name, list: orList(r) })
+                              : t('{name} needs {list} - one of them is enough, and all are off. To have it, switch one of them on.', { name: f.name, list: orList(r) });
+      }
       const st = SETTINGS[r];
-      return st ? `${f.name} needs ${st.label}: ${st.why}. To have it, ${st.give}.`
-                : `${f.name} needs ${r}, which is off. To have it, switch ${r} on.`;
+      return st ? t('{name} needs {label}: {why}. To have it, {give}.', { name: f.name, label: t(st.label), why: t(st.why), give: t(st.give) })
+                : t('{name} needs {req}, which is off. To have it, switch {req} on.', { name: f.name, req: r });
     }).join('\n');
   }
 
@@ -523,18 +541,18 @@ export class Compile {
     const ov = el('div', 'overlay cp-modal');
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
-    ov.setAttribute('aria-label', 'Switch to ' + HTTP_LABEL[id]);
+    ov.setAttribute('aria-label', t('Switch to {server}', { server: t(HTTP_LABEL[id]) }));
     const card = el('div', 'card');
     const list = el('ul', 'cp-lost');
     for (const f of lost) {
       const li = el('li');
       li.append(el('span', 'mono', f.name), el('span', '', ' - ' + f.description));
-      const why = (f.requires || []).filter((r) => SETTINGS[r]).map((r) => SETTINGS[r].why);
-      if (why.length) li.append(el('div', 'why', 'Not built: ' + why.join('; ') + '.'));
+      const why = (f.requires || []).filter((r) => SETTINGS[r]).map((r) => t(SETTINGS[r].why));
+      if (why.length) li.append(el('div', 'why', t('Not built: {why}.', { why: why.join('; ') })));
       list.append(li);
     }
-    const yes = el('button', 'btn primary', 'Switch to ' + HTTP_LABEL[id]);
-    const no = el('button', 'btn', 'Keep ' + HTTP_LABEL[this.choice.httpServer]);
+    const yes = el('button', 'btn primary', t('Switch to {server}', { server: t(HTTP_LABEL[id]) }));
+    const no = el('button', 'btn', t('Keep {server}', { server: t(HTTP_LABEL[this.choice.httpServer]) }));
     yes.type = no.type = 'button';
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -544,10 +562,11 @@ export class Compile {
     document.addEventListener('keydown', onKey);
     const actions = el('div', 'actions');
     actions.append(yes, no);
-    card.append(el('h3', '', 'Switch to ' + HTTP_LABEL[id] + '?'),
-                el('p', '', `With ${HTTP_LABEL[id]}, ${lost.length === 1 ? 'this switch is' : 'these switches are'} not built:`),
+    const server = t(HTTP_LABEL[id]), back = t(HTTP_LABEL[this.choice.httpServer]);
+    card.append(el('h3', '', t('Switch to {server}?', { server })),
+                el('p', '', plural(lost.length, 'With {server}, this switch is not built:', 'With {server}, these switches are not built:', { server })),
                 list,
-                el('p', '', 'Switching back to ' + HTTP_LABEL[this.choice.httpServer] + ' turns ' + (lost.length === 1 ? 'it' : 'them') + ' on again.'),
+                el('p', '', plural(lost.length, 'Switching back to {server} turns it on again.', 'Switching back to {server} turns them on again.', { server: back })),
                 actions);
     ov.append(card);
     document.body.append(ov);
@@ -603,7 +622,7 @@ export class Compile {
   //
   pill(b, section) {
     const size = docSize(section && section.text);
-    if (size) b.append(el('span', 'psz', ' ' + size));
+    if (size) b.append(el('span', 'psz', ' ' + sizeText(size)));
     const q = helpButton(section, true);
     if (!q) return b;
     const w = el('span', 'cp-segitem');
@@ -624,7 +643,7 @@ export class Compile {
     const seg = (id, labels, current) => {
       const box = $(id);
       box.replaceChildren(...labels.map((label) => {
-        const b = el('button', '', label);
+        const b = el('button', '', t(label));
         b.type = 'button';
         b.disabled = true;
         b.setAttribute('aria-pressed', String(label === current));
@@ -633,8 +652,8 @@ export class Compile {
     };
     const arch = (this.caps && this.caps.arch) || '';
     seg('cp-arch', ['amd64', 'arm64'], arch === 'x86_64' ? 'amd64' : arch === 'aarch64' ? 'arm64' : '');
-    seg('cp-dist', ['this machine'], 'this machine');
-    seg('cp-output', ['Binary', 'Docker image', 'Debian package'], 'Binary');
+    seg('cp-dist', [tk('this machine')], tk('this machine'));
+    seg('cp-output', [tk('Binary'), tk('Docker image'), tk('Debian package')], tk('Binary'));
 
     //
     // HTTP server: libmicrohttpd or corHttp - corHttp not with a training build (coraine-build refuses)
@@ -642,18 +661,18 @@ export class Compile {
     const isTraining = (m) => (m === 'pgo' || m === 'tune');
     const http = $('cp-http');
     http.replaceChildren(...HTTP_SERVERS.map(([id, label, desc]) => {
-      const b = el('button', '', label);
+      const b = el('button', '', t(label));
       b.type = 'button';
       b.setAttribute('aria-pressed', String(this.choice.httpServer === id));
       const blocked = (id === 'builtin') && isTraining(this.choice.mode);
       if (blocked) b.setAttribute('aria-disabled', 'true');
-      b.title = blocked ? `Not with ${MODE_LABEL[this.choice.mode]} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for corHttp.` : desc;
+      b.title = blocked ? t('Not with {mode} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for corHttp.', { mode: t(MODE_LABEL[this.choice.mode]) }) : t(desc);
       b.addEventListener('click', () => { if (!blocked) this.httpServerSet(id); });
       return this.pill(b, this.docAt(HTTP_DOC[id]));
     }));
     const lostNow = this.features.filter((f) => (f.requires || []).some((r) => SETTINGS[r]) && this.forcedBy(f).length > 0).map((f) => f.name);
     $('cp-http-note').textContent = (this.choice.httpServer === 'builtin')
-      ? 'No external library.' + (lostNow.length ? ' Not built with it: ' + lostNow.join(', ') + '.' : '')
+      ? (lostNow.length ? t('No external library. Not built with it: {list}.', { list: lostNow.join(', ') }) : t('No external library.'))
       : '';
 
     //
@@ -661,15 +680,15 @@ export class Compile {
     //
     const mongoc = this.isOn('MONGOC');
     const store = $('cp-store');
-    store.replaceChildren(...[['corDB only', false], ['corDB + mongoc', true]].map(([label, value]) => {
-      const b = el('button', '', label);
+    store.replaceChildren(...[[tk('corDB only'), false], ['corDB + mongoc', true]].map(([label, value]) => {
+      const b = el('button', '', t(label));
       b.type = 'button';
       b.setAttribute('aria-pressed', String(mongoc === value));
       b.addEventListener('click', () => { this.choice.features.MONGOC = value; this.changed(); });
       return this.pill(b, this.docAt(STORE_DOC[value]));
     }));
     const sn = $('cp-store-note');
-    sn.textContent = (!cc.mongoc && mongoc) ? 'The mongo-c driver v2 is not installed here: this build would stop. corDB only, or install it.' : (!cc.mongoc ? 'mongoc needs the mongo-c driver v2 (not installed here).' : '');
+    sn.textContent = (!cc.mongoc && mongoc) ? t('The mongo-c driver v2 is not installed here: this build would stop. corDB only, or install it.') : (!cc.mongoc ? t('mongoc needs the mongo-c driver v2 (not installed here).') : '');
     sn.className = 'cp-note' + ((!cc.mongoc && mongoc) ? ' warn' : '');
 
     //
@@ -694,11 +713,11 @@ export class Compile {
       txt.append(el('span', 'fn', f.name), el('span', 'fd', f.description));
       const section = docFeature(this.doc, f.name);
       const size = docSize(section && section.text);
-      if (size) txt.append(el('span', 'fsz', (size === 'no effect yet') ? 'compiled out: no effect yet' : (f.default ? 'off: ' : 'on: ') + size));
+      if (size) txt.append(el('span', 'fsz', (size === 'no effect yet') ? t('compiled out: no effect yet') : (f.default ? t('off: {size}', { size }) : t('on: {size}', { size }))));
       const needs = this.needsOf(f).map((r) => this.reqLabel(r));
-      if (forced.length) txt.append(el('span', 'fr', 'Off: needs ' + needs.join(' and ') + ' - ' + this.offLabel(forced)));
-      else if (needs.length) txt.append(el('span', 'fq', 'Needs ' + needs.join(' and ')));
-      txt.append(el('span', 'fdef', 'default ' + (f.default ? 'on' : 'off') + ((this.isOn(f.name) !== !!f.default) ? ' · changed' : '')));
+      if (forced.length) txt.append(el('span', 'fr', t('Off: needs {needs} - {off}', { needs: andList(needs), off: this.offLabel(forced) })));
+      else if (needs.length) txt.append(el('span', 'fq', t('Needs {needs}', { needs: andList(needs) })));
+      txt.append(el('span', 'fdef', (f.default ? t('default on') : t('default off')) + ((this.isOn(f.name) !== !!f.default) ? ' · ' + t('changed') : '')));
       b.append(el('span', 'cp-fbox'), txt);
       b.addEventListener('click', () => { if (forced.length) return; this.choice.features[f.name] = !this.isOn(f.name); this.changed(); });
       return { b: withHelp(b, section, 'cp-fwrap'), isOn };
@@ -712,9 +731,9 @@ export class Compile {
       head.setAttribute('aria-expanded', String(open));
 
       const gOn = items.filter((x) => x.isOn).length;
-      head.append(el('span', 'chev', open ? '▾' : '▸'), el('span', 'gname', name),
-                  el('span', 'gcount', `${gOn} of ${items.length} on`));
-      if (changed) head.append(el('span', 'gchanged', changed + ' changed'));
+      head.append(el('span', 'chev', open ? '▾' : '▸'), el('span', 'gname', groupName(name)),
+                  el('span', 'gcount', t('{on} of {n} on', { on: gOn, n: items.length })));
+      if (changed) head.append(el('span', 'gchanged', t('{n} changed', { n: changed })));
       head.addEventListener('click', () => {
         if (this.openGroups.has(name)) this.openGroups.delete(name); else this.openGroups.add(name);
         openGroupsSave(this.openGroups);
@@ -723,7 +742,7 @@ export class Compile {
 
       const body = el('div', 'cp-features');
       body.setAttribute('role', 'group');
-      body.setAttribute('aria-label', name);
+      body.setAttribute('aria-label', groupName(name));
       body.hidden = !open;
       body.replaceChildren(...items.map((x) => x.b));
 
@@ -748,14 +767,14 @@ export class Compile {
       b.setAttribute('role', 'switch');
       b.setAttribute('aria-checked', String(isOn));
       if (!br.available) b.setAttribute('aria-disabled', 'true');
-      b.title = br.available ? br.description : 'Not here: ' + br.why;
+      b.title = br.available ? br.description : t('Not here: {why}', { why: br.why });
       const txt = el('span', 'txt');
       txt.append(el('span', 'fn', br.name), el('span', 'fd', br.description));
       const section = this.docAt('Bridge: ' + (BRIDGE_DOC[br.name] || br.name));
       const size = docSize(section && section.text);
-      if (size) txt.append(el('span', 'fsz', 'on: ' + size));
-      if (!br.available) txt.append(el('span', 'fr', 'Not here: ' + br.why));
-      txt.append(el('span', 'fdef', 'default ' + (br.default ? 'on' : 'off') + (changed ? ' · changed' : '')));
+      if (size) txt.append(el('span', 'fsz', t('on: {size}', { size: sizeText(size) })));
+      if (!br.available) txt.append(el('span', 'fr', t('Not here: {why}', { why: br.why })));
+      txt.append(el('span', 'fdef', (br.default ? t('default on') : t('default off')) + (changed ? ' · ' + t('changed') : '')));
       b.append(el('span', 'cp-fbox'), txt);
       b.addEventListener('click', () => { if (!br.available) return; this.choice.bridges[br.name] = !this.isBridgeOn(br); this.changed(); });
       return { b: withHelp(b, section, 'cp-fwrap'), isOn };
@@ -766,19 +785,19 @@ export class Compile {
       groups.push({ name: 'Bridges', features: [] });
       const dds = this.bridges.find((br) => br.name === 'dds');
       if (dds) {
-        const map = el('button', 'btn primary cp-ddsmap', 'Map DDS topics, services and actions');
+        const map = el('button', 'btn primary cp-ddsmap', t('Map DDS topics, services and actions'));
         map.type = 'button';
         map.disabled = !(dds.available && this.isBridgeOn(dds));
-        map.title = map.disabled ? 'switch the dds bridge on first' : 'in Operate - the Compile tab brings you back';
+        map.title = map.disabled ? t('switch the dds bridge on first') : t('in Operate - the Compile tab brings you back');
         map.addEventListener('click', ddsMapAsk);
         sections.push(map);
       }
       const opcua = this.bridges.find((br) => br.name === 'opcua');
       if (opcua) {
-        const map = el('button', 'btn primary cp-ddsmap', 'Map an OPC UA server');
+        const map = el('button', 'btn primary cp-ddsmap', t('Map an OPC UA server'));
         map.type = 'button';
         map.disabled = !(opcua.available && this.isBridgeOn(opcua));
-        map.title = map.disabled ? 'switch the opcua bridge on first' : 'in Operate - the Compile tab brings you back';
+        map.title = map.disabled ? t('switch the opcua bridge on first') : t('in Operate - the Compile tab brings you back');
         map.addEventListener('click', opcuaMapAsk);
         sections.push(map);
       }
@@ -789,15 +808,15 @@ export class Compile {
     const all = $('cp-fexpand');
     const allOpen = groups.length > 0 && groups.every((g) => this.openGroups.has(g.name));
     all.hidden = groups.length === 0;
-    all.textContent = allOpen ? 'Collapse all' : 'Expand all';
+    all.textContent = allOpen ? t('Collapse all') : t('Expand all');
     all.onclick = () => {
       if (allOpen) this.openGroups.clear(); else groups.forEach((g) => this.openGroups.add(g.name));
       openGroupsSave(this.openGroups);
       this.render();
     };
-    $('cp-fcount').textContent = shown.length ? `${on} of ${shown.length} compiled in · a feature switched off is not in the binary at all` : '';
-    $('cp-fnote').textContent = this.featureError ? 'The feature list could not be read: ' + this.featureError
-      : (!cc.available ? 'The switches come from the source coraine-dev installs.' : '');
+    $('cp-fcount').textContent = shown.length ? t('{on} of {n} compiled in · a feature switched off is not in the binary at all', { on, n: shown.length }) : '';
+    $('cp-fnote').textContent = this.featureError ? t('The feature list could not be read: {error}', { error: this.featureError })
+      : (!cc.available ? t('The switches come from the source coraine-dev installs.') : '');
 
     //
     // Optimisation
@@ -810,12 +829,12 @@ export class Compile {
       const trains = (id === 'pgo' || id === 'tune');
       b.disabled = trains && cc.available && !cc.pgo;
       const byServer = trains && !b.disabled && (this.choice.httpServer === 'builtin');
-      b.append(el('span', 'ol', label), el('span', 'od', desc));
-      if (b.disabled) b.append(el('span', 'ow', cc.pgoWhy || 'not available here'));
+      b.append(el('span', 'ol', t(label)), el('span', 'od', t(desc)));
+      if (b.disabled) b.append(el('span', 'ow', cc.pgoWhy || t('not available here')));
       if (byServer) {
         b.setAttribute('aria-disabled', 'true');
-        b.title = 'Not with corHttp yet: coraine-build trains with libmicrohttpd only. Choose libmicrohttpd under HTTP server for this.';
-        b.append(el('span', 'ow', 'not with corHttp yet'));
+        b.title = t('Not with corHttp yet: coraine-build trains with libmicrohttpd only. Choose libmicrohttpd under HTTP server for this.');
+        b.append(el('span', 'ow', t('not with corHttp yet')));
       }
       b.addEventListener('click', () => { if (byServer) return; this.choice.mode = id; this.changed(); });
       return withHelp(b, this.docAt(MODE_DOC[id]), 'cp-owrap');
@@ -827,13 +846,13 @@ export class Compile {
     // This build
     //
     const off = shown.filter((f) => !(this.isOn(f.name) && this.forcedBy(f).length === 0)).map((f) => f.name);
-    $('cp-sum-target').textContent = (arch || 'this machine') + ' · ' + ((this.caps && this.caps.distribution) || 'this distribution') + ' · binary';
-    $('cp-sum-server').textContent = HTTP_LABEL[this.choice.httpServer] + (this.choice.httpServer === 'mhd' ? ' (coraine-build\'s default)' : '');
-    $('cp-sum-stores').textContent = (mongoc ? 'corDB + mongoc' : 'corDB only') + '; history none, corDB, timescale';
-    $('cp-sum-opt').textContent = MODE_LABEL[this.choice.mode] + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
-    $('cp-sum-features').textContent = shown.length ? (off.length ? off.length + ' off: ' + off.join(', ') : 'all ' + shown.length + ' on') : '-';
+    $('cp-sum-target').textContent = t('{arch} · {distribution} · binary', { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') });
+    $('cp-sum-server').textContent = this.choice.httpServer === 'mhd' ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL[this.choice.httpServer]) }) : t(HTTP_LABEL[this.choice.httpServer]);
+    $('cp-sum-stores').textContent = t('{stores}; history none, corDB, timescale', { stores: mongoc ? 'corDB + mongoc' : t('corDB only') });
+    $('cp-sum-opt').textContent = t(MODE_LABEL[this.choice.mode]) + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
+    $('cp-sum-features').textContent = shown.length ? (off.length ? t('{n} off: {list}', { n: off.length, list: off.join(', ') }) : t('all {n} on', { n: shown.length })) : '-';
     const brOn = this.bridges.filter((br) => br.available && this.isBridgeOn(br)).map((br) => br.name);
-    $('cp-sum-bridges').textContent = this.bridges.length ? (brOn.length ? brOn.join(', ') : 'none') : '-';
+    $('cp-sum-bridges').textContent = this.bridges.length ? (brOn.length ? brOn.join(', ') : t('none')) : '-';
     $('cp-sum-source').textContent = cc.version ? 'coraine ' + cc.version : (cc.source || '-');
 
     this.commandSoon();
@@ -985,11 +1004,11 @@ export class Compile {
       this.commandSoon();
     });
     es.addEventListener('skipped', (e) => {
-      $('cp-log-note').textContent = 'The first ' + mib(Number(e.data)) + ' of the log are not shown here - the whole log: ' + this.run.log;
+      $('cp-log-note').textContent = t('The first {size} of the log are not shown here - the whole log: {path}', { size: mib(Number(e.data)), path: this.run.log });
     });
     es.addEventListener('busy', (e) => { $('cp-log-note').textContent = e.data; });
     es.onerror = () => {
-      if (es.readyState === EventSource.CLOSED) $('cp-log-note').textContent = 'The log stream closed.';
+      if (es.readyState === EventSource.CLOSED) $('cp-log-note').textContent = t('The log stream closed.');
     };
   }
 
@@ -1045,7 +1064,7 @@ export class Compile {
     if (!b) return;
     $('cp-run-name').textContent = b.name;
     const st = $('cp-run-state');
-    st.textContent = b.state;
+    st.textContent = stateText(b.state);
     st.className = 'badge ' + b.state;
     $('cp-cancel').hidden = b.state !== 'running';
     $('cp-cancel').disabled = false;
@@ -1112,41 +1131,41 @@ export class Compile {
     dl.replaceChildren();
 
     if (b.state === 'succeeded') {
-      row('Size', mib(b.installBytes) + ' on disk (install/), the broker ' + mib(b.binaryBytes));
+      row(t('Size'), t('{size} on disk (install/), the broker {binary}', { size: mib(b.installBytes), binary: mib(b.binaryBytes) }));
     } else {
-      row('Result', b.error || b.state);
+      row(t('Result'), b.error || stateText(b.state));
     }
-    row('Built as', MODE_LABEL[b.mode] + ' · ' + duration(b.seconds || 0) + ' · ' + when(b.started));
+    row(t('Built as'), (MODE_LABEL[b.mode] ? t(MODE_LABEL[b.mode]) : b.mode) + ' · ' + duration(b.seconds || 0) + ' · ' + when(b.started));
 
     if (b.builtFeatures) {
       const chips = el('div', 'cp-chips');
       for (const [name, on] of Object.entries(b.builtFeatures)) chips.append(el('span', 'cp-chip' + (on ? '' : ' off'), name));
-      row('Features', chips);
+      row(t('Features'), chips);
     } else {
       const asked = Object.entries(b.features || {}).map(([n, v]) => n + '=' + (v ? 'ON' : 'OFF')).join(', ');
-      row('Features', asked || 'the defaults');
+      row(t('Features'), asked || t('the defaults'));
     }
     if (b.version) row('--version', el('pre', 'cp-ver', b.version.trim()));
 
     const dir = el('span', 'cp-chips');
     const path = el('span', 'mono', b.state === 'succeeded' ? b.install : b.dir);
-    const copy = el('button', 'btn', 'Copy');
+    const copy = el('button', 'btn', t('Copy'));
     copy.type = 'button';
     copy.addEventListener('click', () => navigator.clipboard && navigator.clipboard.writeText(path.textContent));
     dir.append(path, copy);
-    row('Directory', dir);
+    row(t('Directory'), dir);
 
-    const log = el('a', '', 'the whole log');
+    const log = el('a', '', t('the whole log'));
     log.href = '/api/builds/' + encodeURIComponent(b.name) + '/log';
     log.target = '_blank';
-    row('Log', log);
+    row(t('Log'), log);
 
-    const runIt = el('button', 'btn primary', 'Run it');
+    const runIt = el('button', 'btn primary', t('Run it'));
     runIt.type = 'button';
-    runIt.title = 'Run: this build in the form, natively';
+    runIt.title = t('Run: this build in the form, natively');
     runIt.addEventListener('click', () => window.dispatchEvent(new CustomEvent('c3:run', { detail: { build: b.name } })));
     const ri = el('span', 'cp-chips');
-    ri.append(runIt, el('span', 'cp-note', 'opens Run with this build - by hand: . ' + b.install + '/env; ' + (b.executable || 'coraine') + ' --database corDB'));
+    ri.append(runIt, el('span', 'cp-note', t('opens Run with this build - by hand: {command}', { command: '. ' + b.install + '/env; ' + (b.executable || 'coraine') + ' --database corDB' })));
     if (b.state === 'succeeded') row('', ri);
 
     dl.hidden = false;
@@ -1169,23 +1188,23 @@ export class Compile {
     const box = $('cp-builds');
     $('cp-bcount').textContent = this.builds.length ? String(this.builds.length) : '';
     if (!this.builds.length) {
-      box.replaceChildren(el('span', 'cp-note', 'None yet.'));
+      box.replaceChildren(el('span', 'cp-note', t('None yet.')));
       return;
     }
     box.replaceChildren(...this.builds.map((b) => {
       const item = el('div', 'cp-bitem' + (this.run && this.run.name === b.name ? ' sel' : ''));
       const open = el('button', 'bopen');
       open.type = 'button';
-      const meta = [MODE_LABEL[b.mode] || b.mode, when(b.started)];
+      const meta = [MODE_LABEL[b.mode] ? t(MODE_LABEL[b.mode]) : b.mode, when(b.started)];
       if (b.installBytes) meta.push(mib(b.installBytes));
       const off = Object.entries(b.features || {}).filter(([, v]) => !v).map(([n]) => n);
-      if (off.length) meta.push(off.join(', ') + ' off');
+      if (off.length) meta.push(t('{list} off', { list: off.join(', ') }));
       open.append(el('span', 'bn', b.name), el('span', 'bm', meta.join(' · ')));
       open.addEventListener('click', () => this.open(b));
-      const badge = el('span', 'badge ' + b.state, b.state);
+      const badge = el('span', 'badge ' + b.state, stateText(b.state));
       item.append(open, badge);
       if (b.state !== 'running') {
-        const del = el('button', 'btn bdel' + (this.armed === b.name ? ' armed' : ''), this.armed === b.name ? 'Sure?' : 'Delete');
+        const del = el('button', 'btn bdel' + (this.armed === b.name ? ' armed' : ''), this.armed === b.name ? t('Sure?') : t('Delete'));
         del.type = 'button';
         del.addEventListener('click', () => this.remove(b));
         item.append(del);
@@ -1220,10 +1239,10 @@ export class Compile {
     const sel = $('cp-preset');
     const cur = sel.value;
     sel.replaceChildren(...(this.presets.length ? this.presets.map((p) => {
-      const o = el('option', '', p.name + ' - ' + (MODE_LABEL[p.mode] || p.mode || 'release'));
+      const o = el('option', '', p.name + ' - ' + (MODE_LABEL[p.mode] ? t(MODE_LABEL[p.mode]) : p.mode || 'release'));
       o.value = p.name;
       return o;
-    }) : [el('option', '', 'no presets yet')]));
+    }) : [el('option', '', t('no presets yet'))]));
     if (cur && this.presets.find((p) => p.name === cur)) sel.value = cur;
     $('cp-preset-load').disabled = $('cp-preset-del').disabled = !this.presets.length;
   }

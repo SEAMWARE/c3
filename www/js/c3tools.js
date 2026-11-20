@@ -16,6 +16,7 @@
 //
 
 import * as api from './api.js';
+import { t, plural } from './i18n.js';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -144,7 +145,15 @@ export function c3Tools(connect, ctx = {}) {
       try {
         const r = await api.brokerGet(connect.broker, '/ngsi-ld/v1/entities?' + q);
         const n = r.ok ? r.headers.get('NGSILD-Results-Count') : null;
-        out.push(n !== null ? `dry run: ${n} ${e.type} entit${n === '1' ? 'y matches' : 'ies match'}${sub.q ? ' (with its q)' : ''} now` : `dry run: the broker answered ${r.status} to the query of ${e.type}${sub.q ? ' with its q' : ''}`);
+        if (n !== null) {
+          out.push(sub.q
+            ? plural(Number(n), 'dry run: {n} {type} entity matches (with its q) now', 'dry run: {n} {type} entities match (with its q) now', { type: e.type })
+            : plural(Number(n), 'dry run: {n} {type} entity matches now', 'dry run: {n} {type} entities match now', { type: e.type }));
+        } else {
+          out.push(sub.q
+            ? t('dry run: the broker answered {status} to the query of {type} with its q', { status: r.status, type: e.type })
+            : t('dry run: the broker answered {status} to the query of {type}', { status: r.status, type: e.type }));
+        }
       } catch { /* no dry run */ }
     }
     return out;
@@ -338,7 +347,7 @@ export function c3Tools(connect, ctx = {}) {
         if (args.bridges) body.bridges = args.bridges;
         const plan = await api.buildCommand(body);
         body.name = plan.name;
-        if (!(await ctx.confirm({ title: 'Start this build?', lines: [plan.argv.join(' ')] }))) return { text: 'the user declined - not started', declined: true };
+        if (!(await ctx.confirm({ title: t('Start this build?'), lines: [plan.argv.join(' ')] }))) return { text: 'the user declined - not started', declined: true };
         const build = await api.buildStart(body);
         location.hash = '#compile';
         if (ctx.compile) { ctx.compile.open(build); ctx.compile.loadBuilds(); }
@@ -373,7 +382,7 @@ export function c3Tools(connect, ctx = {}) {
       async run({ name }) {
         const b = await api.build(name);
         if (b.state !== 'running') return `${name} is not running (${b.state})`;
-        if (!(await ctx.confirm({ title: `Cancel the build ${name}?`, lines: [] }))) return { text: 'the user declined - still running', declined: true };
+        if (!(await ctx.confirm({ title: t('Cancel the build {name}?', { name }), lines: [] }))) return { text: 'the user declined - still running', declined: true };
         await api.buildDelete(name);
         if (ctx.compile) ctx.compile.loadBuilds();
         return `${name} cancelled`;
@@ -424,8 +433,8 @@ export function c3Tools(connect, ctx = {}) {
         if (args.bridgeConfig) def.bridgeConfig = args.bridgeConfig;
         const plan = await api.runCommand(def);
         if (!plan.argv.length) throw new Error(plan.problem || 'Operate cannot start it');
-        const lines = [plan.argv.join(' '), ...plan.services.map((s) => `first: ${s.container} - ${s.label}, ${s.image}`)];
-        if (!(await ctx.confirm({ title: `Start the broker ${args.name}?`, lines }))) return { text: 'the user declined - not started', declined: true };
+        const lines = [plan.argv.join(' '), ...plan.services.map((s) => t('first: {container} - {label}, {image}', { container: s.container, label: s.label, image: s.image }))];
+        if (!(await ctx.confirm({ title: t('Start the broker {name}?', { name: args.name }), lines }))) return { text: 'the user declined - not started', declined: true };
         await api.runStart(def);
         location.hash = '#run';
         if (ctx.run) { await ctx.run.refresh(); ctx.run.select('broker', args.name); }
@@ -457,7 +466,7 @@ export function c3Tools(connect, ctx = {}) {
       description: 'Stop a broker of Operate (the user is asked first). Undo starts it again.',
       inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
       async run({ name }) {
-        if (!(await ctx.confirm({ title: `Stop the broker ${name}?`, lines: [] }))) return { text: 'the user declined - still running', declined: true };
+        if (!(await ctx.confirm({ title: t('Stop the broker {name}?', { name }), lines: [] }))) return { text: 'the user declined - still running', declined: true };
         await api.runStop(name);
         if (ctx.run) ctx.run.refresh();
         return { text: `${name} stopping`, undo: async () => { await api.runStartKept(name); if (ctx.run) ctx.run.refresh(); return `${name} started again`; } };
@@ -474,8 +483,8 @@ export function c3Tools(connect, ctx = {}) {
       async run({ subscription }) {
         const sub = { type: 'Subscription', ...subscription };
         if (!sub.id) sub.id = 'urn:ngsi-ld:Subscription:' + Math.random().toString(36).slice(2, 10);
-        const lines = [`POST /ngsi-ld/v1/subscriptions${connect.tenant ? '   (tenant ' + connect.tenant + ')' : ''}`, JSON.stringify(sub, null, 2), ...(await matchesNow(sub))];
-        if (!(await ctx.confirm({ title: 'Create this subscription?', lines }))) return { text: 'the user declined - not created', declined: true };
+        const lines = ['POST /ngsi-ld/v1/subscriptions' + (connect.tenant ? '   ' + t('(tenant {tenant})', { tenant: connect.tenant }) : ''), JSON.stringify(sub, null, 2), ...(await matchesNow(sub))];
+        if (!(await ctx.confirm({ title: t('Create this subscription?'), lines }))) return { text: 'the user declined - not created', declined: true };
         await write('POST', '/ngsi-ld/v1/subscriptions', sub);
         return { text: `created: ${sub.id}`, undo: async () => { await write('DELETE', '/ngsi-ld/v1/subscriptions/' + encodeURIComponent(sub.id)); return `${sub.id} deleted`; } };
       },
@@ -489,8 +498,8 @@ export function c3Tools(connect, ctx = {}) {
         const was = await read(path);
         const before = {};
         for (const k of Object.keys(changes)) before[k] = k in was ? was[k] : null;
-        const lines = [`PATCH ${plain(path)}`, 'now:   ' + JSON.stringify(before), 'after: ' + JSON.stringify(changes), ...(await matchesNow({ ...was, ...changes }))];
-        if (!(await ctx.confirm({ title: `Change the subscription ${short(id)}?`, lines }))) return { text: 'the user declined - unchanged', declined: true };
+        const lines = [`PATCH ${plain(path)}`, t('now:') + '   ' + JSON.stringify(before), t('after:') + ' ' + JSON.stringify(changes), ...(await matchesNow({ ...was, ...changes }))];
+        if (!(await ctx.confirm({ title: t('Change the subscription {id}?', { id: short(id) }), lines }))) return { text: 'the user declined - unchanged', declined: true };
         await write('PATCH', path, changes);
         const back = {};
         const gone = [];
@@ -512,7 +521,7 @@ export function c3Tools(connect, ctx = {}) {
       async run({ id }) {
         const path = '/ngsi-ld/v1/subscriptions/' + encodeURIComponent(id);
         const was = await read(path);
-        if (!(await ctx.confirm({ title: `Delete the subscription ${short(id)}?`, lines: [`DELETE ${plain(path)}`, JSON.stringify(was, null, 2)] }))) return { text: 'the user declined - not deleted', declined: true };
+        if (!(await ctx.confirm({ title: t('Delete the subscription {id}?', { id: short(id) }), lines: [`DELETE ${plain(path)}`, JSON.stringify(was, null, 2)] }))) return { text: 'the user declined - not deleted', declined: true };
         await write('DELETE', path);
         return { text: `${short(id)} deleted`, undo: async () => { await write('POST', '/ngsi-ld/v1/subscriptions', clean(was)); return `${short(id)} created again`; } };
       },
@@ -528,8 +537,8 @@ export function c3Tools(connect, ctx = {}) {
         const have = await read('/admin/indexes').catch(() => null);
         const n = Array.isArray(have) ? have.length : null;
         const lines = ['POST /admin/indexes', JSON.stringify(body),
-          'The index is built now, in every tenant it covers; a large store takes a while.' + (n ? ` On corDB the ${n} declared already are rebuilt with it, writes waiting meanwhile.` : '')];
-        if (!(await ctx.confirm({ title: `Declare an index on ${attribute}?`, lines }))) return { text: 'the user declined - not declared', declined: true };
+          t('The index is built now, in every tenant it covers; a large store takes a while.') + (n ? ' ' + t('On corDB the {n} declared already are rebuilt with it, writes waiting meanwhile.', { n }) : '')];
+        if (!(await ctx.confirm({ title: t('Declare an index on {attribute}?', { attribute }), lines }))) return { text: 'the user declined - not declared', declined: true };
         const r = await write('POST', '/admin/indexes', body);
         const loc = r.location || '';
         return { text: `declared${loc ? ': ' + loc : ''} - GET /admin/indexes (list_indexes) shows its accesses`, undo: loc ? async () => { await write('DELETE', loc.replace(/^https?:\/\/[^/]+/, '')); return `the index on ${attribute} dropped`; } : null };
@@ -544,8 +553,8 @@ export function c3Tools(connect, ctx = {}) {
         const was = await read(path + '?attrs=' + Object.keys(attrs).map(encodeURIComponent).join(','));
         const before = {};
         for (const k of Object.keys(attrs)) before[k] = k in was ? was[k] : null;
-        const lines = [`PATCH ${plain(path)}/attrs`, 'now:   ' + JSON.stringify(before), 'after: ' + JSON.stringify(attrs)];
-        if (!(await ctx.confirm({ title: `Change ${short(id)}?`, lines }))) return { text: 'the user declined - unchanged', declined: true };
+        const lines = [`PATCH ${plain(path)}/attrs`, t('now:') + '   ' + JSON.stringify(before), t('after:') + ' ' + JSON.stringify(attrs)];
+        if (!(await ctx.confirm({ title: t('Change {id}?', { id: short(id) }), lines }))) return { text: 'the user declined - unchanged', declined: true };
         await write('PATCH', path + '/attrs', attrs);
         return {
           text: `${short(id)} changed`,
@@ -563,8 +572,10 @@ export function c3Tools(connect, ctx = {}) {
       description: 'Create entities (up to 100) - e.g. after modelling the user\'s data on a Smart Data Model. The user sees them and says yes or no. Undo deletes them.',
       inputSchema: { type: 'object', properties: { entities: { type: 'array', items: { type: 'object' }, minItems: 1, maxItems: 100 } }, required: ['entities'] },
       async run({ entities }) {
-        const lines = [`POST /ngsi-ld/v1/entityOperations/create - ${entities.length} entit${entities.length === 1 ? 'y' : 'ies'}`, JSON.stringify(entities.length > 3 ? [...entities.slice(0, 3), `... ${entities.length - 3} more`] : entities, null, 2)];
-        if (!(await ctx.confirm({ title: `Create ${entities.length === 1 ? short(entities[0].id || '') || 'this entity' : entities.length + ' entities'}?`, lines }))) return { text: 'the user declined - not created', declined: true };
+        const lines = ['POST /ngsi-ld/v1/entityOperations/create - ' + plural(entities.length, '{n} entity', '{n} entities'), JSON.stringify(entities.length > 3 ? [...entities.slice(0, 3), t('... {n} more', { n: entities.length - 3 })] : entities, null, 2)];
+        const one = entities.length === 1 ? short(entities[0].id || '') : '';
+        const title = entities.length !== 1 ? t('Create {n} entities?', { n: entities.length }) : one ? t('Create {id}?', { id: one }) : t('Create this entity?');
+        if (!(await ctx.confirm({ title, lines }))) return { text: 'the user declined - not created', declined: true };
         const made = [];
         for (const e of entities) {
           const r = await write('POST', '/ngsi-ld/v1/entities', e, true);
@@ -588,9 +599,10 @@ export function c3Tools(connect, ctx = {}) {
         const path = '/ngsi-ld/v1/entities/' + encodeURIComponent(rule.id);
         const old = await api.brokerGet(connect.broker, path, tenant);
         const was = old.ok ? old.body : null;
-        const lines = [`${was ? 'DELETE ' + plain(path) + ', then POST /ngsi-ld/v1/entities' : 'POST /ngsi-ld/v1/entities'}   (tenant ${tenant})`, JSON.stringify(rule, null, 2)];
-        if (was) lines.push('replaces:', JSON.stringify(clean(was), null, 2));
-        if (!(await ctx.confirm({ title: `${was ? 'Replace' : 'Save'} the rule ${short(rule.id)}?`, lines }))) return { text: 'the user declined - not saved', declined: true };
+        const request = was ? t('{first}, then {second}', { first: 'DELETE ' + plain(path), second: 'POST /ngsi-ld/v1/entities' }) : 'POST /ngsi-ld/v1/entities';
+        const lines = [request + '   ' + t('(tenant {tenant})', { tenant }), JSON.stringify(rule, null, 2)];
+        if (was) lines.push(t('replaces:'), JSON.stringify(clean(was), null, 2));
+        if (!(await ctx.confirm({ title: was ? t('Replace the rule {id}?', { id: short(rule.id) }) : t('Save the rule {id}?', { id: short(rule.id) }), lines }))) return { text: 'the user declined - not saved', declined: true };
         const put = async (method, p, body) => {
           const r = await api.brokerWrite(connect.broker, method, p, body, 'application/json', tenant);
           if (!r.ok) throw brokerError(r);

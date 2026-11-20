@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 import { brokerGet } from './api.js';
+import { t, plural } from './i18n.js';
 
 export const PAGE_SIZE = 100;
 export const ENTITY_CAP = 2000;
@@ -72,7 +73,7 @@ async function pages(broker, r, seen, onProgress, base = 0) {
 
   for (;;) {
     if (!r.ok) throw problem(r);
-    if (!Array.isArray(r.body)) throw { reached: true, status: r.status, title: 'Not an entity list', detail: 'the broker answered the query with something else than a JSON array' };
+    if (!Array.isArray(r.body)) throw { reached: true, status: r.status, title: t('Not an entity list'), detail: t('the broker answered the query with something else than a JSON array') };
 
     const count = r.headers.get('NGSILD-Results-Count');
     if (count !== null && total === null) total = parseInt(count, 10);
@@ -199,7 +200,7 @@ export async function discover(broker, onProgress) {
     if (!r.ok) return null;
     const names = (r.body && (r.body.typeList || (Array.isArray(r.body) ? r.body.map((x) => x.typeName || x.id) : null))) || [];
     list = names.map((n) => ({ name: String(n), id: String(n), attrs: [] }));
-    notes.push('the broker did not answer /types?details=true');
+    notes.push(t('the broker did not answer /types?details=true'));
   }
 
   const byName = new Map();
@@ -236,8 +237,8 @@ export async function discover(broker, onProgress) {
     while (queue.length) await one(queue.shift());
   });
   await Promise.all(workers);
-  if (fallback) notes.push(`${fallback} type${fallback === 1 ? '' : 's'} counted with count=true (no /types/{type})`);
-  if (types.length > TYPE_DETAILS_MAX) notes.push(`details for the first ${TYPE_DETAILS_MAX} types only`);
+  if (fallback) notes.push(plural(fallback, '{n} type counted with count=true (no /types/{type})', '{n} types counted with count=true (no /types/{type})'));
+  if (types.length > TYPE_DETAILS_MAX) notes.push(t('details for the first {n} types only', { n: TYPE_DETAILS_MAX }));
   for (const t of types) t.attrs.sort((a, b) => cmp(a.name, b.name));
 
   const attributes = new Map();
@@ -248,7 +249,7 @@ export async function discover(broker, onProgress) {
       attributes.set(String(x.attributeName || x.id), { typeNames: Array.isArray(x.typeNames) ? x.typeNames.map(String).sort(cmp) : [] });
     }
   } else {
-    notes.push('the broker did not answer /attributes?details=true');
+    notes.push(t('the broker did not answer /attributes?details=true'));
   }
 
   const total = types.reduce((s, t) => s + (t.count || 0), 0);

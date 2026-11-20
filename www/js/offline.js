@@ -9,22 +9,23 @@
 // then extracts those tiles into one .pmtiles file, and the fonts the labels need with the first area.
 //
 import * as api from './api.js';
+import { t, tk } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
 const LEVELS = [
-  [10, 'level 10 - region: main roads, towns'],
-  [12, 'level 12 - city: streets, parks'],
-  [13, 'level 13'],
-  [14, 'level 14 - streets with names'],
-  [15, 'level 15 - everything: buildings, paths, addresses'],
+  [10, tk('level 10 - region: main roads, towns')],
+  [12, tk('level 12 - city: streets, parks')],
+  [13, tk('level 13')],
+  [14, tk('level 14 - streets with names')],
+  [15, tk('level 15 - everything: buildings, paths, addresses')],
 ];
 
 export function bytesText(n) {
-  if (n < 1024) return n + ' B';
-  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
-  if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
-  return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  if (n < 1024) return t('{n} B', { n });
+  if (n < 1024 * 1024) return t('{n} KB', { n: (n / 1024).toFixed(0) });
+  if (n < 1024 * 1024 * 1024) return t('{n} MB', { n: (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) });
+  return t('{n} GB', { n: (n / 1024 / 1024 / 1024).toFixed(2) });
 }
 
 function el(tag, cls, text) {
@@ -47,7 +48,7 @@ export class OfflinePanel {
 
     const z = $('dl-zoom');
     for (const [v, label] of LEVELS) {
-      const o = el('option', null, label);
+      const o = el('option', null, t(label));
       o.value = v;
       z.append(o);
     }
@@ -85,7 +86,7 @@ export class OfflinePanel {
     $('dl-bbox').textContent = `${fmt(this.bbox[0])}, ${fmt(this.bbox[1])} … ${fmt(this.bbox[2])}, ${fmt(this.bbox[3])}`;
     const c = this.map.map.getCenter();
     if (!$('dl-name').value || this.autoName) {
-      $('dl-name').value = `Area at ${c.lat.toFixed(3)}, ${c.lng.toFixed(3)}`;
+      $('dl-name').value = t('Area at {lat}, {lng}', { lat: c.lat.toFixed(3), lng: c.lng.toFixed(3) });
       this.autoName = true;
     }
     $('dl-name').oninput = () => { this.autoName = false; };
@@ -112,7 +113,7 @@ export class OfflinePanel {
     const z = Number($('dl-zoom').value);
     const est = $('dl-est');
     est.className = 'dlest';
-    est.textContent = 'Reading the planet’s index for this area…';
+    est.textContent = t('Reading the planet’s index for this area…');
     $('dl-go').disabled = true;
     let r;
     try {
@@ -120,25 +121,25 @@ export class OfflinePanel {
     } catch (e) {
       if (ticket !== this.estTicket) return;
       est.className = 'dlest bad';
-      est.textContent = 'No estimate: ' + e.message;
+      est.textContent = t('No estimate: {why}', { why: e.message });
       return;
     }
     if (ticket !== this.estTicket) return;
     this.est = r;
     est.textContent = '';
-    est.append(el('span', 'big', bytesText(r.bytes)), el('span', null, ` · ${r.tiles.toLocaleString()} tiles, levels 0-${r.maxzoom}`));
-    const fonts = r.fonts ? '' : ' Plus the fonts for the labels, about 14 MB, once.';
-    est.append(el('div', 'dim', `From the Protomaps planet build ${r.build}.${fonts}`));
+    est.append(el('span', 'big', bytesText(r.bytes)), el('span', null, ' · ' + t('{tiles} tiles, levels 0-{max}', { tiles: r.tiles.toLocaleString(), max: r.maxzoom })));
+    const fonts = r.fonts ? '' : ' ' + t('Plus the fonts for the labels, about 14 MB, once.');
+    est.append(el('div', 'dim', t('From the Protomaps planet build {build}.', { build: r.build }) + fonts));
     $('dl-go').disabled = false;
   }
 
   async download() {
-    const name = $('dl-name').value.trim() || 'Area';
+    const name = $('dl-name').value.trim() || t('Area');
     $('dl-go').disabled = true;
     try {
       await api.mapsDownload(name, this.bbox, Number($('dl-zoom').value));
     } catch (e) {
-      this.toast('Not started: ' + e.message);
+      this.toast(t('Not started: {why}', { why: e.message }));
       $('dl-go').disabled = false;
       return;
     }
@@ -160,13 +161,13 @@ export class OfflinePanel {
       try { j = await api.mapsProgress(); } catch { return; }
       if (!j) return;
       est.className = 'dlest';
-      if (j.state === 'planning') { est.textContent = `${j.name}: reading the planet’s index…`; bar.style.width = '3%'; }
+      if (j.state === 'planning') { est.textContent = t('{name}: reading the planet’s index…', { name: j.name }); bar.style.width = '3%'; }
       else if (j.state === 'tiles') {
         const f = j.bytesTotal ? j.bytesDone / j.bytesTotal : 0;
-        est.textContent = `${j.name}: ${bytesText(j.bytesDone)} of ${bytesText(j.bytesTotal)} · ${j.tiles.toLocaleString()} tiles`;
+        est.textContent = t('{name}: {done} of {total} · {tiles} tiles', { name: j.name, done: bytesText(j.bytesDone), total: bytesText(j.bytesTotal), tiles: j.tiles.toLocaleString() });
         bar.style.width = Math.round(5 + 85 * f) + '%';
       } else if (j.state === 'fonts') {
-        est.textContent = `${j.name}: the labels’ fonts, ${j.fontsDone} of ${j.fontsTotal} glyph ranges`;
+        est.textContent = t('{name}: the labels’ fonts, {done} of {total} glyph ranges', { name: j.name, done: j.fontsDone, total: j.fontsTotal });
         bar.style.width = Math.round(90 + 10 * (j.fontsTotal ? j.fontsDone / j.fontsTotal : 0)) + '%';
       } else {
         clearInterval(this.polling);
@@ -176,11 +177,11 @@ export class OfflinePanel {
         $('dl-go').disabled = false;
         bar.style.width = '0';
         if (j.state === 'done') {
-          est.textContent = `${j.name} is downloaded.` + (j.error ? ' ' + j.error : '');
+          est.textContent = t('{name} is downloaded.', { name: j.name }) + (j.error ? ' ' + j.error : '');
           if (j.error) est.className = 'dlest bad';
-          this.toast(`${j.name} downloaded - drawn from the file from now on`);
-        } else if (j.state === 'cancelled') est.textContent = 'Cancelled - nothing kept.';
-        else { est.className = 'dlest bad'; est.textContent = 'The download failed: ' + j.error; }
+          this.toast(t('{name} downloaded - drawn from the file from now on', { name: j.name }));
+        } else if (j.state === 'cancelled') est.textContent = t('Cancelled - nothing kept.');
+        else { est.className = 'dlest bad'; est.textContent = t('The download failed: {why}', { why: j.error }); }
         await this.refresh();
         this.onAreas(this.status.areas, this.status.fonts);
       }
@@ -193,33 +194,33 @@ export class OfflinePanel {
     const box = $('dl-areas');
     box.textContent = '';
     const areas = (this.status && this.status.areas) || [];
-    if (!areas.length) { box.append(el('p', 'dlnote', 'None yet.')); return; }
+    if (!areas.length) { box.append(el('p', 'dlnote', t('None yet.'))); return; }
     for (const a of areas) {
       const row = el('div', 'dlarea');
       const n = el('span', 'an', a.name);
       n.title = a.id;
-      const show = el('button', 'btn show', 'Show');
+      const show = el('button', 'btn show', t('Show'));
       show.type = 'button';
       show.onclick = () => this.map.fitArea(a);
-      const del = el('button', 'btn danger', 'Delete');
+      const del = el('button', 'btn danger', t('Delete'));
       del.type = 'button';
       del.onclick = async () => {
         if (del.dataset.armed !== '1') {
           del.dataset.armed = '1';
-          del.textContent = 'Delete?';
-          setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Delete'; }, 3000);
+          del.textContent = t('Delete?');
+          setTimeout(() => { del.dataset.armed = ''; del.textContent = t('Delete'); }, 3000);
           return;
         }
         try {
           this.status = await api.mapsDelete(a.id);
           this.renderAreas();
           this.onAreas(this.status.areas, this.status.fonts);
-          this.toast(`${a.name} deleted`);
+          this.toast(t('{name} deleted', { name: a.name }));
         } catch (e) {
-          this.toast('Not deleted: ' + e.message);
+          this.toast(t('Not deleted: {why}', { why: e.message }));
         }
       };
-      row.append(n, show, del, el('span', 'ai', `${bytesText(a.bytes)} · to level ${a.maxzoom} · ${String(a.created || '').slice(0, 10)}${a.build ? ' · build ' + a.build : ''}`));
+      row.append(n, show, del, el('span', 'ai', `${bytesText(a.bytes)} · ${t('to level {n}', { n: a.maxzoom })} · ${String(a.created || '').slice(0, 10)}${a.build ? ' · ' + t('build {build}', { build: a.build }) : ''}`));
       box.append(row);
     }
   }
