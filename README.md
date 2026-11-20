@@ -1018,6 +1018,23 @@ it is part of c³.
   (`POST /api/run/dashboard/login`). A browser keeps a cookie per host, not per port, so they reach WireCloud
   on its port of the same host: the page shows WireCloud in a frame, on the host the page was loaded from
   (`localhost` and `127.0.0.1` are two sites).
+- **c³'s widgets** (`www/widgets/`, vendor `Seamware`, plain JS): every start installs each one WireCloud
+  does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
+  and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
+  `config.xml`. In WireCloud: add them from *Add widget*, connect them in *Wiring*.
+
+  | Widget | Wiring | Does |
+  |---|---|---|
+  | NGSI-LD source | out `entities` | the entities of a type at a broker c³ knows (its form: broker, tenant, type from the broker's types, `q`, `attrs`, the period) - read through c³ every *refresh* seconds |
+  | NGSI-LD table | in `entities`, out `selected` | entities as rows, attributes as columns, sorted by a header clicked; a row clicked is sent on `selected`, again with every new read |
+  | NGSI-LD value | in `entities` | one attribute of one entity, large, with its `unitCode` and `observedAt` |
+
+- **The widgets read the brokers through c³** (`/api/proxy`, as Explore - c³ adds each broker's token,
+  headers and tenant). c³ answers CORS for WireCloud's origin only - `http://localhost:<port>` or
+  `http://127.0.0.1:<port>` while WireCloud runs - on `/api/proxy/ngsi-ld/v1/...` and
+  `/api/run/dashboard/brokers`, for **GET only**: a preflight for any other method is answered 403, so a
+  widget cannot write. Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
+  `c3_port`, set with WireCloud's on the login answer.
 - **The image**: WireCloud 2 has no published one yet ([Ficodes/WireCloud#7](https://github.com/Ficodes/WireCloud/issues/7)).
   Build it from its source: `docker compose -f docker/docker-compose.yml build wirecloud` in a clone of
   Ficodes/WireCloud - at v2.0.0 with the Elasticsearch client pinned to `>=8,<9`
@@ -1079,8 +1096,9 @@ The backend's API, used by the pages:
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
-| `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s; `409` when it does not run, `502` with why |
+| `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |
+| `GET /api/run/dashboard/brokers` | the brokers c³ knows, for the widgets: `[{url, name, tenant, tenants}]`; CORS for WireCloud's origin (GET) |
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |

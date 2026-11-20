@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-table" version="0.1.1">
+  <details>
+    <title>NGSI-LD table</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>Entities as rows, their attributes as columns - a row clicked is sent on as the selection</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="columns" type="text" label="Columns" description="Comma-separated attribute names - empty: every attribute received" default=""/>
+    <preference name="decimals" type="number" label="Decimals" description="At most so many decimals for a number (-1: as it is)" default="2"/>
+    <preference name="rows" type="number" label="Rows" description="The most rows shown" default="200"/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entities" type="text" label="Entities" description="{entities}, from an NGSI-LD source" friendcode="ngsild-entities"/>
+    <outputendpoint name="selected" type="text" label="Selected entity" description="{entities: [the entity clicked]}" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="20" width="8"/>
+</widget>

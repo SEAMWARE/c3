@@ -42,6 +42,7 @@ const DOING = [
   [/^first start: installing/, () => t('first start: installing WireCloud\'s widgets and operators')],
   [/^first start: making/, () => t('first start: making WireCloud\'s user admin - its password made by c³, kept in secrets.json')],
   [/^making WireCloud's search indexes/, () => t('making WireCloud\'s search indexes')],
+  [/^installing the widget (\S+) (\S+) in WireCloud$/, (m) => t('installing the widget {widget} {version} in WireCloud', { widget: m[1], version: m[2] })],
   [/^starting$/, () => t('starting')],
   [/^stopping$/, () => t('stopping')],
 ];

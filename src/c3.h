@@ -233,6 +233,7 @@ extern bool  runInit(void);                       // after configLoad: the broke
 extern void  runRequest(CorHttpConn* connP, const char* path);
 extern void  runCapabilities(Str* sP);            // "run": {...} of GET /api/capabilities
 extern void  runShutdown(void);                   // c3 stops: the brokers keep running; c3's own helpers stop
+extern bool  runDashboardOrigin(const char* origin);   // WireCloud's Origin, while the Dashboard runs
 
 
 

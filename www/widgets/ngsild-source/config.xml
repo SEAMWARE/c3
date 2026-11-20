@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-source" version="0.1.0">
+  <details>
+    <title>NGSI-LD source</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>The entities of a type at a broker c³ knows - read through c³, again every few seconds, sent to the widgets wired to it</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="broker" type="text" label="Broker" description="The broker's URL, as c³ knows it (picked in the widget)" default=""/>
+    <preference name="tenant" type="text" label="Tenant" description="NGSILD-Tenant - empty: the default tenant" default=""/>
+    <preference name="type" type="text" label="Type" description="The entity type" default=""/>
+    <preference name="q" type="text" label="Query (q)" description="An NGSI-LD q, or empty" default=""/>
+    <preference name="attrs" type="text" label="Attributes (attrs)" description="Comma-separated attribute names, or empty for all" default=""/>
+    <preference name="refresh" type="number" label="Refresh (seconds)" description="Read again every so many seconds - 0: only on Refresh" default="10"/>
+  </preferences>
+  <wiring>
+    <outputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}: the entities read, normalized" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="12" width="6"/>
+</widget>

@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-value" version="0.1.0">
+  <details>
+    <title>NGSI-LD value</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>One attribute of one entity, large - from an NGSI-LD source or a table's selection wired to it</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="entity" type="text" label="Entity" description="The entity's id - empty: the first one received" default=""/>
+    <preference name="attribute" type="text" label="Attribute" description="The attribute shown (picked in the widget)" default=""/>
+    <preference name="label" type="text" label="Label" description="Shown above the value - empty: the attribute's name" default=""/>
+    <preference name="unit" type="text" label="Unit" description="Shown after the value - empty: its unitCode, if any" default=""/>
+    <preference name="decimals" type="number" label="Decimals" description="At most so many decimals for a number (-1: as it is)" default="1"/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entities" type="text" label="Entities" description="{entities}, from an NGSI-LD source or a table" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="10" width="3"/>
+</widget>

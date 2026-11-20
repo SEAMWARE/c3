@@ -1,0 +1,12 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; color: #222; }
+.form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; }
+.form label { color: #555; }
+.form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
+.form .every { display: flex; gap: 6px; align-items: center; }
+.form .every input { width: 6em; }
+.acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
+button { padding: 4px 12px; font: inherit; cursor: pointer; }
+.status .what { font-weight: 600; overflow-wrap: anywhere; }
+.status .meta { color: #666; margin-top: 2px; overflow-wrap: anywhere; }
+.err { color: #b00020; margin-top: 6px; overflow-wrap: anywhere; }
