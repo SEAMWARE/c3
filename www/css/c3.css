@@ -158,7 +158,7 @@ nav.pages a, nav.pages span {
 }
 nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600; border-bottom: 3px solid var(--accent-2); }
 
-.top-right { margin-left: 24px; display: flex; align-items: center; gap: 16px; }
+.top-right { margin-left: 64px; display: flex; align-items: center; gap: 16px; }
 .chip {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
   font-family: var(--mono); font-size: 0.975rem; color: var(--muted);
