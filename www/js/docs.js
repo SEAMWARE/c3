@@ -12,6 +12,8 @@
 // The private repositories are not in the page's source: the backend says which ones the user can read
 // (GET /api/repos/private, asked of GitHub as them), and only those are added, each to its group.
 //
+import { t } from './i18n.js';
+
 const $ = (id) => document.getElementById(id);
 
 const C3_PAGES = ['compile', 'run', 'connect'];
@@ -74,17 +76,17 @@ function repoItem(name, desc, isPrivate, guide, api) {
   a.href = guide ? '#docs/' + guide : repoUrl;
   if (!guide) ext(a);
   a.append(el('span', 'dname', name));
-  if (isPrivate) a.append(el('span', 'dpriv', 'private'));
+  if (isPrivate) a.append(el('span', 'dpriv', t('private')));
 
   const d = el('span', 'ddesc', desc || '');
   const more = el('span', 'dmore');
   if (api) {
-    const x = el('a', '', 'API reference');
+    const x = el('a', '', t('API reference'));
     x.href = '#docs/' + api;
     more.append(x);
   }
   if (guide) {
-    const x = ext(el('a', '', 'repository ↗'));
+    const x = ext(el('a', '', t('repository ↗')));
     x.href = repoUrl;
     more.append(x);
   }
@@ -163,12 +165,12 @@ async function guideRead(id) {
 
   try {
     const r = await fetch('docs/' + id + '.html');
-    if (!r.ok) return '<p class="muted">This guide could not be read (' + r.status + ').</p>';
+    if (!r.ok) return '<p class="muted">' + t('This guide could not be read ({status}).', { status: r.status }) + '</p>';
     html = await r.text();
     loaded.set(id, html);
     return html;
   } catch (e) {
-    return '<p class="muted">This guide could not be read: ' + (site ? 'no answer.' : 'the backend did not answer.') + '</p>';
+    return '<p class="muted">' + (site ? t('This guide could not be read: no answer.') : t('This guide could not be read: the backend did not answer.')) + '</p>';
   }
 }
 
@@ -197,7 +199,7 @@ function siteLinks(root) {
     const page = a.getAttribute('href').slice(1).split('/')[0];
     if (!C3_PAGES.includes(page)) continue;
     const span = el('span', 'c3only');
-    span.title = 'A page of c³ - the coraine Control Center';
+    span.title = t('A page of c³ - the coraine Control Center');
     span.append(...a.childNodes, el('sup', null, ' c³'));
     a.replaceWith(span);
   }
@@ -234,7 +236,7 @@ function tocRender(id, root) {
   const hs = root.querySelectorAll('h2');
   if (hs.length < 2) return;
 
-  toc.append(el('div', 'dn-group', 'On this page'));
+  toc.append(el('div', 'dn-group', t('On this page')));
   const ul = el('ul');
   for (const h of hs) {
     const a = el('a', null, h.textContent.replace(/^\d+\s*/, ''));
@@ -255,7 +257,7 @@ function sourcesRender(id, box) {
   const repos = [...new Set((g.from || []).map((f) => f.repo))];
   if (repos.length === 0) return;
 
-  const p = el('p', 'docs-source muted', repos.length === 1 ? 'Source: ' : 'Sources: ');
+  const p = el('p', 'docs-source muted', (repos.length === 1 ? t('Source:') : t('Sources:')) + ' ');
   repos.forEach((repo, ix) => {
     if (ix > 0) p.append(' · ');
     const a = el('a', null, repoOrg(repo) + '/' + repo + ' ↗');
@@ -278,13 +280,13 @@ function pagerRender(id) {
   if (prev) {
     const a = el('a', 'prev');
     a.href = '#docs/' + prev.id;
-    a.append(el('span', 'muted', '← Previous'), el('span', null, prev.title));
+    a.append(el('span', 'muted', t('← Previous')), el('span', null, prev.title));
     pager.append(a);
   }
   if (next) {
     const a = el('a', 'next');
     a.href = '#docs/' + next.id;
-    a.append(el('span', 'muted', 'Next →'), el('span', null, next.title));
+    a.append(el('span', 'muted', t('Next →')), el('span', null, next.title));
     pager.append(a);
   }
 }
@@ -344,13 +346,13 @@ async function searchRun(input, out) {
   const hits = [];
   for (const s of index) {
     if (!words.every((w) => s.lower.includes(w))) continue;
-    const t = s.title.toLowerCase();
-    hits.push({ s, score: words.filter((w) => t.includes(w)).length * 10 + (s.section ? 0 : 5) });
+    const tl = s.title.toLowerCase();
+    hits.push({ s, score: words.filter((w) => tl.includes(w)).length * 10 + (s.section ? 0 : 5) });
   }
   hits.sort((a, b) => b.score - a.score);
 
   if (hits.length === 0) {
-    out.append(el('div', 'ds-none', 'Nothing found for “' + input.value.trim() + '”.'));
+    out.append(el('div', 'ds-none', t('Nothing found for “{q}”.', { q: input.value.trim() })));
     return;
   }
 
@@ -360,7 +362,7 @@ async function searchRun(input, out) {
     a.append(el('span', 'ds-title', s.title), el('span', 'ds-where', s.guide.title), el('span', 'ds-snip', snippet(s.text, words[0])));
     out.append(a);
   }
-  if (hits.length > 40) out.append(el('div', 'ds-none', (hits.length - 40) + ' more - add a word to narrow it.'));
+  if (hits.length > 40) out.append(el('div', 'ds-none', t('{n} more - add a word to narrow it.', { n: hits.length - 40 })));
 }
 
 function searchWire(inputId, outId) {
@@ -428,7 +430,7 @@ export async function docsShow(hash) {
     navRender(guide);
     tocRender(guide, box);
     pagerRender(guide);
-    if (site) document.title = guides.find((x) => x.id === guide).title + ' - coraine documentation';
+    if (site) document.title = t('{title} - coraine documentation', { title: guides.find((x) => x.id === guide).title });
   }
 
   const target = section ? document.getElementById(section) : null;

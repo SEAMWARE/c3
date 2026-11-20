@@ -14,6 +14,8 @@ import { Run } from './run.js';
 import { assistInit } from './assist.js';
 import { windowInit } from './window.js';
 import { docsInit, docsShow } from './docs.js';
+import { i18nInit, t, plural, LANGUAGES, language, setLanguage } from './i18n.js';
+import { openMenu } from './menu.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,7 +41,7 @@ function stepRow(label) {
 }
 
 async function splash() {
-  const labels = ['c³ backend', 'Configuration', 'Last broker'];
+  const labels = [t('c³ backend'), t('Configuration'), t('Last broker')];
   const steps = labels.map(stepRow);
   const bar = $('splash-bar');
   const progress = (i) => { bar.style.width = Math.round(100 * i / labels.length) + '%'; };
@@ -50,14 +52,14 @@ async function splash() {
   try {
     status = await api.status();
   } catch (e) {
-    steps[0].done('fail', 'no answer');
+    steps[0].done('fail', t('no answer'));
     const err = $('splash-error');
     err.hidden = false;
-    err.textContent = 'The c³ backend does not answer: ' + e.message + '. Start it again with c3.';
+    err.textContent = t('The c³ backend does not answer: {error}. Start it again with c3.', { error: e.message });
     return null;
   }
   $('splash-version').textContent = status.c3;
-  steps[0].done('ok', 'port ' + status.port);
+  steps[0].done('ok', t('port {port}', { port: status.port }));
   progress(1);
 
   // 2 - the configuration
@@ -66,10 +68,10 @@ async function splash() {
   try {
     config = await api.config();
     const n = (config.brokers || []).length;
-    steps[1].done(status.configError ? 'warn' : 'ok', status.configError ? 'see the console' : n + ' broker' + (n === 1 ? '' : 's'));
+    steps[1].done(status.configError ? 'warn' : 'ok', status.configError ? t('see the console') : plural(n, '{n} broker', '{n} brokers'));
     if (status.configError) console.warn('c3:', status.configError);
   } catch (e) {
-    steps[1].done('warn', 'not read');
+    steps[1].done('warn', t('not read'));
   }
   progress(2);
 
@@ -78,7 +80,7 @@ async function splash() {
   const last = (config.brokers || [])[0];
   let lastReachable = false;
   if (!last) {
-    steps[2].done('ok', 'none yet');
+    steps[2].done('ok', t('none yet'));
   } else {
     //
     // At most 3 seconds here: a host that does not answer at all would otherwise hold the splash for the
@@ -90,9 +92,9 @@ async function splash() {
     ]);
     lastReachable = r.ok;
     if (r.ok && r.body && r.body.product) steps[2].done('ok', `${r.body.product} ${r.body.version || ''}`.trim());
-    else if (r.ok) steps[2].done('ok', 'reachable');
-    else if (r.timeout) steps[2].done('warn', 'no answer yet');
-    else steps[2].done('warn', r.reached ? 'answered ' + r.status : 'not reachable');
+    else if (r.ok) steps[2].done('ok', t('reachable'));
+    else if (r.timeout) steps[2].done('warn', t('no answer yet'));
+    else steps[2].done('warn', r.reached ? t('answered {status}', { status: r.status }) : t('not reachable'));
   }
   progress(3);
 
@@ -118,7 +120,28 @@ function pageShow(page, compile, run) {
   api.uiSet({ lastPage: page }).catch(() => {});
 }
 
+//
+// The language button: the four languages, the one in use checked
+//
+function languageButton() {
+  const b = $('lang-btn');
+  const flag = document.createElement('img');
+  flag.src = `img/flags/${language()}.svg`;
+  flag.alt = '';
+  b.replaceChildren(flag);
+  b.title = b.ariaLabel = `${t('Language')}: ${LANGUAGES[language()]}`;
+  b.addEventListener('click', () => {
+    const r = b.getBoundingClientRect();
+    openMenu({
+      x: r.left, y: r.bottom + 4, label: t('Language'), returnFocus: b,
+      items: Object.entries(LANGUAGES).map(([code, name]) => ({ icon: `img/flags/${code}.svg`, label: name + (code === language() ? '  ✓' : ''), action: () => setLanguage(code) })),
+    });
+  });
+}
+
 async function main() {
+  await i18nInit();
+  languageButton();
   const boot = await splash();
   if (!boot) return;
 

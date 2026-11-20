@@ -165,6 +165,10 @@ nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600;
   max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .top-right .sw { height: 18px; width: auto; opacity: 0.85; }
+.langbtn { display: inline-flex; align-items: center; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 3px; cursor: pointer; }
+.langbtn img { display: block; width: 30px; height: 20px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,0.35); }
+.menu .micon { width: 21px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; box-shadow: 0 0 0 1px rgba(255,255,255,0.25); }
+.langbtn:hover, .langbtn[aria-expanded="true"] { border-color: var(--accent-2); }
 
 /* Minimise and close - full-screen only, where the window has no title bar (window.js) */
 .winctl { display: flex; gap: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }

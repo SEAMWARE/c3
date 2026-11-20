@@ -19,8 +19,10 @@
 import * as api from './api.js';
 import { shortId } from './ngsild.js';
 import { nameOf } from './map.js';
+import { t, tk, plural } from './i18n.js';
 
 export const SEVERITY = { critical: '#FF4D5E', warning: '#F2B84B', info: '#5FB4E8' };
+const SEVERITY_NAME = { critical: tk('critical'), warning: tk('warning'), info: tk('info') };
 const TOAST_MS = 7000;
 const TOASTS_MAX = 4;
 
@@ -222,15 +224,15 @@ export class Alerts {
   //
   toast(r, e) {
     const box = $('alarm-toasts');
-    const t = el('button', 'atoast ' + r.severity);
-    t.type = 'button';
-    t.style.setProperty('--sev', SEVERITY[r.severity]);
-    t.append(el('span', 'sev', r.severity), el('span', 'at', r.title), el('span', 'ae', nameOf(e) || shortId(e)));
-    t.title = `${e.id} - show it`;
-    t.onclick = () => { t.remove(); this.onJump(e.id); };
-    box.prepend(t);
+    const b = el('button', 'atoast ' + r.severity);
+    b.type = 'button';
+    b.style.setProperty('--sev', SEVERITY[r.severity]);
+    b.append(el('span', 'sev', t(SEVERITY_NAME[r.severity] || r.severity)), el('span', 'at', r.title), el('span', 'ae', nameOf(e) || shortId(e)));
+    b.title = t('{id} - show it', { id: e.id });
+    b.onclick = () => { b.remove(); this.onJump(e.id); };
+    box.prepend(b);
     while (box.children.length > TOASTS_MAX) box.lastElementChild.remove();
-    setTimeout(() => t.remove(), TOAST_MS);
+    setTimeout(() => b.remove(), TOAST_MS);
   }
 
   open() {
@@ -261,33 +263,35 @@ export class Alerts {
     badge.className = 'badge' + (open.length ? '' : ' acked');
     const worst = open[0] || null;
     badge.style.background = worst ? SEVERITY[worst.r.severity] : '';
-    btn.title = list.length ? `${list.length} alarm${list.length === 1 ? '' : 's'}${open.length < list.length ? `, ${list.length - open.length} acknowledged` : ''}` : 'Alarms - none';
+    btn.title = !list.length ? t('Alarms - none')
+      : open.length < list.length ? plural(list.length, '{n} alarm, {acked} acknowledged', '{n} alarms, {acked} acknowledged', { acked: list.length - open.length })
+      : plural(list.length, '{n} alarm', '{n} alarms');
     if ($('alarmpop').hidden) return;
 
     $('al-ackall').disabled = !open.length;
     const box = $('al-list');
     box.textContent = '';
-    if (!list.length) box.append(el('p', 'dim', this.rules.length ? 'No alarms.' : 'No alert rules for this broker - add one below.'));
+    if (!list.length) box.append(el('p', 'dim', this.rules.length ? t('No alarms.') : t('No alert rules for this broker - add one below.')));
     for (const a of list) {
       const row = el('div', 'arow' + (a.acked ? ' acked' : ''));
       row.style.setProperty('--sev', SEVERITY[a.r.severity]);
       const main = el('button', 'amain');
       main.type = 'button';
-      main.title = `${a.id} - show it`;
+      main.title = t('{id} - show it', { id: a.id });
       main.append(el('span', 'adot'), el('span', 'at', a.r.title), el('span', 'ae', a.label), el('span', 'atime', a.at.toLocaleTimeString()));
       main.onclick = () => this.onJump(a.id);
       row.append(main);
       if (!a.acked) {
-        const ack = el('button', 'btn small', 'Ack');
+        const ack = el('button', 'btn small', t('Ack'));
         ack.type = 'button';
-        ack.title = 'Acknowledge - it stays listed until the entity no longer matches';
+        ack.title = t('Acknowledge - it stays listed until the entity no longer matches');
         ack.onclick = () => { this.alarms.get(a.rule + '|' + a.id).acked = true; this.changed(); };
         row.append(ack);
       }
       if (!this.parsed.get(a.rule)) {
-        const clr = el('button', 'btn small', 'Clear');
+        const clr = el('button', 'btn small', t('Clear'));
         clr.type = 'button';
-        clr.title = 'c³ cannot evaluate this rule\'s q - clear the alarm by hand';
+        clr.title = t('c³ cannot evaluate this rule\'s q - clear the alarm by hand');
         clr.onclick = () => { this.alarms.delete(a.rule + '|' + a.id); this.changed(); };
         row.append(clr);
       }
@@ -305,9 +309,9 @@ export class Alerts {
       const how = el('div', 'rhow mono', `${r.type}${r.q ? ' · ' + r.q : ''}`);
       row.append(what, how);
       const why = this.failed.get(r.id);
-      if (why) row.append(el('div', 'rfail', 'The broker refused it: ' + why));
-      else if (!this.parsed.get(r.id)) row.append(el('div', 'rnote', 'c³ cannot evaluate this q: its alarms clear by hand.'));
-      const del = el('button', 'btn small', 'Remove');
+      if (why) row.append(el('div', 'rfail', t('The broker refused it: {why}', { why })));
+      else if (!this.parsed.get(r.id)) row.append(el('div', 'rnote', t('c³ cannot evaluate this q: its alarms clear by hand.')));
+      const del = el('button', 'btn small', t('Remove'));
       del.type = 'button';
       del.onclick = () => this.setRules(this.rules.filter((x) => x.id !== r.id), true);
       row.append(del);
@@ -320,9 +324,9 @@ export class Alerts {
     const type = $('al-type').value.trim();
     const q = $('al-q').value.trim();
     const severity = $('al-sev').value;
-    const say = (t) => { $('al-err').textContent = t; };
-    if (!type) { say('The entity type the rule watches'); $('al-type').focus(); return; }
-    if (q && parseQ(q) === null) say('c³ cannot evaluate this q itself - the broker still can; its alarms will clear by hand.');
+    const say = (msg) => { $('al-err').textContent = msg; };
+    if (!type) { say(t('The entity type the rule watches')); $('al-type').focus(); return; }
+    if (q && parseQ(q) === null) say(t('c³ cannot evaluate this q itself - the broker still can; its alarms will clear by hand.'));
     else say('');
     let base = (title || type + (q ? '-' + q : '')).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'rule';
     let id = base;

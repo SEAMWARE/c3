@@ -12,6 +12,7 @@
 // no rate across one.
 //
 import * as api from './api.js';
+import { t, tk, plural } from './i18n.js';
 
 const PERIOD_MS = 5000;
 const SAMPLES_MAX = 120;
@@ -128,35 +129,35 @@ function latencyP95(a, b) {
 // class and the value of an interval (a: the sample before, b: this one)
 //
 const CHARTS = [
-  { title: 'Requests', unit: '/s', series: [
-    { label: 'all',    cls: 's1', f: (a, b) => rate(a, b, 'ngsild_request_latency_seconds_count') },
-    { label: 'reads',  cls: 's2', f: (a, b) => rateSum(a, b, (n) => READS.has(n)) },
-    { label: 'writes', cls: 's3', f: (a, b) => rateSum(a, b, (n) => isOp(n) && !READS.has(n)) },
+  { title: tk('Requests'), unit: '/s', series: [
+    { label: tk('all'),    cls: 's1', f: (a, b) => rate(a, b, 'ngsild_request_latency_seconds_count') },
+    { label: tk('reads'),  cls: 's2', f: (a, b) => rateSum(a, b, (n) => READS.has(n)) },
+    { label: tk('writes'), cls: 's3', f: (a, b) => rateSum(a, b, (n) => isOp(n) && !READS.has(n)) },
   ] },
-  { title: 'Errors', unit: '/s', series: [
+  { title: tk('Errors'), unit: '/s', series: [
     { label: '4xx', cls: 's4', f: (a, b) => rate(a, b, 'ngsild_errors_4xx_total') },
     { label: '5xx', cls: 's5', f: (a, b) => rate(a, b, 'ngsild_errors_5xx_total') },
   ] },
-  { title: 'Latency', unit: ' ms', series: [
-    { label: 'mean', cls: 's1', f: latencyMean },
+  { title: tk('Latency'), unit: ' ms', series: [
+    { label: tk('mean'), cls: 's1', f: latencyMean },
     { label: 'p95',  cls: 's3', f: latencyP95 },
   ] },
-  { title: 'Notifications', unit: '/s', series: [
-    { label: 'sent',           cls: 's1', f: (a, b) => rate(a, b, 'ngsild_notifications_sent_total') },
-    { label: 'context source', cls: 's2', f: (a, b) => rate(a, b, 'ngsild_csource_notifications_sent_total') },
-    { label: 'SSE events',     cls: 's3', f: (a, b) => rate(a, b, 'ngsild_sse_events_total') },
-    { label: 'failed',         cls: 's5', f: (a, b) => rateSum(a, b, (n) => n === 'ngsild_notifications_failed_total' || n === 'ngsild_csource_notifications_failed_total') },
+  { title: tk('Notifications'), unit: '/s', series: [
+    { label: tk('sent'),           cls: 's1', f: (a, b) => rate(a, b, 'ngsild_notifications_sent_total') },
+    { label: tk('context source'), cls: 's2', f: (a, b) => rate(a, b, 'ngsild_csource_notifications_sent_total') },
+    { label: tk('SSE events'),     cls: 's3', f: (a, b) => rate(a, b, 'ngsild_sse_events_total') },
+    { label: tk('failed'),         cls: 's5', f: (a, b) => rateSum(a, b, (n) => n === 'ngsild_notifications_failed_total' || n === 'ngsild_csource_notifications_failed_total') },
   ] },
-  { title: 'Subscriptions', unit: '', gauge: true, series: [
-    { label: 'entities',       cls: 's1', f: (a, b) => gauge(b, 'ngsild_subscription_cache_size') },
-    { label: 'periodic',       cls: 's2', f: (a, b) => gauge(b, 'ngsild_pernot_cache_size') },
-    { label: 'context source', cls: 's3', f: (a, b) => gauge(b, 'ngsild_csource_subscription_cache_size') },
-    { label: 'SSE streams',    cls: 's4', f: (a, b) => gauge(b, 'ngsild_sse_streams') },
+  { title: tk('Subscriptions'), unit: '', gauge: true, series: [
+    { label: tk('entities'),       cls: 's1', f: (a, b) => gauge(b, 'ngsild_subscription_cache_size') },
+    { label: tk('periodic'),       cls: 's2', f: (a, b) => gauge(b, 'ngsild_pernot_cache_size') },
+    { label: tk('context source'), cls: 's3', f: (a, b) => gauge(b, 'ngsild_csource_subscription_cache_size') },
+    { label: tk('SSE streams'),    cls: 's4', f: (a, b) => gauge(b, 'ngsild_sse_streams') },
   ] },
-  { title: 'Memory', unit: ' MiB', gauge: true, series: [
-    { label: 'used',     cls: 's1', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_used_bytes')) },
-    { label: 'resident', cls: 's2', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_resident_bytes')) },
-    { label: 'budget',   cls: 's5', f: (a, b) => { const v = gauge(b, 'ngsild_memory_budget_bytes'); return v ? mibOf(v) : null; } },
+  { title: tk('Memory'), unit: ' MiB', gauge: true, series: [
+    { label: tk('used'),     cls: 's1', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_used_bytes')) },
+    { label: tk('resident'), cls: 's2', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_resident_bytes')) },
+    { label: tk('budget'),   cls: 's5', f: (a, b) => { const v = gauge(b, 'ngsild_memory_budget_bytes'); return v ? mibOf(v) : null; } },
   ] },
 ];
 
@@ -211,8 +212,8 @@ export class Metrics {
     const r = await api.brokerText(url, '/admin/metrics');
     if (!r.ok) {
       this.push(url, null);                                       // a break: no rate across it
-      this.errors.set(url, r.reached ? 'GET /admin/metrics: HTTP ' + r.status + (r.status === 403 ? ' - the c3 backend is older than Metrics' : '')
-        : 'the broker does not answer');
+      this.errors.set(url, r.reached ? (r.status === 403 ? t('GET /admin/metrics: HTTP {status} - the c3 backend is older than Metrics', { status: r.status })
+        : t('GET /admin/metrics: HTTP {status}', { status: r.status })) : t('the broker does not answer'));
       return;
     }
     this.errors.delete(url);
@@ -238,7 +239,7 @@ export class Metrics {
     const req = rate(a, b, 'ngsild_request_latency_seconds_count');
     const lat = latencyMean(a, b);
     const subs = gauge(b, 'ngsild_subscription_cache_size');
-    return [req !== null && fmt(req) + ' req/s', lat !== null && fmt(lat) + ' ms mean', subs !== null && subs + ' subscription' + (subs === 1 ? '' : 's')]
+    return [req !== null && t('{n} req/s', { n: fmt(req) }), lat !== null && t('{n} ms mean', { n: fmt(lat) }), subs !== null && plural(subs, '{n} subscription', '{n} subscriptions')]
       .filter(Boolean).join(', ');
   }
 
@@ -251,11 +252,12 @@ export class Metrics {
     const why = this.errors.get(url);
     if (why) box.append(el('div', 'rn-lvnote warn', why));
     if (s.length < 2) {
-      if (!why) box.append(el('div', 'rn-lvnote', 'Reading /admin/metrics every 5 s - the first rates after the second read.'));
+      if (!why) box.append(el('div', 'rn-lvnote', t('Reading /admin/metrics every 5 s - the first rates after the second read.')));
       return box;
     }
     const span = Math.round((s[s.length - 1].t - s[0].t) / 1000);
-    box.append(el('div', 'rn-lvnote', `Every 5 s, the last ${span >= 60 ? Math.round(span / 60) + ' min' : span + ' s'} (10 min kept). A rate is per second over each 5 s.`));
+    box.append(el('div', 'rn-lvnote', span >= 60 ? t('Every 5 s, the last {n} min (10 min kept). A rate is per second over each 5 s.', { n: Math.round(span / 60) })
+      : t('Every 5 s, the last {n} s (10 min kept). A rate is per second over each 5 s.', { n: span })));
 
     const grid = el('div', 'mx-grid');
     for (const c of CHARTS) grid.append(this.chart(c, s));
@@ -268,18 +270,18 @@ export class Metrics {
     const pts = c.series.map((ser) => s.slice(1).map((b, i) => [b.t, (c.gauge || sameRun(s[i], b)) ? ser.f(s[i], b) : null]));
     if (c.series.every((ser, k) => pts[k].every(([, v]) => v === null))) {
       const empty = el('div', 'mx-chart');
-      empty.append(el('div', 'mx-title', c.title), el('div', 'hrange', 'not served by this broker'));
+      empty.append(el('div', 'mx-title', t(c.title)), el('div', 'hrange', t('not served by this broker')));
       return empty;
     }
     const box = el('div', 'mx-chart');
     const head = el('div', 'mx-head');
-    head.append(el('span', 'mx-title', c.title));
+    head.append(el('span', 'mx-title', t(c.title)));
     const now = el('span', 'mx-now');
     c.series.forEach((ser, k) => {
       const last = pts[k].length ? pts[k][pts[k].length - 1][1] : null;
       if (last === null && pts[k].every(([, v]) => v === null)) return;
       const item = el('span', 'mx-item');
-      item.append(el('i', 'mx-dot ' + ser.cls), document.createTextNode(ser.label + ' ' + fmt(last) + c.unit));
+      item.append(el('i', 'mx-dot ' + ser.cls), document.createTextNode(t(ser.label) + ' ' + fmt(last) + c.unit));
       now.append(item);
     });
     head.append(now);
@@ -294,7 +296,7 @@ export class Metrics {
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('class', 'mx-svg');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', `${c.title}, the last ${s.length} samples, up to ${fmt(hi)}${c.unit}`);
+    svg.setAttribute('aria-label', t('{title}, the last {n} samples, up to {max}', { title: t(c.title), n: s.length, max: fmt(hi) + c.unit }));
     c.series.forEach((ser, k) => {
       let d = '', pen = false;
       for (const [t, v] of pts[k]) {
@@ -325,12 +327,12 @@ export class Metrics {
     const box = el('div', 'mx-ops');
     const secs = Math.round((b.t - a.t) / 1000);
     if (a === b || !b.v) {
-      box.append(el('div', 'mx-title', 'Busiest operations'), el('div', 'hrange', 'from the next read on'));
+      box.append(el('div', 'mx-title', t('Busiest operations')), el('div', 'hrange', t('from the next read on')));
       return box;
     }
-    box.append(el('div', 'mx-title', `Busiest operations, the last ${secs} s`));
+    box.append(el('div', 'mx-title', t('Busiest operations, the last {n} s', { n: secs })));
     if (!rows.length) {
-      box.append(el('div', 'hrange', 'no NGSI-LD requests'));
+      box.append(el('div', 'hrange', t('no NGSI-LD requests')));
       return box;
     }
     const tab = el('table', 'rn-cfgtab');

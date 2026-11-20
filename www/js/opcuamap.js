@@ -17,13 +17,9 @@
 // the mapper opens on it.
 //
 import * as api from './api.js';
+import { t, tk, plural } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
-
-// count - '1 Channel', '3 Channels'
-function count(n, one, many) {
-  return n + ' ' + (n === 1 ? one : many);
-}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -53,8 +49,8 @@ function input(value, placeholder, label, onInput) {
 function select(options, value, label, onChange) {
   const s = el('select', 'cp-input');
   s.setAttribute('aria-label', label);
-  for (const [v, t] of options) {
-    const o = el('option', '', t);
+  for (const [v, text] of options) {
+    const o = el('option', '', text);
     o.value = v;
     o.selected = (value === v);
     s.append(o);
@@ -83,8 +79,8 @@ const RESERVED  = ['id', 'type', '@id', '@type', '@context', 'scope', 'createdAt
 // a TypeDefinition that says nothing of what the Object is: the proposals' type instead
 const GENERIC = ['BaseObjectType', 'FolderType', ''];
 
-const LAYOUTS = [['attributes', 'an attribute per Variable, named by its path'], ['subAttributes', 'a container one attribute, its Variables sub-attributes'],
-                 ['value', 'a container one JsonProperty, its values as the server has them']];
+const LAYOUTS = [['attributes', tk('an attribute per Variable, named by its path')], ['subAttributes', tk('a container one attribute, its Variables sub-attributes')],
+                 ['value', tk('a container one JsonProperty, its values as the server has them')]];
 
 //
 // housekeeping - the server's own nodes, rarely worth mapping: namespace 0 - its Server object, aliases, locations
@@ -160,10 +156,10 @@ export class OpcuaMapper {
   // note - the line under the form's button
   note(on) {
     const m = this.files && this.files.mapping;
-    if (!m) return on ? 'nothing mapped yet - the mapper reads the server\'s address space and writes the opcua bridge\'s configuration' : '';
+    if (!m) return on ? t('nothing mapped yet - the mapper reads the server\'s address space and writes the opcua bridge\'s configuration') : '';
     const n = (k) => (m[k] || []).length;
-    return 'the OPC UA configuration: ' + m.url + ' - ' + count(n('channels'), 'Channel', 'Channels') + ', ' + count(n('models'), 'model', 'models')
-      + ' - ' + this.files.bridgeConfig;
+    return t('the OPC UA configuration: {url} - {channels}, {models} - {file}', { url: m.url, channels: plural(n('channels'), '{n} Channel', '{n} Channels'),
+      models: plural(n('models'), '{n} model', '{n} models'), file: this.files.bridgeConfig });
   }
 
   // ------------------------------------------------------------------ open, close
@@ -171,7 +167,7 @@ export class OpcuaMapper {
   build() {
     const main = document.querySelector('#page-run .cp-main');
     this.box = el('section', 'dm om');
-    this.box.setAttribute('aria-label', 'OPC UA mapping');
+    this.box.setAttribute('aria-label', t('OPC UA mapping'));
     this.box.hidden = true;
     main.append(this.box);
     // Escape on Operate only: the listener is the document's, and the mapper stays open while another page is shown
@@ -214,10 +210,10 @@ export class OpcuaMapper {
   // closeButtons - the × of a screen, and, opened from Compile, the way back to it
   closeButtons() {
     const out = [];
-    if (this.from === 'compile') out.push(button('← Back to Compile', 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
+    if (this.from === 'compile') out.push(button(t('← Back to Compile'), 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
     const close = button('×', 'dm-close', () => this.close());
-    close.title = 'back to the brokers';
-    close.setAttribute('aria-label', 'close the OPC UA mapping');
+    close.title = t('back to the brokers');
+    close.setAttribute('aria-label', t('close the OPC UA mapping'));
     out.push(close);
     return out;
   }
@@ -259,7 +255,8 @@ export class OpcuaMapper {
 
   async discover(btn) {
     btn.disabled = true;
-    this.status = 'discovering - a broker of c³\'s own connects to ' + (this.server.url || 'the server') + ' and reads its address space ...';
+    this.status = this.server.url ? t('discovering - a broker of c³\'s own connects to {url} and reads its address space ...', { url: this.server.url })
+      : t('discovering - a broker of c³\'s own connects to the server and reads its address space ...');
     this.renderStatus();
     try {
       const def = this.run.def();
@@ -270,7 +267,7 @@ export class OpcuaMapper {
       delete def.bridgeConfig;
       delete def.userContext;
       const inv = await api.runOpcuaDiscover(def);
-      this.inventorySet(inv, this.server.url + ', discovered ' + new Date().toLocaleTimeString());
+      this.inventorySet(inv, t('{url}, discovered {time}', { url: this.server.url, time: new Date().toLocaleTimeString() }));
     } catch (e) {
       this.status = e.message;
     }
@@ -284,9 +281,9 @@ export class OpcuaMapper {
       const inv = JSON.parse(await file.text());
       // c³'s discovery ({ objects }), or the bridge's inventory as the broker answers it (a node, its children)
       const root = inv.objects || (inv.node ? inv : null);
-      if (!root || !Array.isArray(root.children)) throw new Error('not an inventory: no "objects", and not a node with "children"');
+      if (!root || !Array.isArray(root.children)) throw new Error(t('not an inventory: no "objects", and not a node with "children"'));
       this.inventorySet({ url: inv.url || '', complete: inv.complete, nodes: inv.nodes, objects: root },
-        file.name + (inv.discoveredAt ? ', discovered ' + inv.discoveredAt : ''));
+        inv.discoveredAt ? t('{url}, discovered {time}', { url: file.name, time: inv.discoveredAt }) : file.name);
     } catch (e) {
       this.status = file.name + ': ' + e.message;
     }
@@ -303,8 +300,8 @@ export class OpcuaMapper {
     walk(inv.objects, []);
     let n = 0;
     for (const { n: x } of this.index.values()) if (!housekeeping(x)) n++;
-    this.status = from + ' - ' + count(n, 'node', 'nodes') + (this.index.size > n ? ' (and ' + (this.index.size - n) + ' of the server\'s own)' : '')
-      + (inv.complete === false ? '; the address space is larger than one discovery reads - what is shown is cut' : '');
+    this.status = from + ' - ' + plural(n, '{n} node', '{n} nodes') + (this.index.size > n ? ' ' + t('(and {n} of the server\'s own)', { n: this.index.size - n }) : '')
+      + (inv.complete === false ? t('; the address space is larger than one discovery reads - what is shown is cut') : '');
     for (const c of inv.objects.children || []) if (!housekeeping(c)) this.openN.add(c.id);   // the application's top level, open
   }
 
@@ -441,34 +438,34 @@ export class OpcuaMapper {
     for (const [k, r] of this.rows) {
       if (r.kind === 'model') {
         const over = this.modelOver(k);
-        if (over) add(k, 'inside the model of ' + ((this.index.get(over) || {}).n || {}).name + ' already - the bridge would read it twice');
+        if (over) add(k, t('inside the model of {name} already - the bridge would read it twice', { name: ((this.index.get(over) || {}).n || {}).name }));
         continue;
       }
       if (!this.mapped(r)) continue;
-      if (!r.attribute) add(k, 'no attribute name');
-      else if (FORBIDDEN.test(r.attribute)) add(k, 'the attribute name has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))');
-      else if (RESERVED.includes(r.attribute)) add(k, '"' + r.attribute + '" is a member of every entity, not an attribute name');
-      if (!r.entityId) add(k, 'no entity id');
-      else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(r.entityId)) add(k, 'the entity id is not a URI (urn:ngsi-ld:Tank:T1)');
-      else if (!types.has(r.entityId)) add(k, 'the entity ' + r.entityId + ' has no type - give it one here, or on another of its Variables');
-      if (r.entityType && FORBIDDEN.test(r.entityType)) add(k, 'the entity type has a character NGSI-LD forbids in a name');
-      if (r.entityType && types.get(r.entityId) && r.entityType !== types.get(r.entityId)) add(k, 'another Variable gives ' + r.entityId + ' the type ' + types.get(r.entityId));
+      if (!r.attribute) add(k, t('no attribute name'));
+      else if (FORBIDDEN.test(r.attribute)) add(k, t('the attribute name has a character NGSI-LD forbids in a name (space < > " \' = ; ( ))'));
+      else if (RESERVED.includes(r.attribute)) add(k, t('"{name}" is a member of every entity, not an attribute name', { name: r.attribute }));
+      if (!r.entityId) add(k, t('no entity id'));
+      else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(r.entityId)) add(k, t('the entity id is not a URI (urn:ngsi-ld:Tank:T1)'));
+      else if (!types.has(r.entityId)) add(k, t('the entity {id} has no type - give it one here, or on another of its Variables', { id: r.entityId }));
+      if (r.entityType && FORBIDDEN.test(r.entityType)) add(k, t('the entity type has a character NGSI-LD forbids in a name'));
+      if (r.entityType && types.get(r.entityId) && r.entityType !== types.get(r.entityId)) add(k, t('another Variable gives {id} the type {type}', { id: r.entityId, type: types.get(r.entityId) }));
       if (r.attribute && r.entityId) {
         const a = r.entityId + '\n' + r.attribute;
-        if (attrs.has(a)) add(k, r.entityId + ' has the attribute ' + r.attribute + ' already, from ' + attrs.get(a));
+        if (attrs.has(a)) add(k, t('{id} has the attribute {attribute} already, from {from}', { id: r.entityId, attribute: r.attribute, from: attrs.get(a) }));
         else attrs.set(a, ((this.index.get(k) || {}).n || {}).name || k);
       }
     }
 
     const s = this.server;
-    if (!s.url) add('server', 'the server\'s URL');
-    else if (!/^opc\.tcp:\/\/\S+$/.test(s.url)) add('server', 'the URL is opc.tcp://<host>:<port>');
+    if (!s.url) add('server', t('the server\'s URL'));
+    else if (!/^opc\.tcp:\/\/\S+$/.test(s.url)) add('server', t('the URL is opc.tcp://<host>:<port>'));
     if (s.mode !== 'None') {
-      if (!s.certificate || !s.privateKey || !s.applicationUri) add('server', s.mode + ' needs the client\'s certificate, its private key and the application URI the certificate names');
-      if (!lines(s.trustList).length && !s.trustAny) add('server', s.mode + ' needs the server certificates to trust - or "trust any"');
+      if (!s.certificate || !s.privateKey || !s.applicationUri) add('server', t('{mode} needs the client\'s certificate, its private key and the application URI the certificate names', { mode: s.mode }));
+      if (!lines(s.trustList).length && !s.trustAny) add('server', t('{mode} needs the server certificates to trust - or "trust any"', { mode: s.mode }));
     }
-    if (s.username && !s.password && !s.passwordSet) add('server', 'the user ' + s.username + ' has no password: give it once, c³ keeps it');
-    if (!s.username && s.password) add('server', 'a password needs its username');
+    if (s.username && !s.password && !s.passwordSet) add('server', t('the user {user} has no password: give it once, c³ keeps it', { user: s.username }));
+    if (!s.username && s.password) add('server', t('a password needs its username'));
     return per;
   }
 
@@ -482,17 +479,17 @@ export class OpcuaMapper {
     const changed = () => { this.refresh(); };
 
     const row = el('div', 'dm-row');
-    const url = input(s.url, 'opc.tcp://host:4840', 'OPC UA server URL', (v) => { s.url = v; changed(); });
+    const url = input(s.url, 'opc.tcp://host:4840', t('OPC UA server URL'), (v) => { s.url = v; changed(); });
     url.classList.add('om-url');
-    const mode = select([['None', 'no security (None)'], ['Sign', 'Sign'], ['SignAndEncrypt', 'SignAndEncrypt']], s.mode, 'Security mode',
+    const mode = select([['None', t('no security (None)')], ['Sign', 'Sign'], ['SignAndEncrypt', 'SignAndEncrypt']], s.mode, t('Security mode'),
       (v) => { s.mode = v; this.render(); });
-    row.append(el('span', 'dm-reachtitle', 'How c³ reaches your OPC UA server'), lab('server', url), lab('security', mode));
+    row.append(el('span', 'dm-reachtitle', t('How c³ reaches your OPC UA server')), lab(t('server'), url), lab(t('security'), mode));
     box.append(row);
 
     if (s.mode !== 'None') {
       const sec = el('div', 'om-sec');
       const pol = select([['', 'Basic256Sha256'], ['Aes128_Sha256_RsaOaep', 'Aes128_Sha256_RsaOaep'], ['Aes256_Sha256_RsaPss', 'Aes256_Sha256_RsaPss']],
-        s.policy, 'Security policy', (v) => { s.policy = v; changed(); });
+        s.policy, t('Security policy'), (v) => { s.policy = v; changed(); });
       const f = (label, key, ph) => {
         const l = el('label', 'dm-field');
         const i = input(s[key], ph, label, (v) => { s[key] = v; changed(); });
@@ -500,41 +497,41 @@ export class OpcuaMapper {
         return l;
       };
       const pl = el('label', 'dm-field');
-      pl.append(el('span', 'dm-flabel', 'Policy'), pol);
+      pl.append(el('span', 'dm-flabel', t('Policy')), pol);
       const tr = el('textarea', 'cp-input om-trust');
       tr.rows = 2;
       tr.value = s.trustList;
-      tr.placeholder = 'the server certificates to trust - a file a line';
+      tr.placeholder = t('the server certificates to trust - a file a line');
       tr.spellcheck = false;
-      tr.setAttribute('aria-label', 'Trusted server certificates');
+      tr.setAttribute('aria-label', t('Trusted server certificates'));
       tr.addEventListener('input', () => { s.trustList = tr.value; changed(); });
       const tl = el('label', 'dm-field');
-      tl.append(el('span', 'dm-flabel', 'Trust'), tr);
+      tl.append(el('span', 'dm-flabel', t('Trust')), tr);
       const any = el('label', 'rn-check om-any');
       const ac = el('input');
       ac.type = 'checkbox';
       ac.checked = s.trustAny;
       ac.addEventListener('change', () => { s.trustAny = ac.checked; changed(); });
-      any.append(ac, document.createTextNode(' trust any server certificate - cannot tell the server meant from one that pretends to be it'));
-      sec.append(pl, f('Certificate', 'certificate', 'the client\'s certificate - a file (DER or PEM)'), f('Private key', 'privateKey', 'its private key - a file'),
-        f('Application URI', 'applicationUri', 'the URI the certificate names (urn:...)'), tl, any);
+      any.append(ac, document.createTextNode(' ' + t('trust any server certificate - cannot tell the server meant from one that pretends to be it')));
+      sec.append(pl, f(t('Certificate'), 'certificate', t('the client\'s certificate - a file (DER or PEM)')), f(t('Private key'), 'privateKey', t('its private key - a file')),
+        f(t('Application URI'), 'applicationUri', t('the URI the certificate names (urn:...)')), tl, any);
       box.append(sec);
     }
 
     const urow = el('div', 'dm-row');
-    const user = input(s.username, 'empty: anonymous', 'OPC UA username', (v) => { s.username = v; changed(); });
+    const user = input(s.username, t('empty: anonymous'), t('OPC UA username'), (v) => { s.username = v; changed(); });
     user.classList.add('om-user');
-    const pw = input('', s.passwordSet ? 'kept by c³ - empty keeps it' : 'password', 'OPC UA password', (v) => { s.password = v; changed(); });
+    const pw = input('', s.passwordSet ? t('kept by c³ - empty keeps it') : t('password'), t('OPC UA password'), (v) => { s.password = v; changed(); });
     pw.type = 'password';
     pw.autocomplete = 'new-password';
     pw.value = s.password;
     pw.classList.add('om-user');
-    urow.append(lab('user', user), lab('password', pw));
+    urow.append(lab(t('user'), user), lab(t('password'), pw));
     box.append(urow);
 
-    box.append(el('p', 'cp-note', 'The bridge is an OPC UA client of one server. c³ keeps the password in its data directory, readable by you only, '
+    box.append(el('p', 'cp-note', t('The bridge is an OPC UA client of one server. c³ keeps the password in its data directory, readable by you only, '
       + 'and the bridge configuration names that file - the password is in no file you share. Discover needs a native broker with the opcua bridge: '
-      + 'an installed coraine or a build - the image has none. The broker Done starts connects the same way.'));
+      + 'an installed coraine or a build - the image has none. The broker Done starts connects the same way.')));
     box.append(el('div', 'dm-probs', (problems.get('server') || []).join(' · ')));
     return box;
   }
@@ -545,32 +542,32 @@ export class OpcuaMapper {
 
     const head = el('div', 'cp-card dm-head');
     const top = el('div', 'dm-top');
-    top.append(el('h2', 'section', 'Map an OPC UA server'), ...this.closeButtons());
-    head.append(top, el('p', 'cp-note', 'A Variable mapped is one attribute of an entity - its name, the entity\'s id, and the entity\'s type, once for '
+    top.append(el('h2', 'section', t('Map an OPC UA server')), ...this.closeButtons());
+    head.append(top, el('p', 'cp-note', t('A Variable mapped is one attribute of an entity - its name, the entity\'s id, and the entity\'s type, once for '
       + 'each entity, on any of its Variables - its value both ways: a write of the attribute writes the Variable. An Object mapped is a model: '
       + 'the Object and every Object in it entities, their Variables attributes, their references Relationships. Done writes the OPC UA '
-      + 'configuration, two files, and a broker starts with them.'));
+      + 'configuration, two files, and a broker starts with them.')));
 
     head.append(this.reachRow(problems));
 
     const row = el('div', 'dm-row');
-    const voc = input(this.vocab, 'vocabulary - the terms\' namespace (https://example.org/plant/); empty: the default context\'s', 'Vocabulary',
+    const voc = input(this.vocab, t('vocabulary - the terms\' namespace (https://example.org/plant/); empty: the default context\'s'), t('Vocabulary'),
       (v) => { this.vocab = v; });
     voc.classList.add('dm-vocab');
-    const pt = input(this.propType, 'Machine', 'Entity type of the proposals', (v) => { this.propType = v; this.refresh(); });
+    const pt = input(this.propType, 'Machine', t('Entity type of the proposals'), (v) => { this.propType = v; this.refresh(); });
     pt.classList.add('dm-ptype');
-    pt.title = 'the entity type the proposals give an Object whose TypeDefinition says nothing (BaseObjectType)';
+    pt.title = t('the entity type the proposals give an Object whose TypeDefinition says nothing (BaseObjectType)');
     const ptl = el('label', 'dm-plabel');
-    ptl.append(el('span', '', 'proposals\' type'), pt);
-    const disc = button('Discover', 'primary', () => this.discover(disc));
+    ptl.append(el('span', '', t('proposals\' type')), pt);
+    const disc = button(t('Discover'), 'primary', () => this.discover(disc));
     disc.disabled = !this.server.url;
-    disc.title = this.server.url ? '' : 'the server\'s URL first';
+    disc.title = this.server.url ? '' : t('the server\'s URL first');
     const file = el('input');
     file.type = 'file';
     file.accept = '.json,application/json';
     file.hidden = true;
     file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; this.importFile(f); });
-    const imp = button('Import inventory.json', '', () => file.click());
+    const imp = button(t('Import inventory.json'), '', () => file.click());
     row.append(voc, ptl, disc, imp, file);
     const st = el('div', 'dm-row');
     const house = el('label', 'rn-check');
@@ -578,9 +575,9 @@ export class OpcuaMapper {
     hc.type = 'checkbox';
     hc.checked = this.house;
     hc.addEventListener('change', () => { this.house = hc.checked; this.render(); });
-    house.title = 'namespace 0: the Server object, its diagnostics and sessions, aliases, locations';
-    house.append(hc, document.createTextNode(' show the server\'s own nodes'));
-    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : 'Discover reads the server\'s address space - or import an inventory.json')), house);
+    house.title = t('namespace 0: the Server object, its diagnostics and sessions, aliases, locations');
+    house.append(hc, document.createTextNode(' ' + t('show the server\'s own nodes')));
+    st.append(el('span', 'dm-status', this.status || (this.inv ? '' : t('Discover reads the server\'s address space - or import an inventory.json'))), house);
     head.append(row, st);
     out.push(head);
 
@@ -598,14 +595,14 @@ export class OpcuaMapper {
     const ghead = el('div', 'dm-ghead');
     const nVar = [...this.rows.values()].filter((r) => r.kind === 'variable' && this.mapped(r)).length;
     const nMod = [...this.rows.values()].filter((r) => r.kind === 'model').length;
-    ghead.append(el('span', 'dm-gtitle', 'The server\'s Objects'),
-      el('span', 'dm-gcount', [nVar ? count(nVar, 'Variable', 'Variables') : '', nMod ? count(nMod, 'model', 'models') : ''].filter(Boolean).join(', ')
-        + (nVar || nMod ? ' mapped' : '')));
+    const counted = [nVar ? plural(nVar, '{n} Variable', '{n} Variables') : '', nMod ? plural(nMod, '{n} model', '{n} models') : ''].filter(Boolean).join(', ');
+    ghead.append(el('span', 'dm-gtitle', t('The server\'s Objects')),
+      el('span', 'dm-gcount', counted ? t('{what} mapped', { what: counted }) : ''));
     card.append(ghead);
-    if (!this.inv) card.append(el('div', 'dm-empty', 'nothing discovered yet'));
+    if (!this.inv) card.append(el('div', 'dm-empty', t('nothing discovered yet')));
     else {
       const kids = (this.inv.objects.children || []).filter((c) => this.house || !housekeeping(c) || this.mappedBelow(c));
-      if (!kids.length) card.append(el('div', 'dm-empty', 'no Objects' + (this.house ? '' : ' but the server\'s own')));
+      if (!kids.length) card.append(el('div', 'dm-empty', this.house ? t('no Objects') : t('no Objects but the server\'s own')));
       for (const c of kids) card.append(this.nodeLine(c, problems, 0));
     }
     out.push(card);
@@ -615,7 +612,8 @@ export class OpcuaMapper {
     if (gone.length) {
       const g = el('div', 'cp-card dm-groups');
       g.append(el('div', 'dm-ghead', ''));
-      g.firstChild.append(el('span', 'dm-gtitle', count(gone.length, 'node', 'nodes') + ' mapped' + (this.inv ? ', not in the last discovery' : ' - Discover, or import an inventory.json, to see them in the tree')));
+      g.firstChild.append(el('span', 'dm-gtitle', this.inv ? plural(gone.length, '{n} node mapped, not in the last discovery', '{n} nodes mapped, not in the last discovery')
+        : plural(gone.length, '{n} node mapped - Discover, or import an inventory.json, to see them in the tree', '{n} nodes mapped - Discover, or import an inventory.json, to see them in the tree')));
       for (const r of gone) g.append(this.goneLine(r, problems.get(r.node) || []));
       out.push(g);
     }
@@ -626,10 +624,11 @@ export class OpcuaMapper {
     const nProblems = [...problems.values()].reduce((n, l) => n + l.length, 0);
     const ents = new Set(mapped.filter((r) => r.kind === 'variable').map((r) => r.entityId).filter(Boolean));
     const sum = el('span', 'dm-sum', mapped.length
-      ? count(nVar, 'Channel', 'Channels') + ' (' + count(ents.size, 'entity', 'entities') + '), ' + count(nMod, 'model', 'models')
-        + (nProblems ? ' - ' + nProblems + ' to fix first' : '')
-      : 'nothing mapped yet');
-    const done = button('Done', 'primary dm-done', () => this.done(done));
+      ? t('{channels} ({entities}), {models}', { channels: plural(nVar, '{n} Channel', '{n} Channels'), entities: plural(ents.size, '{n} entity', '{n} entities'),
+        models: plural(nMod, '{n} model', '{n} models') })
+        + (nProblems ? ' - ' + t('{n} to fix first', { n: nProblems }) : '')
+      : t('nothing mapped yet'));
+    const done = button(t('Done'), 'primary dm-done', () => this.done(done));
     done.disabled = !mapped.length || nProblems > 0;
     foot.append(sum, el('span', 'dm-err'), done);
     out.push(foot);
@@ -673,7 +672,7 @@ export class OpcuaMapper {
     const node = el('div', 'dm-ep om-node om-' + n.node + (this.mapped(r) ? ' mapped' : '') + (probs.length ? ' bad' : '') + (inModel ? ' inmodel' : ''));
     const head = el('div', 'dm-ephead');
 
-    if (kids.length) head.append(toggle(open, (open ? 'close ' : 'open ') + n.name, () => { if (open) this.openN.delete(k); else this.openN.add(k); this.render(); }));
+    if (kids.length) head.append(toggle(open, open ? t('close {name}', { name: n.name }) : t('open {name}', { name: n.name }), () => { if (open) this.openN.delete(k); else this.openN.add(k); this.render(); }));
     else head.append(el('span', 'om-leaf', n.hasChildren ? '·' : ''));
 
     const name = el('span', 'dm-name', n.name || n.id);
@@ -692,34 +691,35 @@ export class OpcuaMapper {
     const chip = el('span', 'dm-chip');
     head.append(chip);
     if (inModel && n.node !== 'method') {
-      chip.textContent = 'in the model of ' + ((this.index.get(inModel) || {}).n || {}).name;
+      chip.textContent = t('in the model of {name}', { name: ((this.index.get(inModel) || {}).n || {}).name });
       chip.classList.add('prop');
     } else if (n.node === 'variable') {
       const complete = r && r.attribute && r.entityId && (r.entityType || this.entityTypes().has(r.entityId));
-      if (this.mapped(r)) chip.textContent = (r.attribute || '?') + ' of ' + (r.entityId || '?');
+      if (this.mapped(r)) chip.textContent = t('{attribute} of {id}', { attribute: r.attribute || '?', id: r.entityId || '?' });
       if (!complete) {
         const p = this.proposal(n);
-        if (!this.mapped(r)) { chip.textContent = p.attribute + ' of ' + p.entityId; chip.classList.add('prop'); }
+        if (!this.mapped(r)) { chip.textContent = t('{attribute} of {id}', { attribute: p.attribute, id: p.entityId }); chip.classList.add('prop'); }
         const ok = button('✓', 'dm-ok', () => { this.accept(n); this.render(); });
-        ok.title = 'accept the proposal' + (this.mapped(r) ? ' for the empty fields' : ': ' + p.attribute + ' of ' + p.entityId);
-        ok.setAttribute('aria-label', 'accept the proposal for ' + n.name);
+        ok.title = this.mapped(r) ? t('accept the proposal for the empty fields') : t('accept the proposal: {attribute} of {id}', { attribute: p.attribute, id: p.entityId });
+        ok.setAttribute('aria-label', t('accept the proposal for {name}', { name: n.name }));
         head.append(ok);
       }
     } else if (n.node === 'object') {
       const made = this.modelMakes(n, (r && r.attributeLayout) || 'attributes');
-      const what = 'a model: ' + count(made.entities.length, 'entity', 'entities') + ', ' + count(made.attrs.size, 'attribute', 'attributes');
+      const what = t('a model: {entities}, {attributes}', { entities: plural(made.entities.length, '{n} entity', '{n} entities'),
+        attributes: plural(made.attrs.size, '{n} attribute', '{n} attributes') });
       chip.textContent = what;
       if (!r) {
         chip.classList.add('prop');
         const ok = button('✓', 'dm-ok', () => { this.modelAdd(n); this.render(); });
-        ok.title = 'map it as a model: ' + what + ' - every Object in it an entity';
-        ok.setAttribute('aria-label', 'map ' + n.name + ' as a model');
+        ok.title = t('map it as a model: {what} - every Object in it an entity', { what });
+        ok.setAttribute('aria-label', t('map {name} as a model', { name: n.name }));
         head.append(ok);
       }
     } else if (n.node === 'method') {
-      chip.textContent = 'a method - not mapped here';
+      chip.textContent = t('a method - not mapped here');
       chip.classList.add('prop');
-      chip.title = 'a method is a service of its entity: a Service Registration whose endpoint is opcua://<the Object\'s NodeId>/<the method\'s> - made by hand (the opcua bridge\'s README)';
+      chip.title = t('a method is a service of its entity: a Service Registration whose endpoint is opcua://<the Object\'s NodeId>/<the method\'s> - made by hand (the opcua bridge\'s README)');
     }
     node.append(head);
 
@@ -736,9 +736,9 @@ export class OpcuaMapper {
 
   // meta - what a node is, after its name: a Variable's DataType, unit and access; an Object's type
   meta(n) {
-    if (n.node === 'variable') return [n.dataType, n.unit, n.writable ? 'writable' : 'read-only'].filter(Boolean).join(' · ');
+    if (n.node === 'variable') return [n.dataType, n.unit, n.writable ? t('writable') : t('read-only')].filter(Boolean).join(' · ');
     if (n.node === 'object') return n.typeName || 'Object';
-    if (n.node === 'folder') return 'folder';
+    if (n.node === 'folder') return t('folder');
     return n.node || '';
   }
 
@@ -754,7 +754,7 @@ export class OpcuaMapper {
       const prop = this.proposal(n);
       const f = (label, key, ph, list, hint) => {
         const l = el('label', 'dm-field');
-        const i = input(r ? r[key] : '', ph, label + ' of ' + n.name, (v) => {
+        const i = input(r ? r[key] : '', ph, t('{label} of {name}', { label, name: n.name }), (v) => {
           const row = this.row(n);
           row[key] = v;
           this.refresh();
@@ -766,48 +766,48 @@ export class OpcuaMapper {
       };
       const inherited = r && r.entityId && !r.entityType && types.get(r.entityId);
       fields.append(
-        f('Attribute name', 'attribute', prop.attribute || 'value', null, n.writable ? 'a write of the attribute writes the Variable - it is writable' : 'the server does not let it be written: read-only'),
-        f('Entity ID', 'entityId', (r && r.entityId) ? '' : prop.entityId, 'om-ids'),
-        f('Entity type', 'entityType', inherited || prop.entityType || this.propType, 'om-types', inherited ? 'optional - ' + r.entityId + ' is a ' + inherited : 'optional, if another Variable of the entity gives it'));
+        f(t('Attribute name'), 'attribute', prop.attribute || 'value', null, n.writable ? t('a write of the attribute writes the Variable - it is writable') : t('the server does not let it be written: read-only')),
+        f(t('Entity ID'), 'entityId', (r && r.entityId) ? '' : prop.entityId, 'om-ids'),
+        f(t('Entity type'), 'entityType', inherited || prop.entityType || this.propType, 'om-types', inherited ? t('optional - {id} is a {type}', { id: r.entityId, type: inherited }) : t('optional, if another Variable of the entity gives it')));
       out.push(fields);
       if (n.value !== undefined) {
         const pre = el('pre', 'dm-sample', JSON.stringify(n.value, null, 2) + (n.sourceTime ? '\n' + n.sourceTime : ''));
         pre.hidden = true;
-        const b = button('its value', 'small', () => { pre.hidden = !pre.hidden; });
-        b.title = 'the value the server had when it was discovered - the attribute\'s value, its SourceTimestamp the attribute\'s observedAt';
+        const b = button(t('its value'), 'small', () => { pre.hidden = !pre.hidden; });
+        b.title = t('the value the server had when it was discovered - the attribute\'s value, its SourceTimestamp the attribute\'s observedAt');
         tools.append(b);
         out.push(tools, pre);
       }
-      if (this.mapped(r)) tools.append(button('not mapped', 'small', () => { this.rows.delete(k); this.render(); }));
+      if (this.mapped(r)) tools.append(button(t('not mapped'), 'small', () => { this.rows.delete(k); this.render(); }));
     } else {
       const fields = el('div', 'dm-fields');
       const cur = r || { attributeLayout: 'attributes', channelDirection: 'in' };
       const set = (key, v) => { this.modelAdd(n); this.rows.get(k)[key] = v; this.render(); };
-      const lay = select(LAYOUTS.map(([v, t]) => [v, v + ' - ' + t]), cur.attributeLayout, 'Attribute layout of ' + n.name, (v) => set('attributeLayout', v));
+      const lay = select(LAYOUTS.map(([v, what]) => [v, v + ' - ' + t(what)]), cur.attributeLayout, t('Attribute layout of {name}', { name: n.name }), (v) => set('attributeLayout', v));
       const ll = el('label', 'dm-field');
-      ll.append(el('span', 'dm-flabel', 'Containers'), lay, el('span', 'dm-fhint', 'what a folder, or an Object no entity, becomes in the entity above it'));
-      const dir = select([['in', 'read-only - values in'], ['both', 'both - a write of an attribute writes its Variable']], cur.channelDirection,
-        'Direction of ' + n.name, (v) => set('channelDirection', v));
+      ll.append(el('span', 'dm-flabel', t('Containers')), lay, el('span', 'dm-fhint', t('what a folder, or an Object no entity, becomes in the entity above it')));
+      const dir = select([['in', t('read-only - values in')], ['both', t('both - a write of an attribute writes its Variable')]], cur.channelDirection,
+        t('Direction of {name}', { name: n.name }), (v) => set('channelDirection', v));
       const dl = el('label', 'dm-field');
-      dl.append(el('span', 'dm-flabel', 'Direction'), dir);
+      dl.append(el('span', 'dm-flabel', t('Direction')), dir);
       fields.append(ll, dl);
       out.push(fields);
       const made = this.modelMakes(n, cur.attributeLayout);
       const pre = el('pre', 'dm-sample', made.entities.map((e) => this.typeOf(e) === this.propType && GENERIC.includes(e.typeName || '')
         ? (e.typeName || 'BaseObjectType') + '  ' + e.name : (e.typeName || '') + '  ' + e.name).join('\n')
-        + '\n\nattributes: ' + [...made.attrs].join(', '));
+        + '\n\n' + t('attributes: {list}', { list: [...made.attrs].join(', ') }));
       pre.hidden = true;
-      const b = button('what it makes', 'small', () => { pre.hidden = !pre.hidden; });
-      b.title = 'the entities - each Object, its type its TypeDefinition\'s name - and the attributes, as the bridge names them';
+      const b = button(t('what it makes'), 'small', () => { pre.hidden = !pre.hidden; });
+      b.title = t('the entities - each Object, its type its TypeDefinition\'s name - and the attributes, as the bridge names them');
       tools.append(b);
-      if (!r) tools.append(button('map it as a model', 'small', () => { this.modelAdd(n); this.render(); }));
+      if (!r) tools.append(button(t('map it as a model'), 'small', () => { this.modelAdd(n); this.render(); }));
       const vs = this.variablesBelow(n);
       if (!r && vs.length) {
-        const all = button('✓ its Variables (' + vs.length + ')', 'small dm-all', () => { for (const v of vs) this.accept(v); this.render(); });
-        all.title = 'each Variable in it a Channel, as proposed - instead of the model; each name stays editable';
+        const all = button(t('✓ its Variables ({n})', { n: vs.length }), 'small dm-all', () => { for (const v of vs) this.accept(v); this.render(); });
+        all.title = t('each Variable in it a Channel, as proposed - instead of the model; each name stays editable');
         tools.append(all);
       }
-      if (r) tools.append(button('not mapped', 'small', () => { this.rows.delete(k); this.render(); }));
+      if (r) tools.append(button(t('not mapped'), 'small', () => { this.rows.delete(k); this.render(); }));
       out.push(tools, pre);
     }
     out.push(el('div', 'dm-probs', probs.join(' · ')));
@@ -818,9 +818,9 @@ export class OpcuaMapper {
   goneLine(r, probs) {
     const node = el('div', 'dm-ep mapped' + (probs.length ? ' bad' : ''));
     const head = el('div', 'dm-ephead');
-    head.append(el('span', 'dm-name', r.node), el('span', 'dm-type', this.inv ? 'not in the last discovery' : 'not discovered yet'),
-      el('span', 'dm-chip', r.kind === 'model' ? 'a model' : (r.attribute || '?') + ' of ' + (r.entityId || '?')));
-    head.append(button('not mapped', 'small', () => { this.rows.delete(r.node); this.render(); }));
+    head.append(el('span', 'dm-name', r.node), el('span', 'dm-type', this.inv ? t('not in the last discovery') : t('not discovered yet')),
+      el('span', 'dm-chip', r.kind === 'model' ? t('a model') : t('{attribute} of {id}', { attribute: r.attribute || '?', id: r.entityId || '?' })));
+    head.append(button(t('not mapped'), 'small', () => { this.rows.delete(r.node); this.render(); }));
     node.append(head, el('div', 'dm-probs', probs.join(' · ')));
     return node;
   }
@@ -896,17 +896,19 @@ export class OpcuaMapper {
 
     const head = el('div', 'cp-card dm-head');
     const top = el('div', 'dm-top');
-    top.append(el('h2', 'section', 'The OPC UA configuration is written'), ...this.closeButtons());
-    head.append(top, el('p', 'cp-note', count(n('channels'), 'Channel', 'Channels') + ' (attributes of ' + count(ents.size, 'entity', 'entities') + ') and '
-      + count(n('models'), 'model', 'models') + ' - ' + m.url + ', ' + (sec.mode && sec.mode !== 'None' ? sec.mode + ' ' + (sec.policy || 'Basic256Sha256') : 'no security')
-      + ((m.user || {}).username ? ', user ' + m.user.username : ', anonymous') + '. Two files, in ' + f.directory + ':'));
+    top.append(el('h2', 'section', t('The OPC UA configuration is written')), ...this.closeButtons());
+    const how = sec.mode && sec.mode !== 'None' ? sec.mode + ' ' + (sec.policy || 'Basic256Sha256') : t('no security');
+    const who = (m.user || {}).username ? t('user {user}', { user: m.user.username }) : t('anonymous');
+    head.append(top, el('p', 'cp-note', t('{channels} (attributes of {entities}) and {models} - {url}, {security}, {user}. Two files, in {dir}:', {
+      channels: plural(n('channels'), '{n} Channel', '{n} Channels'), entities: plural(ents.size, '{n} entity', '{n} entities'),
+      models: plural(n('models'), '{n} model', '{n} models'), url: m.url, security: how, user: who, dir: f.directory })));
 
     const fileCard = (title, path, what, flag) => {
       const c = el('div', 'dm-file');
       const p = el('code', 'dm-path', path);
-      const copy = button('Copy', 'small', async () => {
-        try { await navigator.clipboard.writeText(path); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'select it and copy'; }
-        setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      const copy = button(t('Copy'), 'small', async () => {
+        try { await navigator.clipboard.writeText(path); copy.textContent = t('Copied'); } catch (e) { copy.textContent = t('select it and copy'); }
+        setTimeout(() => { copy.textContent = t('Copy'); }, 1500);
       });
       const line = el('div', 'dm-fileline');
       line.append(p, copy);
@@ -914,19 +916,20 @@ export class OpcuaMapper {
       return c;
     };
     head.append(
-      fileCard('The bridge configuration', f.bridgeConfig, 'the server the opcua bridge connects to, its Channels and its models'
-        + ((m.user || {}).username ? ' - the password not in it: it names the file c³ keeps it in, in the same directory' : ''), '--bridgeConfig'),
-      fileCard('The @context', f.userContext, 'each entity type and attribute a term of ' + (m.vocabulary || 'the default context\'s namespace')
-        + ', so clients use the short names', '--defaultUserContext'));
+      fileCard(t('The bridge configuration'), f.bridgeConfig, (m.user || {}).username
+        ? t('the server the opcua bridge connects to, its Channels and its models - the password not in it: it names the file c³ keeps it in, in the same directory')
+        : t('the server the opcua bridge connects to, its Channels and its models'), '--bridgeConfig'),
+      fileCard(t('The @context'), f.userContext, m.vocabulary ? t('each entity type and attribute a term of {vocabulary}, so clients use the short names', { vocabulary: m.vocabulary })
+        : t('each entity type and attribute a term of the default context\'s namespace, so clients use the short names'), '--defaultUserContext'));
     out.push(head);
 
     // a broker with them
     const start = el('div', 'cp-card dm-start');
-    start.append(el('h2', 'section', 'Start a broker with it'));
-    start.append(el('p', 'cp-note', 'The broker of the form on the right - its name, port, store and source - with the opcua bridge and the two files. '
-      + 'A native broker: the image has no opcua bridge. More options are added as typed.'));
+    start.append(el('h2', 'section', t('Start a broker with it')));
+    start.append(el('p', 'cp-note', t('The broker of the form on the right - its name, port, store and source - with the opcua bridge and the two files. '
+      + 'A native broker: the image has no opcua bridge. More options are added as typed.')));
     const cmd = el('pre', 'cp-cmd dm-cmd');
-    const more = input(this.run.f.args || '', '--memoryLimit 512', 'More options for the broker', () => show());
+    const more = input(this.run.f.args || '', '--memoryLimit 512', t('More options for the broker'), () => show());
     more.classList.add('dm-more');
     const show = () => {
       cmd.textContent = 'coraine --bridges opcua \\\n  --bridgeConfig ' + f.bridgeConfig + ' \\\n  --defaultUserContext ' + f.userContext
@@ -934,18 +937,18 @@ export class OpcuaMapper {
     };
     show();
     const ml = el('label', 'dm-field');
-    ml.append(el('span', 'dm-flabel', 'More options'), more);
-    const go = button('Start the broker', 'primary dm-go', () => this.startBroker(more.value.trim(), go));
-    const fill = button('Put it in the broker form', '', () => { this.applyToForm(more.value.trim()); this.close(); });
-    fill.title = 'the form on the right gets the opcua bridge, the two files and the options - to change more before Start';
+    ml.append(el('span', 'dm-flabel', t('More options')), more);
+    const go = button(t('Start the broker'), 'primary dm-go', () => this.startBroker(more.value.trim(), go));
+    const fill = button(t('Put it in the broker form'), '', () => { this.applyToForm(more.value.trim()); this.close(); });
+    fill.title = t('the form on the right gets the opcua bridge, the two files and the options - to change more before Start');
     const btns = el('div', 'dm-row');
     btns.append(go, fill, el('span', 'dm-err'));
     start.append(cmd, ml, btns);
     out.push(start);
 
     const back = el('div', 'dm-row');
-    back.append(button('Edit the mapping', '', () => this.show('map')), button('Close', '', () => this.close()));
-    if (this.from === 'compile') back.append(button('← Back to Compile', '', () => { this.close(); location.hash = '#compile'; }));
+    back.append(button(t('Edit the mapping'), '', () => this.show('map')), button(t('Close'), '', () => this.close()));
+    if (this.from === 'compile') back.append(button(t('← Back to Compile'), '', () => { this.close(); location.hash = '#compile'; }));
     out.push(back);
     return out;
   }

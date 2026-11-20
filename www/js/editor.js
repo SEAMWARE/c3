@@ -35,6 +35,7 @@
 // change it).
 //
 import { brokerWrite } from './api.js';
+import { t, tk, plural } from './i18n.js';
 
 export const NULL = 'urn:ngsi-ld:null';
 
@@ -290,11 +291,11 @@ function shortName(n) {
 // SAVE_AS - how an edit is saved: the label, and what an append or a partial update leaves out
 //
 const SAVE_AS = {
-  merge:    'Merge - PATCH /entities/{id}',
-  update:   'Update attributes - PATCH …/attrs',
-  append:   'Append attributes - POST …/attrs',
-  appendNo: 'Append, no overwrite - POST …/attrs?options=noOverwrite',
-  partial:  'Partial attribute update - PATCH …/attrs/{attrId}, one per instance',
+  merge:    tk('Merge - PATCH /entities/{id}'),
+  update:   tk('Update attributes - PATCH …/attrs'),
+  append:   tk('Append attributes - POST …/attrs'),
+  appendNo: tk('Append, no overwrite - POST …/attrs?options=noOverwrite'),
+  partial:  tk('Partial attribute update - PATCH …/attrs/{attrId}, one per instance'),
 };
 
 //
@@ -312,6 +313,11 @@ function fresh(kind) {
   default:                 return { type: 'Property', value: '' };
   }
 }
+
+//
+// JSON_TYPES - a Property value's JSON types, as the select shows them
+//
+const JSON_TYPES = { number: tk('number'), text: tk('text'), boolean: tk('boolean'), json: tk('json') };
 
 function jsonType(v) {
   if (typeof v === 'number') return 'number';
@@ -347,8 +353,8 @@ export class EntityEditor {
     const head = el('div', 'ehead');
     this.title = el('span', 'etitle');
     this.modeLabel = el('span', 'emode');
-    this.saveBtn = button('btn primary', 'Save', 'Save - send the request below', () => this.save());
-    head.append(this.title, this.modeLabel, this.saveBtn, button('btn', 'Cancel', 'Close without saving', () => this.close()));
+    this.saveBtn = button('btn primary', t('Save'), t('Save - send the request below'), () => this.save());
+    head.append(this.title, this.modeLabel, this.saveBtn, button('btn', t('Cancel'), t('Close without saving'), () => this.close()));
 
     this.idRow = el('div', 'eidrow');
     this.body = el('div', 'ebody');
@@ -359,12 +365,12 @@ export class EntityEditor {
     this.asRow = el('label', 'eas');
     this.asSel = el('select');
     for (const [k, label] of Object.entries(SAVE_AS)) {
-      const o = el('option', null, label);
+      const o = el('option', null, t(label));
       o.value = k;
       this.asSel.append(o);
     }
     this.asSel.onchange = () => { this.saveAs = this.asSel.value; this.err.hidden = true; this.refresh(); };
-    this.asRow.append(el('span', null, 'Save as'), this.asSel);
+    this.asRow.append(el('span', null, t('Save as')), this.asSel);
     this.req = el('details', 'ereq');
     this.reqSum = el('summary');
     this.reqPre = el('pre');
@@ -379,7 +385,7 @@ export class EntityEditor {
       if (this.picking) { this.pickCancel(); return; }
       if (this.dirty() && !this.escArmed) {
         this.escArmed = true;
-        this.toast('Unsaved changes - Esc again to close without saving');
+        this.toast(t('Unsaved changes - Esc again to close without saving'));
         setTimeout(() => { this.escArmed = false; }, 2500);
         return;
       }
@@ -414,9 +420,9 @@ export class EntityEditor {
     this.bad = new Set();                        // paths whose input does not parse
     this.escArmed = false;
 
-    this.title.textContent = mode === 'create' ? 'New entity' : this.id;
+    this.title.textContent = mode === 'create' ? t('New entity') : this.id;
     this.title.title = this.id;
-    this.modeLabel.textContent = { edit: 'edit', replace: 'replace', create: 'create' }[mode];
+    this.modeLabel.textContent = { edit: t('edit'), replace: t('replace'), create: t('create') }[mode];
     this.asRow.hidden = mode !== 'edit';
     this.asSel.value = this.saveAs;
     this.err.hidden = true;
@@ -504,15 +510,18 @@ export class EntityEditor {
   refresh() {
     const r = this.request();
     const empty = this.mode === 'edit' && r.count === 0;
-    const leftOut = r.left ? `${r.left} change${r.left === 1 ? '' : 's'} left out - ${this.saveAs === 'partial' ? 'a partial update neither adds nor deletes an attribute or an instance' : 'an append cannot delete'}` : '';
+    const leftOut = !r.left ? ''
+      : this.saveAs === 'partial'
+        ? plural(r.left, '{n} change left out - a partial update neither adds nor deletes an attribute or an instance', '{n} changes left out - a partial update neither adds nor deletes an attribute or an instance')
+        : plural(r.left, '{n} change left out - an append cannot delete', '{n} changes left out - an append cannot delete');
     const one = r.requests[0];
-    if (empty) this.reqSum.textContent = leftOut || 'Nothing changed yet';
-    else if (r.requests.length > 1) this.reqSum.textContent = `${r.requests.length} requests: PATCH …/attrs/{attrId}` + (leftOut ? ` (${leftOut})` : '');
-    else this.reqSum.textContent = `The request: ${one.method} ${decodeURIComponent(one.path)}${this.mode === 'edit' ? `  (${r.count} attribute${r.count === 1 ? '' : 's'})` : ''}` + (leftOut ? ` - ${leftOut}` : '');
+    if (empty) this.reqSum.textContent = leftOut || t('Nothing changed yet');
+    else if (r.requests.length > 1) this.reqSum.textContent = t('{n} requests: PATCH …/attrs/{attrId}', { n: r.requests.length }) + (leftOut ? ` (${leftOut})` : '');
+    else this.reqSum.textContent = t('The request: {method} {path}', { method: one.method, path: decodeURIComponent(one.path) }) + (this.mode === 'edit' ? '  ' + plural(r.count, '({n} attribute)', '({n} attributes)') : '') + (leftOut ? ` - ${leftOut}` : '');
     this.reqPre.textContent = empty ? '' : r.requests.map((q) => (r.requests.length > 1 ? `${q.method} ${decodeURIComponent(q.path)}\n` : '') + JSON.stringify(q.body, null, 2)).join('\n\n');
     const idBad = this.mode !== 'edit' && (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(this.id) || !this.type.trim());
     this.saveBtn.disabled = empty || this.bad.size > 0 || idBad;
-    this.saveBtn.title = this.bad.size ? 'An input does not parse - it is marked' : (idBad ? 'An id (a URI) and a type are needed' : 'Save - send the request below');
+    this.saveBtn.title = this.bad.size ? t('An input does not parse - it is marked') : (idBad ? t('An id (a URI) and a type are needed') : t('Save - send the request below'));
 
     const before = this.origAttrs();
     for (const row of this.body.querySelectorAll('.erow[data-path]')) {
@@ -541,13 +550,13 @@ export class EntityEditor {
     const id = el('input', 'mono');
     id.placeholder = 'urn:ngsi-ld:Vehicle:A';
     id.value = this.id;
-    id.setAttribute('aria-label', 'Entity id');
+    id.setAttribute('aria-label', t('Entity id'));
     id.spellcheck = false;
     id.oninput = () => { this.id = id.value.trim(); this.refresh(); };
     const type = el('input', 'mono');
     type.placeholder = 'Vehicle';
     type.value = this.type;
-    type.setAttribute('aria-label', 'Entity type');
+    type.setAttribute('aria-label', t('Entity type'));
     type.spellcheck = false;
     const dl = el('datalist');
     dl.id = 'ed-types';
@@ -569,11 +578,11 @@ export class EntityEditor {
       startShow();
     });
     const startShow = () => {
-      const t = this.type.trim();
-      const attrs = this.typeAttrs(t).filter(([n]) => !(n in this.work));
+      const ty = this.type.trim();
+      const attrs = this.typeAttrs(ty).filter(([n]) => !(n in this.work));
       start.hidden = attrs.length === 0;
-      start.textContent = `＋ ${t}'s attributes (${attrs.length})`;
-      start.setAttribute('aria-label', `Add the attributes ${t}'s loaded entities have: ${attrs.map(([n]) => n).join(', ')}`);
+      start.textContent = t('＋ {type}\'s attributes ({n})', { type: ty, n: attrs.length });
+      start.setAttribute('aria-label', t('Add the attributes {type}\'s loaded entities have: {names}', { type: ty, names: attrs.map(([n]) => n).join(', ') }));
       start.title = attrs.map(([n, k]) => `${n} - ${k}`).join('\n');
     };
     type.oninput = () => {
@@ -592,7 +601,7 @@ export class EntityEditor {
     for (const [name, list] of Object.entries(this.work)) {
       list.forEach((inst, ix) => this.body.append(this.instanceRow(name, inst, ix, list.length > 1)));
     }
-    if (!Object.keys(this.work).length) this.body.append(el('p', 'enone', 'No attributes.'));
+    if (!Object.keys(this.work).length) this.body.append(el('p', 'enone', t('No attributes.')));
     this.body.append(this.addForm(null));
     this.body.scrollTop = top;
     this.refresh();
@@ -611,7 +620,7 @@ export class EntityEditor {
 
     const line = el('div', 'eline');
     const open = this.expanded.has(p);
-    const caret = button('ecaret', open ? '▾' : '▸', open ? 'Close the sub-attributes' : 'Open the sub-attributes', () => {
+    const caret = button('ecaret', open ? '▾' : '▸', open ? t('Close the sub-attributes') : t('Open the sub-attributes'), () => {
       if (open) this.expanded.delete(p); else this.expanded.add(p);
       this.render();
     });
@@ -620,10 +629,10 @@ export class EntityEditor {
     if (subs.length) caret.dataset.n = subs.length;
 
     line.append(caret, el('span', 'ename', name), el('span', 'ekind', inst.type));
-    if (several || typeof inst.datasetId === 'string') line.append(el('span', 'eds', typeof inst.datasetId === 'string' ? inst.datasetId : 'default instance'));
+    if (several || typeof inst.datasetId === 'string') line.append(el('span', 'eds', typeof inst.datasetId === 'string' ? inst.datasetId : t('default instance')));
     line.append(gone
-      ? button('ebin', '↺', `Restore ${name}`, () => { this.deleted.delete(p); this.render(); })
-      : button('ebin', '🗑', `Delete ${name}${several ? ' - this instance' : ''}`, () => this.remove(name, ix)));
+      ? button('ebin', '↺', t('Restore {name}', { name }), () => { this.deleted.delete(p); this.render(); })
+      : button('ebin', '🗑', several ? t('Delete {name} - this instance', { name }) : t('Delete {name}', { name }), () => this.remove(name, ix)));
     row.append(line);
 
     if (!gone) row.append(this.valueInput(inst, p, inst.type));
@@ -680,12 +689,12 @@ export class EntityEditor {
     row.append(el('span', 'ename', k));
 
     if (gone) {
-      row.append(el('span', 'ekind', ''), button('ebin', '↺', `Restore ${k}`, () => { this.deleted.delete(sp); this.render(); }));
+      row.append(el('span', 'ekind', ''), button('ebin', '↺', t('Restore {name}', { name: k }), () => { this.deleted.delete(sp); this.render(); }));
       return row;
     }
 
     if (STRINGS.has(k) || !isAttribute(v)) {
-      row.append(el('span', 'ekind', k === 'observedAt' ? 'DateTime' : 'text'));
+      row.append(el('span', 'ekind', k === 'observedAt' ? 'DateTime' : t(JSON_TYPES.text)));
       const input = el('input', 'mono');
       input.value = typeof v === 'string' ? v : JSON.stringify(v);
       input.spellcheck = false;
@@ -697,12 +706,12 @@ export class EntityEditor {
       };
       const cell = el('div', 'ecell');
       cell.append(input);
-      if (k === 'observedAt') cell.append(button('btn small', 'now', 'Now, in UTC', () => { input.value = nowIso(); input.oninput(); }));
+      if (k === 'observedAt') cell.append(button('btn small', t('now'), t('Now, in UTC'), () => { input.value = nowIso(); input.oninput(); }));
       row.append(cell);
     } else {
       row.append(el('span', 'ekind', v.type), this.valueInput(v, sp, v.type));
     }
-    row.append(button('ebin', '🗑', `Delete ${k}`, () => { this.deleted.add(sp); this.render(); }));
+    row.append(button('ebin', '🗑', t('Delete {name}', { name: k }), () => { this.deleted.add(sp); this.render(); }));
     return row;
   }
 
@@ -745,9 +754,9 @@ export class EntityEditor {
 
     switch (kind) {
     case 'Relationship': {
-      const i = textIn(a.object || '', 'Target entity id', (x) => { a.object = x.value.trim(); this.mark(path, x, !/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(a.object)); });
-      cell.append(i, button('btn small', 'pick in graph', 'Click the target entity in the graph or on the map', () => {
-        this.pick('Click the target entity…', (id) => { if (id) { i.value = id; i.oninput(); } });
+      const i = textIn(a.object || '', t('Target entity id'), (x) => { a.object = x.value.trim(); this.mark(path, x, !/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(a.object)); });
+      cell.append(i, button('btn small', t('pick in graph'), t('Click the target entity in the graph or on the map'), () => {
+        this.pick(t('Click the target entity…'), (id) => { if (id) { i.value = id; i.oninput(); } });
       }));
       return cell;
     }
@@ -755,8 +764,8 @@ export class EntityEditor {
     case 'GeoProperty': {
       const g = a.value;
       if (isObject(g) && g.type === 'Point' && Array.isArray(g.coordinates)) {
-        const lon = textIn(String(g.coordinates[0]), 'Longitude', (x) => num(x, 0));
-        const lat = textIn(String(g.coordinates[1]), 'Latitude', (x) => num(x, 1));
+        const lon = textIn(String(g.coordinates[0]), t('Longitude'), (x) => num(x, 0));
+        const lat = textIn(String(g.coordinates[1]), t('Latitude'), (x) => num(x, 1));
         const num = (x, at) => {
           const n = Number(x.value);
           const ok = x.value.trim() !== '' && Number.isFinite(n) && (at === 0 ? Math.abs(n) <= 180 : Math.abs(n) <= 90);
@@ -765,15 +774,15 @@ export class EntityEditor {
         };
         lon.classList.add('short');
         lat.classList.add('short');
-        cell.append(el('span', 'elab', 'lon'), lon, el('span', 'elab', 'lat'), lat);
+        cell.append(el('span', 'elab', t('lon')), lon, el('span', 'elab', t('lat')), lat);
         if (this.pickPointFn) {
-          cell.append(button('btn small', 'pick on map', 'Click the point on the map', () => {
+          cell.append(button('btn small', t('pick on map'), t('Click the point on the map'), () => {
             this.pointPick((ll) => { if (ll) { lon.value = String(ll[0]); lat.value = String(ll[1]); lon.oninput(); lat.oninput(); } });
           }));
         }
         return cell;
       }
-      cell.append(jsonArea(g, 'GeoJSON geometry', (v) => { a.value = v; }));
+      cell.append(jsonArea(g, t('GeoJSON geometry'), (v) => { a.value = v; }));
       return cell;
     }
 
@@ -784,7 +793,7 @@ export class EntityEditor {
         list.textContent = '';
         for (const lang of Object.keys(map)) {
           const r = el('div', 'eitem');
-          const l = textIn(lang, 'Language', (x) => {
+          const l = textIn(lang, t('Language'), (x) => {
             const nl = x.value.trim();
             if (!nl || (nl !== lang && nl in map)) { this.mark(path + '@' + lang, x, true); return; }
             const val = map[lang];
@@ -796,11 +805,11 @@ export class EntityEditor {
           l.classList.add('short');
           l.onchange = l.oninput;
           l.oninput = null;
-          const t = textIn(map[lang], 'Text in ' + lang, (x) => { map[lang] = x.value; this.refresh(); });
-          r.append(l, t, button('ebin', '✕', 'Remove ' + lang, () => { delete map[lang]; draw(); this.refresh(); }));
+          const txt = textIn(map[lang], t('Text in {lang}', { lang }), (x) => { map[lang] = x.value; this.refresh(); });
+          r.append(l, txt, button('ebin', '✕', t('Remove {lang}', { lang }), () => { delete map[lang]; draw(); this.refresh(); }));
           list.append(r);
         }
-        list.append(button('eplus', '＋ language', 'Add a language', () => {
+        list.append(button('eplus', t('＋ language'), t('Add a language'), () => {
           let n = 'xx';
           for (let i = 1; n in map; i++) n = 'xx' + i;
           map[n] = '';
@@ -823,18 +832,18 @@ export class EntityEditor {
         arr.forEach((item, i) => {
           const r = el('div', 'eitem');
           const shown = rel ? (isObject(item) ? item.object || '' : String(item)) : (typeof item === 'string' ? item : JSON.stringify(item));
-          const input = textIn(shown, `Item ${i + 1}`, (x) => {
+          const input = textIn(shown, t('Item {n}', { n: i + 1 }), (x) => {
             if (rel) arr[i] = { object: x.value.trim() };
             else { try { arr[i] = JSON.parse(x.value); } catch { arr[i] = x.value; } }
             this.refresh();
           });
-          r.append(input, button('ebin', '✕', `Remove item ${i + 1}`, () => { arr.splice(i, 1); draw(); this.refresh(); }));
-          if (rel) r.insertBefore(button('btn small', 'pick', 'Click the target in the graph', () => {
-            this.pick('Click the target entity…', (id) => { if (id) { input.value = id; input.oninput(); } });
+          r.append(input, button('ebin', '✕', t('Remove item {n}', { n: i + 1 }), () => { arr.splice(i, 1); draw(); this.refresh(); }));
+          if (rel) r.insertBefore(button('btn small', t('pick'), t('Click the target in the graph'), () => {
+            this.pick(t('Click the target entity…'), (id) => { if (id) { input.value = id; input.oninput(); } });
           }), r.lastChild);
           list.append(r);
         });
-        list.append(button('eplus', '＋ item', 'Add an item', () => { arr.push(rel ? { object: '' } : ''); draw(); this.refresh(); }));
+        list.append(button('eplus', t('＋ item'), t('Add an item'), () => { arr.push(rel ? { object: '' } : ''); draw(); this.refresh(); }));
       };
       draw();
       cell.append(list);
@@ -846,7 +855,7 @@ export class EntityEditor {
       return cell;
 
     case 'VocabProperty':
-      cell.append(textIn(a.vocab || '', 'Vocabulary term', (x) => { a.vocab = x.value; this.refresh(); }));
+      cell.append(textIn(a.vocab || '', t('Vocabulary term'), (x) => { a.vocab = x.value; this.refresh(); }));
       return cell;
 
     default: {
@@ -854,10 +863,10 @@ export class EntityEditor {
       // A Property: its value with its JSON type
       //
       const sel = el('select', 'etype');
-      sel.setAttribute('aria-label', 'JSON type');
-      for (const t of ['number', 'text', 'boolean', 'json']) {
-        const o = el('option', null, t);
-        o.value = t;
+      sel.setAttribute('aria-label', t('JSON type'));
+      for (const [jt, label] of Object.entries(JSON_TYPES)) {
+        const o = el('option', null, t(label));
+        o.value = jt;
         sel.append(o);
       }
       sel.value = jsonType(a.value);
@@ -865,19 +874,19 @@ export class EntityEditor {
       const draw = () => {
         holder.textContent = '';
         this.bad.delete(path);
-        const t = sel.value;
-        if (t === 'boolean') {
+        const jt = sel.value;
+        if (jt === 'boolean') {
           const b = el('select');
-          b.setAttribute('aria-label', 'Value');
+          b.setAttribute('aria-label', t('Value'));
           for (const x of ['true', 'false']) { const o = el('option', null, x); o.value = x; b.append(o); }
           b.value = a.value === false ? 'false' : 'true';
           b.onchange = () => { a.value = b.value === 'true'; this.refresh(); };
           holder.append(b);
-        } else if (t === 'json') {
-          holder.append(jsonArea(isObject(a.value) || Array.isArray(a.value) ? a.value : {}, 'Value (JSON)', (v) => { a.value = v; }));
+        } else if (jt === 'json') {
+          holder.append(jsonArea(isObject(a.value) || Array.isArray(a.value) ? a.value : {}, t('Value (JSON)'), (v) => { a.value = v; }));
         } else {
-          const i = textIn(a.value === undefined || isObject(a.value) || Array.isArray(a.value) ? '' : String(a.value), 'Value', (x) => {
-            if (t === 'number') {
+          const i = textIn(a.value === undefined || isObject(a.value) || Array.isArray(a.value) ? '' : String(a.value), t('Value'), (x) => {
+            if (jt === 'number') {
               const n = Number(x.value);
               const ok = x.value.trim() !== '' && Number.isFinite(n);
               if (ok) a.value = n;
@@ -914,29 +923,29 @@ export class EntityEditor {
   //
   addForm(inst, path) {
     const wrap = el('div', inst ? 'eadd sub' : 'eadd');
-    const opener = button('eplus', inst ? '＋ sub-attribute' : '＋ attribute', inst ? 'Add a sub-attribute' : 'Add an attribute', () => {
+    const opener = button('eplus', inst ? t('＋ sub-attribute') : t('＋ attribute'), inst ? t('Add a sub-attribute') : t('Add an attribute'), () => {
       wrap.textContent = '';
       const name = el('input', 'mono');
-      name.placeholder = 'name';
+      name.placeholder = t('name');
       name.spellcheck = false;
-      name.setAttribute('aria-label', 'Name');
+      name.setAttribute('aria-label', t('Name'));
       const listId = 'ed-names-' + Math.random().toString(36).slice(2);
       const dl = el('datalist');
       dl.id = listId;
       for (const n of inst ? ['observedAt', 'unitCode', 'objectType'] : this.names) { const o = el('option'); o.value = n; dl.append(o); }
       name.setAttribute('list', listId);
       const kind = el('select');
-      kind.setAttribute('aria-label', 'Kind');
-      for (const k of inst ? ['Property', 'Relationship', 'text'] : KINDS) { const o = el('option', null, k); o.value = k; kind.append(o); }
+      kind.setAttribute('aria-label', t('Kind'));
+      for (const k of inst ? ['Property', 'Relationship', 'text'] : KINDS) { const o = el('option', null, k === 'text' ? t(JSON_TYPES.text) : k); o.value = k; kind.append(o); }
       const ds = el('input', 'mono');
-      ds.placeholder = 'datasetId (optional)';
+      ds.placeholder = t('datasetId (optional)');
       ds.spellcheck = false;
       ds.setAttribute('aria-label', 'datasetId');
-      const go = button('btn small primary', 'Add', 'Add it', () => {
+      const go = button('btn small primary', t('Add'), t('Add it'), () => {
         const n = name.value.trim();
         if (!n || /[\s"<>]/.test(n)) { name.classList.add('bad'); name.focus(); return; }
         if (inst) {
-          if (n in inst) { name.classList.add('bad'); this.toast(`${n} is there already`); return; }
+          if (n in inst) { name.classList.add('bad'); this.toast(t('{name} is there already', { name: n })); return; }
           inst[n] = STRINGS.has(n) || kind.value === 'text' ? (n === 'observedAt' ? nowIso() : '') : fresh(kind.value);
           this.render();
           return;
@@ -945,7 +954,7 @@ export class EntityEditor {
         const list = this.work[n] || [];
         if (list.some((i) => instanceKey(i) === (d || '@none'))) {
           name.classList.add('bad');
-          this.toast(d ? `${n} has an instance ${d} already` : `${n} is there already - give the new instance a datasetId`);
+          this.toast(d ? t('{name} has an instance {datasetId} already', { name: n, datasetId: d }) : t('{name} is there already - give the new instance a datasetId', { name: n }));
           return;
         }
         const i = fresh(kind.value);
@@ -959,7 +968,7 @@ export class EntityEditor {
         const first = row && (row.querySelector('.ecell input, .ecell textarea') || row.querySelector('.ecell select'));
         if (first) first.focus();
       });
-      const cancel = button('btn small', 'Cancel', 'Cancel', () => { wrap.textContent = ''; wrap.append(opener); opener.focus(); });
+      const cancel = button('btn small', t('Cancel'), t('Cancel'), () => { wrap.textContent = ''; wrap.append(opener); opener.focus(); });
       name.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go.click(); } };
       wrap.append(dl, name, kind);
       if (!inst) wrap.append(ds);
@@ -976,7 +985,7 @@ export class EntityEditor {
   pick(prompt, done) {
     this.picking = done;
     this.root.classList.add('picking');
-    this.toast(prompt + ' (Esc cancels)');
+    this.toast(t('{prompt} (Esc cancels)', { prompt }));
     this.pickFn(prompt, (id) => {
       const d = this.picking;
       this.picking = null;
@@ -988,7 +997,7 @@ export class EntityEditor {
   pointPick(done) {
     this.picking = done;
     this.root.classList.add('picking');
-    this.toast('Click the point on the map… (Esc cancels)');
+    this.toast(t('Click the point on the map… (Esc cancels)'));
     this.pickPointFn((ll) => {
       const d = this.picking;
       this.picking = null;
@@ -1028,7 +1037,7 @@ export class EntityEditor {
       if (a.ok && a.status !== 207) { ++done; continue; }
       if (a.status === 207 && a.body) {
         partly = true;
-        this.err.append(el('strong', null, what + 'Partly done (207):'));
+        this.err.append(el('strong', null, what + t('Partly done (207):')));
         for (const x of [].concat(a.body.notUpdated || [], a.body.errors || [])) {
           this.err.append(el('div', null, `${shortName(x.attributeName || (x.entityId || ''))}: ${(x.reason || (x.error && (x.error.title + ' - ' + (x.error.detail || ''))) || JSON.stringify(x))}`));
         }
@@ -1036,11 +1045,11 @@ export class EntityEditor {
         continue;
       }
       const b = a.body || {};
-      const head = a.reached === false ? 'c³ could not send it' : `The broker answered ${a.status}`;
-      if (done > 0) this.err.append(el('div', 'muted', `${done} of ${r.requests.length} requests done before it.`));
+      const head = a.reached === false ? t('c³ could not send it') : t('The broker answered {status}', { status: a.status });
+      if (done > 0) this.err.append(el('div', 'muted', t('{done} of {n} requests done before it.', { done, n: r.requests.length })));
       this.err.append(el('strong', null, what + head + ':'), el('div', null, [b.title, b.detail].filter(Boolean).join(' - ') || ''));
-      if (a.status === 401) this.err.append(el('div', 'muted', 'The broker wants an access token - Token, beside Connect.'));
-      if (a.status === 403) this.err.append(el('div', 'muted', 'The broker does not allow this request with the token sent.'));
+      if (a.status === 401) this.err.append(el('div', 'muted', t('The broker wants an access token - Token, beside Connect.')));
+      if (a.status === 403) this.err.append(el('div', 'muted', t('The broker does not allow this request with the token sent.')));
       if (done > 0) this.onSaved(this.id, this.mode);
       this.err.hidden = false;
       this.refresh();
@@ -1050,7 +1059,7 @@ export class EntityEditor {
     if (!partly) {
       const id = this.id;
       this.close();
-      this.toast({ edit: 'Saved', replace: 'Replaced', create: 'Created' }[this.mode] + ' - ' + id);
+      this.toast({ edit: t('Saved - {id}', { id }), replace: t('Replaced - {id}', { id }), create: t('Created - {id}', { id }) }[this.mode]);
       this.onSaved(id, this.mode);
       return;
     }

@@ -13,6 +13,27 @@ import * as api from './api.js';
 import { Metrics } from './metrics.js';
 import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
+import { t, tk, plural } from './i18n.js';
+
+//
+// The states of a broker or a service as the backend and Docker/Podman name them (also CSS classes), shown translated
+//
+const STATE_NAMES = {
+  running: tk('running'), starting: tk('starting'), stopping: tk('stopping'), stopped: tk('stopped'), failed: tk('failed'),
+  ready: tk('ready'), answers: tk('answers'), created: tk('created'), exited: tk('exited'), paused: tk('paused'),
+  restarting: tk('restarting'), dead: tk('dead'), removing: tk('removing'),
+};
+const stateName = (v) => (STATE_NAMES[v] ? t(STATE_NAMES[v]) : v);
+
+//
+// The sets of src/run.c, by id: their label and description translated (a set added later shows as the backend names it)
+//
+const SET_TEXTS = {
+  cordb: { label: tk('corDB alone'), description: tk('No services: corDB holds the entities and their history, on disk in c3\'s data directory.') },
+  'mongoc-timescale': { label: tk('mongoc + timescale'), description: tk('MongoDB for the entities, PostgreSQL with TimescaleDB for the history - each in a container.') },
+  mqtt: { label: tk('with MQTT'), description: tk('corDB, and the MQTT bridge connected to a Mosquitto in a container.') },
+};
+const setText = (s, what) => (SET_TEXTS[s.id] && SET_TEXTS[s.id][what] === s[what] ? t(SET_TEXTS[s.id][what]) : s[what]);
 
 const $ = (id) => document.getElementById(id);
 
@@ -56,8 +77,8 @@ function rangesOf(levels) {
   return out.join(',');
 }
 
-const mib = (b) => (b / (1024 * 1024)).toFixed(0) + ' MiB';
-const ago = (s) => (s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : s >= 60 ? Math.floor(s / 60) + ' min' : s + ' s');
+const mib = (b) => t('{n} MiB', { n: (b / (1024 * 1024)).toFixed(0) });
+const ago = (s) => (s >= 3600 ? t('{h} h {m} min', { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) }) : s >= 60 ? t('{m} min', { m: Math.floor(s / 60) }) : t('{s} s', { s }));
 
 //
 // featuresOf - "features: A=1 B=0" of a --version, as {A: true, B: false}; null: not known (an image)
@@ -74,10 +95,10 @@ function featuresOf(version) {
 }
 
 const PLUGINS = [
-  ['ws',      'WebSocket transport', 'TRANSPORTS', '--transports ws'],
-  ['admin',   'admin API',           'ADMIN_API',  '--apiPlugins admin'],
-  ['distributed', 'distributed operations', 'REGISTRATIONS', '--distributed'],
-  ['verbose', 'verbose log',         null,         '-v'],
+  ['ws',      tk('WebSocket transport'), 'TRANSPORTS', '--transports ws'],
+  ['admin',   tk('admin API'),           'ADMIN_API',  '--apiPlugins admin'],
+  ['distributed', tk('distributed operations'), 'REGISTRATIONS', '--distributed'],
+  ['verbose', tk('verbose log'),         null,         '-v'],
 ];
 
 export class Run {
@@ -163,8 +184,8 @@ export class Run {
     box.replaceChildren();
     o.channels.forEach((c, ix) => {
       const card = el('div', 'rn-ouch');
-      for (const [key, label, ph] of [['node', 'Variable (NodeId)', 'ns=2;s=Tank1.Level'], ['entityId', 'entity id', 'urn:ngsi-ld:Tank:T1'],
-                                      ['entityType', 'entity type', 'Tank'], ['attribute', 'attribute', 'level']]) {
+      for (const [key, label, ph] of [['node', t('Variable (NodeId)'), 'ns=2;s=Tank1.Level'], ['entityId', t('entity id'), 'urn:ngsi-ld:Tank:T1'],
+                                      ['entityType', t('entity type'), 'Tank'], ['attribute', t('attribute'), 'level']]) {
         const f = el('label', 'rn-ouf rn-ouf-' + key);
         const inp = el('input', 'cp-input');
         inp.value = c[key];
@@ -176,8 +197,8 @@ export class Run {
         card.append(f);
       }
       const del = button('×', 'rn-oudel', () => { o.channels.splice(ix, 1); this.renderOpcua(); this.changed(false); });
-      del.title = 'remove this Channel';
-      del.setAttribute('aria-label', 'remove Channel ' + (ix + 1));
+      del.title = t('remove this Channel');
+      del.setAttribute('aria-label', t('remove Channel {n}', { n: ix + 1 }));
       del.disabled = cont;
       card.append(del);
       box.append(card);
@@ -190,20 +211,20 @@ export class Run {
   browseBroker() {
     const k = this.kept(this.f.name);
     if (this.f.where === 'container') return { url: null, why: '' };
-    if (!this.f.opcua.url) return { url: null, why: 'Browsing asks a running broker: give the server, start the broker, then browse.' };
-    if (!k || k.state !== 'running') return { url: null, why: 'Browsing asks the running broker\'s bridge: start ' + (this.f.name || 'the broker') + ', then browse - and stop and start it again for what you pick.' };
-    if (!k.def.admin) return { url: null, why: 'Browsing needs the admin API in the broker (Switches).' };
-    return { url: 'http://localhost:' + k.def.port, why: 'The server as ' + k.name + '\'s bridge sees it. What you pick takes effect when the broker is started again.' };
+    if (!this.f.opcua.url) return { url: null, why: t('Browsing asks a running broker: give the server, start the broker, then browse.') };
+    if (!k || k.state !== 'running') return { url: null, why: t('Browsing asks the running broker\'s bridge: start {name}, then browse - and stop and start it again for what you pick.', { name: this.f.name || t('the broker') }) };
+    if (!k.def.admin) return { url: null, why: t('Browsing needs the admin API in the broker (Switches).') };
+    return { url: 'http://localhost:' + k.def.port, why: t('The server as {name}\'s bridge sees it. What you pick takes effect when the broker is started again.', { name: k.name }) };
   }
 
   async browseToggle() {
     const tree = $('rn-ou-tree');
-    if (!tree.hidden) { tree.hidden = true; $('rn-ou-browse').textContent = 'Browse the server'; return; }
+    if (!tree.hidden) { tree.hidden = true; $('rn-ou-browse').textContent = t('Browse the server'); return; }
     const b = this.browseBroker();
     if (!b.url) return;
     tree.hidden = false;
-    $('rn-ou-browse').textContent = 'Close the browser';
-    tree.replaceChildren(el('div', 'cp-note', 'asking the server ...'));
+    $('rn-ou-browse').textContent = t('Close the browser');
+    tree.replaceChildren(el('div', 'cp-note', t('asking the server ...')));
     const top = await this.inventory(b.url, null);
     tree.replaceChildren();
     if (top.error) { tree.append(el('div', 'cp-note err', top.error)); return; }
@@ -218,7 +239,7 @@ export class Run {
     const r = await api.brokerGet(broker, '/admin/bridges/opcua/inventory' + q);
     if (r.ok && r.body) return { node: r.body };
     const why = (r.body && (r.body.detail || r.body.title)) || ('HTTP ' + r.status);
-    return { error: r.status === 404 && !from ? 'the broker has no opcua bridge loaded - ' + why : why };
+    return { error: r.status === 404 && !from ? t('the broker has no opcua bridge loaded - {why}', { why }) : why };
   }
 
   //
@@ -236,21 +257,21 @@ export class Run {
     row.append(tog, el('span', 'rn-oukind', n.node), el('b', '', n.name || n.id), el('span', 'rn-ouid', n.id || ''));
     const here = [...path, n];
     if (n.node === 'variable') {
-      const info = [n.dataType, n.writable ? 'writable' : 'read-only', n.unit].filter(Boolean).join(', ');
+      const info = [n.dataType, n.writable ? t('writable') : t('read-only'), n.unit].filter(Boolean).join(', ');
       row.append(el('span', 'rn-ouval', JSON.stringify(n.value)), el('span', 'rn-oukind', info));
       const added = this.f.opcua.channels.some((c) => c.node === n.id);
-      const b = button(added ? 'a Channel' : '+ Channel', '', () => { this.channelAdd(this.channelFor(here)); b.textContent = 'a Channel'; b.disabled = true; });
+      const b = button(added ? t('a Channel') : t('+ Channel'), '', () => { this.channelAdd(this.channelFor(here)); b.textContent = t('a Channel'); b.disabled = true; });
       b.disabled = added || !n.id;
       row.append(b);
     } else if (n.node === 'object' && n.id && n.id !== 'i=85') {
       const roots = () => this.f.opcua.roots.split('\n').map((x) => x.trim()).filter(Boolean);
-      const b = button(roots().includes(n.id) ? 'a model root' : '+ model root', '', () => {
+      const b = button(roots().includes(n.id) ? t('a model root') : t('+ model root'), '', () => {
         if (!roots().includes(n.id)) this.f.opcua.roots = [...roots(), n.id].join('\n');
-        b.textContent = 'a model root'; b.disabled = true;
+        b.textContent = t('a model root'); b.disabled = true;
         this.renderOpcua(); this.changed(false);
       });
       b.disabled = roots().includes(n.id);
-      b.title = 'the Object and everything in it as entities (an AssetChannel)';
+      b.title = t('the Object and everything in it as entities (an AssetChannel)');
       row.append(b);
     }
     if (n.children) for (const c of n.children) kids.append(this.browseNode(broker, c, here));
@@ -319,7 +340,7 @@ export class Run {
   renderDds() {
     const on = this.f.bridges.includes('dds');
     $('rn-dds-map').disabled = !on;
-    $('rn-dds-map').title = on ? '' : 'tick the dds bridge first';
+    $('rn-dds-map').title = on ? '' : t('tick the dds bridge first');
     $('rn-dds-note').textContent = this.ddsMap.note(on);
   }
 
@@ -341,7 +362,7 @@ export class Run {
   renderOpcuaMap() {
     const on = this.f.bridges.includes('opcua');
     $('rn-opcua-map').disabled = !on;
-    $('rn-opcua-map').title = on ? '' : 'tick the opcua bridge first';
+    $('rn-opcua-map').title = on ? '' : t('tick the opcua bridge first');
     $('rn-opcua-note').textContent = this.opcuaMap.note(on);
   }
 
@@ -412,7 +433,7 @@ export class Run {
         this.metricsShow();
       }
     } catch (e) {
-      $('rn-brokers').replaceChildren(el('span', 'rn-empty', 'The backend does not answer: ' + e.message));
+      $('rn-brokers').replaceChildren(el('span', 'rn-empty', t('The backend does not answer: {why}', { why: e.message })));
     }
   }
 
@@ -420,7 +441,7 @@ export class Run {
 
   renderEngine() {
     const e = (this.state && this.state.engine) || {};
-    $('rn-engine').textContent = e.name ? e.name + ' ' + (e.version || '') : 'no containers';
+    $('rn-engine').textContent = e.name ? e.name + ' ' + (e.version || '') : t('no containers');
     $('rn-nocont').hidden = !!e.name;
     $('rn-nocont-why').textContent = e.why ? e.why.charAt(0).toUpperCase() + e.why.slice(1) + '.' : '';
     $('page-run').classList.toggle('rn-nocontainers', !e.name);
@@ -431,9 +452,9 @@ export class Run {
   kept(name) { return this.state && this.state.brokers.find((b) => b.name === name); }
 
   sourceLabel(d) {
-    if (d.from === 'build') return 'build ' + d.build;
+    if (d.from === 'build') return t('build {build}', { build: d.build });
     if (d.from === 'image') return d.image;
-    return 'installed coraine';
+    return t('installed coraine');
   }
 
   renderLists() {
@@ -441,13 +462,13 @@ export class Run {
     const box = $('rn-brokers');
     $('rn-bcount').textContent = s.brokers.length ? String(s.brokers.length) : '';
     if (!s.brokers.length) {
-      box.replaceChildren(el('span', 'rn-empty', 'None yet - choose a set and Start, on the right.'));
+      box.replaceChildren(el('span', 'rn-empty', t('None yet - choose a set and Start, on the right.')));
     } else {
       box.replaceChildren(...s.brokers.map((b) => this.brokerItem(b)));
     }
 
     const sv = $('rn-services');
-    if (!s.services.length) sv.replaceChildren(el('span', 'rn-empty', 'None - the sets with mongoc, timescale or MQTT start them.'));
+    if (!s.services.length) sv.replaceChildren(el('span', 'rn-empty', t('None - the sets with mongoc, timescale or MQTT start them.')));
     else sv.replaceChildren(...s.services.map((x) => this.serviceItem(x)));
   }
 
@@ -464,23 +485,24 @@ export class Run {
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
     title.append(el('span', 'rname', b.name));
-    const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), runs && b.ready ? b.ready : b.state);
+    const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state));
     title.append(badge);
     if (runs || b.state === 'stopping') {
       const a = el('a', 'rurl', b.url);
       a.href = '#connect';
-      a.title = 'Open it in Connect';
+      a.title = t('Open it in Connect');
       a.addEventListener('click', (e) => { e.preventDefault(); this.onConnect(b.url); });
       title.append(a);
     } else title.append(el('span', 'rurl', b.url));
     main.append(title);
 
-    const meta = [this.sourceLabel(d), d.where === 'container' ? 'in a container' : 'natively',
-      d.store + (d.store === 'corDB' ? (d.dbDir ? ' on disk' : ' in RAM') : ''), 'history ' + d.history];
-    if (d.bridges && d.bridges.length) meta.push('bridges ' + d.bridges.join(', '));
+    const meta = [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'),
+      d.store === 'corDB' ? (d.dbDir ? t('{store} on disk', { store: d.store }) : t('{store} in RAM', { store: d.store })) : d.store,
+      t('history {name}', { name: d.history })];
+    if (d.bridges && d.bridges.length) meta.push(t('bridges {list}', { list: d.bridges.join(', ') }));
     if (d.ckan && d.ckan.length) meta.push('CKAN ' + d.ckan.join(', '));
-    meta.push('port ' + d.port + (d.healthPort ? ', health ' + d.healthPort : ''));
-    if (b.pid) meta.push('pid ' + b.pid + (b.attached ? ' (attached)' : ''));
+    meta.push(t('port {port}', { port: d.port }) + (d.healthPort ? ', ' + t('health {port}', { port: d.healthPort }) : ''));
+    if (b.pid) meta.push(b.attached ? t('pid {pid} (attached)', { pid: b.pid }) : t('pid {pid}', { pid: b.pid }));
     if (b.container && runs) meta.push(b.container);
     main.append(el('div', 'rmeta', meta.join(' · ')));
 
@@ -488,35 +510,35 @@ export class Run {
 
     if (b.state === 'stopping' && b.stop) {
       const left = Math.max(0, b.stop.grace - Math.round((Date.now() - new Date(b.stop.asked).getTime()) / 1000));
-      main.append(el('div', 'rwhy warn', b.stop.killed ? 'SIGKILL sent - the grace period is over' : 'SIGTERM sent - SIGKILL in ' + left + ' s if it has not stopped (grace ' + b.stop.grace + ' s)'));
+      main.append(el('div', 'rwhy warn', b.stop.killed ? t('SIGKILL sent - the grace period is over') : t('SIGTERM sent - SIGKILL in {left} s if it has not stopped (grace {grace} s)', { left, grace: b.stop.grace })));
     } else if (b.state === 'starting') {
-      main.append(el('div', 'rwhy warn', b.services.length ? 'starting its services, then the broker - the log follows it' : 'starting'));
+      main.append(el('div', 'rwhy warn', b.services.length ? t('starting its services, then the broker - the log follows it') : t('starting')));
     } else if (b.why) {
       main.append(el('div', 'rwhy' + (b.state === 'failed' ? ' bad' : ''), b.why));
     }
-    if (b.services.length) main.append(el('div', 'rmeta', 'uses ' + b.services.join(', ')));
-    const where = b.dataDir ? 'data in ' + b.dataDir : b.volume ? 'data in the volume ' + b.volume : 'data in RAM only';
+    if (b.services.length) main.append(el('div', 'rmeta', t('uses {list}', { list: b.services.join(', ') })));
+    const where = b.dataDir ? t('data in {dir}', { dir: b.dataDir }) : b.volume ? t('data in the volume {volume}', { volume: b.volume }) : t('data in RAM only');
     main.append(el('div', 'rmeta mono', where));
     item.append(main);
 
     const acts = el('div', 'racts');
     if (runs) {
-      acts.append(button('Stop', '', () => this.stop(b)));
-      acts.append(button('Explore', '', () => this.onConnect(b.url)));
-      acts.append(button('Options', '', () => this.edit(b)));          // to see them - and browse its OPC UA server
+      acts.append(button(t('Stop'), '', () => this.stop(b)));
+      acts.append(button(t('Explore'), '', () => this.onConnect(b.url)));
+      acts.append(button(t('Options'), '', () => this.edit(b)));          // to see them - and browse its OPC UA server
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
-      const st = button('Start', 'primary', () => this.startKept(b));
+      const st = button(t('Start'), 'primary', () => this.startKept(b));
       st.disabled = b.busy;
       acts.append(st);
-      acts.append(button('Options', '', () => this.edit(b)));
+      acts.append(button(t('Options'), '', () => this.edit(b)));
     }
-    acts.append(button('Log', '', () => this.select('broker', b.name)));
+    acts.append(button(t('Log'), '', () => this.select('broker', b.name)));
     if (!runs && b.state !== 'starting' && b.state !== 'stopping') {
       if (this.armed === 'forget:' + b.name) {
-        acts.append(button('Forget, keep data', 'armed', () => this.forget(b, false)));
-        if (b.dataDir || b.volume) acts.append(button('Forget and delete data', 'armed', () => this.forget(b, true)));
-        acts.append(button('Cancel', '', () => this.disarm()));
-      } else acts.append(button('Forget', '', () => this.arm('forget:' + b.name)));
+        acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
+        if (b.dataDir || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
+        acts.append(button(t('Cancel'), '', () => this.disarm()));
+      } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
     }
     item.append(acts);
     return item;
@@ -527,14 +549,14 @@ export class Run {
     const box = el('div', 'rhealth');
     const pill = (text, cls, title) => { const p = el('span', 'rn-pill' + (cls ? ' ' + cls : ''), text); if (title) p.title = title; box.append(p); };
     if (h.product) {                                // /version: no health port
-      pill(h.product + ' ' + (h.version || ''), 'ok', 'GET /version - no health port');
+      pill(h.product + ' ' + (h.version || ''), 'ok', t('GET /version - no health port'));
       return box;
     }
-    if (typeof h.uptime === 'number') pill('up ' + ago(h.uptime));
-    if (h.store) pill('store ' + h.store.plugin + (h.store.loaded === false ? ' loading' : '') + (h.store.reachable === false ? ' unreachable' : ''), h.store.reachable === false || h.store.loaded === false ? 'bad' : 'ok');
-    if (h.troe) pill('history ' + h.troe.plugin + (h.troe.reachable === false ? ' unreachable' : ''), h.troe.reachable === false ? 'bad' : 'ok');
-    if (h.memory) pill(mib(h.memory.resident || h.memory.used || 0) + (h.memory.budget ? ' of ' + mib(h.memory.budget) : ''), h.memory.level && h.memory.level !== 'ok' ? 'warn' : '', 'resident memory');
-    if (h.requests) pill(h.requests.total + ' requests' + (h.requests.inFlight ? ', ' + h.requests.inFlight + ' in flight' : ''));
+    if (typeof h.uptime === 'number') pill(t('up {time}', { time: ago(h.uptime) }));
+    if (h.store) pill(t('store {plugin}', { plugin: h.store.plugin }) + (h.store.loaded === false ? ' ' + t('loading') : '') + (h.store.reachable === false ? ' ' + t('unreachable') : ''), h.store.reachable === false || h.store.loaded === false ? 'bad' : 'ok');
+    if (h.troe) pill(t('history {name}', { name: h.troe.plugin }) + (h.troe.reachable === false ? ' ' + t('unreachable') : ''), h.troe.reachable === false ? 'bad' : 'ok');
+    if (h.memory) pill(h.memory.budget ? t('{used} of {total}', { used: mib(h.memory.resident || h.memory.used || 0), total: mib(h.memory.budget) }) : mib(h.memory.resident || h.memory.used || 0), h.memory.level && h.memory.level !== 'ok' ? 'warn' : '', t('resident memory'));
+    if (h.requests) pill(plural(h.requests.total, '{n} request', '{n} requests') + (h.requests.inFlight ? ', ' + t('{n} in flight', { n: h.requests.inFlight }) : ''));
     if (h.status && h.status !== 'ok') pill(h.status, 'warn');
     return box;
   }
@@ -546,21 +568,21 @@ export class Run {
 
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
-    title.append(el('span', 'rname', s.container), el('span', 'badge ' + s.state, s.state));
+    title.append(el('span', 'rname', s.container), el('span', 'badge ' + s.state, stateName(s.state)));
     if (s.port && runs) title.append(el('span', 'rurl', '127.0.0.1:' + s.port));
     main.append(title);
     main.append(el('div', 'rmeta', [s.label, s.image, s.status || ''].filter(Boolean).join(' · ')));
-    const used = s.usedBy.length ? 'used by ' + s.usedBy.join(', ') : 'used by no broker that runs';
-    main.append(el('div', 'rmeta', used + (s.neededBy.length ? ' · needed by ' + s.neededBy.join(', ') : '')));
-    main.append(el('div', 'rmeta mono', s.volumeExists ? 'data in the volume ' + s.volume : 'no data yet (the volume ' + s.volume + ' is made at its first start)'));
+    const used = s.usedBy.length ? t('used by {list}', { list: s.usedBy.join(', ') }) : t('used by no broker that runs');
+    main.append(el('div', 'rmeta', used + (s.neededBy.length ? ' · ' + t('needed by {list}', { list: s.neededBy.join(', ') }) : '')));
+    main.append(el('div', 'rmeta mono', s.volumeExists ? t('data in the volume {volume}', { volume: s.volume }) : t('no data yet (the volume {volume} is made at its first start)', { volume: s.volume })));
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (runs && !s.usedBy.length) acts.append(button('Stop', '', () => this.stopService(s)));
-    acts.append(button('Log', '', () => this.select('service', s.container)));
+    if (runs && !s.usedBy.length) acts.append(button(t('Stop'), '', () => this.stopService(s)));
+    acts.append(button(t('Log'), '', () => this.select('service', s.container)));
     if (s.volumeExists && !runs && s.state !== 'starting' && s.state !== 'stopping') {
       const armed = this.armed === 'vol:' + s.volume;
-      acts.append(button(armed ? 'Delete ' + s.volume + '? Sure' : 'Delete data', armed ? 'armed' : '', () => this.deleteVolume(s.volume)));
+      acts.append(button(armed ? t('Delete {volume}? Sure', { volume: s.volume }) : t('Delete data'), armed ? 'armed' : '', () => this.deleteVolume(s.volume)));
     }
     item.append(acts);
     return item;
@@ -687,33 +709,33 @@ export class Run {
 
     if (b.ok && b.body) {
       const bd = b.body.build || {};
-      body.append(el('div', 'rn-lvnote', [b.body.version, bd.type, bd.httpServer && 'HTTP server ' + bd.httpServer,
-        bd.gitSha && 'git ' + String(bd.gitSha).slice(0, 8), bd.builtAt && 'built ' + bd.builtAt].filter(Boolean).join(' - ')));
+      body.append(el('div', 'rn-lvnote', [b.body.version, bd.type, bd.httpServer && t('HTTP server {name}', { name: bd.httpServer }),
+        bd.gitSha && 'git ' + String(bd.gitSha).slice(0, 8), bd.builtAt && t('built {when}', { when: bd.builtAt })].filter(Boolean).join(' - ')));
       const feats = el('div', 'rn-cfgfeat');
       for (const [k, v] of Object.entries(b.body.features || {})) {
         const s = el('span', v ? 'on' : 'off', k);
-        s.title = v ? 'compiled in' : 'compiled out - only another build brings it';
+        s.title = v ? t('compiled in') : t('compiled out - only another build brings it');
         feats.append(s);
       }
       body.append(feats);
       const loaded = (b.body.plugins && b.body.plugins.loaded) || {};
       const names = Object.entries(loaded).flatMap(([kind, v]) => (Array.isArray(v) ? v : [v]).filter(Boolean)
         .map((p) => kind + ' ' + (p.alias || p.name || '')));
-      if (names.length) body.append(el('div', 'rn-lvnote', 'Plugins loaded: ' + names.join(', ')));
+      if (names.length) body.append(el('div', 'rn-lvnote', t('Plugins loaded: {list}', { list: names.join(', ') })));
     } else {
       body.append(el('div', 'rn-lvnote warn', 'GET /build: ' + why(b)));
     }
 
     if (!c.ok || !c.body) {
-      body.append(el('div', 'rn-lvnote warn', 'GET /admin/config: ' + why(c) + (c.status === 404 ? ' - a coraine older than /admin/config' : '')));
-      $('rn-config-sum').textContent = 'Configuration and build';
+      body.append(el('div', 'rn-lvnote warn', 'GET /admin/config: ' + why(c) + (c.status === 404 ? ' - ' + t('a coraine older than /admin/config') : '')));
+      $('rn-config-sum').textContent = t('Configuration and build');
       return;
     }
     const opts = c.body.options || [];
     const set = opts.filter((o) => o.from !== 'default');
     const tab = el('table', 'rn-cfgtab');
     const head = el('tr');
-    for (const h of ['option', 'value', 'from', 'default']) head.append(el('th', '', h));
+    for (const h of [t('option'), t('value'), t('from'), t('default')]) head.append(el('th', '', h));
     tab.append(head);
     let section = null;
     for (const o of opts) {
@@ -729,19 +751,19 @@ export class Run {
       const tr = el('tr', o.from !== 'default' ? 'set' : '');
       const show = (v) => (v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v));
       const n = el('td', 'n', o.name);
-      n.title = (o.description || '') + (o.env ? '\nenvironment: ' + o.env : '') + (o.short ? '\nshort: ' + o.short : '');
+      n.title = (o.description || '') + (o.env ? '\n' + t('environment: {env}', { env: o.env }) : '') + (o.short ? '\n' + t('short: {option}', { option: o.short }) : '');
       const v = el('td', 'v', show(o.value));
-      if (o.secret) v.title = 'a secret - never shown';
+      if (o.secret) v.title = t('a secret - never shown');
       const resolved = o.from === 'default' && !o.secret && show(o.value) !== show(o.default);   // 0 = "the broker decides"
-      const fromText = resolved ? 'default, resolved by the broker'
-        : { default: '', env: 'environment', longOption: 'command line', shortOption: 'command line', configFile: 'config file' }[o.from] || o.from;
+      const fromText = resolved ? t('default, resolved by the broker')
+        : { default: '', env: t('environment'), longOption: t('command line'), shortOption: t('command line'), configFile: t('config file') }[o.from] || o.from;
       tr.append(n, v, el('td', '', fromText), el('td', 'd', show(o.default)));
       tab.append(tr);
     }
     const wrap = el('div', 'rn-cfgwrap');
     wrap.append(tab);
-    body.append(el('div', 'rn-lvnote', 'Read-only: ' + opts.length + ' options, ' + set.length + ' not at their default (bold). Hover an option for what it does.'), wrap);
-    $('rn-config-sum').textContent = 'Configuration and build - ' + set.length + ' option' + (set.length === 1 ? '' : 's') + ' set';
+    body.append(el('div', 'rn-lvnote', t('Read-only: {n} options, {set} not at their default (bold). Hover an option for what it does.', { n: opts.length, set: set.length })), wrap);
+    $('rn-config-sum').textContent = plural(set.length, 'Configuration and build - {n} option set', 'Configuration and build - {n} options set');
   }
 
   // ------------------------------------------------------------------ metrics
@@ -761,7 +783,7 @@ export class Run {
     }
     if (!url || !d.open || !this.shown) {
       this.metrics.stop();
-      if (!url) $('rn-metrics-sum').textContent = 'Metrics';
+      if (!url) $('rn-metrics-sum').textContent = t('Metrics');
       return;
     }
     const urls = () => ((this.state && this.state.brokers) || []).filter((b) => b.state === 'running' && b.def.admin)
@@ -775,7 +797,7 @@ export class Run {
     if (!url || !$('rn-metrics').open) return;
     $('rn-metrics-body').replaceChildren(this.metrics.render(url));
     const sum = this.metrics.summary(url);
-    $('rn-metrics-sum').textContent = 'Metrics' + (sum ? ' - ' + sum : '');
+    $('rn-metrics-sum').textContent = t('Metrics') + (sum ? ' - ' + sum : '');
   }
 
   levelsShow(reload = true) {
@@ -828,8 +850,8 @@ export class Run {
     };
 
     const flags = el('div', 'rn-lvflags');
-    for (const [f, label, why] of [['verbose', 'verbose', 'the -v lines: what the broker does, request by request'],
-                                   ['info', 'info', 'info lines']]) {
+    for (const [f, label, why] of [['verbose', 'verbose', t('the -v lines: what the broker does, request by request')],
+                                   ['info', 'info', t('info lines')]]) {
       const l = el('label', 'rn-check');
       const c = el('input');
       c.type = 'checkbox';
@@ -842,8 +864,8 @@ export class Run {
     }
     body.append(flags);
 
-    if (traces === false) body.append(el('div', 'rn-lvnote warn', 'A release build: traces are compiled out - trace levels are kept and trace nothing. A debug build (Compile, mode Debug) traces.'));
-    else if (traces === undefined) body.append(el('div', 'rn-lvnote', 'This broker does not say whether it has traces compiled in - only debug builds do.'));
+    if (traces === false) body.append(el('div', 'rn-lvnote warn', t('A release build: traces are compiled out - trace levels are kept and trace nothing. A debug build (Compile, mode Debug) traces.')));
+    else if (traces === undefined) body.append(el('div', 'rn-lvnote', t('This broker does not say whether it has traces compiled in - only debug builds do.')));
 
     const libs = [];
     for (const t of this.traceLevels) {
@@ -872,10 +894,10 @@ export class Run {
     }
 
     const other = [...on].filter((l) => !known.has(l));
-    if (other.length) body.append(el('div', 'rn-lvnote', 'Also set, levels c3 has no name for: ' + rangesOf(other)));
+    if (other.length) body.append(el('div', 'rn-lvnote', t('Also set, levels c3 has no name for: {levels}', { levels: rangesOf(other) })));
     const n = on.size;
-    $('rn-levels-sum').textContent = 'Log and trace levels - ' + ['verbose', 'info'].filter((f) => cur[f]).concat(n ? [n + ' trace level' + (n === 1 ? '' : 's')] : []).join(', ')
-      .replace(/^$/, 'nothing extra');
+    const what = ['verbose', 'info'].filter((f) => cur[f]).concat(n ? [plural(n, '{n} trace level', '{n} trace levels')] : []).join(', ');
+    $('rn-levels-sum').textContent = t('Log and trace levels - {what}', { what: what || t('nothing extra') });
   }
 
   // ------------------------------------------------------------------ the log
@@ -908,7 +930,7 @@ export class Run {
     this.es = es;
     es.onmessage = (e) => this.append(e.data);
     es.addEventListener('reset', () => { $('rn-log').replaceChildren(); });
-    es.addEventListener('skipped', (e) => this.note('The first ' + (Number(e.data) / 1048576).toFixed(1) + ' MiB of the log are not shown here - the whole file has them.'));
+    es.addEventListener('skipped', (e) => this.note(t('The first {n} MiB of the log are not shown here - the whole file has them.', { n: (Number(e.data) / 1048576).toFixed(1) })));
     es.addEventListener('busy', (e) => this.note(e.data));
   }
 
@@ -1014,7 +1036,7 @@ export class Run {
       $('rn-name').placeholder = this.f.name;
     }
     const k = this.kept(this.f.name);
-    $('rn-form-sub').textContent = k ? 'replaces the options of ' + k.name : '';
+    $('rn-form-sub').textContent = k ? t('replaces the options of {name}', { name: k.name }) : '';
   }
 
   seg(id, options, current, onPick) {
@@ -1032,7 +1054,7 @@ export class Run {
   renderForm() {
     const f = this.f;
     const cont = this.containers();
-    const noCont = (this.caps && this.caps.containersWhy) || 'install docker or podman';
+    const noCont = (this.caps && this.caps.containersWhy) || t('install docker or podman');
     const sets = (this.state && this.state.sets) || [];
 
     //
@@ -1042,10 +1064,10 @@ export class Run {
       const b = el('button', 'rn-set');
       b.type = 'button';
       b.setAttribute('aria-pressed', String(f.set === s.id));
-      b.append(el('span', 'sl', s.label), el('span', 'sd', s.description));
+      b.append(el('span', 'sl', setText(s, 'label')), el('span', 'sd', setText(s, 'description')));
       if (s.services.length) b.append(el('span', 'sd mono', s.services.map((x) => x.image).join(', ')));
       if (s.services.length && !cont) { b.disabled = true; b.append(el('span', 'sw', noCont)); }
-      else if (s.store === 'mongoc' && !this.has('MONGOC')) { b.disabled = true; b.append(el('span', 'sw', 'this broker is built without mongoc')); }
+      else if (s.store === 'mongoc' && !this.has('MONGOC')) { b.disabled = true; b.append(el('span', 'sw', t('this broker is built without mongoc'))); }
       b.addEventListener('click', () => this.applySet(s.id));
       return b;
     }));
@@ -1056,9 +1078,9 @@ export class Run {
     const inst = this.sources && this.sources.installed;
     const builds = this.builds();
     this.seg('rn-from', [
-      ['installed', 'Installed coraine', inst ? '' : 'no coraine in $PATH'],
-      ['build', 'A build', builds.length ? '' : 'no build yet - Compile makes one'],
-      ['image', 'An image', cont ? '' : noCont],
+      ['installed', t('Installed coraine'), inst ? '' : t('no coraine in $PATH')],
+      ['build', t('A build'), builds.length ? '' : t('no build yet - Compile makes one')],
+      ['image', t('An image'), cont ? '' : noCont],
     ], f.from, (v) => {
       f.from = v;
       f.where = v === 'image' ? 'container' : 'native';
@@ -1079,28 +1101,28 @@ export class Run {
     const src = this.source();
     let fromNote = '';
     if (f.from === 'installed' && inst) fromNote = inst.path + ' · ' + (inst.version || '').split('\n')[0];
-    else if (f.from === 'build' && src) fromNote = (src.version || '').split('\n')[0] + ' · built by Compile';
-    else if (f.from === 'image') fromNote = this.imagesNote || 'the tags published on quay.io, and those already here';
+    else if (f.from === 'build' && src) fromNote = (src.version || '').split('\n')[0] + ' · ' + t('built by Compile');
+    else if (f.from === 'image') fromNote = this.imagesNote || t('the tags published on quay.io, and those already here');
     $('rn-from-note').textContent = fromNote;
 
     //
     // Runs: natively or in a container - which one follows from the source
     //
     this.seg('rn-where', [
-      ['native', 'Natively', f.from === 'image' ? 'an image runs in a container' : ''],
-      ['container', 'In a container', f.from === 'image' ? '' : f.from === 'build' ? 'Compile makes no image yet' : 'the installed broker runs natively - a published image runs in a container'],
+      ['native', t('Natively'), f.from === 'image' ? t('an image runs in a container') : ''],
+      ['container', t('In a container'), f.from === 'image' ? '' : f.from === 'build' ? t('Compile makes no image yet') : t('the installed broker runs natively - a published image runs in a container')],
     ], f.where, (v) => { f.where = v; this.changed(); });
 
     //
     // Store and history
     //
-    const mongoWhy = !this.has('MONGOC') ? 'this broker is built without mongoc' : !cont ? noCont : '';
+    const mongoWhy = !this.has('MONGOC') ? t('this broker is built without mongoc') : !cont ? noCont : '';
     this.seg('rn-store', [['corDB', 'corDB', ''], ['mongoc', 'mongoc', mongoWhy]], f.store, (v) => { f.store = v; if (v === 'corDB' && f.set === 'mongoc-timescale') f.dbDir = true; this.changed(); });
     $('rn-dbdir').checked = f.store === 'corDB' && f.dbDir;
     $('rn-dbdir').disabled = f.store !== 'corDB';
     $('rn-dbdir').parentElement.classList.toggle('off', f.store !== 'corDB');
 
-    this.seg('rn-history', [['none', 'none', ''], ['corDB', 'corDB', ''], ['timescale', 'timescale', cont ? '' : noCont]], f.history, (v) => { f.history = v; this.changed(); });
+    this.seg('rn-history', [['none', t('none'), ''], ['corDB', 'corDB', ''], ['timescale', 'timescale', cont ? '' : noCont]], f.history, (v) => { f.history = v; this.changed(); });
 
     //
     // Ports
@@ -1109,8 +1131,8 @@ export class Run {
     if (document.activeElement !== $('rn-hport')) $('rn-hport').value = f.healthPort || '';
     if (document.activeElement !== $('rn-grace')) $('rn-grace').value = f.grace || '';
     $('rn-hport').disabled = !this.has('HEALTH');
-    if (!this.has('HEALTH')) { f.healthPort = 0; $('rn-hport').value = ''; $('rn-hport').placeholder = 'built without HEALTH'; }
-    else $('rn-hport').placeholder = 'none';
+    if (!this.has('HEALTH')) { f.healthPort = 0; $('rn-hport').value = ''; $('rn-hport').placeholder = t('built without {feature}', { feature: 'HEALTH' }); }
+    else $('rn-hport').placeholder = t('none');
 
     //
     // Switches: what the broker has compiled in
@@ -1123,14 +1145,14 @@ export class Run {
       c.checked = !off && !!f[key];
       c.disabled = !!off;
       c.addEventListener('change', () => { f[key] = c.checked; this.changed(false); });
-      l.append(c, document.createTextNode(label + ' '), el('span', 'mono cp-note', flag));
-      if (off) { l.title = 'built without ' + feature; f[key] = false; }
+      l.append(c, document.createTextNode(t(label) + ' '), el('span', 'mono cp-note', flag));
+      if (off) { l.title = t('built without {feature}', { feature }); f[key] = false; }
       return l;
     }));
 
     const fs = this.features();
-    $('rn-tenants').textContent = !fs ? 'Tenants: as the image is built (NGSILD-Tenant); no switch at start.'
-      : (fs.TENANTS === false ? 'Tenants: built without them (TENANTS=OFF) - one store, NGSILD-Tenant refused.' : 'Tenants: compiled in - a request names one with NGSILD-Tenant; no switch at start.');
+    $('rn-tenants').textContent = !fs ? t('Tenants: as the image is built (NGSILD-Tenant); no switch at start.')
+      : (fs.TENANTS === false ? t('Tenants: built without them (TENANTS=OFF) - one store, NGSILD-Tenant refused.') : t('Tenants: compiled in - a request names one with NGSILD-Tenant; no switch at start.'));
 
     //
     // Bridges: those the source has
@@ -1146,9 +1168,9 @@ export class Run {
         this.changed();
       });
       l.append(c, document.createTextNode(name));
-      if (name === 'mqtt' && !cont && !f.bridgeConfig) { l.append(el('span', 'why', ' its Mosquitto needs containers')); }
+      if (name === 'mqtt' && !cont && !f.bridgeConfig) { l.append(el('span', 'why', ' ' + t('its Mosquitto needs containers'))); }
       return l;
-    }) : [el('span', 'cp-note', 'this broker has no bridge plugins')]));
+    }) : [el('span', 'cp-note', t('this broker has no bridge plugins'))]));
     if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
     if ($('rn-uctx').value !== f.userContext) $('rn-uctx').value = f.userContext;
     this.renderCkan(cont);
@@ -1172,8 +1194,8 @@ export class Run {
         .catch(() => { this.ckanSets = []; this.renderCkan(cont); });
     }
     const sets = this.ckanSets || [];
-    const why = f.where === 'container' ? 'a native broker only: the image has no ckan bridge'
-      : (f.bridgeConfig ? 'not with a bridge configuration file of one\'s own' : '');
+    const why = f.where === 'container' ? t('a native broker only: the image has no ckan bridge')
+      : (f.bridgeConfig ? t('not with a bridge configuration file of one\'s own') : '');
     $('rn-ckan').replaceChildren(...sets.map((ds) => {
       const l = el('label', 'rn-check');
       const c = el('input');
@@ -1184,13 +1206,13 @@ export class Run {
         f.ckan = c.checked ? [...f.ckan, ds.id] : f.ckan.filter((x) => x !== ds.id);
         this.changed();
       });
-      l.title = ds.portal + ' - resource ' + ds.resource;
+      l.title = t('{portal} - resource {resource}', { portal: ds.portal, resource: ds.resource });
       l.append(c, document.createTextNode(ds.label + (ds.rows ? ' (' + ds.rows + ')' : '')));
       return l;
     }));
     const n = f.ckan.length;
-    $('rn-ckan-sum').textContent = why ? why : (n ? n + ' dataset' + (n > 1 ? 's' : '') + ': ' +
-      f.ckan.map((id) => (sets.find((d) => d.id === id) || { label: id }).label.replace(/^.* - /, '')).join(', ') : 'none');
+    $('rn-ckan-sum').textContent = why ? why : (n ? plural(n, '{n} dataset: {list}', '{n} datasets: {list}', {
+      list: f.ckan.map((id) => (sets.find((d) => d.id === id) || { label: id }).label.replace(/^.* - /, '')).join(', ') }) : t('none'));
   }
 
   //
@@ -1205,7 +1227,7 @@ export class Run {
     set('rn-ou-trust', o.trustList); set('rn-ou-user', o.username);
     $('rn-ou-trustany').checked = o.trustAny;
     if (!o.password) $('rn-ou-pw').value = '';
-    $('rn-ou-pw').placeholder = o.passwordSet ? 'password - kept by c3; empty keeps it' : 'password';
+    $('rn-ou-pw').placeholder = o.passwordSet ? t('password - kept by c3; empty keeps it') : t('password');
     const secure = o.mode !== 'None';
     $('rn-ou-secure').hidden = !secure;
     $('rn-ou-policy').disabled = !secure;
@@ -1228,10 +1250,10 @@ export class Run {
     const secure = o.mode !== 'None';
     const roots = o.roots.split('\n').map((x) => x.trim()).filter(Boolean).length;
     const chans = o.channels.length;
-    $('rn-opcua-sum').textContent = cont ? 'a native broker only: the image has no opcua bridge'
-      : (!o.url ? 'none' : o.url + ' - ' + (secure ? o.mode + ' ' + (o.policy || 'Basic256Sha256') : 'no security')
-        + (o.username ? ', user ' + o.username : ', anonymous') + ', ' + roots + ' model' + (roots === 1 ? '' : 's')
-        + ', ' + chans + ' Channel' + (chans === 1 ? '' : 's'));
+    $('rn-opcua-sum').textContent = cont ? t('a native broker only: the image has no opcua bridge')
+      : (!o.url ? t('none') : o.url + ' - ' + (secure ? o.mode + ' ' + (o.policy || 'Basic256Sha256') : t('no security'))
+        + ', ' + (o.username ? t('user {name}', { name: o.username }) : t('anonymous')) + ', ' + plural(roots, '{n} model', '{n} models')
+        + ', ' + plural(chans, '{n} Channel', '{n} Channels'));
   }
 
   def(withSecret = false) {
@@ -1295,7 +1317,7 @@ export class Run {
       this.plan = c;
       need.replaceChildren(...c.services.map((s) => {
         const row = el('div');
-        row.append(document.createTextNode('first: '), el('span', 'mono', s.container), document.createTextNode(' - ' + s.label + ', ' + s.image + ', on 127.0.0.1:' + s.port));
+        row.append(document.createTextNode(t('first:') + ' '), el('span', 'mono', s.container), document.createTextNode(' - ' + t('{label}, {image}, on {address}', { label: s.label, image: s.image, address: '127.0.0.1:' + s.port })));
         return row;
       }));
       if (c.argv.length) {
@@ -1329,8 +1351,8 @@ export class Run {
     const runs = k && ['running', 'starting', 'stopping'].includes(k.state);
     const b = $('rn-start');
     b.disabled = !!this.problem || !!runs || (this.f.from === 'image' && !this.f.tag);
-    b.title = runs ? k.name + ' runs - stop it first' : (this.problem || '');
-    b.textContent = runs ? this.f.name + ' runs' : 'Start';
+    b.title = runs ? t('{name} runs - stop it first', { name: k.name }) : (this.problem || '');
+    b.textContent = runs ? t('{name} runs', { name: this.f.name }) : t('Start');
   }
 
   async start() {
@@ -1360,24 +1382,24 @@ export class Run {
   //
   async loadImages() {
     if (this.images) return;
-    this.imagesNote = 'asking quay.io for the published tags ...';
+    this.imagesNote = t('asking quay.io for the published tags ...');
     try {
       const r = await api.runImages();
       this.images = r;
       const local = new Set(r.local.map((x) => x.tag));
       const opts = [];
-      for (const t of r.local) { const o = el('option', '', 'here · ' + t.created.slice(0, 16)); o.value = t.tag; opts.push(o); }
-      for (const t of r.published) {
-        if (local.has(t.tag)) continue;
-        const o = el('option', '', 'quay.io · ' + (t.modified || '').slice(5, 22));
-        o.value = t.tag;
+      for (const x of r.local) { const o = el('option', '', t('here · {created}', { created: x.created.slice(0, 16) })); o.value = x.tag; opts.push(o); }
+      for (const x of r.published) {
+        if (local.has(x.tag)) continue;
+        const o = el('option', '', 'quay.io · ' + (x.modified || '').slice(5, 22));
+        o.value = x.tag;
         opts.push(o);
       }
       $('rn-tags').replaceChildren(...opts);
-      this.imagesNote = r.local.length + ' here, ' + r.published.length + ' published' + (r.publishedError ? ' (' + r.publishedError + ')' : '') + ' - a tag not here is pulled at the start';
+      this.imagesNote = t('{here} here, {published} published', { here: r.local.length, published: r.published.length }) + (r.publishedError ? ' (' + r.publishedError + ')' : '') + ' - ' + t('a tag not here is pulled at the start');
       if (!this.f.tag && r.published.length) { this.f.tag = r.published[0].tag; }
     } catch (e) {
-      this.imagesNote = 'the tags could not be read: ' + e.message;
+      this.imagesNote = t('the tags could not be read: {why}', { why: e.message });
     }
     this.renderForm();
   }

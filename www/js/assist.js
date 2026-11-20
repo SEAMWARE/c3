@@ -13,6 +13,7 @@
 // posted back. Each command that changed the view has an Undo; so has the model (undo, list_changes).
 //
 import { c3Tools } from './c3tools.js';
+import { t, plural, language } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,7 +44,7 @@ export async function assistInit({ connect, compile, run } = {}) {
 function popupInit(info) {
   const btn = $('ai-btn');
   const pop = $('ai-pop');
-  $('ai-why').textContent = info.reason ? 'Here: ' + info.reason + '.' : 'This c³ has no AI Assist backend.';
+  $('ai-why').textContent = info.reason ? t('Here: {reason}.', { reason: info.reason }) : t('This c³ has no AI Assist backend.');
 
   const close = (refocus) => {
     if (pop.hidden) return;
@@ -112,7 +113,7 @@ function inline(parent, text, onEntity) {
 function entityButton(id, onEntity) {
   const b = el('button', 'eref', id);
   b.type = 'button';
-  b.title = 'Show ' + id + ' in Explore';
+  b.title = t('Show {id} in Explore', { id });
   b.onclick = () => onEntity(id);
   return b;
 }
@@ -241,7 +242,7 @@ function panelInit(info, connect, compile, run) {
   const send = $('ai-send');
   const stop = $('ai-stop');
 
-  btn.title = 'AI Assist - ask about the broker';
+  btn.title = t('AI Assist - ask about the broker');
   btn.setAttribute('aria-haspopup', 'false');
 
   //
@@ -253,18 +254,20 @@ function panelInit(info, connect, compile, run) {
     if (!u) return '';
     if (u.window) {
       const at = u.resetsAt ? new Date(u.resetsAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-      return `Your plan, ${u.window.replace('_', '-')} window: ${Math.round(u.utilization * 100)} % used` + (at ? ` (resets ${at})` : '');
+      const win = u.window.replace('_', '-');
+      const used = Math.round(u.utilization * 100);
+      return at ? t('Your plan, {window} window: {used} % used (resets {at})', { window: win, used, at }) : t('Your plan, {window} window: {used} % used', { window: win, used });
     }
-    return `This month: ${money(u.spentUsd)}` + (u.limitUsd != null ? ` of ${money(u.limitUsd)}` : '');
+    return u.limitUsd != null ? t('This month: {spent} of {limit}', { spent: money(u.spentUsd), limit: money(u.limitUsd) }) : t('This month: {spent}', { spent: money(u.spentUsd) });
   };
   const showMe = (me) => {
     if (local) {
       $('ai-prov').textContent = `${info.provider} · ${info.model}`;
-      $('ai-prov').title = 'Instructions: ' + info.instructions;
+      $('ai-prov').title = t('Instructions: {instructions}', { instructions: info.instructions });
       return;
     }
     $('ai-prov').textContent = me ? `${info.provider} · ${me.model}` : info.provider;
-    $('ai-prov').title = me ? `${info.provider} at ${info.service}, for ${me.name}` : info.service;
+    $('ai-prov').title = me ? t('{provider} at {service}, for {name}', { provider: info.provider, service: info.service, name: me.name }) : info.service;
     $('ai-usage').textContent = usageText(me);
   };
   showMe(info.me);
@@ -284,7 +287,7 @@ function panelInit(info, connect, compile, run) {
     e.preventDefault();
     const token = $('ai-tok').value.trim();
     if (!token) return;
-    tokMsg('Checking it with the service…');
+    tokMsg(t('Checking it with the service…'));
     $('ai-tok-use').disabled = true;
     try {
       const r = await fetch('/api/assist/token', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, remember: $('ai-tok-rem').checked }) });
@@ -297,7 +300,7 @@ function panelInit(info, connect, compile, run) {
       showToken(false);
       q.focus({ preventScroll: true });
     } catch (err) {
-      tokMsg('No answer from c³: ' + err.message, true);
+      tokMsg(t('No answer from c³: {error}', { error: err.message }), true);
     } finally {
       $('ai-tok-use').disabled = false;
     }
@@ -307,12 +310,12 @@ function panelInit(info, connect, compile, run) {
     info.tokenSet = false;
     info.me = null;
     showMe(null);
-    showToken(true, 'Forgotten.');
+    showToken(true, t('Forgotten.'));
   };
   $('ai-tokbtn').onclick = () => showToken(tokForm.hidden);
   $('ai-tokbtn').hidden = local;                 // the local engine has no token: the user's own login
   const needToken = !local && (!info.tokenSet || info.serviceStatus === 401);
-  if (needToken) showToken(true, info.tokenSet ? 'The service does not know the token kept here - give the current one.' : '', info.tokenSet);
+  if (needToken) showToken(true, info.tokenSet ? t('The service does not know the token kept here - give the current one.') : '', info.tokenSet);
   else if (info.tokenSet && info.serviceStatus !== 200) tokMsg('');
 
   let conv = null;                               // {session, broker, tenant}
@@ -326,10 +329,10 @@ function panelInit(info, connect, compile, run) {
     box.append(el('div', 'ctitle', title));
     for (const l of lines || []) box.append(el('pre', null, l));
     const row = el('div', 'crow');
-    const yes = el('button', 'btn primary small', 'Do it');
-    const no = el('button', 'btn small', 'No');
+    const yes = el('button', 'btn primary small', t('Do it'));
+    const no = el('button', 'btn small', t('No'));
     yes.type = no.type = 'button';
-    const end = (v) => { yes.disabled = no.disabled = true; box.classList.add(v ? 'yes' : 'no'); row.replaceWith(el('div', 'cdone', v ? 'Done as asked.' : 'Declined.')); done(v); };
+    const end = (v) => { yes.disabled = no.disabled = true; box.classList.add(v ? 'yes' : 'no'); row.replaceWith(el('div', 'cdone', v ? t('Done as asked.') : t('Declined.'))); done(v); };
     yes.onclick = () => end(true);
     no.onclick = () => end(false);
     row.append(yes, no);
@@ -346,33 +349,33 @@ function panelInit(info, connect, compile, run) {
   const ISSUES = 'https://github.com/SEAMWARE-cor/coraine-assistant/issues/new';
   const report = ({ title, body, labels }) => new Promise((done) => {
     const box = el('div', 'aip-confirm aip-report');
-    box.append(el('div', 'ctitle', 'Report this to Seamware?'));
-    const t = el('input', 'rtitle');
-    t.value = title;
-    t.setAttribute('aria-label', 'Issue title');
+    box.append(el('div', 'ctitle', t('Report this to Seamware?')));
+    const ti = el('input', 'rtitle');
+    ti.value = title;
+    ti.setAttribute('aria-label', t('Issue title'));
     const b = el('textarea', 'rbody');
     b.value = body;
     b.rows = 10;
-    b.setAttribute('aria-label', 'Issue text');
-    box.append(t, b, el('div', 'rnote', 'Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.'));
+    b.setAttribute('aria-label', t('Issue text'));
+    box.append(ti, b, el('div', 'rnote', t('Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.')));
     const row = el('div', 'crow');
-    const open = el('button', 'btn primary small', 'Open on GitHub');
-    const no = el('button', 'btn small', 'Not now');
+    const open = el('button', 'btn primary small', t('Open on GitHub'));
+    const no = el('button', 'btn small', t('Not now'));
     open.type = no.type = 'button';
     const end = (v, said) => { open.disabled = no.disabled = true; row.replaceWith(el('div', 'cdone', said)); done(v); };
     open.onclick = () => {
       let text = b.value;
-      const url = (x) => `${ISSUES}?title=${encodeURIComponent(t.value)}&labels=${encodeURIComponent(labels.join(','))}&body=${encodeURIComponent(x)}`;
+      const url = (x) => `${ISSUES}?title=${encodeURIComponent(ti.value)}&labels=${encodeURIComponent(labels.join(','))}&body=${encodeURIComponent(x)}`;
       while (url(text).length > 7500 && text.length > 200) text = text.slice(0, Math.floor(text.length * 0.9));
       window.open(url(text === b.value ? text : text + '\n\n… (cut - the rest did not fit in a link)'), '_blank', 'noopener');
-      end('opened', 'Opened on GitHub - file it there.');
+      end('opened', t('Opened on GitHub - file it there.'));
     };
-    no.onclick = () => end('dismissed', 'Not reported.');
+    no.onclick = () => end('dismissed', t('Not reported.'));
     row.append(open, no);
     box.append(row);
     log.append(box);
     scroll();
-    t.focus({ preventScroll: true });
+    ti.focus({ preventScroll: true });
   });
 
   //
@@ -392,7 +395,7 @@ function panelInit(info, connect, compile, run) {
       if (!line) continue;
       line.classList.add('undone');
       const b = line.querySelector('.undo');
-      if (b) { b.disabled = true; b.textContent = 'undone'; }
+      if (b) { b.disabled = true; b.textContent = t('undone'); }
       changeLines.delete(n);
     }
   });
@@ -413,9 +416,9 @@ function panelInit(info, connect, compile, run) {
     if (!r.ok || r.n) line.append(el('div', r.ok ? 'cmdres' : 'cmdres err', r.text.length > 300 ? r.text.slice(0, 300) + '…' : r.text));
     else line.classList.add('quiet');            // a look (get_view, list_changes): its result is the model's
     if (r.n) {
-      const u = el('button', 'btn small undo', '↶ Undo');
+      const u = el('button', 'btn small undo', '↶ ' + t('Undo'));
       u.type = 'button';
-      u.title = 'Put the view back as it was before this - and before every later change';
+      u.title = t('Put the view back as it was before this - and before every later change');
       u.onclick = () => tools.undoTo(r.n);
       head.append(u);
       changeLines.set(r.n, line);
@@ -445,16 +448,16 @@ function panelInit(info, connect, compile, run) {
     ctxShown = key;
     ctx.textContent = '';
     if (!w.broker) {
-      ctx.append(el('span', 'warn', 'Connect to a broker in Explore - the assistant reads that one.'));
+      ctx.append(el('span', 'warn', t('Connect to a broker in Explore - the assistant reads that one.')));
       return;
     }
-    ctx.append(w.broker + ' · ' + (w.tenant ? 'tenant ' + w.tenant : 'the default tenant'));
-    if (conv && (conv.broker !== w.broker || conv.tenant !== w.tenant)) ctx.append(el('div', 'warn', 'Explore is on another broker or tenant now - the next question starts a new conversation.'));
+    ctx.append(w.broker + ' · ' + (w.tenant ? t('tenant {tenant}', { tenant: w.tenant }) : t('the default tenant')));
+    if (conv && (conv.broker !== w.broker || conv.tenant !== w.tenant)) ctx.append(el('div', 'warn', t('Explore is on another broker or tenant now - the next question starts a new conversation.')));
   };
 
   const empty = () => {
     log.textContent = '';
-    log.append(el('div', 'aip-empty', 'Ask in your own words - which entities, how many, what changed, what is related to what - or tell it what to show: "paint the Stores green", "only the vehicles, on the map", "highlight the ones above 90". It reads the broker and cannot change anything in it; what it does to the view has an Undo, and "undo that" works too. Click an entity id in an answer to see it in Explore.'));
+    log.append(el('div', 'aip-empty', t('Ask in your own words - which entities, how many, what changed, what is related to what - or tell it what to show: "paint the Stores green", "only the vehicles, on the map", "highlight the ones above 90". It reads the broker and cannot change anything in it; what it does to the view has an Undo, and "undo that" works too. Click an entity id in an answer to see it in Explore.')));
   };
 
   const newConversation = (note) => {
@@ -508,7 +511,7 @@ function panelInit(info, connect, compile, run) {
 
     const w = where();
     if (!w.broker) { showCtx(); return; }
-    if (conv && (conv.broker !== w.broker || conv.tenant !== w.tenant)) newConversation('A new conversation - Explore is on ' + w.broker + ', ' + (w.tenant ? 'tenant ' + w.tenant : 'the default tenant') + ' now.');
+    if (conv && (conv.broker !== w.broker || conv.tenant !== w.tenant)) newConversation(w.tenant ? t('A new conversation - Explore is on {broker}, tenant {tenant} now.', { broker: w.broker, tenant: w.tenant }) : t('A new conversation - Explore is on {broker}, the default tenant now.', { broker: w.broker }));
     log.querySelector('.aip-empty')?.remove();
 
     q.value = '';
@@ -540,7 +543,7 @@ function panelInit(info, connect, compile, run) {
     send.disabled = true;
     stop.hidden = false;
 
-    const body = { broker: w.broker, question, uiTools: tools.definitions };
+    const body = { broker: w.broker, question, uiTools: tools.definitions, lang: language() };
     if (w.tenant) body.tenant = w.tenant;
     if (conv) body.session = conv.session;
 
@@ -562,7 +565,7 @@ function panelInit(info, connect, compile, run) {
           cancelAnimationFrame(frame);
           frame = requestAnimationFrame(() => { if (answer) { render(answer, text, onEntity); scroll(); } });
         } else if (event === 'serverDown') {
-          log.append(el('div', 'aip-err', `The ${data.server === 'c3' ? 'c³ commands' : 'broker tools'} are missing from this answer - the tool server "${data.server}" did not connect (${data.status}).`));
+          log.append(el('div', 'aip-err', data.server === 'c3' ? t('The c³ commands are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status }) : t('The broker tools are missing from this answer - the tool server "{server}" did not connect ({status}).', { server: data.server, status: data.status })));
         } else if (event === 'ui') {
           textDone();
           runCommand(data);
@@ -581,32 +584,32 @@ function panelInit(info, connect, compile, run) {
           toolLines.set(data.id, { d, pre });
           scroll();
         } else if (event === 'toolResult') {
-          const t = toolLines.get(data.id);
-          if (t) {
+          const tl = toolLines.get(data.id);
+          if (tl) {
             let shown = data.text;
             try { shown = JSON.stringify(JSON.parse(data.text), null, 2); } catch { /* as it came */ }
-            t.pre.textContent = shown;
-            if (data.isError) t.d.classList.add('err');
+            tl.pre.textContent = shown;
+            if (data.isError) tl.d.classList.add('err');
           }
         } else if (event === 'usage') {
           $('ai-usage').textContent = usageText(data);
         } else if (event === 'end') {
           if (!text && data.answer) { textBox(); text = data.answer; }
           textDone();
-          const meta = [calls + ' tool call' + (calls === 1 ? '' : 's'), data.seconds + ' s', (data.input + data.output + data.cacheRead) + ' tokens'];
-          if (data.costUsd) meta.push(local ? '≈ $' + data.costUsd.toFixed(3) + ' at API prices - not billed, your plan' : '$' + data.costUsd.toFixed(3));
+          const meta = [plural(calls, '{n} tool call', '{n} tool calls'), data.seconds + ' s', t('{n} tokens', { n: data.input + data.output + data.cacheRead })];
+          if (data.costUsd) meta.push(local ? t('≈ {cost} at API prices - not billed, your plan', { cost: '$' + data.costUsd.toFixed(3) }) : '$' + data.costUsd.toFixed(3));
           log.append(el('div', 'aip-meta', meta.join(' · ')));
-          if (data.isError) log.append(el('div', 'aip-err', 'The model ended with an error.'));
+          if (data.isError) log.append(el('div', 'aip-err', t('The model ended with an error.')));
         } else if (event === 'error') {
           textDone();
           if (/no such conversation/.test(data.detail || '')) conv = null;          // forgotten by the service: the next question starts anew
           if (/token is needed|does not know this token/.test(data.detail || '')) showToken(true, data.detail, true);
-          log.append(el('div', data.detail === 'stopped' ? 'aip-note' : 'aip-err', data.detail === 'stopped' ? 'Stopped.' : data.detail));
+          log.append(el('div', data.detail === 'stopped' ? 'aip-note' : 'aip-err', data.detail === 'stopped' ? t('Stopped.') : data.detail));
         }
       }
     } catch (err) {
       textDone();
-      if (err.name !== 'AbortError') log.append(el('div', 'aip-err', 'No answer: ' + err.message));
+      if (err.name !== 'AbortError') log.append(el('div', 'aip-err', t('No answer: {error}', { error: err.message })));
     } finally {
       textDone();
       busy = null;

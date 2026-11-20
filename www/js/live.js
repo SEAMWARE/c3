@@ -18,6 +18,8 @@
 // Nothing is drawn per notification: the entities that changed are gathered - several notifications of
 // one entity merged into one change - and handed to onBatch every INTERVAL ms at most.
 //
+import { t } from './i18n.js';
+
 const INTERVAL = 250;
 const NULL_URN = 'urn:ngsi-ld:null';
 
@@ -128,7 +130,7 @@ export class Live {
       if (this.ws !== ws) return;
       this.ready = false;
       this.ws = null;
-      if (this.want) this.onStatus({ mode: 'off', broker: this.want.broker, detail: 'the connection to the c³ backend is closed', retrying: true });
+      if (this.want) this.onStatus({ mode: 'off', broker: this.want.broker, detail: t('the connection to the c³ backend is closed'), retrying: true });
       this.reopen();
     };
   }
