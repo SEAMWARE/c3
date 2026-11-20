@@ -23,7 +23,8 @@ ATTRS = ("title", "placeholder", "aria-label", "alt")
 
 # t('...') / t("...") / t(`...`) / tk('...') - the first argument, a literal; plural(n, 'one', 'many')
 STR   = r"""('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\$]|\\.)*`)"""
-T_RE  = re.compile(r"(?<![\w.$])tk?\(\s*" + STR)
+CAT   = STR + r"(?:\s*\+\s*" + STR + r")*"                     # 'a' + 'b': one text, as JavaScript joins it
+T_RE  = re.compile(r"(?<![\w.$])tk?\(\s*(" + CAT + r")")
 PL_RE = re.compile(r"(?<![\w.$])plural\(\s*[^,]+,\s*" + STR + r"\s*,\s*" + STR)
 
 
@@ -34,6 +35,10 @@ def unquote(lit):
   return json.loads('"' + body.replace('\\' + q, q).replace('"', '\\"').replace("\\'", "'") + '"') if q == "'" else json.loads(lit)
 
 
+def joined(cat):
+  return "".join(unquote(m.group(1)) for m in re.finditer(STR, cat))
+
+
 def jsKeys():
   keys = {}
   for f in sorted(os.listdir(os.path.join(ROOT, "js"))):
@@ -41,7 +46,7 @@ def jsKeys():
       continue
     src = open(os.path.join(ROOT, "js", f), encoding="utf-8").read()
     for m in T_RE.finditer(src):
-      keys.setdefault(unquote(m.group(1)), f)
+      keys.setdefault(joined(m.group(1)), f)
     for m in PL_RE.finditer(src):
       keys.setdefault(unquote(m.group(1)), f)
       keys.setdefault(unquote(m.group(2)), f)

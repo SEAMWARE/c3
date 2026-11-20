@@ -89,7 +89,12 @@ const SETTINGS = {
 //
 // The groups c³ names itself (the others come from the source's CMake): kept in English, shown translated
 //
-const GROUP_NAMES = { Other: tk('Other'), Bridges: tk('Bridges') };
+// The groups c³ makes, and coraine's own (CMakeLists.txt "# Group:" lines) - a group coraine adds later shows as named
+const GROUP_NAMES = {
+  Other: tk('Other'), Bridges: tk('Bridges'), Snapshot: tk('Snapshot'), Snapshots: tk('Snapshots'), Geo: tk('Geo'),
+  Security: tk('Security'), 'Beyond NGSI-LD': tk('Beyond NGSI-LD'), Protocols: tk('Protocols'), Operations: tk('Operations'),
+  'Stores and tools': tk('Stores and tools'),
+};
 const groupName = (name) => (GROUP_NAMES[name] ? t(GROUP_NAMES[name]) : name);
 
 //

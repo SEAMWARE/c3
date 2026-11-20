@@ -15,6 +15,26 @@ import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
 import { t, tk, plural } from './i18n.js';
 
+//
+// The states of a broker or a service as the backend and Docker/Podman name them (also CSS classes), shown translated
+//
+const STATE_NAMES = {
+  running: tk('running'), starting: tk('starting'), stopping: tk('stopping'), stopped: tk('stopped'), failed: tk('failed'),
+  ready: tk('ready'), answers: tk('answers'), created: tk('created'), exited: tk('exited'), paused: tk('paused'),
+  restarting: tk('restarting'), dead: tk('dead'), removing: tk('removing'),
+};
+const stateName = (v) => (STATE_NAMES[v] ? t(STATE_NAMES[v]) : v);
+
+//
+// The sets of src/run.c, by id: their label and description translated (a set added later shows as the backend names it)
+//
+const SET_TEXTS = {
+  cordb: { label: tk('corDB alone'), description: tk('No services: corDB holds the entities and their history, on disk in c3\'s data directory.') },
+  'mongoc-timescale': { label: tk('mongoc + timescale'), description: tk('MongoDB for the entities, PostgreSQL with TimescaleDB for the history - each in a container.') },
+  mqtt: { label: tk('with MQTT'), description: tk('corDB, and the MQTT bridge connected to a Mosquitto in a container.') },
+};
+const setText = (s, what) => (SET_TEXTS[s.id] && SET_TEXTS[s.id][what] === s[what] ? t(SET_TEXTS[s.id][what]) : s[what]);
+
 const $ = (id) => document.getElementById(id);
 
 function el(tag, cls, text) {
@@ -465,7 +485,7 @@ export class Run {
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
     title.append(el('span', 'rname', b.name));
-    const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), runs && b.ready ? b.ready : b.state);
+    const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state));
     title.append(badge);
     if (runs || b.state === 'stopping') {
       const a = el('a', 'rurl', b.url);
@@ -548,7 +568,7 @@ export class Run {
 
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
-    title.append(el('span', 'rname', s.container), el('span', 'badge ' + s.state, s.state));
+    title.append(el('span', 'rname', s.container), el('span', 'badge ' + s.state, stateName(s.state)));
     if (s.port && runs) title.append(el('span', 'rurl', '127.0.0.1:' + s.port));
     main.append(title);
     main.append(el('div', 'rmeta', [s.label, s.image, s.status || ''].filter(Boolean).join(' · ')));
@@ -1044,7 +1064,7 @@ export class Run {
       const b = el('button', 'rn-set');
       b.type = 'button';
       b.setAttribute('aria-pressed', String(f.set === s.id));
-      b.append(el('span', 'sl', s.label), el('span', 'sd', s.description));
+      b.append(el('span', 'sl', setText(s, 'label')), el('span', 'sd', setText(s, 'description')));
       if (s.services.length) b.append(el('span', 'sd mono', s.services.map((x) => x.image).join(', ')));
       if (s.services.length && !cont) { b.disabled = true; b.append(el('span', 'sw', noCont)); }
       else if (s.store === 'mongoc' && !this.has('MONGOC')) { b.disabled = true; b.append(el('span', 'sw', t('this broker is built without mongoc'))); }

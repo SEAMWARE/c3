@@ -125,12 +125,16 @@ function pageShow(page, compile, run) {
 //
 function languageButton() {
   const b = $('lang-btn');
-  b.textContent = language().toUpperCase();
+  const flag = document.createElement('img');
+  flag.src = `img/flags/${language()}.svg`;
+  flag.alt = '';
+  b.replaceChildren(flag);
+  b.title = b.ariaLabel = `${t('Language')}: ${LANGUAGES[language()]}`;
   b.addEventListener('click', () => {
     const r = b.getBoundingClientRect();
     openMenu({
       x: r.left, y: r.bottom + 4, label: t('Language'), returnFocus: b,
-      items: Object.entries(LANGUAGES).map(([code, name]) => ({ label: (code === language() ? '✓ ' : '\u2003') + name, action: () => setLanguage(code) })),
+      items: Object.entries(LANGUAGES).map(([code, name]) => ({ icon: `img/flags/${code}.svg`, label: name + (code === language() ? '  ✓' : ''), action: () => setLanguage(code) })),
     });
   });
 }

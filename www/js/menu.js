@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // openMenu({ x, y, items, label, returnFocus }) shows a menu at (x, y) in the window, kept inside it.
-// An item: { label, hint, action, items, disabled }; one with 'items' opens a submenu. { separator: true }
+// An item: { label, hint, icon (an image URL, shown before the label), action, items, disabled }; one with 'items' opens a submenu. { separator: true }
 // draws a line.
 //
 // Keys (WAI-ARIA menu pattern): Down / Up move (and wrap), Home / End, Enter or Space activates, Right
@@ -73,6 +73,12 @@ function build(items, level, label) {
     const b = el('div', 'item');
     b.setAttribute('role', 'menuitem');
     b.tabIndex = -1;
+    if (it.icon) {
+      const img = el('img', 'micon');
+      img.src = it.icon;
+      img.alt = '';
+      b.append(img);
+    }
     b.append(el('span', 'label', it.label));
     if (it.hint) b.append(el('span', 'hint', it.hint));
     if (it.items) {
