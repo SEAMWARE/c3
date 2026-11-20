@@ -19,7 +19,7 @@
   <div class="splash-brand">
     <img src="img/coraine-mark.png" alt="coraine">
     <div class="splash-word">c<span class="cube">³</span></div>
-    <div class="splash-sub">coraine control center</div>
+    <div class="splash-sub">Coraine Control Center</div>
   </div>
   <div class="splash-steps">
     <div id="steps"></div>
@@ -32,7 +32,7 @@
 <div id="app" hidden>
   <header class="top">
     <img class="mark" src="img/coraine-mark.png" alt="coraine">
-    <div class="brand"><span class="word">c<span class="cube">³</span></span><span class="tag sep" aria-hidden="true">-</span><span class="tag">coraine control center</span></div>
+    <div class="brand"><span class="word">c<span class="cube">³</span></span><span class="tag sep" aria-hidden="true">-</span><span class="tag">Coraine Control Center</span></div>
     <nav class="pages" aria-label="Parts">
       <a href="#compile" id="nav-compile">Compile</a>
       <a href="#run" id="nav-run">Operate</a>
@@ -42,8 +42,9 @@
     </nav>
     <div class="top-right">
       <button class="aibtn" type="button" id="ai-btn" aria-haspopup="dialog" aria-expanded="false" title="AI Assist">✦ AI Assist</button>
+      <button class="sizebtn" type="button" id="size-btn" aria-haspopup="menu" title="Text size" aria-label="Text size">A<span>A</span></button>
       <button class="langbtn" type="button" id="lang-btn" aria-haspopup="menu" title="Language" aria-label="Language"><img src="img/flags/en.svg" alt=""></button>
-      <span class="chip" id="chip">no broker</span><img class="sw" src="img/seamware.svg" alt="Seamware">
+      <img class="sw" src="img/seamware.svg" alt="Seamware">
       <div class="winctl" id="win-ctl" hidden>
         <button type="button" id="win-min" title="Minimise" aria-label="Minimise the window"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.5h10"/></svg></button>
         <button type="button" id="win-close" class="close" title="Close" aria-label="Close the window"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
@@ -138,7 +139,7 @@
               <div class="cp-grid3">
                 <div class="cp-field"><span class="cp-label">HTTP server</span><div class="cp-seg" id="cp-http"></div><span class="cp-note" id="cp-http-note"></span></div>
                 <div class="cp-field"><span class="cp-label">Current-state stores</span><div class="cp-seg" id="cp-store"></div><span class="cp-note" id="cp-store-note"></span></div>
-                <div class="cp-field"><span class="cp-label">Temporal history</span><span class="cp-note" style="font-size: 15px; line-height: 22px; color: var(--text)">none, corDB and timescale are always built; <span class="mono">--troe</span> picks one at start</span></div>
+                <div class="cp-field"><span class="cp-label">Temporal history</span><span class="cp-note" style="font-size: 1.125rem; line-height: 1.5rem; color: var(--text)">none, corDB and timescale are always built; <span class="mono">--troe</span> picks one at start</span></div>
               </div>
             </section>
 
@@ -388,7 +389,8 @@
       <form class="connform" id="connform">
         <input id="broker-url" list="broker-list" placeholder="http://localhost:1026 - or a demo's name" aria-label="Broker URL, or the name of a demo" title="The broker's URL (http://host:port, or host:port) - or the name of a demo, e.g. CDMAD" autocomplete="off" spellcheck="false">
         <datalist id="broker-list"></datalist>
-        <input class="tenant" id="tenant" list="tenant-list" placeholder="default tenant" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant (NGSILD-Tenant) everything in Connect is read from - empty: the default tenant" autocomplete="off" spellcheck="false">
+        <label class="tenantlbl" for="tenant">Tenant</label>
+        <input class="tenant" id="tenant" list="tenant-list" placeholder="default" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant - the HTTP header NGSILD-Tenant - Explore reads everything from; empty: the default tenant. Type another and press Enter; the ones used before are offered" autocomplete="off" spellcheck="false">
         <datalist id="tenant-list"></datalist>
         <label class="localbox" title="Ask for the broker's own entities only (local=true) - not its Context Sources'. Off: what the broker answers, with the entities of its registrations"><input type="checkbox" id="local-only">Local only</label>
         <button class="btn primary" type="submit" id="connect-btn">Connect</button>
@@ -594,6 +596,15 @@
       </div>
     </div>
 
+    <dialog class="db-progress" id="db-progress" aria-labelledby="db-ptitle">
+      <h2 id="db-ptitle">Starting the Dashboard</h2>
+      <div class="db-pbar" role="progressbar" aria-labelledby="db-ptitle" id="db-pbar"><div id="db-pfill"></div></div>
+      <div class="db-pcount" id="db-pcount"></div>
+      <ol class="db-steps" id="db-steps"></ol>
+      <p class="db-pwhy" id="db-pwhy" hidden></p>
+      <details class="db-plog" id="db-plog"><summary>The log</summary><pre id="db-plogtext"></pre></details>
+      <div class="db-pacts"><button type="button" class="btn" id="db-pclose">Close</button></div>
+    </dialog>
     <div class="db-bar" id="db-bar" hidden>
       <span class="rdot ok"></span>
       <span class="db-name">WireCloud</span>

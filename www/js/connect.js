@@ -783,7 +783,7 @@ export class Connect {
     $('modebar').hidden = true;
     this.closeJson();
     closeMenu(false);
-    $('chip').textContent = (demo ? demo.name + ' · ' : '') + (tenant ? `${url} · ${tenant}` : url);
+    window.dispatchEvent(new CustomEvent('c3-explore-broker', { detail: { url, tenant, demo: demo ? demo.name : null } }));   // Operate's list shows it
     $('reload-btn').disabled = false;
     $('notice').hidden = true;
     $('counts').textContent = '';

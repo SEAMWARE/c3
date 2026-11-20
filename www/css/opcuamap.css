@@ -19,8 +19,8 @@
 .om-user { width: 180px; }
 .om-sec { display: flex; flex-direction: column; gap: 6px; }
 .om-sec .dm-field { grid-template-columns: 130px minmax(0, 1fr); }
-.om-trust { resize: vertical; font-family: var(--mono, monospace); font-size: 13px; }
-.om-any { font-size: 13px; }
+.om-trust { resize: vertical; font-family: var(--mono, monospace); font-size: 0.975rem; }
+.om-any { font-size: 0.975rem; }
 
 @media (max-width: 700px) {
   .om-kids > .om-node { margin-left: 10px; }

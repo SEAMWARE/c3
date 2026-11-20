@@ -104,6 +104,11 @@ const PLUGINS = [
 export class Run {
   constructor({ onConnect } = {}) {
     this.onConnect = onConnect || (() => {});
+    this.explored = null;             // {url, tenant, demo}: the broker Explore is connected to - the active one
+    window.addEventListener('c3-explore-broker', (e) => {
+      this.explored = e.detail;
+      if (this.state) this.renderLists();
+    });
     this.caps = null;                 // GET /api/capabilities: "run"
     this.state = null;                // GET /api/run
     this.stateText = '';
@@ -457,24 +462,59 @@ export class Run {
     return t('installed coraine');
   }
 
+  //
+  // active - is this URL the broker Explore is connected to (the same host and port: localhost and 127.0.0.1
+  // are the same broker here)
+  //
+  active(url) {
+    if (!this.explored || !url) return false;
+    const key = (u) => { try { const x = new URL(u); return x.protocol + '//' + x.hostname.replace(/^127\.0\.0\.1$/, 'localhost') + ':' + (x.port || (x.protocol === 'https:' ? '443' : '80')); } catch { return u; } };
+    return key(url) === key(this.explored.url);
+  }
+
   renderLists() {
     const s = this.state;
     const box = $('rn-brokers');
-    $('rn-bcount').textContent = s.brokers.length ? String(s.brokers.length) : '';
-    if (!s.brokers.length) {
-      box.replaceChildren(el('span', 'rn-empty', t('None yet - choose a set and Start, on the right.')));
-    } else {
-      box.replaceChildren(...s.brokers.map((b) => this.brokerItem(b)));
-    }
+    //
+    // The broker Explore is connected to is in the list - highlighted, first - also when c³ did not start it
+    //
+    const ours = s.brokers.find((b) => this.active(b.url));
+    const items = s.brokers.map((b) => this.brokerItem(b));
+    if (ours) items.unshift(items.splice(s.brokers.indexOf(ours), 1)[0]);
+    else if (this.explored) items.unshift(this.exploredItem());
+    $('rn-bcount').textContent = items.length ? String(items.length) : '';
+    if (!items.length) box.replaceChildren(el('span', 'rn-empty', t('None yet - choose a set and Start, on the right.')));
+    else box.replaceChildren(...items);
 
     const sv = $('rn-services');
     if (!s.services.length) sv.replaceChildren(el('span', 'rn-empty', t('None - the sets with mongoc, timescale or MQTT start them.')));
     else sv.replaceChildren(...s.services.map((x) => this.serviceItem(x)));
   }
 
+  //
+  // exploredItem - the broker Explore is connected to, when c³ did not start it: its URL and tenant, no more
+  //
+  exploredItem() {
+    const x = this.explored;
+    const item = el('div', 'rn-item active');
+    item.append(el('span', 'rdot ok'));
+    const main = el('div', 'rmain');
+    const title = el('div', 'rtitle');
+    title.append(el('span', 'rname', x.demo || x.url), el('span', 'badge active', t('in Explore')));
+    if (x.demo) title.append(el('span', 'rurl', x.url));
+    main.append(title);
+    main.append(el('div', 'rmeta', [x.tenant ? t('tenant {tenant}', { tenant: x.tenant }) : t('the default tenant'), t('not started by c³')].join(' · ')));
+    item.append(main);
+    const acts = el('div', 'racts');
+    acts.append(button(t('Explore'), '', () => this.onConnect(x.url)));
+    item.append(acts);
+    return item;
+  }
+
   brokerItem(b) {
     const d = b.def;
-    const item = el('div', 'rn-item' + (this.sel && this.sel.kind === 'broker' && this.sel.name === b.name ? ' sel' : ''));
+    const on = this.active(b.url);
+    const item = el('div', 'rn-item' + (on ? ' active' : '') + (this.sel && this.sel.kind === 'broker' && this.sel.name === b.name ? ' sel' : ''));
     const runs = b.state === 'running';
     let dot = '';
     if (runs && (b.ready === 'ready' || b.ready === 'answers')) dot = 'ok';
@@ -485,12 +525,13 @@ export class Run {
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
     title.append(el('span', 'rname', b.name));
+    if (on) title.append(el('span', 'badge active', this.explored.tenant ? t('in Explore - tenant {tenant}', { tenant: this.explored.tenant }) : t('in Explore')));
     const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state));
     title.append(badge);
     if (runs || b.state === 'stopping') {
       const a = el('a', 'rurl', b.url);
       a.href = '#connect';
-      a.title = t('Open it in Connect');
+      a.title = t('Open it in Explore');
       a.addEventListener('click', (e) => { e.preventDefault(); this.onConnect(b.url); });
       title.append(a);
     } else title.append(el('span', 'rurl', b.url));

@@ -7,13 +7,13 @@
 #page-dashboard { gap: 12px; }
 
 .db-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.db-doing { font-size: 14px; color: var(--muted); }
+.db-doing { font-size: 1.05rem; color: var(--muted); }
 .db-log {
-  margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; font-family: var(--mono); font-size: 12px; line-height: 17px;
+  margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; font-family: var(--mono); font-size: 0.9rem; line-height: 1.1875rem;
   white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2);
 }
 
-.db-powered { font-size: 12px; color: var(--dim); }
+.db-powered { font-size: 0.9rem; color: var(--dim); }
 .db-powered a { color: var(--muted); }
 
 /* WireCloud runs: a bar, then the frame filling the rest of the page */
@@ -23,7 +23,7 @@
 }
 .db-bar .rdot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .db-bar .db-name { font-weight: 600; }
-.db-bar .db-url { font-size: 13px; color: var(--muted); }
+.db-bar .db-url { font-size: 0.975rem; color: var(--muted); }
 .db-bar .grow { flex: 1; }
 .db-bar a.btn { text-decoration: none; }
 
@@ -37,3 +37,31 @@
   .db-bar { padding: 8px; }
   .db-framewrap { min-height: 360px; }
 }
+
+/* The progress of a start or a stop: every step, done, running or failed, and a bar */
+.db-progress { width: min(640px, calc(100vw - 32px)); padding: 22px 24px 18px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); color: var(--text); box-shadow: 0 20px 60px #000a; }
+.db-progress::backdrop { background: #0009; }
+.db-progress h2 { margin: 0 0 14px; font-family: var(--title); font-size: 1.5rem; font-weight: 400; }
+.db-pbar { height: 8px; border-radius: 4px; background: var(--bg-deep); overflow: hidden; }
+.db-pbar > div { height: 100%; width: 0; background: var(--accent-2); transition: width .4s ease; }
+.db-pbar.failed > div { background: var(--bad, #e5484d); }
+.db-pcount { margin: 6px 0 12px; font-size: 0.9rem; color: var(--muted); }
+.db-steps { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow: auto; }
+.db-steps li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0; }
+.db-steps li .ic { text-align: center; }
+.db-steps li.done .ic { color: var(--ok); }
+.db-steps li.failed .ic, .db-steps li.failed .tx { color: var(--bad, #e5484d); }
+.db-steps li.run .tx { color: var(--text); font-weight: 600; }
+.db-steps li.done .tx { color: var(--muted); }
+.db-steps li .sec { font-family: var(--mono); font-size: 0.9rem; color: var(--muted); }
+.db-steps li.run .ic::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%;
+  border: 2px solid var(--accent-2); border-right-color: transparent; animation: db-spin .8s linear infinite; }
+@keyframes db-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .db-steps li.run .ic::before { animation: none; } }
+.db-pwhy { margin: 12px 0 0; color: var(--bad, #e5484d); overflow-wrap: anywhere; }
+.db-plog { margin-top: 12px; }
+.db-plog summary { cursor: pointer; color: var(--muted); }
+.db-plog pre { max-height: 30vh; overflow: auto; margin: 6px 0 0; padding: 8px; background: var(--bg-deep); border-radius: 6px;
+  font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.db-pacts { display: flex; justify-content: flex-end; margin-top: 14px; }

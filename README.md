@@ -208,7 +208,7 @@ markers are coloured by), the downloaded map areas, and the last page:
         "grace": 30, "lastStarted": "2026-10-10T08:00:00Z" }
     ]
   },
-  "ui": { "lastPage": "connect" }
+  "ui": { "lastPage": "connect", "lang": "en", "textSize": "130" }
 }
 ```
 
@@ -1080,7 +1080,7 @@ The backend's API, used by the pages:
 | `DELETE /api/brokers` `{"url"}` | forget a broker |
 | `PUT /api/brokers/types` `{"url", "types"}` | the types Explore loads from a broker, as its `connect.types` (the broker must be in the list) |
 | `PUT /api/brokers/connect` `{"url", "view", "map", "colourBy", "relationships", "alerts", "tenant", "local"}` | Explore's view of a broker: each member given replaces the stored one |
-| `PUT /api/ui` `{"lastPage"}` | `compile`, `run` or `connect` |
+| `PUT /api/ui` `{"lastPage", "lang", "textSize"}` | any of them: the page shown last (`compile`, `run`, `connect`, ...); the language (`en`, `es`, `fr`, `de`); the text size in percent (`90`, `100`, `115`, `130`, `150`, `175`, `200`) - the header's **Aa** button. c³'s text sizes are in `rem`: the text size sets the root's, and Chrome's own font size (Settings - Appearance) counts too |
 | `GET /api/capabilities` | what this machine can do: `host`, `arch`, `distribution`, `compile` (`available`, `why`, `coraineBuild`, `source`, `version`, `builds`, `pgo`, `pgoWhy`, `mongoc`, `mongocWhy`, `liveLog`), `run` (`coraine`, `coraineWhy`, `containers`, `engine`, `engineVersion`, `containersWhy`, `dir`) |
 | `GET /api/compile/features` | `coraine-build --list-features --json` as `{"coraineBuild", "source", "version", "features": [{"name", "default", "description", "requires"}]}` |
 | `PUT /api/compile/choice` `{"mode", "features", "workload"}` | Compile's choice, kept as `compile.choice` |
@@ -1103,7 +1103,7 @@ The backend's API, used by the pages:
 | `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
-| `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s |
+| `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
 | `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |

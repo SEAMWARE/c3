@@ -321,10 +321,24 @@ static int             nSvcs     = 0;
 #define DASHBOARD_SET   "dashboard"
 #define DASHBOARD_USER  "admin"
 
+typedef struct DashStep
+{
+  char     text[200];
+  time_t   start;
+  time_t   end;                                  // 0: it runs
+  bool     failed;
+} DashStep;
+
+#define DASH_STEPS  40
+
 typedef struct Dashboard
 {
   bool     busy;                                 // a start or a stop runs
   char     doing[200];                           // what it does now ("" when not busy)
+  bool     stepsOfStart;                         // the steps are a start's (else a stop's)
+  DashStep steps[DASH_STEPS];                    // the last start's or stop's steps, kept after it ended
+  int      nSteps;
+  int      total;                                // how many steps it should take, as far as known
   char     why[600];                             // why the last start failed; "" - it did not
   char     logPath[2300];
   int64_t  logEnd;
@@ -6209,10 +6223,44 @@ static void dashDoing(const char* fmt, ...)
   vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
 
+  time_t now = time(NULL);
   pthread_mutex_lock(&rMutex);
   snprintf(dash.doing, sizeof(dash.doing), "%s", text);
+  if ((dash.nSteps > 0) && (dash.steps[dash.nSteps - 1].end == 0))
+    dash.steps[dash.nSteps - 1].end = now;
+  if (dash.nSteps == DASH_STEPS)                 // never, the steps being fewer - the last one says it then
+    dash.nSteps--;
+  DashStep* stP = &dash.steps[dash.nSteps++];
+  snprintf(stP->text, sizeof(stP->text), "%s", text);
+  stP->start  = now;
+  stP->end    = 0;
+  stP->failed = false;
+  if (dash.nSteps > dash.total)
+    dash.total = dash.nSteps;
   pthread_mutex_unlock(&rMutex);
   logLine(dash.logPath, "%s", text);
+}
+
+//
+// dashSteps - more steps than planned (the first start's, a widget to install); dashStepsEnd - the last step
+// over, failed or not
+//
+static void dashSteps(int more)
+{
+  pthread_mutex_lock(&rMutex);
+  dash.total += more;
+  pthread_mutex_unlock(&rMutex);
+}
+
+static void dashStepsEnd(bool failed)            // with rMutex
+{
+  if ((dash.nSteps > 0) && (dash.steps[dash.nSteps - 1].end == 0))
+  {
+    dash.steps[dash.nSteps - 1].end    = time(NULL);
+    dash.steps[dash.nSteps - 1].failed = failed;
+  }
+  if (failed == false)
+    dash.total = dash.nSteps;
 }
 
 //
@@ -6675,6 +6723,7 @@ static bool dashWidgets(int port, char* err, int errLen)
       break;
     }
 
+    dashSteps(1);
     dashDoing("installing the widget %s/%s %s in WireCloud", vendor, name, version);
     Str      head = { NULL, 0, 0 };
     LocalReq up   = { "POST", "/api/resources/", bearer, "application/octet-stream", zip.s, zip.len, &head, NULL, 60 };
@@ -6776,6 +6825,7 @@ static void* dashboardThread(void* vP)
   //
   // WireCloud's image: no published one yet - the one built from its source
   //
+  dashDoing("checking WireCloud's image");
   if (engineRun(out, sizeof(out), 30, "image", "inspect", "--format", "{{.Id}}", kinds[KIND_WIRECLOUD].image, NULL) != 0)
   {
     snprintf(err, sizeof(err), "the image %s is not here - WireCloud 2 has no published image yet: build it from its source (github.com/Ficodes/WireCloud, docker/README.md)", kinds[KIND_WIRECLOUD].image);
@@ -6797,6 +6847,7 @@ static void* dashboardThread(void* vP)
   //
   // Logged in already works: it was made ready before
   //
+  dashDoing("logging in to WireCloud");
   char lerr[512];
   int  status = dashLogin(port, NULL, lerr, sizeof(lerr));
   if (status != 302)
@@ -6810,6 +6861,7 @@ static void* dashboardThread(void* vP)
     //
     // The first start (or its data deleted): its widgets, its user
     //
+    dashSteps(2);
     char password[65];
     if (credsDashboard(password, sizeof(password), NULL, 0, NULL, 0, err, sizeof(err)) == false)
       goto fail;
@@ -6847,6 +6899,7 @@ static void* dashboardThread(void* vP)
   //
   if (localHttp(esPort, "GET", "/workspaces", NULL, NULL, 10) == 404)
   {
+    dashSteps(1);
     dashDoing("making WireCloud's search indexes (rebuildsearchindexes)");
     const char* rebuild[] = { "python", "-m", "manage", "rebuildsearchindexes", NULL };
     if (dashExec(NULL, 300, rebuild) != 0)
@@ -6856,11 +6909,13 @@ static void* dashboardThread(void* vP)
     }
   }
 
+  dashDoing("checking c3's widgets in WireCloud");
   if (dashWidgets(port, err, sizeof(err)) == false)
     goto fail;
 
   logLine(dash.logPath, "the Dashboard runs: WireCloud on 127.0.0.1:%d, logged in as " DASHBOARD_USER, port);
   pthread_mutex_lock(&rMutex);
+  dashStepsEnd(false);
   dash.busy     = false;
   dash.doing[0] = 0;
   dash.why[0]   = 0;
@@ -6870,6 +6925,7 @@ static void* dashboardThread(void* vP)
  fail:
   logLine(dash.logPath, "the Dashboard did not start: %s", err);
   pthread_mutex_lock(&rMutex);
+  dashStepsEnd(true);
   dash.busy     = false;
   dash.doing[0] = 0;
   snprintf(dash.why, sizeof(dash.why), "%s", err);
@@ -6894,6 +6950,7 @@ static void* dashboardStopThread(void* vP)
   }
 
   pthread_mutex_lock(&rMutex);
+  dashStepsEnd(false);
   dash.busy     = false;
   dash.doing[0] = 0;
   pthread_mutex_unlock(&rMutex);
@@ -6962,6 +7019,22 @@ static void dashboardState(CorHttpConn* connP)
   strAddf(&s, ", \"busy\": %s", dash.busy ? "true" : "false");
   strAdd(&s, ", \"doing\": ");     strAddJson(&s, (dash.doing[0] != 0) ? dash.doing : NULL);
   strAdd(&s, ", \"why\": ");       strAddJson(&s, (dash.why[0] != 0) ? dash.why : NULL);
+
+  //
+  // The last start's or stop's steps: each one's text, its seconds (so far, while it runs), done or failed
+  //
+  time_t now = time(NULL);
+  strAdd(&s, ", \"steps\": {\"of\": ");     strAddJson(&s, dash.stepsOfStart ? "start" : "stop");
+  strAddf(&s, ", \"total\": %d, \"list\": [", dash.total);
+  for (int ix = 0; ix < dash.nSteps; ix++)
+  {
+    DashStep* stP = &dash.steps[ix];
+    strAdd(&s, (ix > 0) ? ", {\"text\": " : "{\"text\": ");
+    strAddJson(&s, stP->text);
+    strAddf(&s, ", \"seconds\": %ld, \"done\": %s, \"failed\": %s}", (long) (((stP->end != 0) ? stP->end : now) - stP->start),
+            (stP->end != 0) ? "true" : "false", stP->failed ? "true" : "false");
+  }
+  strAdd(&s, "]}");
   strAdd(&s, ", \"log\": ");       strAddJson(&s, dash.logPath);
 
   int  running = 0;
@@ -7055,6 +7128,9 @@ static void dashboardRequest(CorHttpConn* connP, const char* action)
     dash.busy = true;
     dash.why[0] = 0;
     snprintf(dash.doing, sizeof(dash.doing), "%s", start ? "starting" : "stopping");
+    dash.stepsOfStart = start;
+    dash.nSteps       = 0;
+    dash.total        = start ? 6 : DASH_KINDS;     // start: the image, the three services, the login, the widgets
     pthread_mutex_unlock(&rMutex);
 
     if (threadStart(start ? dashboardThread : dashboardStopThread, NULL) == false)
