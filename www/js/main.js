@@ -11,6 +11,7 @@ import { brokerGet } from './api.js';
 import { Connect } from './connect.js';
 import { Compile } from './compile.js';
 import { Run } from './run.js';
+import { Dashboard } from './dashboard.js';
 import { assistInit } from './assist.js';
 import { windowInit } from './window.js';
 import { docsInit, docsShow } from './docs.js';
@@ -102,11 +103,11 @@ async function splash() {
 }
 
 //
-// The pages: #compile, #run, #connect and #docs (#docs/<guide>: docs.js), the one shown kept as ui.lastPage
+// The pages: #compile, #run, #connect, #dashboard and #docs (#docs/<guide>: docs.js), the one shown kept as ui.lastPage
 //
-const PAGES = ['compile', 'run', 'connect', 'docs'];
+const PAGES = ['compile', 'run', 'connect', 'dashboard', 'docs'];
 
-function pageShow(page, compile, run) {
+function pageShow(page, compile, run, dashboard) {
   for (const p of PAGES) {
     $('page-' + p).hidden = (p !== page);
     const a = $('nav-' + p);
@@ -115,6 +116,7 @@ function pageShow(page, compile, run) {
   }
   if (page === 'compile') compile.refresh();
   if (page === 'run') run.refresh(); else run.hide();
+  if (page === 'dashboard') dashboard.refresh(); else dashboard.hide();
   if (page === 'docs') docsShow(location.hash);
   window.dispatchEvent(new Event('resize'));          // a page shown again measures itself
   api.uiSet({ lastPage: page }).catch(() => {});
@@ -165,6 +167,8 @@ async function main() {
     },
   });
 
+  const dashboard = new Dashboard();
+
   assistInit({ connect, compile, run });
 
   //
@@ -199,8 +203,8 @@ async function main() {
   const fromHash = () => PAGES.find((p) => location.hash === '#' + p || location.hash.startsWith('#' + p + '/'));
   const first = fromHash() || (PAGES.includes((boot.config.ui || {}).lastPage) ? boot.config.ui.lastPage : 'connect');
   if (fromHash() !== first) history.replaceState(null, '', '#' + first);
-  pageShow(first, compile, run);
-  window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run));
+  pageShow(first, compile, run, dashboard);
+  window.addEventListener('hashchange', () => pageShow(fromHash() || 'connect', compile, run, dashboard));
 
   if (boot.last) {
     $('broker-url').value = boot.last.url;

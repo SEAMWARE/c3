@@ -159,6 +159,19 @@ export const runOpcuaFiles      = () => call('GET', '/api/run/opcua/files');    
 export const runOpcuaFilesWrite = (mapping) => call('POST', '/api/run/opcua/files', mapping); // the OPC UA configuration from a mapping
 
 //
+// The Dashboard: WireCloud in containers of c3's (run.c, "The Dashboard")
+//
+export const dashboard      = () => call('GET', '/api/run/dashboard');
+export const dashboardStart = () => call('POST', '/api/run/dashboard/start');
+export const dashboardStop  = () => call('POST', '/api/run/dashboard/stop');
+export const dashboardLogin = () => call('POST', '/api/run/dashboard/login');   // WireCloud's session cookies on the answer
+export async function dashboardLog() {                                           // the log's last 64 KiB, as text
+  const response = await fetch('/api/run/dashboard/log', { headers: { Range: 'bytes=-65536' } });
+  if (!response.ok && response.status !== 206) throw new Error('HTTP ' + response.status);
+  return response.text();
+}
+
+//
 // brokerWrite - a POST, PATCH, PUT or DELETE to the broker's entities, through the backend's proxy
 //
 // pathAndQuery starts with /ngsi-ld/v1/entities; 'body' (an object, or undefined) is sent as JSON - with

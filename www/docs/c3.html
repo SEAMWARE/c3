@@ -13,6 +13,7 @@ on this machine and does the work; the browser window is the interface.</p>
   <li><a href="#compile">Compile<span>a broker built by coraine-build: the features compiled in or out, the optimisation, the HTTP server - its output followed live, the builds kept</span></a></li>
   <li><a href="#run">Operate<span>brokers started and stopped, natively or in a container, with MongoDB, PostgreSQL/TimescaleDB and Mosquitto; their logs, configuration, metrics and log levels</span></a></li>
   <li><a href="#connect">Explore<span>a live connection to a broker: entities as boxes, Relationships as arrows, the entities on a map - online or offline - and their values as they change</span></a></li>
+  <li><a href="#dashboard">Dashboard<span>dashboards built by the user from what the brokers hold: WireCloud, in containers c³ starts, shown in the page and logged in by c³</span></a></li>
   <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component, with its guide and its repository</span></a></li>
 </ul>
 <p>The DDS and OPC UA mappings are in Operate's broker form. The <b>AI Assist</b> button in the header says what is planned; nothing
@@ -92,6 +93,8 @@ running one and exits; any other program on the port is an error.</p>
   <code>curl</code>, <code>wrk</code>, <code>python3</code></td></tr>
   <tr><td>Operate</td><td>an installed <code>coraine</code> or a build of Compile's for a native broker; Docker or Podman
   for a broker in a container and for the services</td></tr>
+  <tr><td>Dashboard</td><td>Docker or Podman, and WireCloud 2's image <code>wirecloud-fastapi:latest</code> built from
+  its source (see <a href="#dashboard-image">below</a>)</td></tr>
   <tr><td>Documentation</td><td>nothing - the pages are part of c³</td></tr>
 </table>
 <p>What is missing greys the part that needs it, with what to install.</p>
@@ -426,6 +429,57 @@ when the broker goes away, the page watches again until it is back.</p>
 </ul>
 
 <!-- ======================================================================= -->
+<h2 id="dashboard">Dashboard - WireCloud</h2>
+<p>Dashboards the user builds from what the brokers hold, with <a href="https://github.com/Ficodes/WireCloud"
+target="_blank" rel="noopener">WireCloud</a> (Ficodes, AGPL-3.0). c³ starts WireCloud in containers of its own and
+shows it in the page; WireCloud is a program of its own there - nothing of it is part of c³.</p>
+<table class="gtable">
+  <tr><th>Container</th><th>Image</th><th>Port (127.0.0.1)</th><th>Volume</th></tr>
+  <tr><td><code>c3-dashboard-mongo</code></td><td><code>mongo:8.2</code></td><td>37017, else the next free one</td><td><code>c3-dashboard-mongo</code></td></tr>
+  <tr><td><code>c3-dashboard-elasticsearch</code></td><td><code>docker.elastic.co/elasticsearch/elasticsearch:8.13.4</code></td><td>19200, else the next free one</td><td><code>c3-dashboard-elasticsearch</code></td></tr>
+  <tr><td><code>c3-dashboard-wirecloud</code></td><td><code>wirecloud-fastapi:latest</code></td><td>18000, else the next free one</td><td><code>c3-dashboard-wirecloud</code></td></tr>
+</table>
+<p><b>Start</b> starts the three in that order, each ready before the next (MongoDB answers a ping, Elasticsearch's
+cluster health is yellow or green, WireCloud's login page answers 200); <b>Stop</b> stops them in the other order and
+removes the containers - the volumes are kept. They are on the network <code>c3</code> and labelled <code>c3=run</code>,
+as Operate's services, and Operate lists them too, where their logs are and where a stopped one's data is deleted.</p>
+<p><b>The first start</b> - when c³ cannot log in to WireCloud as <code>admin</code> - also runs, in WireCloud's
+container:</p>
+<table class="gtable">
+  <tr><th>Command</th><th>Does</th></tr>
+  <tr><td><code>python -m manage populate</code></td><td>installs WireCloud's own widgets and operators</td></tr>
+  <tr><td><code>python -m manage createsuperuser --username admin</code></td><td>makes the user <code>admin</code>; its
+  password is made by c³ (24 random bytes, hex) and passed in the environment of the <code>exec</code>, not on a
+  command line</td></tr>
+</table>
+<p>Every start runs <code>python -m manage rebuildsearchindexes</code> when Elasticsearch has no
+<code>workspaces</code> index - populate does not make the search indexes, and without them WireCloud's search answers
+500.</p>
+<p><b>Logged in by c³</b> - once WireCloud runs, the page asks c³ to log in (<code>POST
+/api/run/dashboard/login</code>): c³ logs in to WireCloud as <code>admin</code> and sets WireCloud's session cookies
+(<code>token</code>, <code>csrf_token</code>, <code>token_expiration</code>) on its own answer. A browser keeps a cookie
+per host, not per port, so the cookies reach WireCloud on its port of the same host, and the page shows WireCloud in a
+frame, logged in. The frame is on the host the page was loaded from: <code>localhost</code> and <code>127.0.0.1</code>
+are two sites, and a cookie of one does not go to the other. <b>Open in a tab</b> opens WireCloud on its own,
+<b>Reload</b> logs in again.</p>
+<p><b>Its secrets</b> - the password of <code>admin</code> and WireCloud's <code>WIRECLOUD_JWT_KEY</code> and
+<code>WIRECLOUD_SECRET_KEY</code> - are made by c³ at the first start and kept in <code>secrets.json</code>
+(<code>dashboard</code>). The keys go to WireCloud's container through an env file (mode 600) removed once the container
+is made. None of them is sent to the page.</p>
+<h3 id="dashboard-image">WireCloud's image</h3>
+<p>WireCloud 2 has no published image yet (<a href="https://github.com/Ficodes/WireCloud/issues/7" target="_blank"
+rel="noopener">Ficodes/WireCloud#7</a>); c³ uses <code>wirecloud-fastapi:latest</code>, the name WireCloud's
+<code>docker/docker-compose.yml</code> builds:</p>
+<pre>git clone https://github.com/Ficodes/WireCloud
+cd WireCloud
+docker compose -f docker/docker-compose.yml build wirecloud</pre>
+<p>At v2.0.0 the build needs the Elasticsearch client pinned to the server's major version
+(<code>elasticsearch&gt;=8,&lt;9</code> in <code>requirements.txt</code> and <code>pyproject.toml</code>,
+<a href="https://github.com/Ficodes/WireCloud/issues/5" target="_blank" rel="noopener">#5</a>) and
+<code>createsuperuser</code> fixed (<a href="https://github.com/Ficodes/WireCloud/issues/6" target="_blank"
+rel="noopener">#6</a>). Without the image, Start says so and starts nothing.</p>
+
+<!-- ======================================================================= -->
 <h2 id="documentation">The Documentation page</h2>
 <p>These guides: the list (<code>#docs</code>), a guide (<code>#docs/&lt;guide&gt;</code>) and a section of it
 (<code>#docs/&lt;guide&gt;/&lt;section&gt;</code>), with <b>On this page</b>, the previous and next guide, and search
@@ -436,7 +490,8 @@ its repository on GitHub. With the <code>gh</code> command logged in, the privat
 user can read are added (<code>gh repo list</code>, asked as the user).</p>
 <p>The same pages are the website <a href="https://seamware.github.io/docs/" target="_blank"
 rel="noopener">seamware.github.io/docs</a> (<code>make site</code>, in <code>build/site</code>); there a link to a
-page of c³ itself - <a href="#compile">Compile</a>, <a href="#run">Operate</a>, <a href="#connect">Explore</a> - is
+page of c³ itself - <a href="#compile">Compile</a>, <a href="#run">Operate</a>, <a href="#connect">Explore</a>,
+<a href="#dashboard">Dashboard</a> - is
 the page's name, marked as being in c³.</p>
 
 <!-- ======================================================================= -->
@@ -457,7 +512,8 @@ the page's name, marked as being in c³.</p>
 <p>It is written whole to <code>c3.json.tmp</code> and renamed over <code>c3.json</code> (mode 600, the directory
 700). Members this version does not know are kept; a file that is not a JSON object is moved to
 <code>c3.json.broken</code>; a file of a newer <code>version</code> is read and never written. No access token is in
-it, nor a broker's own headers: remembered, they are in <code>secrets.json</code> beside it (mode 600 - a file others can read is not used).</p>
+it, nor a broker's own headers: remembered, they are in <code>secrets.json</code> beside it (mode 600 - a file others can read is not used),
+with the Dashboard's secrets.</p>
 <p><b>The data directory</b>, <code>$XDG_DATA_HOME/c3/</code> (else <code>~/.local/share/c3/</code>) - here the
 directories are the truth, not the configuration:</p>
 <pre>builds/&lt;name&gt;/           coraine-build's directory: the source, the build tree, install/ (the result)
@@ -468,6 +524,7 @@ run/&lt;name&gt;/state.json   a native broker that runs: its pid and the process
 run/&lt;name&gt;/data/        --dbDir of a native corDB
 run/&lt;name&gt;/bridges.json the bridge configuration c3 writes
 run/services/&lt;container&gt;.log
+run/services/c3-dashboard.log  the Dashboard's starts and stops: c3's lines, the commands, their output
 maps/&lt;id&gt;.pmtiles       a downloaded map area
 maps/fonts/             the label fonts</pre>
 <p>Chrome's profile for c³'s window is in <code>$XDG_STATE_HOME/c3/chrome</code>.</p>

@@ -16,7 +16,7 @@ import { t } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
-const C3_PAGES = ['compile', 'run', 'connect'];
+const C3_PAGES = ['compile', 'run', 'connect', 'dashboard'];
 
 let site = false;
 let contents = null;                          // guides.json, once read

@@ -8,6 +8,7 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 | **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
 | **Operate** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto; the brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
 | **Explore** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
+| **Dashboard** | Dashboards built by the user from what the brokers hold: [WireCloud](https://github.com/Ficodes/WireCloud) (Ficodes, AGPL-3.0) in containers c³ starts - MongoDB, Elasticsearch, WireCloud - shown in the page, logged in by c³. |
 | **Documentation** | All of coraine's documentation in one place, written to be read: the guides - installation, administration, the API, building, deploying, performance, the transports, the bridges, authorization, the internals - a guide and an API reference per cor-lib, with search, a guide's sections and the next one, offline; every component's repository. The same pages are the website [seamware.github.io/docs](https://seamware.github.io/docs/) (`make site`). Planned: a skeleton repository for each kind of plugin. |
 
 Built today: the `c3` command, its backend and its configuration file; **Compile** - a broker built by
@@ -16,7 +17,8 @@ live, the builds kept; **Operate** - brokers started and stopped natively or in 
 with MongoDB, PostgreSQL/TimescaleDB and Mosquitto as containers, their logs, configuration, metrics and
 log levels; **Explore** - discovery, the types picked, tenants, an entity's menu (linked entities,
 neighbourhood), editing, the entities **on a map** (online, or offline from downloaded areas) and **live
-values** over the broker's WebSocket transport or HTTP notifications. [doc/design.md](doc/design.md) is
+values** over the broker's WebSocket transport or HTTP notifications; **Dashboard** - WireCloud started,
+made ready (its widgets, its user `admin`, its search indexes) and shown, logged in. [doc/design.md](doc/design.md) is
 the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
 
 **Demos** - [seamware-cor.github.io/c3-demos](https://seamware-cor.github.io/c3-demos/): AI Assist on video, and the
@@ -30,7 +32,8 @@ and zlib (`zlib1g-dev`, for the map files); a browser. To connect to a broker: a
 ([installation](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md) - `apt install
 coraine` from https://seamware.github.io/apt, or Docker). For **Compile**: the `coraine-dev` package (its
 `coraine-build` and source tarball) - or, without it, the git clones c³ itself is built against: coraine
-beside the cor-libs. For **Operate** in containers: Docker or Podman.
+beside the cor-libs. For **Operate** in containers: Docker or Podman. For **Dashboard**: Docker or Podman,
+and WireCloud 2's image built from its source ([Dashboard](#dashboard), below).
 
 The backend builds against the cor-libs as coraine does - sibling checkouts, each built with `make` in it
 (`COR_LIBS=<dir>` for checkouts elsewhere):
@@ -997,6 +1000,30 @@ services/<container>.log
 **Forget** (press, then keep or delete the data) removes a broker that does not run from `c3.json`; with its
 data, also its directory and its volume.
 
+## Dashboard
+
+WireCloud (Ficodes, AGPL-3.0) in three containers c³ starts and stops - `c3-dashboard-mongo` (`mongo:8.2`),
+`c3-dashboard-elasticsearch` (`docker.elastic.co/elasticsearch/elasticsearch:8.13.4`) and
+`c3-dashboard-wirecloud` (`wirecloud-fastapi:latest`), on 127.0.0.1 ports from 37017, 19200 and 18000, their
+data in volumes of the same names, kept when they stop. WireCloud is a program of its own there; nothing of
+it is part of c³.
+
+- **The first start** (c³ cannot log in as `admin`): `python -m manage populate` and `createsuperuser
+  --username admin`, in WireCloud's container. The password, WireCloud's JWT key and its secret key are made
+  by c³ and kept in `secrets.json` (`dashboard`); the password goes in through the `exec`'s environment, the
+  keys through an env file (mode 600) removed once the container is made.
+- **Every start**: `python -m manage rebuildsearchindexes` when Elasticsearch has no `workspaces` index -
+  populate does not make them, and WireCloud's search answers 500 without them.
+- **Logged in**: c³ logs in to WireCloud and sets its session cookies on its own answer
+  (`POST /api/run/dashboard/login`). A browser keeps a cookie per host, not per port, so they reach WireCloud
+  on its port of the same host: the page shows WireCloud in a frame, on the host the page was loaded from
+  (`localhost` and `127.0.0.1` are two sites).
+- **The image**: WireCloud 2 has no published one yet ([Ficodes/WireCloud#7](https://github.com/Ficodes/WireCloud/issues/7)).
+  Build it from its source: `docker compose -f docker/docker-compose.yml build wirecloud` in a clone of
+  Ficodes/WireCloud - at v2.0.0 with the Elasticsearch client pinned to `>=8,<9`
+  ([#5](https://github.com/Ficodes/WireCloud/issues/5)) and `createsuperuser` fixed
+  ([#6](https://github.com/Ficodes/WireCloud/issues/6)).
+
 ## How it is built
 
 **Backend - C, on coraine's own libraries.** One binary, `c3`, from the files in [src/](src/) - `maps.c`
@@ -1050,6 +1077,10 @@ The backend's API, used by the pages:
 | `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
+| `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s |
+| `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
+| `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s; `409` when it does not run, `502` with why |
+| `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
