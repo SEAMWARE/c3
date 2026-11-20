@@ -466,6 +466,29 @@ are two sites, and a cookie of one does not go to the other. <b>Open in a tab</b
 <code>WIRECLOUD_SECRET_KEY</code> - are made by c³ at the first start and kept in <code>secrets.json</code>
 (<code>dashboard</code>). The keys go to WireCloud's container through an env file (mode 600) removed once the container
 is made. None of them is sent to the page.</p>
+<h3 id="dashboard-widgets">c³'s widgets</h3>
+<p>c³ comes with WireCloud widgets of its own (<code>www/widgets/</code>, vendor <code>Seamware</code>). Every start
+installs each one WireCloud does not have at its version: c³ zips the widget's directory into a <code>.wgt</code> and
+uploads it as <code>admin</code>. In WireCloud, add them to a workspace from <b>Add widget</b> and connect them in
+<b>Wiring</b>.</p>
+<table class="gtable">
+  <tr><th>Widget</th><th>Wiring</th><th>Does</th></tr>
+  <tr><td>NGSI-LD source</td><td>out <code>entities</code></td><td>the entities of a type at a broker c³ knows - its
+  form: the broker, the tenant, a type of the broker's, <code>q</code>, <code>attrs</code>, every how many seconds;
+  read again every so many seconds</td></tr>
+  <tr><td>NGSI-LD table</td><td>in <code>entities</code>, out <code>selected</code></td><td>entities as rows,
+  attributes as columns, sorted by a header clicked; a row clicked is sent on <code>selected</code>, again with every
+  new read</td></tr>
+  <tr><td>NGSI-LD value</td><td>in <code>entities</code></td><td>one attribute of one entity, large, with its unit
+  and <code>observedAt</code></td></tr>
+</table>
+<p>Source &rarr; table &rarr; value: the table lists the entities, the value shows the one clicked, and follows its
+value as the source reads again.</p>
+<p><b>Through c³</b> - the widgets read the brokers through c³'s proxy, as Explore does: c³ adds each broker's token,
+headers and tenant. c³ answers CORS for WireCloud's origin only (<code>http://localhost:&lt;port&gt;</code> or
+<code>http://127.0.0.1:&lt;port&gt;</code> while WireCloud runs), on the NGSI-LD API through the proxy and the list of
+brokers, and for <b>GET only</b>: a preflight for any other method is answered 403, so a widget cannot write. The
+widgets find c³'s port in the cookie <code>c3_port</code>, set with WireCloud's when c³ logs in.</p>
 <h3 id="dashboard-image">WireCloud's image</h3>
 <p>WireCloud 2 has no published image yet (<a href="https://github.com/Ficodes/WireCloud/issues/7" target="_blank"
 rel="noopener">Ficodes/WireCloud#7</a>); c³ uses <code>wirecloud-fastapi:latest</code>, the name WireCloud's

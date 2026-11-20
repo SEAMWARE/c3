@@ -472,6 +472,44 @@ void serveRequest(CorHttpConn* connP)
     return;
   }
 
+  //
+  // The Dashboard's widgets (WireCloud's origin, run.c): they read the brokers through c3 - the brokers' list
+  // and GETs of the NGSI-LD API through the proxy, nothing else. Their requests carry X-C3-Broker, so the
+  // browser asks first (a preflight): c3 answers it for WireCloud's origin only, and for GET only - a widget
+  // cannot write through c3 (the proxy's write check takes any Origin of this machine; the preflight is what
+  // keeps a write out). Every other origin still gets no preflight answer at all.
+  //
+  const char* origin = corHttpHeader(connP, "Origin");
+  if ((origin != NULL) && runDashboardOrigin(origin))
+  {
+    bool widgetPath = (strncmp(path, "/api/proxy/ngsi-ld/v1/", 22) == 0) || (strcmp(path, "/api/run/dashboard/brokers") == 0);
+
+    if (widgetPath && (strcmp(method, "OPTIONS") == 0))
+    {
+      const char* want = corHttpHeader(connP, "Access-Control-Request-Method");
+      if ((want == NULL) || (strcmp(want, "GET") != 0))
+      {
+        serveError(connP, 403, "Forbidden", "WireCloud's widgets read through c3 - GET only");
+        return;
+      }
+      corHttpResponseStatus(connP, 204);
+      corHttpResponseHeader(connP, "Access-Control-Allow-Origin", corAllocStrdup(&connP->alloc, origin));
+      corHttpResponseHeader(connP, "Access-Control-Allow-Methods", "GET");
+      corHttpResponseHeader(connP, "Access-Control-Allow-Headers", "X-C3-Broker, NGSILD-Tenant, Accept, Link");
+      corHttpResponseHeader(connP, "Access-Control-Max-Age", "600");
+      corHttpResponseHeader(connP, "Vary", "Origin");
+      corHttpResponseBody(connP, (char*) "", 0);
+      return;
+    }
+
+    if (widgetPath && (strcmp(method, "GET") == 0))
+    {
+      corHttpResponseHeader(connP, "Access-Control-Allow-Origin", corAllocStrdup(&connP->alloc, origin));
+      corHttpResponseHeader(connP, "Access-Control-Expose-Headers", "NGSILD-Results-Count, Link");
+      corHttpResponseHeader(connP, "Vary", "Origin");
+    }
+  }
+
   if (strncmp(path, "/api/", 5) != 0)
   {
     if ((strcmp(method, "GET") != 0) && (strcmp(method, "HEAD") != 0))

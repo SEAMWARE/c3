@@ -71,6 +71,7 @@
 #include <sys/wait.h>                            // waitpid
 #include <time.h>                                // time
 #include <unistd.h>                              // close, write, usleep
+#include <zlib.h>                                // crc32 - the widgets' .wgt
 
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corAlloc/corAllocBufferInit.h"         // corAllocBufferInit
@@ -2288,16 +2289,31 @@ static bool networkEnsure(char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
-// localHttp - one HTTP/1.0 request to 127.0.0.1:<port> (the Dashboard's WireCloud and Elasticsearch): the
-// status, the response's head into headP (when given) - -1: no answer. A body is sent as JSON.
+// LocalReq - one HTTP/1.0 request to 127.0.0.1:<port> (the Dashboard's WireCloud and Elasticsearch)
 //
-static int localHttp(int port, const char* method, const char* path, const char* body, Str* headP, int timeoutS)
+typedef struct LocalReq
+{
+  const char*  method;
+  const char*  path;
+  const char*  auth;                             // Authorization's value, or NULL
+  const char*  contentType;                      // the body's (NULL: application/json)
+  const char*  body;                             // or NULL
+  int          bodyLen;                          // -1: strlen(body)
+  Str*         headP;                            // the response's head, when given
+  Str*         respP;                            // the response's body, when given
+  int          timeoutS;
+} LocalReq;
+
+//
+// localRequest - the status; -1: no answer
+//
+static int localRequest(int port, const LocalReq* rP)
 {
   int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (fd == -1)
     return -1;
 
-  struct timeval tv = { timeoutS, 0 };
+  struct timeval tv = { rP->timeoutS, 0 };
   setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
@@ -2313,13 +2329,18 @@ static int localHttp(int port, const char* method, const char* path, const char*
     return -1;
   }
 
-  Str req = { NULL, 0, 0 };
-  strAddf(&req, "%s %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\nAccept: */*\r\nUser-Agent: c3/" C3_VERSION "\r\n", method, path, port);   // WireCloud answers 500 without a User-Agent (Ficodes/WireCloud#8)
-  if (body != NULL)
-    strAddf(&req, "Content-Type: application/json\r\nContent-Length: %d\r\n", (int) strlen(body));
+  int bodyLen = (rP->body == NULL) ? 0 : (rP->bodyLen >= 0) ? rP->bodyLen : (int) strlen(rP->body);
+  Str req     = { NULL, 0, 0 };
+
+  // WireCloud answers 500 without a User-Agent (Ficodes/WireCloud#8)
+  strAddf(&req, "%s %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\nAccept: application/json, */*\r\nUser-Agent: c3/" C3_VERSION "\r\n", rP->method, rP->path, port);
+  if (rP->auth != NULL)
+    strAddf(&req, "Authorization: %s\r\n", rP->auth);
+  if (rP->body != NULL)
+    strAddf(&req, "Content-Type: %s\r\nContent-Length: %d\r\n", (rP->contentType != NULL) ? rP->contentType : "application/json", bodyLen);
   strAdd(&req, "\r\n");
-  if (body != NULL)
-    strAdd(&req, body);
+  if (rP->body != NULL)
+    strAddN(&req, rP->body, bodyLen);
 
   bool sent = true;
   for (int off = 0; off < req.len; )
@@ -2332,35 +2353,48 @@ static int localHttp(int port, const char* method, const char* path, const char*
     }
     off += w;
   }
+  if (req.s != NULL)
+    memset(req.s, 0, req.len);                   // a password may be in it
   strFree(&req);
 
-  char head[16 * 1024];
-  int  len = 0;
-
-  while (sent && (len < (int) sizeof(head) - 1))
+  //
+  // The answer: HTTP/1.0 - the server closes when it is whole (up to 4 MiB kept)
+  //
+  Str all = { NULL, 0, 0 };
+  char buf[16 * 1024];
+  while (sent)
   {
-    int r = read(fd, head + len, sizeof(head) - 1 - len);
+    int r = read(fd, buf, sizeof(buf));
     if (r <= 0)
       break;
-    len += r;
-    head[len] = 0;
-    if (strstr(head, "\r\n\r\n") != NULL)
-      break;
+    if (all.len < 4 * 1024 * 1024)
+      strAddN(&all, buf, r);
+    if ((rP->respP == NULL) && (all.s != NULL) && (strstr(all.s, "\r\n\r\n") != NULL))
+      break;                                     // the head is all that is wanted
   }
   close(fd);
-  head[len] = 0;
 
   int status = -1;
-  if ((len > 12) && (strncmp(head, "HTTP/1.", 7) == 0))
-    status = atoi(&head[9]);
+  if ((all.len > 12) && (strncmp(all.s, "HTTP/1.", 7) == 0))
+    status = atoi(&all.s[9]);
 
-  if (headP != NULL)
-  {
-    char* end = strstr(head, "\r\n\r\n");
-    strAddN(headP, head, (end != NULL) ? (int) (end - head) : len);
-  }
+  char* end = (all.s != NULL) ? strstr(all.s, "\r\n\r\n") : NULL;
+  if (rP->headP != NULL)
+    strAddN(rP->headP, (all.s != NULL) ? all.s : "", (end != NULL) ? (int) (end - all.s) : all.len);
+  if ((rP->respP != NULL) && (end != NULL))
+    strAddN(rP->respP, end + 4, all.len - (int) (end + 4 - all.s));
 
+  strFree(&all);
   return status;
+}
+
+//
+// localHttp - the common case: a JSON body or none, the head wanted or not
+//
+static int localHttp(int port, const char* method, const char* path, const char* body, Str* headP, int timeoutS)
+{
+  LocalReq r = { method, path, NULL, NULL, body, -1, headP, NULL, timeoutS };
+  return localRequest(port, &r);
 }
 
 
@@ -6310,6 +6344,360 @@ static int dashExec(const char* password, int timeoutS, const char* const* args)
 }
 
 //
+// The widgets c3 installs in WireCloud - www/widgets/<name>/, each a widget's files (config.xml first), and
+// www/widgets/common/, added to every widget as js/common/. A .wgt is a zip; its entries are STORED (no
+// compression: a widget is a few KiB), each with its CRC-32 (zlib).
+//
+typedef struct ZipEntry
+{
+  char      name[512];
+  uint32_t  crc;
+  uint32_t  size;
+  uint32_t  offset;
+} ZipEntry;
+
+#define ZIP_ENTRIES_MAX  256
+
+static void zipLe16(Str* sP, unsigned v) { char b[2] = { (char) (v & 0xff), (char) ((v >> 8) & 0xff) }; strAddN(sP, b, 2); }
+static void zipLe32(Str* sP, uint32_t v) { char b[4] = { (char) (v & 0xff), (char) ((v >> 8) & 0xff), (char) ((v >> 16) & 0xff), (char) ((v >> 24) & 0xff) }; strAddN(sP, b, 4); }
+
+static bool zipAdd(Str* zP, ZipEntry* entries, int* nP, const char* name, const char* data, int len)
+{
+  if ((*nP >= ZIP_ENTRIES_MAX) || (strlen(name) >= sizeof(entries[0].name)))
+    return false;
+
+  ZipEntry* eP = &entries[(*nP)++];
+  snprintf(eP->name, sizeof(eP->name), "%s", name);
+  eP->crc    = crc32(crc32(0L, Z_NULL, 0), (const Bytef*) data, len);
+  eP->size   = len;
+  eP->offset = zP->len;
+
+  zipLe32(zP, 0x04034b50);                       // local file header
+  zipLe16(zP, 20);                               // version needed: 2.0
+  zipLe16(zP, 0x0800);                           // flags: the name is UTF-8
+  zipLe16(zP, 0);                                // STORED
+  zipLe16(zP, 0);  zipLe16(zP, 0x21);            // time, date: 1980-01-01
+  zipLe32(zP, eP->crc);
+  zipLe32(zP, eP->size);
+  zipLe32(zP, eP->size);
+  zipLe16(zP, strlen(name));
+  zipLe16(zP, 0);
+  strAdd(zP, name);
+  strAddN(zP, data, len);
+  return true;
+}
+
+static void zipEnd(Str* zP, const ZipEntry* entries, int n)
+{
+  uint32_t cdStart = zP->len;
+
+  for (int ix = 0; ix < n; ix++)
+  {
+    zipLe32(zP, 0x02014b50);                     // central directory header
+    zipLe16(zP, 20);  zipLe16(zP, 20);
+    zipLe16(zP, 0x0800);
+    zipLe16(zP, 0);
+    zipLe16(zP, 0);  zipLe16(zP, 0x21);
+    zipLe32(zP, entries[ix].crc);
+    zipLe32(zP, entries[ix].size);
+    zipLe32(zP, entries[ix].size);
+    zipLe16(zP, strlen(entries[ix].name));
+    zipLe16(zP, 0);  zipLe16(zP, 0);             // extra, comment
+    zipLe16(zP, 0);  zipLe16(zP, 0);             // disk, internal attributes
+    zipLe32(zP, 0);                              // external attributes
+    zipLe32(zP, entries[ix].offset);
+    strAdd(zP, entries[ix].name);
+  }
+
+  uint32_t cdSize = zP->len - cdStart;
+  zipLe32(zP, 0x06054b50);                       // end of central directory
+  zipLe16(zP, 0);  zipLe16(zP, 0);
+  zipLe16(zP, n);  zipLe16(zP, n);
+  zipLe32(zP, cdSize);
+  zipLe32(zP, cdStart);
+  zipLe16(zP, 0);
+}
+
+//
+// zipDir - every regular file under dir (recursively), as <prefix><its path under dir>
+//
+static bool zipDir(Str* zP, ZipEntry* entries, int* nP, const char* dir, const char* prefix, char* err, int errLen)
+{
+  DIR* dP = opendir(dir);
+  if (dP == NULL)
+  {
+    snprintf(err, errLen, "%s: %s", dir, strerror(errno));
+    return false;
+  }
+
+  struct dirent* deP;
+  bool           ok = true;
+  while (ok && ((deP = readdir(dP)) != NULL))
+  {
+    if (deP->d_name[0] == '.')
+      continue;
+
+    char path[4096];
+    char name[1024];
+    snprintf(path, sizeof(path), "%s/%s", dir, deP->d_name);
+    snprintf(name, sizeof(name), "%s%s", prefix, deP->d_name);
+
+    struct stat st;
+    if (lstat(path, &st) != 0)
+      continue;
+
+    if (S_ISDIR(st.st_mode))
+    {
+      char sub[1100];
+      snprintf(sub, sizeof(sub), "%s/", name);
+      ok = zipDir(zP, entries, nP, path, sub, err, errLen);
+    }
+    else if (S_ISREG(st.st_mode))
+    {
+      int fd = open(path, O_RDONLY | O_CLOEXEC);
+      if (fd == -1)
+        continue;
+      char* data = malloc(st.st_size + 1);
+      int   got  = (data != NULL) ? (int) read(fd, data, st.st_size) : -1;
+      close(fd);
+      if ((got != st.st_size) || (zipAdd(zP, entries, nP, name, data, got) == false))
+      {
+        snprintf(err, errLen, "%s: not packed (unread, or too many files)", path);
+        ok = false;
+      }
+      free(data);
+    }
+  }
+  closedir(dP);
+  return ok;
+}
+
+//
+// widgetIdent - vendor, name and version of a widget's config.xml (its <widget ...> element)
+//
+static bool widgetIdent(const char* xml, char* vendor, char* name, char* version, int len)
+{
+  const char* w = strstr(xml, "<widget");
+  if (w == NULL)
+    return false;
+  const char* end = strchr(w, '>');
+
+  struct { const char* attr; char* out; } a[] = { { " vendor=\"", vendor }, { " name=\"", name }, { " version=\"", version } };
+  for (int ix = 0; ix < 3; ix++)
+  {
+    const char* v = strstr(w, a[ix].attr);
+    if ((v == NULL) || ((end != NULL) && (v > end)))
+      return false;
+    v += strlen(a[ix].attr);
+    const char* q = strchr(v, '"');
+    if ((q == NULL) || (q - v >= len) || (q == v))
+      return false;
+    snprintf(a[ix].out, len, "%.*s", (int) (q - v), v);
+    for (const char* c = a[ix].out; *c != 0; ++c)        // they go into a URL path
+    {
+      if (!(((*c >= 'a') && (*c <= 'z')) || ((*c >= 'A') && (*c <= 'Z')) || ((*c >= '0') && (*c <= '9')) || (*c == '-') || (*c == '_') || (*c == '.')))
+        return false;
+    }
+  }
+  return true;
+}
+
+//
+// dashWidgets - c3's widgets installed in WireCloud for admin: each one whose vendor/name/version WireCloud
+// does not have yet (a changed widget: a new version in its config.xml). Logged in through WireCloud's API
+// (a bearer token: no CSRF token needed). false: why, in err.
+//
+static bool dashWidgets(int port, char* err, int errLen)
+{
+  char dir[4200];
+  snprintf(dir, sizeof(dir), "%s/widgets", c3WwwDir);
+
+  DIR* dP = opendir(dir);
+  if (dP == NULL)
+    return true;                                 // no widgets with this c3
+
+  //
+  // The API's login: a bearer token
+  //
+  char password[65];
+  if (credsDashboard(password, sizeof(password), NULL, 0, NULL, 0, err, errLen) == false)
+  {
+    closedir(dP);
+    return false;
+  }
+  Str body = { NULL, 0, 0 };
+  strAdd(&body, "{\"username\": \"" DASHBOARD_USER "\", \"password\": ");
+  strAddJson(&body, password);
+  strAdd(&body, "}");
+  memset(password, 0, sizeof(password));
+
+  Str      resp = { NULL, 0, 0 };
+  LocalReq lr   = { "POST", "/api/auth/login", NULL, NULL, body.s, -1, NULL, &resp, 30 };
+  int      st   = localRequest(port, &lr);
+  memset(body.s, 0, body.len);
+  strFree(&body);
+
+  char bearer[2048] = "";
+  const char* at = (resp.s != NULL) ? strstr(resp.s, "\"access_token\"") : NULL;
+  if (at != NULL)
+  {
+    const char* v = strchr(at + 14, '"');
+    const char* e = (v != NULL) ? strchr(v + 1, '"') : NULL;
+    if ((e != NULL) && (e - v - 1 < (int) sizeof(bearer) - 8))
+      snprintf(bearer, sizeof(bearer), "Bearer %.*s", (int) (e - v - 1), v + 1);
+  }
+  strFree(&resp);
+  if ((st != 200) || (bearer[0] == 0))
+  {
+    closedir(dP);
+    snprintf(err, errLen, "WireCloud's API login answered %d", st);
+    return false;
+  }
+
+  char common[4300];
+  snprintf(common, sizeof(common), "%s/common", dir);
+
+  bool           ok = true;
+  struct dirent* deP;
+  while (ok && ((deP = readdir(dP)) != NULL))
+  {
+    if ((deP->d_name[0] == '.') || (strcmp(deP->d_name, "common") == 0))
+      continue;
+
+    char wdir[4500];
+    char cfg[4600];
+    snprintf(wdir, sizeof(wdir), "%s/%s", dir, deP->d_name);
+    snprintf(cfg, sizeof(cfg), "%s/config.xml", wdir);
+
+    char* xml = fileText(cfg);
+    if (xml == NULL)
+      continue;                                  // not a widget
+
+    char vendor[64], name[64], version[64];
+    bool identified = widgetIdent(xml, vendor, name, version, sizeof(vendor));
+    free(xml);
+    if (identified == false)
+    {
+      logLine(dash.logPath, "widget %s: its config.xml names no vendor, name and version - left out", deP->d_name);
+      continue;
+    }
+
+    char path[300];
+    snprintf(path, sizeof(path), "/api/resource/%s/%s/%s", vendor, name, version);
+    LocalReq has = { "GET", path, bearer, NULL, NULL, 0, NULL, NULL, 15 };
+    if (localRequest(port, &has) == 200)
+      continue;                                  // installed already
+
+    //
+    // The .wgt: the widget's files, then common/ as js/common/
+    //
+    Str       zip = { NULL, 0, 0 };
+    ZipEntry* entries = calloc(ZIP_ENTRIES_MAX, sizeof(ZipEntry));
+    int       n = 0;
+    char      zerr[512] = "";
+
+    bool packed = (entries != NULL) && zipDir(&zip, entries, &n, wdir, "", zerr, sizeof(zerr));
+    if (packed && (access(common, R_OK) == 0))
+      packed = zipDir(&zip, entries, &n, common, "js/common/", zerr, sizeof(zerr));
+    if (packed)
+      zipEnd(&zip, entries, n);
+    free(entries);
+
+    if (packed == false)
+    {
+      strFree(&zip);
+      snprintf(err, errLen, "widget %s: %s", deP->d_name, zerr);
+      ok = false;
+      break;
+    }
+
+    dashDoing("installing the widget %s/%s %s in WireCloud", vendor, name, version);
+    Str      head = { NULL, 0, 0 };
+    LocalReq up   = { "POST", "/api/resources/", bearer, "application/octet-stream", zip.s, zip.len, &head, NULL, 60 };
+    int      us   = localRequest(port, &up);
+    strFree(&zip);
+    if ((us != 201) && (us != 200))
+    {
+      snprintf(err, errLen, "WireCloud did not take the widget %s/%s %s: it answered %d", vendor, name, version, us);
+      ok = false;
+    }
+    strFree(&head);
+  }
+
+  closedir(dP);
+  memset(bearer, 0, sizeof(bearer));
+  return ok;
+}
+
+//
+// runDashboardOrigin - is this Origin WireCloud's, the Dashboard's, while it runs? Its widgets read the brokers
+// through c3 (serve.c answers their CORS preflights - GET only)
+//
+bool runDashboardOrigin(const char* origin)
+{
+  int port = dashPort();
+  if ((origin == NULL) || (port <= 0))
+    return false;
+
+  char a[64], b[64];
+  snprintf(a, sizeof(a), "http://localhost:%d", port);
+  snprintf(b, sizeof(b), "http://127.0.0.1:%d", port);
+  return (strcmp(origin, a) == 0) || (strcmp(origin, b) == 0);
+}
+
+//
+// dashboardBrokers - GET /api/run/dashboard/brokers: the brokers c3 knows (the configuration's), for the widgets'
+// broker picker - url, name, tenant and tenants only
+//
+static void dashboardBrokers(CorHttpConn* connP)
+{
+  CorAlloc alloc;
+  char     buf[16 * 1024];
+  CorJson  json;
+
+  corAllocBufferInit(&alloc, buf, sizeof(buf), 4 * 1024 * 1024, NULL, "dashboard brokers");
+  corJsonCreate(&json, &alloc);
+
+  CorNode* rootP    = corJsonParse(&json, corAllocStrdup(&alloc, configText()));
+  CorNode* brokersP = ((rootP != NULL) && (rootP->type == CorObject)) ? corTreeLookup(rootP, "brokers") : NULL;
+  Str      s        = { NULL, 0, 0 };
+  bool     first    = true;
+
+  strAdd(&s, "[");
+  for (CorNode* bP = ((brokersP != NULL) && (brokersP->type == CorArray)) ? brokersP->value.head : NULL; bP != NULL; bP = bP->next)
+  {
+    CorNode* urlP     = (bP->type == CorObject) ? corTreeLookup(bP, "url")     : NULL;
+    CorNode* nameP    = (bP->type == CorObject) ? corTreeLookup(bP, "name")    : NULL;
+    CorNode* tenantP  = (bP->type == CorObject) ? corTreeLookup(bP, "tenant")  : NULL;
+    CorNode* tenantsP = (bP->type == CorObject) ? corTreeLookup(bP, "tenants") : NULL;
+
+    if ((urlP == NULL) || (urlP->type != CorString))
+      continue;
+
+    strAdd(&s, first ? "{\"url\": " : ", {\"url\": ");
+    strAddJson(&s, urlP->value.s);
+    strAdd(&s, ", \"name\": ");   strAddJson(&s, ((nameP != NULL) && (nameP->type == CorString)) ? nameP->value.s : urlP->value.s);
+    strAdd(&s, ", \"tenant\": "); strAddJson(&s, ((tenantP != NULL) && (tenantP->type == CorString)) ? tenantP->value.s : "");
+    strAdd(&s, ", \"tenants\": [");
+    bool tFirst = true;
+    for (CorNode* tP = ((tenantsP != NULL) && (tenantsP->type == CorArray)) ? tenantsP->value.head : NULL; tP != NULL; tP = tP->next)
+    {
+      if (tP->type != CorString)
+        continue;
+      strAdd(&s, tFirst ? "" : ", ");
+      strAddJson(&s, tP->value.s);
+      tFirst = false;
+    }
+    strAdd(&s, "]}");
+    first = false;
+  }
+  strAdd(&s, "]");
+
+  corAllocBufferReset(&alloc, false);
+  respondStr(connP, 200, &s);
+}
+
+//
 // dashboardThread - start: the three services, then WireCloud made ready for c3 (the first time: populate and
 // the user admin), and logged in once to see it is
 //
@@ -6404,6 +6792,9 @@ static void* dashboardThread(void* vP)
     }
   }
 
+  if (dashWidgets(port, err, sizeof(err)) == false)
+    goto fail;
+
   logLine(dash.logPath, "the Dashboard runs: WireCloud on 127.0.0.1:%d, logged in as " DASHBOARD_USER, port);
   pthread_mutex_lock(&rMutex);
   dash.busy     = false;
@@ -6477,6 +6868,14 @@ static void* dashboardLoginThread(void* vP)
     corHttpResponseHeader(jP->connP, "Set-Cookie", corAllocStrdup(&jP->connP->alloc, line));
   memset(cookies.s, 0, cookies.len);
   strFree(&cookies);
+
+  //
+  // c3's port for c3's widgets in WireCloud: a cookie of this host, so they read it on WireCloud's origin (not
+  // HttpOnly - their script reads it; nothing secret in it)
+  //
+  char portCookie[96];
+  snprintf(portCookie, sizeof(portCookie), "c3_port=%d; Path=/; SameSite=Lax", c3Port);
+  corHttpResponseHeader(jP->connP, "Set-Cookie", corAllocStrdup(&jP->connP->alloc, portCookie));
 
   Str s = { NULL, 0, 0 };
   strAddf(&s, "{\"port\": %d, \"user\": \"" DASHBOARD_USER "\"}", port);
@@ -6557,6 +6956,12 @@ static void dashboardRequest(CorHttpConn* connP, const char* action)
   if (post && (strcmp(action, "login") == 0))
   {
     jobStart(connP, dashboardLoginThread, NULL);
+    return;
+  }
+
+  if (get && (strcmp(action, "brokers") == 0))
+  {
+    dashboardBrokers(connP);
     return;
   }
 

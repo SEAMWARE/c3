@@ -839,6 +839,7 @@
   "inside the model of {name} already - the bridge would read it twice": "schon im Modell von {name} - die Bridge würde es zweimal lesen",
   "install docker or podman": "docker oder podman installieren",
   "installed coraine": "installiertes coraine",
+  "installing the widget {widget} {version} in WireCloud": "Widget {widget} {version} wird in WireCloud installiert",
   "installs.": "installiert.",
   "interfaces": "Schnittstellen",
   "interrupted": "unterbrochen",

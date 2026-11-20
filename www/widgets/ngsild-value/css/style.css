@@ -1,0 +1,11 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+html, body { height: 100%; }
+body { margin: 0; font: 13px/1.4 system-ui, sans-serif; color: #222; }
+#view { height: 100%; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 4px; }
+.label { color: #555; font-size: 14px; overflow-wrap: anywhere; }
+.value { font-size: 40px; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.value .unit { font-size: 18px; font-weight: 400; color: #666; margin-left: 4px; }
+.meta { color: #777; font-size: 12px; overflow-wrap: anywhere; }
+.pick { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 280px; }
+.pick select { padding: 4px 6px; font: inherit; }
+.wait { color: #777; }
