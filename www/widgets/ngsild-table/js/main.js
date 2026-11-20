@@ -5,7 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Its input "entities" (an NGSI-LD source); a header clicked sorts by that column; a row clicked is sent on
-// the output "selected" as {entities: [it]} - again with every new read, so a value tile wired to it follows it.
+// the output "selected" as {broker, tenant, type, entities: [it]} - again with every new read, so what is wired to
+// it follows it (a value tile its value, a chart its history - read at the same broker).
 //
 /* globals MashupPlatform, C3 */
 (function () {
@@ -18,6 +19,7 @@
   var sortBy = "id";
   var up = true;
   var selected = null;
+  var from = {};                                 // {broker, tenant, type} of the entities - sent on with the selection
 
   function pref(name) { return MashupPlatform.prefs.get(name); }
 
@@ -71,7 +73,7 @@
       });
       tr.addEventListener("click", function () {
         selected = e.id;
-        MashupPlatform.wiring.pushEvent("selected", { entities: [e] });
+        MashupPlatform.wiring.pushEvent("selected", C3.withEntities(from, [e]));
         render();
       });
       tbody.append(tr);
@@ -83,13 +85,14 @@
 
   MashupPlatform.wiring.registerCallback("entities", function (data) {
     entities = C3.entitiesIn(data);
+    from = C3.fromOf(data);
     render();
 
     //
     // The entity selected, as it is now: what is wired to the selection follows its values
     //
     var now = selected ? entities.filter(function (e) { return e.id === selected; })[0] : null;
-    if (now) MashupPlatform.wiring.pushEvent("selected", { entities: [now] });
+    if (now) MashupPlatform.wiring.pushEvent("selected", C3.withEntities(from, [now]));
   });
   MashupPlatform.prefs.registerCallback(render);
   render();

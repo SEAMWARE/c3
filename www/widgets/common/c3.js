@@ -26,7 +26,8 @@ var C3 = (function () {
       "{n} entities": "{n} entidades", "updated {time}": "actualizado {time}", "Not configured": "Sin configurar",
       "Waiting for entities - wire an NGSI-LD source to this widget": "Esperando entidades - conecta una fuente NGSI-LD a este widget",
       "Attribute": "Atributo", "Entity": "Entidad", "the first": "la primera", "No such attribute": "No existe ese atributo",
-      "all": "todos", "any type": "cualquier tipo", "no value": "sin valor"
+      "all": "todos", "any type": "cualquier tipo", "no value": "sin valor",
+      "Hours": "Horas", "last {h} h": "últimas {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "El broker no tiene historial - no lo guarda (TRoE), o no para este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}"
     },
     fr: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "par défaut", "Type": "Type", "Query (q)": "Requête (q)",
@@ -37,7 +38,8 @@ var C3 = (function () {
       "{n} entities": "{n} entités", "updated {time}": "mis à jour {time}", "Not configured": "Non configuré",
       "Waiting for entities - wire an NGSI-LD source to this widget": "En attente d'entités - reliez une source NGSI-LD à ce widget",
       "Attribute": "Attribut", "Entity": "Entité", "the first": "la première", "No such attribute": "Attribut introuvable",
-      "all": "tous", "any type": "tout type", "no value": "pas de valeur"
+      "all": "tous", "any type": "tout type", "no value": "pas de valeur",
+      "Hours": "Heures", "last {h} h": "dernières {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Pas d'historique dans le broker - il n'en garde pas (TRoE), ou pas pour cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}"
     },
     de: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "Standard", "Type": "Typ", "Query (q)": "Abfrage (q)",
@@ -48,7 +50,8 @@ var C3 = (function () {
       "{n} entities": "{n} Entitäten", "updated {time}": "aktualisiert {time}", "Not configured": "Nicht konfiguriert",
       "Waiting for entities - wire an NGSI-LD source to this widget": "Warte auf Entitäten - verbinden Sie eine NGSI-LD-Quelle mit diesem Widget",
       "Attribute": "Attribut", "Entity": "Entität", "the first": "die erste", "No such attribute": "Kein solches Attribut",
-      "all": "alle", "any type": "jeder Typ", "no value": "kein Wert"
+      "all": "alle", "any type": "jeder Typ", "no value": "kein Wert",
+      "Hours": "Stunden", "last {h} h": "letzte {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Keine Historie im Broker - er speichert keine (TRoE), oder nicht für dieses Attribut", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}"
     }
   };
 
@@ -149,6 +152,20 @@ var C3 = (function () {
     return (data && Array.isArray(data.entities)) ? data.entities : [];
   }
 
+  //
+  // fromOf - where an event's entities come from: {broker, tenant, type}, as a source sends them ({} if unknown)
+  // withEntities - an event of other entities from the same place
+  //
+  function fromOf(data) {
+    if (typeof data === "string") { try { data = JSON.parse(data); } catch (e) { return {}; } }
+    if (!data || Array.isArray(data) || typeof data !== "object") return {};
+    return { broker: data.broker, tenant: data.tenant, type: data.type };
+  }
+
+  function withEntities(from, entities) {
+    return { broker: from.broker, tenant: from.tenant, type: from.type, entities: entities };
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -156,5 +173,5 @@ var C3 = (function () {
     return e;
   }
 
-  return { t: t, base: base, brokers: brokers, get: get, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, el: el };
+  return { t: t, base: base, request: request, brokers: brokers, get: get, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, el: el };
 })();

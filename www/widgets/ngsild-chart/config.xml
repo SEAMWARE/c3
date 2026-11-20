@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-chart" version="0.1.0">
+  <details>
+    <title>NGSI-LD chart</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>A numeric attribute over time, a line per entity - its history from the broker's temporal API, then every new read</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="attribute" type="text" label="Attribute" description="The attribute drawn (picked in the widget)" default=""/>
+    <preference name="hours" type="number" label="Hours" description="How far back the chart goes" default="6"/>
+    <preference name="lines" type="number" label="Lines" description="The most entities drawn (the first ones received)" default="8"/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}, from an NGSI-LD source, a table or a map" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="20" width="8"/>
+</widget>

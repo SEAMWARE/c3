@@ -2403,6 +2403,20 @@ static void percentDecode(char* s)
 //
 // mapsRequest - every /api/maps request
 //
+// mapsDashboard - GET /api/run/dashboard/maps: the downloaded areas and whether the fonts are here, for the
+// Dashboard's map widget - nothing of the directory, the job or the planet
+//
+void mapsDashboard(CorHttpConn* connP)
+{
+  const char* areas = configMapsAreasText(&connP->alloc);
+  int         size  = strlen(areas) + 64;
+  char*       body  = corAlloc(&connP->alloc, size);
+
+  snprintf(body, size, "{\"areas\": %s, \"fonts\": %s}", areas, fontsPresent() ? "true" : "false");
+  serveJson(connP, 200, body);
+}
+
+//
 void mapsRequest(CorHttpConn* connP, const char* path)
 {
   const char* method = connP->method.s;

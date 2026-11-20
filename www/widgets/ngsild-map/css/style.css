@@ -1,0 +1,7 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+html, body { height: 100%; margin: 0; }
+body { font: 12px/1.4 system-ui, sans-serif; background: #111419; }
+#map { position: absolute; inset: 0; }
+#note { position: absolute; left: 8px; top: 8px; right: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(17,20,25,.85); color: #cdd2db; }
+.maplibregl-popup-content { font: 12px/1.4 system-ui, sans-serif; padding: 6px 10px; }
+.maplibregl-ctrl-attrib { font-size: 10px; }

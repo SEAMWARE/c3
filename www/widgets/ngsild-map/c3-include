@@ -1,0 +1,6 @@
+# What the map takes from c3's www/ into its .wgt - "<path under www/> <path in the .wgt>". maplibre must load
+# from the widget's own origin (its worker), and basemap.js finds the vendor files where c3's pages do.
+js/basemap.js js/basemap.js
+vendor/maplibre-gl vendor/maplibre-gl
+vendor/pmtiles vendor/pmtiles
+vendor/protomaps-basemaps vendor/protomaps-basemaps

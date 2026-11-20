@@ -1021,18 +1021,24 @@ it is part of c³.
 - **c³'s widgets** (`www/widgets/`, vendor `Seamware`, plain JS): every start installs each one WireCloud
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
   and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
-  `config.xml`. In WireCloud: add them from *Add widget*, connect them in *Wiring*.
+  `config.xml`. A widget's file `c3-include` names files of `www/` packed into its `.wgt`
+  (`<path under www/> <path in the .wgt>`): the map takes maplibre and c³'s `basemap.js` this way, since
+  maplibre's worker must load from the widget's own origin. In WireCloud: add them from *Add widget*,
+  connect them in *Wiring*.
 
   | Widget | Wiring | Does |
   |---|---|---|
   | NGSI-LD source | out `entities` | the entities of a type at a broker c³ knows (its form: broker, tenant, type from the broker's types, `q`, `attrs`, the period) - read through c³ every *refresh* seconds |
-  | NGSI-LD table | in `entities`, out `selected` | entities as rows, attributes as columns, sorted by a header clicked; a row clicked is sent on `selected`, again with every new read |
+  | NGSI-LD table | in `entities`, out `selected` | entities as rows, attributes as columns, sorted by a header clicked; a row clicked is sent on `selected` with the source's broker, tenant and type, again with every new read |
   | NGSI-LD value | in `entities` | one attribute of one entity, large, with its `unitCode` and `observedAt` |
+| NGSI-LD chart | in `entities` | a numeric attribute over the last *hours*, a line per entity (8 at most): the history from the broker's temporal API (`GET /temporal/entities/{id}`, `options=temporalValues`), then each new read's values |
+| NGSI-LD map | in `entities`, out `selected` | the entities on c³'s map, by their GeoProperty (`location`, else the first), fitted to them; one clicked is sent on `selected` |
 
 - **The widgets read the brokers through c³** (`/api/proxy`, as Explore - c³ adds each broker's token,
   headers and tenant). c³ answers CORS for WireCloud's origin only - `http://localhost:<port>` or
-  `http://127.0.0.1:<port>` while WireCloud runs - on `/api/proxy/ngsi-ld/v1/...` and
-  `/api/run/dashboard/brokers`, for **GET only**: a preflight for any other method is answered 403, so a
+  `http://127.0.0.1:<port>` while WireCloud runs - on `/api/proxy/ngsi-ld/v1/...`,
+  `/api/run/dashboard/brokers`, `/api/run/dashboard/maps` and the downloaded areas' `.pmtiles` (by Range)
+  and fonts (`/api/maps/areas/...`, `/api/maps/fonts/...`), for **GET only**: a preflight for any other method is answered 403, so a
   widget cannot write. Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
   `c3_port`, set with WireCloud's on the login answer.
 - **The image**: WireCloud 2 has no published one yet ([Ficodes/WireCloud#7](https://github.com/Ficodes/WireCloud/issues/7)).
@@ -1099,6 +1105,7 @@ The backend's API, used by the pages:
 | `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |
 | `GET /api/run/dashboard/brokers` | the brokers c³ knows, for the widgets: `[{url, name, tenant, tenants}]`; CORS for WireCloud's origin (GET) |
+| `GET /api/run/dashboard/maps` | the downloaded areas and whether their fonts are here, for the map widget: `{areas, fonts}`; CORS for WireCloud's origin (GET) |
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
