@@ -205,7 +205,7 @@ bool assistLocalInit(void)
     snprintf(path, sizeof(path), "%s/system.md", dir);
   else
     snprintf(path, sizeof(path), "%s/git/coraine-assistant/system.md", (home != NULL) ? home : "");
-  instructions = fileText(path);
+  instructions = fileText(path);                 // there now? (read again with every question: a git pull takes effect at once)
   snprintf(instructionsFrom, sizeof(instructionsFrom), "%s", (instructions != NULL) ? path : "");
 
   available = true;
@@ -776,9 +776,12 @@ static void systemPrompt(Ask* aP, Str* sP)
   char now[64];
   isoTime(time(NULL), now, sizeof(now));
 
-  if (instructions != NULL)
+  char* fresh = (instructionsFrom[0] != 0) ? fileText(instructionsFrom) : NULL;
+
+  if (fresh != NULL)
   {
-    strAdd(sP, instructions);
+    strAdd(sP, fresh);
+    free(fresh);
     strAddf(sP, "\n\nConnected to: the broker at %s, tenant %s. The current time is %s.",
             aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now);
     return;
