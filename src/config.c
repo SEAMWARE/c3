@@ -1228,6 +1228,35 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
       corTreeChildAdd(newMapP, corTreeFloat(&doc.alloc, "pitch", pitch));
   }
 
+  //
+  // The types' own colours (AI Assist): {"<type>": "#rrggbb"}, the whole set - {} for none
+  //
+  CorNode* coloursP    = corTreeLookup(bodyP, "typeColours");
+  CorNode* newColoursP = NULL;
+  if (coloursP != NULL)
+  {
+    if (coloursP->type != CorObject)
+    {
+      snprintf(errBuf, errLen, "\"typeColours\" must be an object: {\"<type>\": \"#rrggbb\"}");
+      goto done;
+    }
+
+    newColoursP = corTreeObject(&doc.alloc, "typeColours");
+    int n = 0;
+    for (CorNode* cP = coloursP->value.head; cP != NULL; cP = cP->next)
+    {
+      const char* v  = (cP->type == CorString) ? cP->value.s : NULL;
+      bool        ok = (v != NULL) && (strlen(v) == 7) && (v[0] == '#') && (strspn(&v[1], "0123456789abcdefABCDEF") == 6);
+
+      if ((ok == false) || (cP->name == NULL) || (cP->name[0] == 0) || (strlen(cP->name) > 2048) || (++n > 500))
+      {
+        snprintf(errBuf, errLen, "\"typeColours\": at most 500 types, each a colour \"#rrggbb\"");
+        goto done;
+      }
+      corTreeChildAdd(newColoursP, corTreeString(&doc.alloc, cP->name, v));
+    }
+  }
+
   CorNode* brokersP = corTreeLookup(doc.treeP, "brokers");
   CorNode* brokerP  = brokerFind(brokersP, url);
 
@@ -1256,6 +1285,8 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     corTreeChildAddOrReplace(connectP, "alerts", newAlertsP);
   if (localP != NULL)
     corTreeChildAddOrReplace(connectP, "local", corTreeBoolean(&doc.alloc, "local", localP->value.b));
+  if (newColoursP != NULL)
+    corTreeChildAddOrReplace(connectP, "typeColours", newColoursP);
 
   if (tenant != NULL)
   {

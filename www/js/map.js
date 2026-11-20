@@ -656,9 +656,17 @@ export class EntityMap {
   applyFlash() {
     const map = this.map;
     if (!map || !map.getLayer('flash-point')) return;
-    const f = ['in', ['get', 'id'], ['literal', this.flashIds || []]];
+    const f = ['in', ['get', 'id'], ['literal', [...(this.flashIds || []), ...(this.hlIds || [])]]];
     for (const x of ['', '-m']) map.setFilter('flash-point' + x, ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'anchor']], f]);
     map.setFilter('flash-line', ['all', ['!=', ['geometry-type'], 'Point'], f]);
+  }
+
+  //
+  // highlight - entities ringed as a flash rings them, until another highlight (AI Assist)
+  //
+  highlight(ids) {
+    this.hlIds = ids;
+    this.applyFlash();
   }
 
   //
@@ -702,10 +710,13 @@ export class EntityMap {
   //
   // fit - every entity shown on the map in view
   //
-  fit(animate = true) {
+  fit(animate = true, ids = null) {
     if (!this.map) return;
     const b = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const box of this.boxes.values()) { extend(b, [box[0], box[1]]); extend(b, [box[2], box[3]]); }
+    for (const [id, box] of this.boxes) {
+      if (ids && !ids.includes(id)) continue;
+      extend(b, [box[0], box[1]]); extend(b, [box[2], box[3]]);
+    }
     if (!Number.isFinite(b[0])) return;
     if (b[0] === b[2] && b[1] === b[3]) this.map.jumpTo({ center: [b[0], b[1]], zoom: 15 });
     else this.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 56, maxZoom: 17, duration: animate ? 500 : 0 });

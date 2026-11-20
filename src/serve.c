@@ -11,7 +11,7 @@
 //   POST   /api/brokers         {"url", "name"}: a broker connected to - first in the list, lastUsed now
 //   DELETE /api/brokers         {"url"}: forget a broker
 //   PUT    /api/brokers/types   {"url", "types"}: the entity types Connect loads from a broker
-//   PUT    /api/brokers/connect {"url", "view", "map", "colourBy", "relationships", "alerts"}: Connect's view of a broker
+//   PUT    /api/brokers/connect {"url", "view", "map", "colourBy", "typeColours", "relationships", "alerts"}: Connect's view of a broker
 //   GET    /api/brokers/tokens  which brokers have an access token, from where - never the token (creds.c)
 //   PUT    /api/brokers/token   {"url", "token", "remember"}; DELETE {"url"} (creds.c)
 //   GET    /api/brokers/headers each broker's own headers - a secret one's value never (creds.c)
@@ -26,6 +26,7 @@
 //   ...    /api/compile/...     Compile: the feature list (compile.c); the choice and the presets (config.c)
 //   ...    /api/builds...       Compile: the builds - start, follow, cancel, delete (compile.c)
 //   ...    /api/run...          Run: brokers and their services - start, stop, follow (run.c)
+//   ...    /api/assist...       AI Assist (assist.c - dev/ai-assist only)
 //   GET    /<file>              a file of the www directory; / is index.html (Range taken)
 //
 // Only for this machine: a connection from another address is refused, and so is a request whose Host
@@ -523,6 +524,8 @@ void serveRequest(CorHttpConn* connP)
     reposRequest(connP, path);
   else if ((strcmp(path, "/api/window") == 0) || (strncmp(path, "/api/window/", 12) == 0))
     windowRequest(connP, path);
+  else if ((strcmp(path, "/api/assist") == 0) || (strncmp(path, "/api/assist/", 12) == 0))
+    assistRequest(connP, path);
   else if ((strcmp(path, "/api/ui") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configUiSet);
   else

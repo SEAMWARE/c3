@@ -122,6 +122,8 @@ export class Graph {
       el.append(stripe, head);
       for (const a of n.attrs) el.append(attrRow(a));
 
+      if (this.hl && this.hl.has(n.id)) el.classList.add('hl');
+
       const node = { id: n.id, x: p.x, y: p.y, types: n.types, el, pinned: !!p.pinned };
       this.place(node);
       this.nodes.set(n.id, node);
@@ -265,6 +267,14 @@ export class Graph {
 
   visible(node) {
     return !node.types.every((t) => this.hiddenTypes.has(t));
+  }
+
+  //
+  // setHighlight - the entities ringed (AI Assist), kept across set/patch
+  //
+  setHighlight(ids) {
+    this.hl = new Set(ids);
+    for (const n of this.nodes.values()) n.el.classList.toggle('hl', this.hl.has(n.id));
   }
 
   //

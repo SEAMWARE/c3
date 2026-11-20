@@ -237,6 +237,15 @@ extern void  runShutdown(void);                   // c3 stops: the brokers keep 
 
 // -----------------------------------------------------------------------------
 //
+// assist.c - AI Assist (dev/ai-assist only): Claude Code on the local login, corMcp its tools; C3_DEV=1
+//
+extern void  assistInit(void);                    // is the dev provider there?
+extern void  assistRequest(CorHttpConn* connP, const char* path);   // /api/assist...
+
+
+
+// -----------------------------------------------------------------------------
+//
 // serve.c - the request callback: the API and the static pages
 //
 extern void  serveRequest(CorHttpConn* connP);

@@ -59,6 +59,25 @@
     </div>
   </header>
 
+  <aside class="aipanel" id="ai-panel" aria-labelledby="ai-ptitle" hidden>
+    <div class="aip-head">
+      <h2 id="ai-ptitle">AI Assist</h2>
+      <span class="aip-prov" id="ai-prov"></span>
+      <button class="btn small" type="button" id="ai-new" title="A new conversation - the model forgets this one">New</button>
+      <button class="iconbtn" type="button" id="ai-pclose" aria-label="Close the assistant">✕</button>
+    </div>
+    <div class="aip-ctx" id="ai-ctx"></div>
+    <div class="aip-log" id="ai-log" aria-live="polite"></div>
+    <form class="aip-form" id="ai-form">
+      <textarea id="ai-q" rows="3" placeholder="Ask about the broker - Enter sends, Shift+Enter a new line" aria-label="Your question" spellcheck="true"></textarea>
+      <div class="aip-row">
+        <span class="aip-usage" id="ai-usage"></span>
+        <button class="btn" type="button" id="ai-stop" hidden>Stop</button>
+        <button class="btn primary" type="submit" id="ai-send">Ask</button>
+      </div>
+    </form>
+  </aside>
+
   <main class="page" id="page-compile" hidden>
     <div class="cp-wrap">
       <div class="cp-main">
