@@ -61,7 +61,8 @@ function colourHex(c) {
 const TYPES = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Entity types - the short names as get_view lists them (Store, Vehicle) or the full IRIs' };
 
 //
-// ctx: {compile, run, confirm({title, lines}) -> Promise<bool>, onExploreMoved()}
+// ctx: {compile, run, confirm({title, lines}) -> Promise<bool>, onExploreMoved(),
+//       report({title, body, labels}) -> Promise<'opened' | 'dismissed'>}
 //
 export function c3Tools(connect, ctx = {}) {
   const types = typeResolver(connect);
@@ -437,6 +438,36 @@ export function c3Tools(connect, ctx = {}) {
             'The broker tools of this answer still read the broker the question was asked on; from the next question on they read this one.',
           undo: was.url ? async () => { await connect.connect(was.url, was.tenant); if (ctx.onExploreMoved) ctx.onExploreMoved(); return `Explore is back on ${was.url}`; } : null,
         };
+      },
+    },
+    {
+      name: 'report_gap',
+      description: 'Draft a GitHub issue for Seamware about what the assistant could not do, did wrong or did slowly - when the user says so ("you cannot do X", "that is wrong", "report this"), or offers to. c³ shows the draft; the user edits it and files it on GitHub themselves - nothing is sent by this command. '
+        + 'Write it for the developer who will fix it: what the user asked (their words), what you did (the tools called, with their arguments, and the errors), what was missing or wrong, and what would have answered it (a tool, a filter, knowledge). '
+        + 'Leave out the broker\'s URL, tenant, entity ids and values unless the user asks to keep them - describe the data instead ("a Vehicle with fuelLevel 0.05").',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: ['gap', 'wrong-answer', 'slow', 'c3', 'other'], description: 'gap: could not do it; wrong-answer; slow: too many calls or too long; c3: about c³ itself' },
+          title: { type: 'string', description: 'One line: what could not be done, e.g. "Cannot tell why a subscription does not notify"' },
+          asked: { type: 'string', description: 'What the user asked, in their words' },
+          happened: { type: 'string', description: 'What the assistant did - tools, arguments, errors - and what it answered' },
+          missing: { type: 'string', description: 'What was missing or wrong, and what would have answered it' },
+        },
+        required: ['kind', 'title', 'asked', 'happened', 'missing'],
+      },
+      async run(args) {
+        if (!ctx.report) throw new Error('reporting is not available in this c³');
+        const body = [
+          '**Asked**', '', args.asked, '',
+          '**What happened**', '', args.happened, '',
+          '**Missing**', '', args.missing, '',
+          '---', `c³ ${ctx.version || ''} · ${ctx.engine || ''} · ${new Date().toISOString().slice(0, 10)}`,
+        ].join('\n');
+        const r = await ctx.report({ title: args.title, body, labels: [args.kind] });
+        return r === 'opened'
+          ? 'the draft is open on GitHub for the user to file - do not say it is filed'
+          : 'the user dismissed the draft - nothing reported';
       },
     },
     {

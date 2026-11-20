@@ -1323,7 +1323,7 @@ void assistLocalRequest(CorHttpConn* connP, const char* path)
 
     if (available == true)
     {
-      strAdd(&s, "{\"available\": true, \"engine\": \"local\", \"provider\": \"Claude Code - your own login\", \"model\": ");
+      strAdd(&s, "{\"available\": true, \"version\": \"" C3_VERSION "\", \"engine\": \"local\", \"provider\": \"Claude Code - your own login\", \"model\": ");
       strAddJson(&s, model);
       strAdd(&s, ", \"instructions\": ");
       strAddJson(&s, (instructions != NULL) ? instructionsFrom : "built in (no coraine-assistant checkout)");

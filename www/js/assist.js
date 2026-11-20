@@ -340,6 +340,42 @@ function panelInit(info, connect, compile, run) {
   });
 
   //
+  // report - a gap the assistant drafted (report_gap): shown, editable; "Open on GitHub" opens the new-issue page
+  // of the assistant's repository, filled in - the user files it there, with their own GitHub login
+  //
+  const ISSUES = 'https://github.com/SEAMWARE-cor/coraine-assistant/issues/new';
+  const report = ({ title, body, labels }) => new Promise((done) => {
+    const box = el('div', 'aip-confirm aip-report');
+    box.append(el('div', 'ctitle', 'Report this to Seamware?'));
+    const t = el('input', 'rtitle');
+    t.value = title;
+    t.setAttribute('aria-label', 'Issue title');
+    const b = el('textarea', 'rbody');
+    b.value = body;
+    b.rows = 10;
+    b.setAttribute('aria-label', 'Issue text');
+    box.append(t, b, el('div', 'rnote', 'Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.'));
+    const row = el('div', 'crow');
+    const open = el('button', 'btn primary small', 'Open on GitHub');
+    const no = el('button', 'btn small', 'Not now');
+    open.type = no.type = 'button';
+    const end = (v, said) => { open.disabled = no.disabled = true; row.replaceWith(el('div', 'cdone', said)); done(v); };
+    open.onclick = () => {
+      let text = b.value;
+      const url = (x) => `${ISSUES}?title=${encodeURIComponent(t.value)}&labels=${encodeURIComponent(labels.join(','))}&body=${encodeURIComponent(x)}`;
+      while (url(text).length > 7500 && text.length > 200) text = text.slice(0, Math.floor(text.length * 0.9));
+      window.open(url(text === b.value ? text : text + '\n\n… (cut - the rest did not fit in a link)'), '_blank', 'noopener');
+      end('opened', 'Opened on GitHub - file it there.');
+    };
+    no.onclick = () => end('dismissed', 'Not reported.');
+    row.append(open, no);
+    box.append(row);
+    log.append(box);
+    scroll();
+    t.focus({ preventScroll: true });
+  });
+
+  //
   // Explore moved by a command (connect_explore): the conversation goes with it - the user asked for it
   //
   const onExploreMoved = () => {
@@ -348,7 +384,7 @@ function panelInit(info, connect, compile, run) {
     showCtx();
   };
 
-  const tools = c3Tools(connect, { compile, run, confirm, onExploreMoved });
+  const tools = c3Tools(connect, { compile, run, confirm, onExploreMoved, report, version: info.version || '', engine: `${info.provider} · ${info.model || ''}` });
   const changeLines = new Map();                 // a change's n -> its line in the log
   tools.onUndone((ns) => {
     for (const n of ns) {
@@ -369,7 +405,7 @@ function panelInit(info, connect, compile, run) {
     const head = el('div', 'cmdhead');
     head.append(el('span', 'cmdmark', '⚙'), el('span', 'tname', data.name));
     line.append(head);
-    if (data.args && Object.keys(data.args).length) line.append(el('div', 'cargs', JSON.stringify(data.args)));
+    if (data.args && Object.keys(data.args).length && data.name !== 'report_gap') line.append(el('div', 'cargs', JSON.stringify(data.args)));   // a report shows its draft itself
     log.append(line);
     scroll();
 

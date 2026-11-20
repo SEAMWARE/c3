@@ -254,6 +254,9 @@ header.top { position: relative; }
 .aip-cmd .cmdres.err { color: var(--bad); }
 .aip-cmd.undone { opacity: 0.55; }
 .aip-cmd.undone .cmdres { text-decoration: line-through; }
+.aip-report .rtitle, .aip-report .rbody { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 12px; }
+.aip-report .rbody { font-family: var(--mono); font-size: 11px; resize: vertical; }
+.aip-report .rnote { margin-top: 6px; font-size: 11px; color: var(--dim); }
 .aip-confirm { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warn); background: var(--panel-2); }
 .aip-confirm .ctitle { color: var(--text); font-weight: 600; margin-bottom: 6px; }
 .aip-confirm pre { margin: 0 0 6px; padding: 6px 8px; border-radius: 6px; background: var(--bg-deep); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
