@@ -16,6 +16,8 @@
   padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line-soft); background: var(--panel-2);
 }
 .rn-item.sel { border-color: var(--accent-2); }
+.rn-item.active { border-color: var(--accent-2); box-shadow: inset 4px 0 0 var(--accent-2), 0 0 0 1px var(--accent-2); }
+.badge.active { background: var(--accent-2); color: #fff; }
 .rn-item .rdot { margin-top: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
 .rn-item .rdot.ok   { background: var(--ok);   box-shadow: 0 0 8px var(--ok); }
 .rn-item .rdot.busy { background: var(--warn); box-shadow: 0 0 8px var(--warn); }

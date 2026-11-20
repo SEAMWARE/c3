@@ -141,7 +141,7 @@ h2.section {
 #app { min-height: 100%; display: flex; flex-direction: column; }
 
 header.top {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 24px;
   padding: 0 32px; min-height: 64px;
   background: var(--bg-deep); border-bottom: 1px solid var(--line);
 }
@@ -293,7 +293,6 @@ header.top { position: relative; }
   nav.pages { margin-left: 0; }
   nav.pages { margin-left: 0; }
   nav.pages a, nav.pages span { padding-left: 8px; padding-right: 8px; }
-  .top-right .chip { display: none; }
 }
 
 
