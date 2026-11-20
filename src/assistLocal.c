@@ -69,6 +69,11 @@
 
 #include "c3.h"
 
+#ifndef C3_CLONES
+#define C3_CLONES ""
+#endif
+#define C3_CLONES_DIR C3_CLONES                 // the clones c3 was built against (the makefile's COR_LIBS)
+
 
 
 // -----------------------------------------------------------------------------
@@ -91,6 +96,7 @@ static char  reason[256];
 static char  claudePath[1024];
 static char* instructions = NULL;              // system.md of coraine-assistant, NULL: the built-in ones
 static char  instructionsFrom[1200];
+static char  docsDirs[2600];                    // corMcp's --docs: coraine's doc/ and the knowledge base, those there are
 static char  corMcpPath[1024];
 static char  model[64];
 static char  workDir[1024];
@@ -205,6 +211,25 @@ bool assistLocalInit(void)
     snprintf(path, sizeof(path), "%s/system.md", dir);
   else
     snprintf(path, sizeof(path), "%s/git/coraine-assistant/system.md", (home != NULL) ? home : "");
+  //
+  // What the assistant may search (corMcp --docs): $C3_ASSIST_DOCS, else coraine's doc/ of the clone c3 builds
+  // from, and the knowledge/ of the coraine-assistant checkout - the ones that are there
+  //
+  const char* docs = getenv("C3_ASSIST_DOCS");
+  if ((docs != NULL) && (docs[0] != 0))
+    snprintf(docsDirs, sizeof(docsDirs), "%s", docs);
+  else
+  {
+    char d1[1200];
+    char d2[1300];
+    snprintf(d1, sizeof(d1), "%s/coraine/doc", C3_CLONES_DIR);
+    snprintf(d2, sizeof(d2), "%.*s/knowledge", (int) (strlen(path) - strlen("/system.md")), path);
+    if ((C3_CLONES_DIR[0] != 0) && (access(d1, R_OK) == 0))
+      snprintf(docsDirs, sizeof(docsDirs), "%s", d1);
+    if (access(d2, R_OK) == 0)
+      snprintf(docsDirs + strlen(docsDirs), sizeof(docsDirs) - strlen(docsDirs), "%s%s", (docsDirs[0] != 0) ? ":" : "", d2);
+  }
+
   instructions = fileText(path);                 // there now? (read again with every question: a git pull takes effect at once)
   snprintf(instructionsFrom, sizeof(instructionsFrom), "%s", (instructions != NULL) ? path : "");
 
@@ -730,6 +755,11 @@ static bool cfgWrite(Ask* aP, char* errBuf, int errLen)
   strAddJson(&s, corMcpPath);
   strAdd(&s, ", \"args\": [\"--broker\", ");
   strAddJson(&s, aP->broker);
+  if (docsDirs[0] != 0)
+  {
+    strAdd(&s, ", \"--docs\", ");
+    strAddJson(&s, docsDirs);
+  }
   if (aP->tenant[0] != 0)
   {
     strAdd(&s, ", \"--tenant\", ");
@@ -1330,6 +1360,8 @@ void assistLocalRequest(CorHttpConn* connP, const char* path)
       strAddJson(&s, model);
       strAdd(&s, ", \"instructions\": ");
       strAddJson(&s, (instructions != NULL) ? instructionsFrom : "built in (no coraine-assistant checkout)");
+      strAdd(&s, ", \"docs\": ");
+      strAddJson(&s, docsDirs);
       strAdd(&s, ", \"tokenSet\": true}");
     }
     else
