@@ -1,7 +1,8 @@
 //
-// assist.js - AI Assist: the button, and either its popup (coming soon) or - when the backend has a provider
-// (GET /api/assist) - the panel: questions about the broker Explore is connected to, answered by a model
-// that reads it with corMcp's tools
+// assist.js - AI Assist: the button, and either its popup (not available here: why) or - when the backend
+// can ask (GET /api/assist) - the panel: questions about the broker Explore is connected to, answered by the
+// Coraine Assistant, Seamware's service, which reads the broker with corMcp's tools - run by c³'s backend.
+// Without an AI Assist token the panel asks for one (kept by the backend, never by this page)
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -30,18 +31,19 @@ export async function assistInit({ connect, compile, run } = {}) {
   } catch { /* no backend route: the popup */ }
 
   if (info.available && connect) panelInit(info, connect, compile, run);
-  else popupInit();
+  else popupInit(info);
 }
 
 
 
 // -----------------------------------------------------------------------------
 //
-// The popup - what is coming, when no provider is there
+// The popup - AI Assist is not available in this c³: why
 //
-function popupInit() {
+function popupInit(info) {
   const btn = $('ai-btn');
   const pop = $('ai-pop');
+  $('ai-why').textContent = info.reason ? 'Here: ' + info.reason + '.' : 'This c³ has no AI Assist backend.';
 
   const close = (refocus) => {
     if (pop.hidden) return;
@@ -241,8 +243,63 @@ function panelInit(info, connect, compile, run) {
 
   btn.title = 'AI Assist - ask about the broker';
   btn.setAttribute('aria-haspopup', 'false');
-  $('ai-prov').textContent = `${info.provider} · ${info.model}`;
-  $('ai-prov').title = $('ai-prov').textContent;
+
+  //
+  // Who is asking, on which model, and this month's spending - the service's word on the token
+  //
+  const money = (v) => '$' + Number(v || 0).toFixed(2);
+  const usageText = (u) => u ? `This month: ${money(u.spentUsd)}` + (u.limitUsd != null ? ` of ${money(u.limitUsd)}` : '') : '';
+  const showMe = (me) => {
+    $('ai-prov').textContent = me ? `${info.provider} · ${me.model}` : info.provider;
+    $('ai-prov').title = me ? `${info.provider} at ${info.service}, for ${me.name}` : info.service;
+    $('ai-usage').textContent = usageText(me);
+  };
+  showMe(info.me);
+
+  //
+  // The token: asked for when there is none (or the service does not know it); the Token button shows the form
+  //
+  const tokForm = $('ai-token');
+  const tokMsg = (text, err) => { $('ai-tok-msg').textContent = text || ''; $('ai-tok-msg').classList.toggle('err', !!err); };
+  const showToken = (show, text, err) => {
+    tokForm.hidden = !show;
+    $('ai-tok-forget').hidden = !info.tokenSet;
+    tokMsg(text, err);
+    if (show) $('ai-tok').focus({ preventScroll: true });
+  };
+  tokForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = $('ai-tok').value.trim();
+    if (!token) return;
+    tokMsg('Checking it with the service…');
+    $('ai-tok-use').disabled = true;
+    try {
+      const r = await fetch('/api/assist/token', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, remember: $('ai-tok-rem').checked }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { tokMsg(j.detail || 'HTTP ' + r.status, true); return; }
+      $('ai-tok').value = '';
+      info.tokenSet = true;
+      info.me = j;
+      showMe(j);
+      showToken(false);
+      q.focus({ preventScroll: true });
+    } catch (err) {
+      tokMsg('No answer from c³: ' + err.message, true);
+    } finally {
+      $('ai-tok-use').disabled = false;
+    }
+  });
+  $('ai-tok-forget').onclick = async () => {
+    try { await fetch('/api/assist/token', { method: 'DELETE' }); } catch { /* shown as forgotten anyway */ }
+    info.tokenSet = false;
+    info.me = null;
+    showMe(null);
+    showToken(true, 'Forgotten.');
+  };
+  $('ai-tokbtn').onclick = () => showToken(tokForm.hidden);
+  const needToken = !info.tokenSet || info.serviceStatus === 401;
+  if (needToken) showToken(true, info.tokenSet ? 'The service does not know the token kept here - give the current one.' : '', info.tokenSet);
+  else if (info.tokenSet && info.serviceStatus !== 200) tokMsg('');
 
   let conv = null;                               // {session, broker, tenant}
   let busy = null;                               // the AbortController of the question being answered
@@ -442,6 +499,7 @@ function panelInit(info, connect, compile, run) {
       if (!r.ok) {
         let d = 'HTTP ' + r.status;
         try { const j = await r.json(); d = j.detail || j.title || d; } catch { /* the status */ }
+        if (r.status === 401) showToken(true, d, true);
         throw new Error(d);
       }
 
@@ -481,18 +539,18 @@ function panelInit(info, connect, compile, run) {
             if (data.isError) t.d.classList.add('err');
           }
         } else if (event === 'usage') {
-          const pct = Math.round(data.utilization * 100);
-          const at = data.resetsAt ? new Date(data.resetsAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-          $('ai-usage').textContent = `Plan, ${data.window.replace('_', '-')} window: ${pct} % used` + (at ? ` (resets ${at})` : '');
+          $('ai-usage').textContent = usageText(data);
         } else if (event === 'end') {
           if (!text && data.answer) { textBox(); text = data.answer; }
           textDone();
           const meta = [calls + ' tool call' + (calls === 1 ? '' : 's'), data.seconds + ' s', (data.input + data.output + data.cacheRead) + ' tokens'];
-          if (data.costUsd) meta.push('≈ $' + data.costUsd.toFixed(3) + ' at API prices');
+          if (data.costUsd) meta.push('$' + data.costUsd.toFixed(3));
           log.append(el('div', 'aip-meta', meta.join(' · ')));
           if (data.isError) log.append(el('div', 'aip-err', 'The model ended with an error.'));
         } else if (event === 'error') {
           textDone();
+          if (/no such conversation/.test(data.detail || '')) conv = null;          // forgotten by the service: the next question starts anew
+          if (/token is needed|does not know this token/.test(data.detail || '')) showToken(true, data.detail, true);
           log.append(el('div', data.detail === 'stopped' ? 'aip-note' : 'aip-err', data.detail === 'stopped' ? 'Stopped.' : data.detail));
         }
       }

@@ -196,6 +196,14 @@ header.top { position: relative; }
 .aipop ul { margin: 6px 0 10px; padding-left: 20px; }
 .aipop li { margin: 4px 0; }
 .aipop .mono { font-family: var(--mono); font-size: 12px; }
+.aipop .why { color: var(--warn); }
+.aip-token { padding: 12px; border-bottom: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.aip-token p { margin: 0; }
+.aip-token input[type=password] { font-family: var(--mono); font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.aip-token .chk { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.aip-token .mono { font-family: var(--mono); font-size: 11px; opacity: 0.75; }
+.aip-tok-msg { flex: 1; font-size: 12px; }
+.aip-tok-msg.err { color: var(--warn); }
 
 /* AI Assist - the panel, docked at the right of every page (dev/ai-assist) */
 .aipanel {
