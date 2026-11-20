@@ -12,7 +12,7 @@
 // short ones built in.
 //
 //   GET    /api/assist          {"available", "provider", "model"} or {"available": false, "reason"}
-//   POST   /api/assist/ask      {"broker", "tenant", "question", "session"}: the answer as server-sent events
+//   POST   /api/assist/ask      {"broker", "tenant", "question", "session", "lang"}: the answer as server-sent events
 //   POST   /api/assist/stop     {"session"}: the question being answered there is given up
 //   POST   /api/assist/ui       {"call", "ok", "text"}: the page's result of a c3 command (a "ui" event)
 //   POST   /api/assist/mcp/<s>  c3's own MCP server (Streamable HTTP, JSON answers) - the c3 commands the page
@@ -113,6 +113,7 @@ typedef struct Ask
   char            session[37];
   char            broker[512];
   char            tenant[256];
+  char            lang[4];                       // c³'s language: en, es, fr, de ("": not said)
   char*           question;
   char*           token;                         // the broker's, or NULL
   bool            resume;
@@ -822,10 +823,35 @@ static bool cfgWrite(Ask* aP, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// language - the name of c³'s language, for the model; NULL: English, or not said
+//
+static const char* language(const char* lang)
+{
+  if (strcmp(lang, "es") == 0) return "Spanish (español)";
+  if (strcmp(lang, "fr") == 0) return "French (français)";
+  if (strcmp(lang, "de") == 0) return "German (Deutsch)";
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // systemPrompt - who the model is, and what it is connected to
 //
 static void systemPrompt(Ask* aP, Str* sP)
 {
+  //
+  // c³'s language: the user reads c³ in it - the answer in it too, unless the question is in another one; the
+  // tools, the documentation and the knowledge are in English, their words (option names, request lines) kept
+  //
+  char        langLine[400] = "";
+  const char* langName      = language(aP->lang);
+  if (langName != NULL)
+    snprintf(langLine, sizeof(langLine), " The user has c³ in %s: answer in %s, unless the question is in another language - then in that one. "
+             "The documentation and the tools are in English: translate what you take from them, but keep option names, "
+             "attribute names, ids and request lines exactly as they are.", langName, langName);
+
   char now[64];
   isoTime(time(NULL), now, sizeof(now));
 
@@ -835,8 +861,8 @@ static void systemPrompt(Ask* aP, Str* sP)
   {
     strAdd(sP, fresh);
     free(fresh);
-    strAddf(sP, "\n\nConnected to: the broker at %s, tenant %s. The current time is %s.",
-            aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now);
+    strAddf(sP, "\n\nConnected to: the broker at %s, tenant %s. The current time is %s.%s",
+            aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now, langLine);
     return;
   }
 
@@ -847,8 +873,8 @@ static void systemPrompt(Ask* aP, Str* sP)
           "Prefer counting before listing, and ask for only the attributes you need. "
           "Be brief: the answer first, then what supports it. "
           "Write every entity id in full, as code (`urn:ngsi-ld:Store:S-17`) - the user can click it to see the entity. "
-          "Answer in the language of the question. The current time is %s.",
-          aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now);
+          "Answer in the language of the question. The current time is %s.%s",
+          aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now, langLine);
 
   if (aP->uiTools != NULL)
     strAdd(sP, " "
@@ -873,6 +899,7 @@ static void askStart(CorHttpConn* connP, CorNode* bodyP)
   const char* tenant   = nodeString(bodyP, "tenant");
   const char* question = nodeString(bodyP, "question");
   const char* session  = nodeString(bodyP, "session");
+  const char* lang     = nodeString(bodyP, "lang");
 
   if ((broker == NULL) || ((strncmp(broker, "http://", 7) != 0) && (strncmp(broker, "https://", 8) != 0)) || (strlen(broker) >= 512))
   {
@@ -887,6 +914,11 @@ static void askStart(CorHttpConn* connP, CorNode* bodyP)
   if ((question == NULL) || (question[0] == 0) || (strlen(question) > QUESTION_MAX))
   {
     serveError(connP, 400, "Bad request", "question: 1-8000 characters");
+    return;
+  }
+  if ((lang != NULL) && (strcmp(lang, "en") != 0) && (strcmp(lang, "es") != 0) && (strcmp(lang, "fr") != 0) && (strcmp(lang, "de") != 0))
+  {
+    serveError(connP, 400, "Bad request", "lang: en, es, fr or de");
     return;
   }
   if ((session != NULL) && (uuidValid(session) == false))
@@ -914,6 +946,7 @@ static void askStart(CorHttpConn* connP, CorNode* bodyP)
     --blen;
   snprintf(aP->broker, sizeof(aP->broker), "%.*s", blen, broker);
   snprintf(aP->tenant, sizeof(aP->tenant), "%s", (tenant != NULL) ? tenant : "");
+  snprintf(aP->lang, sizeof(aP->lang), "%s", (lang != NULL) ? lang : "");
 
   aP->question = strdup(question);
   aP->token    = credsToken(aP->broker, NULL);
