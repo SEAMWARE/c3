@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-rules" version="0.1.0">
+  <details>
+    <title>corCep rules</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>corCep's rules at a broker c³ knows - what each watches and does, how often it fired, its last error - read through c³</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="broker" type="text" label="Broker" description="The broker's URL, as c³ knows it (picked in the widget)" default=""/>
+    <preference name="tenant" type="text" label="Rules tenant" description="The tenant the Rule entities are in - corCep's --rules-tenant" default="cep"/>
+    <preference name="refresh" type="number" label="Refresh" description="Read again every so many seconds (0: never)" default="10"/>
+  </preferences>
+  <wiring>
+    <outputendpoint name="selected" type="text" label="Selected rule" description="{broker, tenant, type, entities: [the Rule clicked]}" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="50" width="8"/>
+</widget>

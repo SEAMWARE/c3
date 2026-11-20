@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-map" version="0.1.2">
+  <details>
+    <title>NGSI-LD map</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>The entities on c³'s map, by their location - an entity clicked is sent on as the selection</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="geo" type="text" label="GeoProperty" description="The GeoProperty drawn - empty: location, else the first GeoProperty" default=""/>
+    <preference name="attribute" type="text" label="Attribute" description="Its value shown under each entity - empty: none" default=""/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}, from an NGSI-LD source" friendcode="ngsild-entities"/>
+    <outputendpoint name="selected" type="text" label="Selected entity" description="{broker, tenant, type, entities: [the entity clicked]}" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="50" width="8"/>
+</widget>

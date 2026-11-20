@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-alarms" version="0.1.0">
+  <details>
+    <title>NGSI-LD alarms</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>The alarms at a broker c³ knows - the entities of a type (a corCep rule's create, say), newest first, by severity - read through c³</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="broker" type="text" label="Broker" description="The broker's URL, as c³ knows it (picked in the widget)" default=""/>
+    <preference name="tenant" type="text" label="Tenant" description="The tenant the alarms are in" default=""/>
+    <preference name="type" type="text" label="Alarm type" description="The entity type of the alarms" default="Alert"/>
+    <preference name="q" type="text" label="Query (q)" description="Only the alarms matching it" default=""/>
+    <preference name="text" type="text" label="Text" description="The attribute shown - empty: message, description or name, else the first text" default=""/>
+    <preference name="severity" type="text" label="Severity" description="The attribute giving the colour: critical, high, error / warning, medium / low, info" default="severity"/>
+    <preference name="rows" type="number" label="Rows" description="The most alarms shown" default="50"/>
+    <preference name="refresh" type="number" label="Refresh" description="Read again every so many seconds (0: never)" default="10"/>
+  </preferences>
+  <wiring>
+    <outputendpoint name="selected" type="text" label="Selected alarm" description="{broker, tenant, type, entities: [the alarm clicked]}" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="50" width="6"/>
+</widget>

@@ -209,6 +209,7 @@ extern void  proxyRequest(CorHttpConn* connP, const char* path);
 extern bool  mapsInit(void);
 extern void  mapsSync(void);
 extern void  mapsRequest(CorHttpConn* connP, const char* path);
+extern void  mapsDashboard(CorHttpConn* connP);                      // GET /api/run/dashboard/maps: {areas, fonts}
 
 
 

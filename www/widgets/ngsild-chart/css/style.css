@@ -1,0 +1,20 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+html, body { height: 100%; }
+body { margin: 0; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+#view { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 8px 0; }
+.head .attr { font-weight: 600; font-size: 13px; cursor: pointer; }
+.head .meta { color: #777; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 10px; padding: 2px 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; color: #444; }
+.legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; }
+.plot { flex: 1; min-height: 80px; position: relative; }
+.plot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.axis { stroke: #ccc; stroke-width: 1; }
+.grid { stroke: #eee; stroke-width: 1; }
+.tick { fill: #777; font-size: 10px; }
+.tip { position: absolute; pointer-events: none; background: rgba(255,255,255,.95); border: 1px solid #ddd; border-radius: 4px; padding: 3px 6px; white-space: nowrap; font-size: 11px; }
+.wait, .note { padding: 10px; color: #777; }
+.err { padding: 0 8px; color: #b3261e; overflow-wrap: anywhere; }
+.pick { display: flex; flex-direction: column; gap: 6px; padding: 10px; max-width: 280px; }
+.pick select { padding: 4px 6px; font: inherit; }

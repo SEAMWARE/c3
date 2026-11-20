@@ -211,7 +211,7 @@ export function buildStyle(areas) {
     };
     layers.push({ id: 'c3-mask', type: 'fill', source: 'c3-mask', paint: { 'fill-color': C.water } });
     for (const a of areas) {
-      sources['pm-' + a.id] = { type: 'vector', url: `pmtiles://${location.origin}/api/maps/areas/${a.id}.pmtiles`, attribution: PM_ATTRIBUTION };
+      sources['pm-' + a.id] = { type: 'vector', url: `pmtiles://${apiBase || location.origin}/api/maps/areas/${a.id}.pmtiles`, attribution: PM_ATTRIBUTION };
       layers.push(...areaLayers(a));
     }
   }
@@ -220,6 +220,15 @@ export function buildStyle(areas) {
 }
 
 export const ATTRIBUTION = OSM;
+
+//
+// apiBase - where c³'s API is: '' (this page's own origin), or c³'s address when the map is not c³'s page - the
+// Dashboard's map widget, in WireCloud, reads the areas and the fonts from c³
+//
+let apiBase = '';
+export function setApiBase(base) {
+  apiBase = base || '';
+}
 
 //
 // Protocols - registered once
@@ -282,7 +291,7 @@ async function glyphs(params, abort) {
   const stack = decodeURIComponent(m[1]).split(',')[0].trim();
   const range = m[2];
   if (fontsLocal && FONT_STACKS.includes(stack)) {
-    const r = await fetch(`/api/maps/fonts/${encodeURIComponent(stack)}/${range}.pbf`, { signal: abort.signal });
+    const r = await fetch(`${apiBase}/api/maps/fonts/${encodeURIComponent(stack)}/${range}.pbf`, { signal: abort.signal });
     if (r.ok) return { data: await r.arrayBuffer() };
   }
   const r = await fetch(`${GLYPHS_ONLINE}${encodeURIComponent(stack)}/${range}.pbf`, { signal: abort.signal });

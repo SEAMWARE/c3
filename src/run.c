@@ -6421,6 +6421,81 @@ static void zipEnd(Str* zP, const ZipEntry* entries, int n)
 //
 // zipDir - every regular file under dir (recursively), as <prefix><its path under dir>
 //
+//
+// zipFile - one file into the zip, as 'name'
+//
+static bool zipFile(Str* zP, ZipEntry* entries, int* nP, const char* path, const char* name, char* err, int errLen)
+{
+  struct stat st;
+  int         fd = open(path, O_RDONLY | O_CLOEXEC);
+  if ((fd == -1) || (fstat(fd, &st) != 0))
+  {
+    if (fd != -1)
+      close(fd);
+    snprintf(err, errLen, "%s: %s", path, strerror(errno));
+    return false;
+  }
+
+  char* data = malloc(st.st_size + 1);
+  int   got  = (data != NULL) ? (int) read(fd, data, st.st_size) : -1;
+  close(fd);
+  bool ok = (got == st.st_size) && zipAdd(zP, entries, nP, name, data, got);
+  if (ok == false)
+    snprintf(err, errLen, "%s: not packed (unread, or too many files)", path);
+  free(data);
+  return ok;
+}
+
+static bool zipDir(Str* zP, ZipEntry* entries, int* nP, const char* dir, const char* prefix, char* err, int errLen);
+
+//
+// zipIncludes - the files of www/ a widget takes from c3, named in its file c3-include: a line per file or
+// directory, "<path under www/> <path in the .wgt>" (a '#' line is a comment). The map widget takes maplibre
+// and c3's base map this way - in the .wgt, so they load from WireCloud's origin (maplibre's worker must).
+//
+static bool zipIncludes(Str* zP, ZipEntry* entries, int* nP, const char* wdir, char* err, int errLen)
+{
+  char list[4200];
+  snprintf(list, sizeof(list), "%s/c3-include", wdir);
+  FILE* fP = fopen(list, "r");
+  if (fP == NULL)
+    return true;                                 // nothing to include
+
+  char line[1024];
+  bool ok = true;
+  while (ok && (fgets(line, sizeof(line), fP) != NULL))
+  {
+    char from[512], to[512];
+    if ((line[0] == '#') || (sscanf(line, "%511s %511s", from, to) != 2))
+      continue;
+    if ((strstr(from, "..") != NULL) || (strstr(to, "..") != NULL) || (from[0] == '/') || (to[0] == '/'))
+    {
+      snprintf(err, errLen, "%s: '%s %s' - paths under www/ and in the .wgt only", list, from, to);
+      ok = false;
+      break;
+    }
+
+    char path[4700];
+    snprintf(path, sizeof(path), "%s/%s", c3WwwDir, from);
+    struct stat st;
+    if (stat(path, &st) != 0)
+    {
+      snprintf(err, errLen, "%s: %s: %s", list, path, strerror(errno));
+      ok = false;
+    }
+    else if (S_ISDIR(st.st_mode))
+    {
+      char prefix[520];
+      snprintf(prefix, sizeof(prefix), "%s/", to);
+      ok = zipDir(zP, entries, nP, path, prefix, err, errLen);
+    }
+    else
+      ok = zipFile(zP, entries, nP, path, to, err, errLen);
+  }
+  fclose(fP);
+  return ok;
+}
+
 static bool zipDir(Str* zP, ZipEntry* entries, int* nP, const char* dir, const char* prefix, char* err, int errLen)
 {
   DIR* dP = opendir(dir);
@@ -6452,21 +6527,8 @@ static bool zipDir(Str* zP, ZipEntry* entries, int* nP, const char* dir, const c
       snprintf(sub, sizeof(sub), "%s/", name);
       ok = zipDir(zP, entries, nP, path, sub, err, errLen);
     }
-    else if (S_ISREG(st.st_mode))
-    {
-      int fd = open(path, O_RDONLY | O_CLOEXEC);
-      if (fd == -1)
-        continue;
-      char* data = malloc(st.st_size + 1);
-      int   got  = (data != NULL) ? (int) read(fd, data, st.st_size) : -1;
-      close(fd);
-      if ((got != st.st_size) || (zipAdd(zP, entries, nP, name, data, got) == false))
-      {
-        snprintf(err, errLen, "%s: not packed (unread, or too many files)", path);
-        ok = false;
-      }
-      free(data);
-    }
+    else if (S_ISREG(st.st_mode) && (strcmp(name, "c3-include") != 0))
+      ok = zipFile(zP, entries, nP, path, name, err, errLen);
   }
   closedir(dP);
   return ok;
@@ -6589,7 +6651,7 @@ static bool dashWidgets(int port, char* err, int errLen)
       continue;                                  // installed already
 
     //
-    // The .wgt: the widget's files, then common/ as js/common/
+    // The .wgt: the widget's files, then common/ as js/common/, then what its c3-include names
     //
     Str       zip = { NULL, 0, 0 };
     ZipEntry* entries = calloc(ZIP_ENTRIES_MAX, sizeof(ZipEntry));
@@ -6599,6 +6661,8 @@ static bool dashWidgets(int port, char* err, int errLen)
     bool packed = (entries != NULL) && zipDir(&zip, entries, &n, wdir, "", zerr, sizeof(zerr));
     if (packed && (access(common, R_OK) == 0))
       packed = zipDir(&zip, entries, &n, common, "js/common/", zerr, sizeof(zerr));
+    if (packed)
+      packed = zipIncludes(&zip, entries, &n, wdir, zerr, sizeof(zerr));
     if (packed)
       zipEnd(&zip, entries, n);
     free(entries);
@@ -6962,6 +7026,12 @@ static void dashboardRequest(CorHttpConn* connP, const char* action)
   if (get && (strcmp(action, "brokers") == 0))
   {
     dashboardBrokers(connP);
+    return;
+  }
+
+  if (get && (strcmp(action, "maps") == 0))
+  {
+    mapsDashboard(connP);
     return;
   }
 
