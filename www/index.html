@@ -389,7 +389,8 @@
       <form class="connform" id="connform">
         <input id="broker-url" list="broker-list" placeholder="http://localhost:1026 - or a demo's name" aria-label="Broker URL, or the name of a demo" title="The broker's URL (http://host:port, or host:port) - or the name of a demo, e.g. CDMAD" autocomplete="off" spellcheck="false">
         <datalist id="broker-list"></datalist>
-        <input class="tenant" id="tenant" list="tenant-list" placeholder="default tenant" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant (NGSILD-Tenant) everything in Connect is read from - empty: the default tenant" autocomplete="off" spellcheck="false">
+        <label class="tenantlbl" for="tenant">Tenant</label>
+        <input class="tenant" id="tenant" list="tenant-list" placeholder="default" aria-label="Tenant (NGSILD-Tenant) - empty: the default tenant" title="The tenant - the HTTP header NGSILD-Tenant - Explore reads everything from; empty: the default tenant. Type another and press Enter; the ones used before are offered" autocomplete="off" spellcheck="false">
         <datalist id="tenant-list"></datalist>
         <label class="localbox" title="Ask for the broker's own entities only (local=true) - not its Context Sources'. Off: what the broker answers, with the entities of its registrations"><input type="checkbox" id="local-only">Local only</label>
         <button class="btn primary" type="submit" id="connect-btn">Connect</button>

@@ -320,7 +320,8 @@ header.top { position: relative; }
   font-family: var(--mono); font-size: 0.975rem; color: var(--text-2);
 }
 .connform input:focus { border-color: var(--accent-2); outline: none; }
-.connform input.tenant { flex: 0 1 11em; }       /* in em: "default tenant" whole at any text size */
+.connform .tenantlbl { align-self: center; margin-left: 6px; color: var(--muted); font-size: 0.975rem; white-space: nowrap; }
+.connform input.tenant { flex: 0 1 11em; }       /* in em: grows with the text size */
 .connform .localbox { display: flex; align-items: center; gap: 6px; flex: none; font-size: 0.975rem; color: var(--text-2); white-space: nowrap; cursor: pointer; }
 .connform .localbox input { flex: none; min-height: 0; width: 15px; height: 15px; margin: 0; accent-color: var(--accent-2); }
 

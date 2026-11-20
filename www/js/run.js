@@ -531,7 +531,7 @@ export class Run {
     if (runs || b.state === 'stopping') {
       const a = el('a', 'rurl', b.url);
       a.href = '#connect';
-      a.title = t('Open it in Connect');
+      a.title = t('Open it in Explore');
       a.addEventListener('click', (e) => { e.preventDefault(); this.onConnect(b.url); });
       title.append(a);
     } else title.append(el('span', 'rurl', b.url));
