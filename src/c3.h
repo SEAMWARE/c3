@@ -237,10 +237,15 @@ extern void  runShutdown(void);                   // c3 stops: the brokers keep 
 
 // -----------------------------------------------------------------------------
 //
-// assist.c - AI Assist (dev/ai-assist only): Claude Code on the local login, corMcp its tools; C3_DEV=1
+// assist.c - AI Assist: the engine - assistLocal.c (Claude Code on the user's own login, C3_DEV=1) or
+// assistService.c (the Coraine Assistant service, $C3_ASSIST_URL)
 //
 extern void  assistInit(void);                    // is the dev provider there?
 extern void  assistRequest(CorHttpConn* connP, const char* path);   // /api/assist...
+extern bool  assistLocalInit(void);
+extern void  assistLocalRequest(CorHttpConn* connP, const char* path);
+extern bool  assistServiceInit(void);
+extern void  assistServiceRequest(CorHttpConn* connP, const char* path);
 
 
 

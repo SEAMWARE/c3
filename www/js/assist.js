@@ -248,8 +248,21 @@ function panelInit(info, connect, compile, run) {
   // Who is asking, on which model, and this month's spending - the service's word on the token
   //
   const money = (v) => '$' + Number(v || 0).toFixed(2);
-  const usageText = (u) => u ? `This month: ${money(u.spentUsd)}` + (u.limitUsd != null ? ` of ${money(u.limitUsd)}` : '') : '';
+  const local = info.engine === 'local';         // Claude Code on the user's own login: a plan, not a bill
+  const usageText = (u) => {
+    if (!u) return '';
+    if (u.window) {
+      const at = u.resetsAt ? new Date(u.resetsAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      return `Your plan, ${u.window.replace('_', '-')} window: ${Math.round(u.utilization * 100)} % used` + (at ? ` (resets ${at})` : '');
+    }
+    return `This month: ${money(u.spentUsd)}` + (u.limitUsd != null ? ` of ${money(u.limitUsd)}` : '');
+  };
   const showMe = (me) => {
+    if (local) {
+      $('ai-prov').textContent = `${info.provider} · ${info.model}`;
+      $('ai-prov').title = 'Instructions: ' + info.instructions;
+      return;
+    }
     $('ai-prov').textContent = me ? `${info.provider} · ${me.model}` : info.provider;
     $('ai-prov').title = me ? `${info.provider} at ${info.service}, for ${me.name}` : info.service;
     $('ai-usage').textContent = usageText(me);
@@ -297,7 +310,8 @@ function panelInit(info, connect, compile, run) {
     showToken(true, 'Forgotten.');
   };
   $('ai-tokbtn').onclick = () => showToken(tokForm.hidden);
-  const needToken = !info.tokenSet || info.serviceStatus === 401;
+  $('ai-tokbtn').hidden = local;                 // the local engine has no token: the user's own login
+  const needToken = !local && (!info.tokenSet || info.serviceStatus === 401);
   if (needToken) showToken(true, info.tokenSet ? 'The service does not know the token kept here - give the current one.' : '', info.tokenSet);
   else if (info.tokenSet && info.serviceStatus !== 200) tokMsg('');
 
@@ -544,7 +558,7 @@ function panelInit(info, connect, compile, run) {
           if (!text && data.answer) { textBox(); text = data.answer; }
           textDone();
           const meta = [calls + ' tool call' + (calls === 1 ? '' : 's'), data.seconds + ' s', (data.input + data.output + data.cacheRead) + ' tokens'];
-          if (data.costUsd) meta.push('$' + data.costUsd.toFixed(3));
+          if (data.costUsd) meta.push(local ? '≈ $' + data.costUsd.toFixed(3) + ' at API prices - not billed, your plan' : '$' + data.costUsd.toFixed(3));
           log.append(el('div', 'aip-meta', meta.join(' · ')));
           if (data.isError) log.append(el('div', 'aip-err', 'The model ended with an error.'));
         } else if (event === 'error') {
