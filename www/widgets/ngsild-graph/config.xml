@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-graph" version="0.1.0">
+  <details>
+    <title>NGSI-LD graph</title>
+    <homepage>https://github.com/SEAMWARE/c3</homepage>
+    <authors>Seamware</authors>
+    <image>images/icon.svg</image>
+    <description>c³ Explore's graph: the entities as boxes, their Relationships as arrows - every source wired to it shown together; an entity clicked is sent on as the selection</description>
+    <license>Apache-2.0</license>
+  </details>
+  <preferences>
+    <preference name="hideTypes" type="text" label="Hidden types" description="Types not drawn, comma-separated - the legend's types toggle them" default=""/>
+  </preferences>
+  <wiring>
+    <inputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}, from NGSI-LD sources - each source's entities kept, all of them drawn" friendcode="ngsild-entities"/>
+    <inputendpoint name="select" type="text" label="Select" description="{entities: [an entity]} - that entity selected and centred (a table's or a map's selection)" friendcode="ngsild-entities"/>
+    <outputendpoint name="selected" type="text" label="Selected entity" description="{broker, tenant, type, entities: [the entity clicked]}" friendcode="ngsild-entities"/>
+  </wiring>
+  <contents src="index.html" cacheable="false" useplatformstyle="true"/>
+  <rendering height="50" width="8"/>
+</widget>

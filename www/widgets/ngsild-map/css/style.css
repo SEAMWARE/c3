@@ -1,7 +1,11 @@
 /* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
 html, body { height: 100%; margin: 0; }
-body { font: 12px/1.4 system-ui, sans-serif; background: #111419; }
-#map { position: absolute; inset: 0; }
-#note { position: absolute; left: 8px; top: 8px; right: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(17,20,25,.85); color: #cdd2db; }
-.maplibregl-popup-content { font: 12px/1.4 system-ui, sans-serif; padding: 6px 10px; }
-.maplibregl-ctrl-attrib { font-size: 10px; }
+body { font: 12px/1.4 system-ui, sans-serif; background: #0B1620; overflow: hidden; }
+#map { position: absolute; inset: 0; outline: none; }
+#note { position: absolute; left: 8px; top: 8px; right: 48px; padding: 6px 8px; border-radius: 6px; background: rgba(17,20,25,.85); color: #cdd2db; }
+.legend { position: absolute; left: 8px; bottom: 26px; right: 120px; display: flex; flex-wrap: wrap; gap: 4px 6px; pointer-events: none; }
+.legend span { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 12px; background: #161920E6; border: 1px solid #2B303B; color: #CDD2DB; font-size: 11px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: #0E1014CC !important; color: #A6ADBA; font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: #F3B3CE !important; }
+.maplibregl-ctrl-scale { background: #0E1014AA !important; color: #A6ADBA !important; border-color: #5A616E !important; font-size: 10px !important; }

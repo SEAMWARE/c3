@@ -1,5 +1,10 @@
-# What the map takes from c3's www/ into its .wgt - "<path under www/> <path in the .wgt>". maplibre must load
-# from the widget's own origin (its worker), and basemap.js finds the vendor files where c3's pages do.
+# What the map takes from c3's www/ into its .wgt - "<path under www/> <path in the .wgt>": Explore's own map
+# (map.js - its colours, icons, Relationships, glides) with what it uses, and maplibre with the base map's files.
+# maplibre must load from the widget's own origin (its worker); basemap.js finds the vendor files where c3's
+# pages do.
+js/map.js js/map.js
+js/icons.js js/icons.js
+js/entity.js js/entity.js
 js/basemap.js js/basemap.js
 vendor/maplibre-gl vendor/maplibre-gl
 vendor/pmtiles vendor/pmtiles

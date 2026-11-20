@@ -14,6 +14,7 @@ import {
   loadEntities, discover, setLocal, entityGet, entitiesQuery, relationshipNames, linked, typeParam,
   edgesOf, typesOf, attributes, kindOf, relationshipTargets, valueText, shortId, boxAttrs, ENTITY_CAP,
 } from './ngsild.js';
+import { PALETTE, typeColors, typeLabel } from './entity.js';
 import { layout } from './layout.js';
 import { Graph } from './graph.js';
 import { openMenu, closeMenu } from './menu.js';
@@ -40,16 +41,14 @@ const HOOD_IN_MAX = 300;
 
 //
 // Type colours - by the type's place in the sorted list of the broker's types (discovery), or of the
-// graph's types when the broker has no discovery: the same broker, the same colours, whatever is picked.
-// Types beyond the palette repeat it.
+// graph's types when the broker has no discovery: the same broker, the same colours, whatever is picked
+// (entity.js typeColors - the Dashboard's graph and map widgets colour the same way).
 //
-const PALETTE = ['#5FB4E8', '#F2B84B', '#6FDCA0', '#B48CFF', '#FF8A9A', '#6FA8FF', '#C9D46A', '#4FD1C5', '#F59E6B', '#E58AB1', '#7FA3BC', '#A6ADBA'];
-
 let colors = new Map();
 let ownColors = new Map();                       // the types given a colour of their own (AI Assist), per broker
 
 function setTypeColors(types) {
-  colors = new Map([...new Set(types)].sort().map((t, i) => [t, PALETTE[i % PALETTE.length]]));
+  colors = typeColors(types);
 }
 
 export function typeColor(type) {
@@ -58,13 +57,6 @@ export function typeColor(type) {
 
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-//
-// typeLabel - a type as shown: the last part of an expanded IRI
-//
-function typeLabel(t) {
-  const m = t.match(/[#/]([^#/]+)$/);
-  return m && /^https?:/.test(t) ? m[1] : t;
-}
 
 //
 // targetLabel - an entity id that is not loaded, as shown: urn:ngsi-ld:Dock:dock3 -> Dock:dock3

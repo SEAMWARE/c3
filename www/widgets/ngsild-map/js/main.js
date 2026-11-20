@@ -1,164 +1,125 @@
 //
-// main.js - NGSI-LD map: the entities on c³'s map, by their location
+// main.js - NGSI-LD map: c³ Explore's map of the entities wired to it
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// The base map is c³'s own (js/basemap.js and maplibre, packed into this widget by c³ - c3-include): online
+// Explore's own map (js/map.js and what it uses, maplibre and c³'s base map - packed in by c³, c3-include): online
 // OpenFreeMap tiles, and the areas downloaded in c³ read from c³ (GET /api/run/dashboard/maps, the .pmtiles by
-// Range, the fonts). On it, the entities of the input "entities" by their GeoProperty - points, lines,
-// polygons - labelled with their id (and an attribute's value). An entity clicked is sent on "selected", as
-// a table's row is; the view fits the entities whenever they are other entities.
+// Range, the fonts). On it the entities by every GeoProperty they have - a Point a marker (an icon for the kinds
+// Explore knows: a bus, a stop, a streetlight, ...), a line, an area - coloured by type as in Explore; a
+// Relationship between two entities on the map is an arrow ("relationships": every one, or the selected
+// entity's). The input "entities" takes the events of any number of sources, each source's entities kept; a new
+// read of the same entities makes a Point that moved glide to its new place, other entities fit the view to them.
+// An entity clicked is sent on "selected"; an entity on "select" is selected and centred.
 //
 /* globals MashupPlatform, C3 */
-import { buildStyle, registerProtocols, setAreas, setApiBase, ATTRIBUTION } from './basemap.js';
+import { EntityMap } from './map.js';
+import { setApiBase } from './basemap.js';
+import { edgesOf, typesOf, typeLabel } from './entity.js';
+import { Gathered, colorer } from './common/views.js';
 
 const t = C3.t;
-const PINK = '#e0457b';
-const LABEL_FONT = ['Noto Sans Medium'];
+const $ = (id) => document.getElementById(id);
 
-let map = null;
-let entities = null;
-let from = {};
-let selected = null;
-let shownIds = '';
-
-const pref = C3.pref;
+const gathered = new Gathered();
+const emap = new EntityMap({ container: $('map') });
+let shown = [];
+let byId = new Map();
+let idsKey = null;
+let opened = null;
+let quiet = false;
 
 function note(text) {
-  const n = document.getElementById('note');
-  n.hidden = !text;
-  n.textContent = text || '';
+  $('note').hidden = !text;
+  $('note').textContent = text || '';
+}
+
+function prefsApply() {
+  emap.setRelationships(C3.pref('relationships') || 'all');
+  emap.setLabelZoom(Math.max(0, Number(C3.pref('labelZoom')) || 0));
+  emap.setLabelAttr(C3.pref('attribute') || null);
 }
 
 //
-// geometryOf - an entity's GeoProperty, as GeoJSON: the one named, else location, else the first there is
+// open - the map, once: the areas downloaded in c³ first (without c³: the online tiles only)
 //
-function geometryOf(e) {
-  const isGeo = (g) => g && typeof g === 'object' && typeof g.type === 'string' && Array.isArray(g.coordinates);
-  const names = pref('geo') ? [pref('geo')] : ['location'].concat(Object.keys(e).filter((k) => {
-    const a = Array.isArray(e[k]) ? e[k][0] : e[k];
-    return a && a.type === 'GeoProperty';
-  }));
-  for (const n of names) {
-    const v = C3.value(e, n);
-    if (v && isGeo(v.value)) return v.value;
+function open() {
+  if (!opened) {
+    opened = (async () => {
+      let areas = [], fonts = false;
+      if (C3.base()) {
+        setApiBase(C3.base());
+        try {
+          const r = await C3.request('/api/run/dashboard/maps');
+          areas = (r.body && r.body.areas) || [];
+          fonts = !!(r.body && r.body.fonts);
+        } catch (e) { /* online only */ }
+      }
+      emap.setAreas(areas, fonts);
+      await emap.open(null);
+      prefsApply();
+    })();
   }
-  return null;
+  return opened;
 }
 
-function shortId(id) {
-  const m = /^urn:ngsi-ld:[^:]+:(.+)$/.exec(id);
-  return m ? m[1] : id;
+function legend(colorOf) {
+  const n = new Map();
+  shown.forEach((x) => { if (emap.has(x.entity.id)) typesOf(x.entity).forEach((ty) => n.set(ty, (n.get(ty) || 0) + 1)); });
+  const box = $('legend');
+  box.textContent = '';
+  [...n.keys()].sort().forEach((ty) => {
+    const s = C3.el('span');
+    const sw = C3.el('i');
+    sw.style.background = colorOf(ty);
+    s.append(sw, document.createTextNode(typeLabel(ty) + ' ' + n.get(ty)));
+    s.title = ty;
+    box.append(s);
+  });
 }
 
-function features() {
-  const attr = pref('attribute');
-  return (entities || []).map((e) => {
-    const g = geometryOf(e);
-    if (!g) return null;
-    const v = attr ? C3.value(e, attr) : null;
-    const label = shortId(e.id) + (v ? '\n' + C3.show(v.value, 1) + (v.unitCode ? ' ' + v.unitCode : '') : '');
-    //
-    // The geometry copied into this frame: the wiring hands over WireCloud's own objects (another window), and
-    // maplibre's worker transfer refuses an object whose class is not this window's Object
-    //
-    return { type: 'Feature', geometry: JSON.parse(JSON.stringify(g)), properties: { id: e.id, label, sel: e.id === selected } };
-  }).filter(Boolean);
-}
+async function draw() {
+  await open();
+  shown = gathered.all();
+  byId = new Map(shown.map((x) => [x.entity.id, x.entity]));
+  const colorOf = await colorer(shown, gathered.brokers());
+  const entities = shown.map((x) => x.entity);
+  const ids = entities.map((e) => e.id).join('\n');
+  const other = ids !== idsKey;
 
-//
-// fit - the view around the entities (a single point: zoom 15)
-//
-function fit(fs) {
-  let w = 180, s = 90, e = -180, n = -90;
-  const walk = (c) => {
-    if (typeof c[0] === 'number') {
-      w = Math.min(w, c[0]); e = Math.max(e, c[0]); s = Math.min(s, c[1]); n = Math.max(n, c[1]);
-    } else c.forEach(walk);
-  };
-  fs.forEach((f) => walk(f.geometry.coordinates));
-  if (w > e) return;
-  if (w === e && s === n) map.jumpTo({ center: [w, s], zoom: 15 });
-  else map.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: 16, duration: 0 });
-}
+  emap.set(entities, edgesOf(entities, byId), (e) => colorOf(typesOf(e)[0]), { live: !other });
+  if (other) emap.fit(false);
+  idsKey = ids;
+  legend(colorOf);
 
-function show() {
-  if (!map || !map.getSource('ents')) return;
-  const fs = features();
-  map.getSource('ents').setData({ type: 'FeatureCollection', features: fs });
-  if (!entities) note(t('Waiting for entities - wire an NGSI-LD source to this widget'));
-  else if (!fs.length) note(t('No entity has a location'));
+  if (!entities.length) note(t('No entities in what is wired to this widget'));
+  else if (!emap.anchors.size) note(t('No entity has a location'));
   else note(null);
-
-  const now = fs.map((f) => f.properties.id).join(',');
-  if (fs.length && now !== shownIds) fit(fs);
-  shownIds = now;
 }
 
-function entityLayers() {
-  map.addSource('ents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-  map.addLayer({ id: 'ents-fill', type: 'fill', source: 'ents', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': PINK, 'fill-opacity': 0.18 } });
-  map.addLayer({ id: 'ents-line', type: 'line', source: 'ents', filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': PINK, 'line-width': ['case', ['get', 'sel'], 3.5, 2] } });
-  map.addLayer({
-    id: 'ents-point', type: 'circle', source: 'ents', filter: ['==', ['geometry-type'], 'Point'],
-    paint: {
-      'circle-radius': ['case', ['get', 'sel'], 9, 6], 'circle-color': PINK,
-      'circle-stroke-color': ['case', ['get', 'sel'], '#ffffff', '#2a1520'], 'circle-stroke-width': 2,
-    },
-  });
-  map.addLayer({
-    id: 'ents-label', type: 'symbol', source: 'ents',
-    layout: { 'text-field': ['get', 'label'], 'text-font': LABEL_FONT, 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-allow-overlap': false },
-    paint: { 'text-color': '#E8EBF0', 'text-halo-color': '#0E1014', 'text-halo-width': 1.4 },
-  });
-
-  for (const layer of ['ents-point', 'ents-line', 'ents-fill']) {
-    map.on('click', layer, (ev) => {
-      const id = ev.features[0].properties.id;
-      const e = (entities || []).find((x) => x.id === id);
-      if (!e) return;
-      selected = id;
-      MashupPlatform.wiring.pushEvent('selected', C3.withEntities(from, [e]));
-      show();
-    });
-    map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
-  }
-}
-
-async function open() {
-  const maplibregl = await import('../vendor/maplibre-gl/maplibre-gl.mjs').then((m) => m.default || m);
-
-  //
-  // The areas downloaded in c³, read from c³ - without c³, the online tiles only
-  //
-  let areas = [], fonts = false;
-  if (C3.base()) {
-    setApiBase(C3.base());
-    try {
-      const r = await C3.request('/api/run/dashboard/maps');
-      areas = (r.body && r.body.areas) || [];
-      fonts = !!(r.body && r.body.fonts);
-    } catch (e) { /* online only */ }
-  }
-  setAreas(areas, fonts);
-  await registerProtocols(maplibregl);
-
-  map = new maplibregl.Map({ container: 'map', style: buildStyle(areas), center: [0, 20], zoom: 1.5, attributionControl: false });
-  map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: ATTRIBUTION }));
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-  map.on('load', () => {
-    entityLayers();
-    show();
-  });
-}
+emap.onSelect = (id) => {
+  emap.select(id);
+  if (quiet || !id) return;
+  const x = shown.find((s) => s.entity.id === id);
+  if (x) MashupPlatform.wiring.pushEvent('selected', C3.withEntities(x.from, [x.entity]));
+};
 
 MashupPlatform.wiring.registerCallback('entities', (data) => {
-  entities = C3.entitiesIn(data);
-  from = C3.fromOf(data);
-  show();
+  gathered.add(data);
+  draw().catch((e) => note(e.message));
 });
-C3.onPrefs(() => show());
 
+MashupPlatform.wiring.registerCallback('select', (data) => {
+  const e = C3.entitiesIn(data)[0];
+  if (!e || !emap.has(e.id)) return;
+  quiet = true;
+  emap.select(e.id, { center: true });
+  quiet = false;
+});
+
+C3.onPrefs(() => { if (emap.map) prefsApply(); });
+window.addEventListener('resize', () => emap.resize());
+
+note(t('Waiting for entities - wire an NGSI-LD source to this widget'));
 open().catch((e) => note(e.message));

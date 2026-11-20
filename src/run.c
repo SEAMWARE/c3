@@ -6970,7 +6970,8 @@ void runDashboardWidgetWrite(const char* method, const char* broker, const char*
 
 //
 // dashboardBrokers - GET /api/run/dashboard/brokers: the brokers c3 knows (the configuration's), for the widgets'
-// broker picker - url, name, tenant and tenants only
+// broker picker - url, name, tenant and tenants - and the types' own colours given in Explore (its
+// "connect": {"typeColours"}), so the graph and the map colour a type as Explore does
 //
 static void dashboardBrokers(CorHttpConn* connP)
 {
@@ -7011,7 +7012,22 @@ static void dashboardBrokers(CorHttpConn* connP)
       strAddJson(&s, tP->value.s);
       tFirst = false;
     }
-    strAdd(&s, "]}");
+    strAdd(&s, "], \"typeColours\": {");
+
+    CorNode* connP    = (bP->type == CorObject) ? corTreeLookup(bP, "connect") : NULL;
+    CorNode* coloursP = ((connP != NULL) && (connP->type == CorObject)) ? corTreeLookup(connP, "typeColours") : NULL;
+    bool     cFirst   = true;
+    for (CorNode* cP = ((coloursP != NULL) && (coloursP->type == CorObject)) ? coloursP->value.head : NULL; cP != NULL; cP = cP->next)
+    {
+      if ((cP->type != CorString) || (cP->name == NULL))
+        continue;
+      strAdd(&s, cFirst ? "" : ", ");
+      strAddJson(&s, cP->name);
+      strAdd(&s, ": ");
+      strAddJson(&s, cP->value.s);
+      cFirst = false;
+    }
+    strAdd(&s, "}}");
     first = false;
   }
   strAdd(&s, "]");

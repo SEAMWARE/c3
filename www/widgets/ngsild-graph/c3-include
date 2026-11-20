@@ -1,0 +1,6 @@
+# What the graph takes from c3's www/ into its .wgt - "<path under www/> <path in the .wgt>": Explore's own graph
+# (its boxes, arrows, zoom, pan, drag), its layout, the entity helpers and the graph's styles.
+js/graph.js js/graph.js
+js/layout.js js/layout.js
+js/entity.js js/entity.js
+css/graph.css css/graph.css

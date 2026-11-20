@@ -1025,9 +1025,13 @@ it is part of c³.
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
   and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
   `config.xml`. The source, rules, alarms and control widgets read a broker themselves (their own form: one of
-  c³'s brokers, a tenant); the others take the entities wired to them. A widget's file `c3-include` names files of `www/` packed into its `.wgt`
-  (`<path under www/> <path in the .wgt>`): the map takes maplibre and c³'s `basemap.js` this way, since
-  maplibre's worker must load from the widget's own origin. In WireCloud: add them from *Add widget*,
+  c³'s brokers, a tenant); the others take the entities wired to them. The graph and the map colour a type as
+  Explore does - its place in the broker's sorted types (`GET /ngsi-ld/v1/types`, through c³), unless it was given
+  a colour of its own in Explore (the broker's `connect.typeColours`, which `/api/run/dashboard/brokers` lists). A widget's file `c3-include` names files of `www/` packed into its `.wgt`
+  (`<path under www/> <path in the .wgt>`): the graph takes Explore's `graph.js`, `layout.js`, `entity.js` and
+  `css/graph.css` this way, the map Explore's `map.js` with `icons.js`, `entity.js`, `basemap.js` and maplibre,
+  since maplibre's worker must load from the widget's own origin. `entity.js` (an entity's types, attributes,
+  Relationships, colours) talks to no broker and no c³: `ngsild.js` exports it again for Explore. In WireCloud: add them from *Add widget*,
   connect them in *Wiring*.
 
   | Widget | Wiring | Does |
@@ -1036,7 +1040,8 @@ it is part of c³.
   | NGSI-LD table | in `entities`, out `selected` | entities as rows, attributes as columns, sorted by a header clicked; a row clicked is sent on `selected` with the source's broker, tenant and type, again with every new read |
   | NGSI-LD value | in `entities` | one attribute of one entity, large, with its `unitCode` and `observedAt` |
 | NGSI-LD chart | in `entities` | a numeric attribute over the last *hours*, a line per entity (8 at most): the history from the broker's temporal API (`GET /temporal/entities/{id}`, `options=temporalValues`), then each new read's values |
-| NGSI-LD map | in `entities`, out `selected` | the entities on c³'s map, by their GeoProperty (`location`, else the first), fitted to them; one clicked is sent on `selected` |
+| NGSI-LD graph | in `entities`, `select`; out `selected` | Explore's graph (`js/graph.js`, `js/layout.js`, `css/graph.css`): a box per entity, coloured by type, an arrow per Relationship between two entities shown, laid out in layers - wheel zooms, dragging the background pans, a box can be dragged. Keeps the entities of every source wired to `entities` (per broker, tenant and type) and draws them together - one source per type shows how the types relate. A new read of the same entities keeps the picture and flashes the values that changed; other entities lay it out again. The legend's types hide and show a type (preference `hideTypes`). One clicked is sent on `selected`; an entity on `select` is selected and centred |
+| NGSI-LD map | in `entities`, `select`; out `selected` | Explore's map (`js/map.js`): the entities by every GeoProperty (a Point a marker - an icon for the kinds Explore knows -, a line, an area), coloured by type, a Relationship between two entities on it an arrow (preference `relationships`: `all` or `selected`); labels: the preference `attribute`'s value, else the name, from the zoom `labelZoom` (0: always). Keeps every source's entities, as the graph; a new read of the same entities makes a Point that moved glide there, other entities fit the view to them. One clicked is sent on `selected`; an entity on `select` is selected and centred |
 | corCep rules | out `selected` | corCep's Rule entities at a broker (its rules tenant, `cep` by default), with the statistics corCep writes on them: what each watches and does, `fired`, `firedAt`, `lastError`, `droppedActions`; a rule that fired since the last read flashes, a disabled one is grey. Writes: a rule's checkbox PATCHes its `enabled`; ✎ opens it - `name`, `enabled`, and `when`, `then`, `else` as JSON (JsonProperty) - saved by PATCH, or deleted; *New* POSTs a Rule. corCep follows on its own (its subscription on the rules). A rule written here has no `author`: under `--pdp` corCep leaves it out |
 | NGSI-LD alarms | out `selected` | the entities of a type at a broker (`Alert` by default - a corCep rule's `create`), newest first by the broker's `createdAt` (`options=sysAttrs`), coloured by `severity`; one come since the widget opened is marked new for a minute. Writes: *Acknowledge* PATCHes `acknowledged` (true), `acknowledgedAt` (a DateTime) and `acknowledgedBy` (WireCloud's user) - an acknowledged one is grey, or left out (*Hide acknowledged*); × deletes one, once asked in the widget |
 | NGSI-LD control | in `entity` | sets one attribute of one entity (its form: broker, tenant, entity, attribute; or the entity of a selection wired to it): a *switch* (a boolean, the other value), a *button* (sends a JSON value), a *slider* (min, max, step - sent when let go) or a *number*; a PATCH of the entity's attrs, the attribute's `unitCode` kept. Reads the value again every *refresh* seconds |
@@ -1167,12 +1172,14 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | File | |
 |---|---|
 | `index.html`, `css/c3.css` | the shell and the look (dark only - Seamware magenta `#A72E60` on `#0E1014`) |
+| `css/graph.css` | the graph's viewport, arrows and boxes - shared with the Dashboard's graph widget |
 | `css/compile.css`, `js/compile.js` | the Compile page |
 | `css/run.css`, `js/run.js` | the Operate page (`#run`) |
 | `js/metrics.js` | Operate's Metrics: `/admin/metrics` parsed, sampled and drawn |
 | `js/main.js` | the splash screen, then the pages (`#compile`, `#run`, `#connect`; the last one shown is `ui.lastPage`) |
 | `js/api.js` | the backend's API |
-| `js/ngsild.js` | discovery, the paged load (all, or the types picked), linked entities, Relationships, values as text |
+| `js/ngsild.js` | discovery, the paged load (all, or the types picked), linked entities |
+| `js/entity.js` | an entity read: its types, attributes, Relationships, a short id, values as text, the type colours - no broker, no c³ (the Dashboard's graph and map widgets pack it; `ngsild.js` exports it again) |
 | `js/layout.js` | the layout |
 | `js/graph.js` | boxes, arrows, zoom, pan, drag, selection, filters, a box expanded in place |
 | `js/menu.js` | the context menu, mouse and keyboard |

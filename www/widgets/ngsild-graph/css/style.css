@@ -1,0 +1,19 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+/* c3's tokens, which css/graph.css (Explore's graph, packed in) draws with */
+:root {
+  --bg-deep: #0A0C0F; --panel: #161920; --line: #2B303B; --line-box: #333A47;
+  --text: #ECEEF2; --text-2: #CDD2DB; --muted: #A6ADBA; --faint: #5A616E;
+  --accent-2: #D0558A; --accent-soft: #F3B3CE; --warn: #F2B84B;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+html, body { height: 100%; margin: 0; }
+body { font: 12px/1.4 system-ui, sans-serif; background: var(--bg-deep); color: var(--text-2); overflow: hidden; }
+.bar { position: absolute; right: 8px; top: 8px; display: flex; align-items: center; gap: 4px; }
+.bar button { min-width: 26px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); cursor: pointer; }
+.bar #pct { min-width: 40px; text-align: center; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.legend { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 4px 6px; pointer-events: none; }
+.legend button { pointer-events: auto; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 12px; background: #161920E6; color: var(--text-2); font-size: 11px; cursor: pointer; }
+.legend button i { width: 9px; height: 9px; border-radius: 2px; }
+.legend button.off { color: var(--faint); }
+.legend button.off i { background: transparent !important; border: 2px solid currentColor; width: 5px; height: 5px; }
+#note { position: absolute; left: 8px; top: 8px; right: 160px; padding: 6px 8px; border-radius: 6px; background: #161920E6; color: var(--text-2); }
