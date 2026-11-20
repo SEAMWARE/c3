@@ -1,0 +1,24 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+html, body { height: 100%; }
+body { margin: 0; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+#view { height: 100%; box-sizing: border-box; overflow: auto; }
+.form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; padding: 10px; }
+.form label { color: #555; }
+.form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
+.acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
+button { padding: 4px 12px; font: inherit; cursor: pointer; }
+.ctl { height: 100%; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+.ctl .label { color: #555; font-size: 14px; cursor: pointer; overflow-wrap: anywhere; }
+.ctl .now { font-size: 26px; font-weight: 700; }
+.ctl .now .unit { font-size: 14px; font-weight: 400; color: #666; margin-left: 3px; }
+.ctl .meta { color: #888; overflow-wrap: anywhere; }
+.ctl .err { color: #b3261e; overflow-wrap: anywhere; }
+.ctl input[type=range] { width: 90%; accent-color: #e0457b; }
+.ctl .row { display: flex; gap: 6px; align-items: center; }
+.ctl .row input { width: 7em; padding: 4px 6px; font: inherit; }
+.ctl button.go { padding: 8px 22px; font-size: 14px; font-weight: 600; background: #e0457b; color: #fff; border: 0; border-radius: 6px; }
+.toggle { position: relative; width: 64px; height: 34px; border-radius: 17px; background: #c9ccd2; border: 0; padding: 0; transition: background .15s; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .15s; }
+.toggle.on { background: #e0457b; }
+.toggle.on::after { left: 33px; }
+.toggle:disabled { opacity: .5; }

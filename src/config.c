@@ -841,6 +841,71 @@ bool configUiSet(char* body, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// configDashboardWrites - may the Dashboard's widgets write entities (through c3's proxy)? "dashboard":
+// {"widgetsWrite": bool}; not set: yes
+//
+bool configDashboardWrites(void)
+{
+  Doc doc;
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* dP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "dashboard") : NULL;
+  CorNode* wP = ((dP != NULL) && (dP->type == CorObject)) ? corTreeLookup(dP, "widgetsWrite") : NULL;
+  bool     on = ((wP == NULL) || (wP->type != CorBoolean)) ? true : wP->value.b;
+
+  docRelease(&doc);
+  return on;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configDashboardSet - PUT /api/run/dashboard/settings {"widgetsWrite": bool}
+//
+bool configDashboardSet(char* body, char* errBuf, int errLen)
+{
+  Doc  doc;
+  bool ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if (bodyP == NULL)
+    goto done;
+
+  CorNode* wP = corTreeLookup(bodyP, "widgetsWrite");
+  if ((wP == NULL) || (wP->type != CorBoolean))
+  {
+    snprintf(errBuf, errLen, "\"widgetsWrite\": true or false");
+    goto done;
+  }
+
+  CorNode* dP = corTreeLookup(doc.treeP, "dashboard");
+  if ((dP != NULL) && (dP->type != CorObject))
+  {
+    corTreeChildRemove(doc.treeP, dP);
+    dP = NULL;
+  }
+  if (dP == NULL)
+  {
+    dP = corTreeObject(&doc.alloc, "dashboard");
+    corTreeChildAdd(doc.treeP, dP);
+  }
+  corTreeChildAddOrReplace(dP, "widgetsWrite", corTreeBoolean(&doc.alloc, "widgetsWrite", wP->value.b));
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // configBrokerTypes - PUT /api/brokers/types {"url": "...", "types": ["Building", "Floor"]}
 //
 // The entity types Connect loads from this broker, kept as the broker's "connect": {"types": [...]} - for

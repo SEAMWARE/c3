@@ -21,7 +21,7 @@
   var selected = null;
   var from = {};                                 // {broker, tenant, type} of the entities - sent on with the selection
 
-  function pref(name) { return MashupPlatform.prefs.get(name); }
+  var pref = C3.pref;
 
   function columns() {
     var c = String(pref("columns") || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
@@ -94,6 +94,6 @@
     var now = selected ? entities.filter(function (e) { return e.id === selected; })[0] : null;
     if (now) MashupPlatform.wiring.pushEvent("selected", C3.withEntities(from, [now]));
   });
-  MashupPlatform.prefs.registerCallback(render);
+  C3.onPrefs(render);
   render();
 })();

@@ -1,11 +1,11 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-rules" version="0.1.0">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-rules" version="0.2.1">
   <details>
     <title>corCep rules</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
     <authors>Seamware</authors>
     <image>images/icon.svg</image>
-    <description>corCep's rules at a broker c³ knows - what each watches and does, how often it fired, its last error - read through c³</description>
+    <description>corCep's rules at a broker c³ knows - what each watches and does, how often it fired, its last error - read through c³; turned on and off, edited, written and deleted too</description>
     <license>Apache-2.0</license>
   </details>
   <preferences>

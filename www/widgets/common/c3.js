@@ -28,7 +28,8 @@ var C3 = (function () {
       "Attribute": "Atributo", "Entity": "Entidad", "the first": "la primera", "No such attribute": "No existe ese atributo",
       "all": "todos", "any type": "cualquier tipo", "no value": "sin valor",
       "Hours": "Horas", "last {h} h": "últimas {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "El broker no tiene historial - no lo guarda (TRoE), o no para este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}",
-      "Rules tenant": "Tenant de las reglas", "Alarm type": "Tipo de alarma", "{n} rules": "{n} reglas", "{n} alarms": "{n} alarmas", "{n} new": "{n} nuevas", "never": "nunca", "disabled": "desactivada", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Ninguna regla en este tenant - corCep las lee del tenant de las reglas (cep)", "No alarm": "Ninguna alarma", "{n} s ago": "hace {n} s", "{n} min ago": "hace {n} min", "{n} h ago": "hace {n} h", "{n} d ago": "hace {n} d", "fired": "disparada", "last error": "último error"
+      "Rules tenant": "Tenant de las reglas", "Alarm type": "Tipo de alarma", "{n} rules": "{n} reglas", "{n} alarms": "{n} alarmas", "{n} new": "{n} nuevas", "never": "nunca", "disabled": "desactivada", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Ninguna regla en este tenant - corCep las lee del tenant de las reglas (cep)", "No alarm": "Ninguna alarma", "{n} s ago": "hace {n} s", "{n} min ago": "hace {n} min", "{n} h ago": "hace {n} h", "{n} d ago": "hace {n} d", "fired": "disparada", "last error": "último error",
+      "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ no dejó pasar la escritura - ¿está activado \"Los widgets pueden escribir\" en la página Panel de c³?", "Yes": "Sí", "No": "No", "Delete": "Borrar", "New": "Nueva", "Acknowledge": "Reconocer", "acknowledged": "reconocida", "Hide acknowledged": "Ocultar reconocidas", "Delete this alarm?": "¿Borrar esta alarma?", "Delete this rule?": "¿Borrar esta regla?", "Not JSON: {why}": "No es JSON: {why}", "Saved": "Guardado", "Enabled": "Activada", "Rule id": "Id de la regla", "Name": "Nombre", "Entity": "Entidad", "Control": "Control", "Label": "Etiqueta", "switch": "interruptor", "button": "botón", "slider": "deslizador", "number": "número", "Value sent": "Valor enviado", "Set": "Fijar", "Min": "Mín", "Max": "Máx", "Step": "Paso", "now": "ahora", "Rules written here have no author: with --pdp, corCep leaves them out": "Las reglas escritas aquí no tienen autor: con --pdp, corCep las deja fuera"
     },
     fr: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "par défaut", "Type": "Type", "Query (q)": "Requête (q)",
@@ -41,7 +42,8 @@ var C3 = (function () {
       "Attribute": "Attribut", "Entity": "Entité", "the first": "la première", "No such attribute": "Attribut introuvable",
       "all": "tous", "any type": "tout type", "no value": "pas de valeur",
       "Hours": "Heures", "last {h} h": "dernières {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Pas d'historique dans le broker - il n'en garde pas (TRoE), ou pas pour cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}",
-      "Rules tenant": "Tenant des règles", "Alarm type": "Type d'alarme", "{n} rules": "{n} règles", "{n} alarms": "{n} alarmes", "{n} new": "{n} nouvelles", "never": "jamais", "disabled": "désactivée", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Aucune règle dans ce tenant - corCep les lit dans le tenant des règles (cep)", "No alarm": "Aucune alarme", "{n} s ago": "il y a {n} s", "{n} min ago": "il y a {n} min", "{n} h ago": "il y a {n} h", "{n} d ago": "il y a {n} j", "fired": "déclenchée", "last error": "dernière erreur"
+      "Rules tenant": "Tenant des règles", "Alarm type": "Type d'alarme", "{n} rules": "{n} règles", "{n} alarms": "{n} alarmes", "{n} new": "{n} nouvelles", "never": "jamais", "disabled": "désactivée", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Aucune règle dans ce tenant - corCep les lit dans le tenant des règles (cep)", "No alarm": "Aucune alarme", "{n} s ago": "il y a {n} s", "{n} min ago": "il y a {n} min", "{n} h ago": "il y a {n} h", "{n} d ago": "il y a {n} j", "fired": "déclenchée", "last error": "dernière erreur",
+      "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ n'a pas laissé passer l'écriture - \"Les widgets peuvent écrire\" est-il activé dans la page Tableau de bord de c³ ?", "Yes": "Oui", "No": "Non", "Delete": "Supprimer", "New": "Nouvelle", "Acknowledge": "Acquitter", "acknowledged": "acquittée", "Hide acknowledged": "Masquer les acquittées", "Delete this alarm?": "Supprimer cette alarme ?", "Delete this rule?": "Supprimer cette règle ?", "Not JSON: {why}": "Pas du JSON : {why}", "Saved": "Enregistré", "Enabled": "Activée", "Rule id": "Id de la règle", "Name": "Nom", "Entity": "Entité", "Control": "Commande", "Label": "Libellé", "switch": "interrupteur", "button": "bouton", "slider": "curseur", "number": "nombre", "Value sent": "Valeur envoyée", "Set": "Appliquer", "Min": "Min", "Max": "Max", "Step": "Pas", "now": "maintenant", "Rules written here have no author: with --pdp, corCep leaves them out": "Les règles écrites ici n'ont pas d'auteur : avec --pdp, corCep les écarte"
     },
     de: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "Standard", "Type": "Typ", "Query (q)": "Abfrage (q)",
@@ -54,7 +56,8 @@ var C3 = (function () {
       "Attribute": "Attribut", "Entity": "Entität", "the first": "die erste", "No such attribute": "Kein solches Attribut",
       "all": "alle", "any type": "jeder Typ", "no value": "kein Wert",
       "Hours": "Stunden", "last {h} h": "letzte {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Keine Historie im Broker - er speichert keine (TRoE), oder nicht für dieses Attribut", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}",
-      "Rules tenant": "Tenant der Regeln", "Alarm type": "Alarmtyp", "{n} rules": "{n} Regeln", "{n} alarms": "{n} Alarme", "{n} new": "{n} neu", "never": "nie", "disabled": "deaktiviert", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Keine Regel in diesem Tenant - corCep liest sie aus dem Tenant der Regeln (cep)", "No alarm": "Kein Alarm", "{n} s ago": "vor {n} s", "{n} min ago": "vor {n} min", "{n} h ago": "vor {n} h", "{n} d ago": "vor {n} T", "fired": "ausgelöst", "last error": "letzter Fehler"
+      "Rules tenant": "Tenant der Regeln", "Alarm type": "Alarmtyp", "{n} rules": "{n} Regeln", "{n} alarms": "{n} Alarme", "{n} new": "{n} neu", "never": "nie", "disabled": "deaktiviert", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Keine Regel in diesem Tenant - corCep liest sie aus dem Tenant der Regeln (cep)", "No alarm": "Kein Alarm", "{n} s ago": "vor {n} s", "{n} min ago": "vor {n} min", "{n} h ago": "vor {n} h", "{n} d ago": "vor {n} T", "fired": "ausgelöst", "last error": "letzter Fehler",
+      "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ hat den Schreibvorgang nicht durchgelassen - ist \"Widgets dürfen schreiben\" auf der Dashboard-Seite von c³ an?", "Yes": "Ja", "No": "Nein", "Delete": "Löschen", "New": "Neu", "Acknowledge": "Quittieren", "acknowledged": "quittiert", "Hide acknowledged": "Quittierte ausblenden", "Delete this alarm?": "Diesen Alarm löschen?", "Delete this rule?": "Diese Regel löschen?", "Not JSON: {why}": "Kein JSON: {why}", "Saved": "Gespeichert", "Enabled": "Aktiv", "Rule id": "Regel-Id", "Name": "Name", "Entity": "Entität", "Control": "Steuerung", "Label": "Beschriftung", "switch": "Schalter", "button": "Taste", "slider": "Schieberegler", "number": "Zahl", "Value sent": "Gesendeter Wert", "Set": "Setzen", "Min": "Min", "Max": "Max", "Step": "Schritt", "now": "jetzt", "Rules written here have no author: with --pdp, corCep leaves them out": "Hier geschriebene Regeln haben keinen Autor: mit --pdp lässt corCep sie aus"
     }
   };
 
@@ -78,10 +81,12 @@ var C3 = (function () {
     return location.protocol + "//" + location.hostname + ":" + m[1];
   }
 
-  function request(path, headers) {
+  function request(path, headers, method, body) {
     var b = base();
     if (!b) return Promise.reject(new Error(t("c³ is not reachable - open this dashboard from c³'s Dashboard page")));
-    return fetch(b + path, { headers: headers || {}, credentials: "omit" }).then(function (r) {
+    var init = { method: method || "GET", headers: headers || {}, credentials: "omit" };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    return fetch(b + path, init).then(function (r) {
       return r.text().then(function (text) {
         var body = null;
         try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
@@ -89,10 +94,55 @@ var C3 = (function () {
           var why = (body && (body.detail || body.title)) || ("HTTP " + r.status);
           throw new Error(why);
         }
-        return { body: body, count: r.headers.get("NGSILD-Results-Count") };
+        return { body: body, count: r.headers.get("NGSILD-Results-Count"), location: r.headers.get("Location"), status: r.status };
       });
     }, function () {
-      throw new Error(t("c³ is not reachable - open this dashboard from c³'s Dashboard page"));
+      //
+      // A write the browser did not send: c³ did not answer its preflight - the Dashboard's widgets may not
+      // write now (c³'s switch), or this is no write c³ lets through
+      //
+      throw new Error(init.method === "GET" ? t("c³ is not reachable - open this dashboard from c³'s Dashboard page")
+                                            : t("c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?"));
+    });
+  }
+
+  //
+  // write - a POST, PATCH or DELETE of the NGSI-LD entities API at a broker, through c³ (the Dashboard's switch
+  // "Widgets may write" on): {body, status, location}
+  //
+  function write(method, broker, tenant, pathAndQuery, body) {
+    var headers = { "X-C3-Broker": broker, "Accept": "application/json" };
+    if (tenant) headers["NGSILD-Tenant"] = tenant;
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    return request("/api/proxy" + pathAndQuery, headers, method, body);
+  }
+
+  //
+  // property - a value as an NGSI-LD Property (a JsonProperty for an object or an array)
+  //
+  function property(v) {
+    return (v !== null && typeof v === "object") ? { type: "JsonProperty", json: v } : { type: "Property", value: v };
+  }
+
+  function username() {
+    try { return String(MashupPlatform.context.get("username") || ""); } catch (e) { return ""; }
+  }
+
+  //
+  // confirm - a question in the widget itself (no browser dialog), a bar at its top, outside what a refresh
+  // redraws: resolves true on Yes
+  //
+  function confirm(text) {
+    return new Promise(function (done) {
+      var bar = el("div", "c3-confirm");
+      var yes = el("button", "", t("Yes"));
+      var no = el("button", "", t("No"));
+      bar.append(el("span", "", text), yes, no);
+      yes.addEventListener("click", function () { bar.remove(); done(true); });
+      no.addEventListener("click", function () { bar.remove(); done(false); });
+      var old = document.querySelector(".c3-confirm");
+      if (old) old.remove();
+      document.body.prepend(bar);
     });
   }
 
@@ -170,6 +220,38 @@ var C3 = (function () {
   }
 
   //
+  // pref / onPrefs - a widget's preferences. WireCloud calls the preferences callback with the values changed
+  // BEFORE MashupPlatform.prefs.get gives them (and keeps one callback per widget): pref() answers from the
+  // values the callback brought first, so a widget that reads its preferences in its callback reads the new ones
+  //
+  var changed = {};
+
+  function pref(name) {
+    return (name in changed) ? changed[name] : MashupPlatform.prefs.get(name);
+  }
+
+  var prefsFn = null;
+
+  function onPrefs(fn) {
+    prefsFn = fn;
+    MashupPlatform.prefs.registerCallback(function (values) {
+      Object.keys(values || {}).forEach(function (k) { changed[k] = values[k]; });
+      fn(values);
+    });
+  }
+
+  //
+  // setPrefs - a widget's own form saved: the values stored in WireCloud, and the widget follows them at once -
+  // WireCloud's callback does not always come (seen with a widget's second Save in a row); when it does, the
+  // widget only follows the same values again
+  //
+  function setPrefs(values) {
+    Object.keys(values).forEach(function (k) { changed[k] = values[k]; });
+    MashupPlatform.prefs.set(values);
+    if (prefsFn) prefsFn(values);
+  }
+
+  //
   // ago - how long ago a time (ms) was, short
   //
   function ago(ms) {
@@ -216,5 +298,5 @@ var C3 = (function () {
     return e;
   }
 
-  return { t: t, base: base, request: request, brokers: brokers, get: get, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el };
+  return { t: t, pref: pref, onPrefs: onPrefs, setPrefs: setPrefs, base: base, request: request, brokers: brokers, get: get, write: write, property: property, username: username, confirm: confirm, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el };
 })();

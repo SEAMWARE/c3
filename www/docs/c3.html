@@ -487,10 +487,18 @@ uploads it as <code>admin</code>. In WireCloud, add them to a workspace from <b>
   (online tiles and the areas downloaded in c³), by their location; one clicked is sent on <code>selected</code></td></tr>
   <tr><td>corCep rules</td><td>out <code>selected</code></td><td>corCep's rules at a broker (its rules tenant,
   <code>cep</code>): what each watches and does, how often and when it last fired, its last error - the statistics
-  corCep writes on its Rule entities; a rule that fired since the last read flashes</td></tr>
+  corCep writes on its Rule entities; a rule that fired since the last read flashes. Its checkbox turns a rule on
+  or off; ✎ opens it - its name, and <code>when</code>, <code>then</code>, <code>else</code> as JSON - to save or
+  delete; <b>New</b> writes a rule. corCep follows on its own. A rule written here has no <code>author</code>: under
+  <code>--pdp</code> corCep leaves it out</td></tr>
   <tr><td>NGSI-LD alarms</td><td>out <code>selected</code></td><td>the alarms at a broker - the entities of a type,
   <code>Alert</code> by default, as a corCep rule's <code>create</code> makes them - newest first (the broker's
-  <code>createdAt</code>), coloured by their <code>severity</code>; new ones marked</td></tr>
+  <code>createdAt</code>), coloured by their <code>severity</code>; new ones marked. <b>Acknowledge</b> sets
+  <code>acknowledged</code>, <code>acknowledgedAt</code> and <code>acknowledgedBy</code> (WireCloud's user) - an
+  acknowledged alarm is grey, or hidden (<b>Hide acknowledged</b>); &times; deletes one, once asked</td></tr>
+  <tr><td>NGSI-LD control</td><td>in <code>entity</code></td><td>sets one attribute of one entity - a light on, a
+  setpoint: a switch (a boolean), a button (sends a value), a slider or a number. Its form names the broker, tenant,
+  entity and attribute; a selection wired to it picks the entity instead. The attribute's unit is kept</td></tr>
 </table>
 <p>Source &rarr; table &rarr; value: the table lists the entities, the value shows the one clicked, and follows its
 value as the source reads again. Source &rarr; chart draws all of them over time; table (or map) &rarr; chart draws
@@ -499,11 +507,14 @@ chart's history needs a broker that keeps it (TRoE); without one it draws what i
 <p>The map is c³'s own (the same base map as Explore): c³ packs maplibre and its base map into the widget (the
 widget's file <code>c3-include</code> names them), and the widget reads the areas downloaded in c³, and their fonts,
 from c³.</p>
-<p><b>Through c³</b> - the widgets read the brokers through c³'s proxy, as Explore does: c³ adds each broker's token,
-headers and tenant. c³ answers CORS for WireCloud's origin only (<code>http://localhost:&lt;port&gt;</code> or
-<code>http://127.0.0.1:&lt;port&gt;</code> while WireCloud runs), on the NGSI-LD API through the proxy, the list of
-brokers and the downloaded map areas (their list, the <code>.pmtiles</code> by Range, the fonts), and for <b>GET
-only</b>: a preflight for any other method is answered 403, so a widget cannot write. The
+<p><b>Through c³</b> - the widgets reach the brokers through c³'s proxy, as Explore does: c³ adds each broker's
+token, headers and tenant, so only the brokers c³ knows. c³ answers CORS for WireCloud's origin only
+(<code>http://localhost:&lt;port&gt;</code> or <code>http://127.0.0.1:&lt;port&gt;</code> while WireCloud runs), on
+the NGSI-LD API through the proxy, the list of brokers and the downloaded map areas (their list, the
+<code>.pmtiles</code> by Range, the fonts) for GET; and for POST, PATCH and DELETE on the entities
+(<code>/ngsi-ld/v1/entities</code> and below) only, while the switch <b>Widgets may write</b> in the Dashboard's bar
+is on - it is by default. Anything else - a subscription, <code>/admin</code>, a write with the switch off - is
+refused (403). Every write a widget makes is a line in the Dashboard's log. The
 widgets find c³'s port in the cookie <code>c3_port</code>, set with WireCloud's when c³ logs in.</p>
 <h3 id="dashboard-image">WireCloud's image</h3>
 <p>WireCloud 2 has no published image yet (<a href="https://github.com/Ficodes/WireCloud/issues/7" target="_blank"

@@ -29,3 +29,12 @@ tbody tr.sel { background: #f6d6e3; }
 tr.new td:first-child { box-shadow: inset 3px 0 0 #e0457b; }
 tr.new .name { color: #b3195a; }
 td.when { white-space: nowrap; color: #666; }
+.head .hide { display: inline-flex; align-items: center; gap: 4px; color: #666; cursor: pointer; }
+td.acts { white-space: nowrap; text-align: right; }
+td.acts button { padding: 1px 8px; font-size: 11px; }
+td.acts button.x { margin-left: 4px; padding: 1px 6px; color: #999; }
+td.acts button.x:hover { color: #b3261e; }
+tr.acked td { opacity: .55; }
+.c3-confirm { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff4d6; border-bottom: 1px solid #f0d58a; position: fixed; top: 0; left: 0; right: 0; z-index: 5; }
+.c3-confirm span { flex: 1; }
+input[type=checkbox] { accent-color: #e0457b; }

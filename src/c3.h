@@ -147,6 +147,8 @@ extern int          configBrokers(void);        // how many brokers it holds
 extern bool         configBrokerTouch(char* body, char* errBuf, int errLen);   // POST /api/brokers
 extern bool         configBrokerForget(char* body, char* errBuf, int errLen);  // DELETE /api/brokers
 extern bool         configUiSet(char* body, char* errBuf, int errLen);         // PUT /api/ui
+extern bool         configDashboardWrites(void);                                 // "dashboard": {"widgetsWrite"} - may widgets write entities (default yes)
+extern bool         configDashboardSet(char* body, char* errBuf, int errLen);  // PUT /api/run/dashboard/settings
 extern bool         configBrokerTypes(char* body, char* errBuf, int errLen);   // PUT /api/brokers/types
 extern bool         configBrokerConnect(char* body, char* errBuf, int errLen); // PUT /api/brokers/connect
 extern bool         configBrokerLogin(char* body, char* errBuf, int errLen);   // PUT /api/brokers/login
@@ -235,6 +237,7 @@ extern void  runRequest(CorHttpConn* connP, const char* path);
 extern void  runCapabilities(Str* sP);            // "run": {...} of GET /api/capabilities
 extern void  runShutdown(void);                   // c3 stops: the brokers keep running; c3's own helpers stop
 extern bool  runDashboardOrigin(const char* origin);   // WireCloud's Origin, while the Dashboard runs
+extern void  runDashboardWidgetWrite(const char* method, const char* broker, const char* tenant, const char* path);  // in the Dashboard's log
 
 
 

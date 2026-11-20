@@ -208,6 +208,7 @@ markers are coloured by), the downloaded map areas, and the last page:
         "grace": 30, "lastStarted": "2026-10-10T08:00:00Z" }
     ]
   },
+  "dashboard": { "widgetsWrite": true },
   "ui": { "lastPage": "connect", "lang": "en", "textSize": "130" }
 }
 ```
@@ -229,6 +230,8 @@ markers are coloured by), the downloaded map areas, and the last page:
 - `maps.areas`: the areas downloaded, one `.pmtiles` file each in the data directory. The directory is
   the truth: a finished download is added, an area whose file is gone is dropped, a file with no entry
   is added under its id (its bounds and levels read from the file's header).
+- `dashboard.widgetsWrite`: may the Dashboard's widgets write entities (the switch **Widgets may write**,
+  Dashboard below); not set: yes.
 - Written whole to `c3.json.tmp`, then renamed over `c3.json` (mode 600, the directory 700).
 - `compile.choice`: Compile's choice as it is (`mode`, the `features` set by hand, `workload`), kept as it
   changes; `compile.presets`: the choices saved under a name. The builds themselves are not listed here:
@@ -1021,7 +1024,7 @@ it is part of c³.
 - **c³'s widgets** (`www/widgets/`, vendor `Seamware`, plain JS): every start installs each one WireCloud
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
   and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
-  `config.xml`. The source, rules and alarms widgets read a broker themselves (their own form: one of
+  `config.xml`. The source, rules, alarms and control widgets read a broker themselves (their own form: one of
   c³'s brokers, a tenant); the others take the entities wired to them. A widget's file `c3-include` names files of `www/` packed into its `.wgt`
   (`<path under www/> <path in the .wgt>`): the map takes maplibre and c³'s `basemap.js` this way, since
   maplibre's worker must load from the widget's own origin. In WireCloud: add them from *Add widget*,
@@ -1034,15 +1037,20 @@ it is part of c³.
   | NGSI-LD value | in `entities` | one attribute of one entity, large, with its `unitCode` and `observedAt` |
 | NGSI-LD chart | in `entities` | a numeric attribute over the last *hours*, a line per entity (8 at most): the history from the broker's temporal API (`GET /temporal/entities/{id}`, `options=temporalValues`), then each new read's values |
 | NGSI-LD map | in `entities`, out `selected` | the entities on c³'s map, by their GeoProperty (`location`, else the first), fitted to them; one clicked is sent on `selected` |
-| corCep rules | out `selected` | corCep's Rule entities at a broker (its rules tenant, `cep` by default), with the statistics corCep writes on them: what each watches and does, `fired`, `firedAt`, `lastError`, `droppedActions`; a rule that fired since the last read flashes, a disabled one is grey |
-| NGSI-LD alarms | out `selected` | the entities of a type at a broker (`Alert` by default - a corCep rule's `create`), newest first by the broker's `createdAt` (`options=sysAttrs`), coloured by `severity`; one come since the widget opened is marked new for a minute |
+| corCep rules | out `selected` | corCep's Rule entities at a broker (its rules tenant, `cep` by default), with the statistics corCep writes on them: what each watches and does, `fired`, `firedAt`, `lastError`, `droppedActions`; a rule that fired since the last read flashes, a disabled one is grey. Writes: a rule's checkbox PATCHes its `enabled`; ✎ opens it - `name`, `enabled`, and `when`, `then`, `else` as JSON (JsonProperty) - saved by PATCH, or deleted; *New* POSTs a Rule. corCep follows on its own (its subscription on the rules). A rule written here has no `author`: under `--pdp` corCep leaves it out |
+| NGSI-LD alarms | out `selected` | the entities of a type at a broker (`Alert` by default - a corCep rule's `create`), newest first by the broker's `createdAt` (`options=sysAttrs`), coloured by `severity`; one come since the widget opened is marked new for a minute. Writes: *Acknowledge* PATCHes `acknowledged` (true), `acknowledgedAt` (a DateTime) and `acknowledgedBy` (WireCloud's user) - an acknowledged one is grey, or left out (*Hide acknowledged*); × deletes one, once asked in the widget |
+| NGSI-LD control | in `entity` | sets one attribute of one entity (its form: broker, tenant, entity, attribute; or the entity of a selection wired to it): a *switch* (a boolean, the other value), a *button* (sends a JSON value), a *slider* (min, max, step - sent when let go) or a *number*; a PATCH of the entity's attrs, the attribute's `unitCode` kept. Reads the value again every *refresh* seconds |
 
-- **The widgets read the brokers through c³** (`/api/proxy`, as Explore - c³ adds each broker's token,
-  headers and tenant). c³ answers CORS for WireCloud's origin only - `http://localhost:<port>` or
+- **The widgets reach the brokers through c³** (`/api/proxy`, as Explore - c³ adds each broker's token,
+  headers and tenant), so only the brokers c³ knows. c³ answers CORS for WireCloud's origin only - `http://localhost:<port>` or
   `http://127.0.0.1:<port>` while WireCloud runs - on `/api/proxy/ngsi-ld/v1/...`,
   `/api/run/dashboard/brokers`, `/api/run/dashboard/maps` and the downloaded areas' `.pmtiles` (by Range)
-  and fonts (`/api/maps/areas/...`, `/api/maps/fonts/...`), for **GET only**: a preflight for any other method is answered 403, so a
-  widget cannot write. Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
+  and fonts (`/api/maps/areas/...`, `/api/maps/fonts/...`), for **GET**; and **POST, PATCH and DELETE on
+  `/api/proxy/ngsi-ld/v1/entities` and `/entities/...` only**, while the Dashboard's switch **Widgets may write**
+  is on (config `"dashboard": {"widgetsWrite": true}`, the default; `PUT /api/run/dashboard/settings`). Any
+  other preflight - a subscription, `/admin`, a PUT, a write with the switch off - is answered 403, and a write
+  from WireCloud's origin that comes without one is refused the same. Each widget write is a line in the
+  Dashboard's log (`a widget writes: <method> <broker><path> - tenant <t>`). Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
   `c3_port`, set with WireCloud's on the login answer.
 - **The image**: WireCloud 2 has no published one yet ([Ficodes/WireCloud#7](https://github.com/Ficodes/WireCloud/issues/7)).
   Build it from its source: `docker compose -f docker/docker-compose.yml build wirecloud` in a clone of
@@ -1108,6 +1116,7 @@ The backend's API, used by the pages:
 | `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |
 | `GET /api/run/dashboard/brokers` | the brokers c³ knows, for the widgets: `[{url, name, tenant, tenants}]`; CORS for WireCloud's origin (GET) |
+| `PUT /api/run/dashboard/settings` | `{"widgetsWrite": bool}` - may the Dashboard's widgets write entities (the page's switch *Widgets may write*); kept in c3.json as `"dashboard": {"widgetsWrite"}`, on by default. `GET /api/run/dashboard` answers it as `widgetsWrite` |
 | `GET /api/run/dashboard/maps` | the downloaded areas and whether their fonts are here, for the map widget: `{areas, fonts}`; CORS for WireCloud's origin (GET) |
 | `POST /api/run/dds/discover` `{broker}` | the inventory of the broker's DDS domain - the dds bridge's (`GET /admin/bridges/dds/inventory`), from a broker of its own started and stopped for it: `200`; `422` for a container broker, `409` while another discovery runs, `502` with why when the broker did not start or answer |
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |

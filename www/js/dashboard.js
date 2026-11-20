@@ -72,6 +72,15 @@ export class Dashboard {
     this.progress = null;          // the dialog's: {what: 'start' | 'stop', error} while it is open
     $('db-pclose').addEventListener('click', () => this.progressClose());
     $('db-progress').addEventListener('cancel', () => { this.progress = null; });
+    $('db-write').addEventListener('change', async (ev) => {
+      try {
+        await api.dashboardSettings({ widgetsWrite: ev.target.checked });
+        this.writeWhy = null;
+      } catch (e) {
+        this.writeWhy = t('c³ did not keep "Widgets may write": {error}', { error: e.message });   // shown in the bar; the switch as c³ has it
+      }
+      this.poll();
+    });
   }
 
   refresh() {
@@ -273,9 +282,11 @@ export class Dashboard {
 
     if (runs) {
       $('db-url').textContent = '127.0.0.1:' + s.port;
+      $('db-write').checked = s.widgetsWrite !== false;
       $('db-open').href = this.wirecloudUrl(s.port);
-      $('db-loginwhy').hidden = !this.loginWhy;
-      $('db-loginwhy').textContent = this.loginWhy ? t('c³ could not log in to WireCloud: {why}', { why: this.loginWhy }) : '';
+      const barWhy = this.loginWhy ? t('c³ could not log in to WireCloud: {why}', { why: this.loginWhy }) : (this.writeWhy || '');
+      $('db-loginwhy').hidden = !barWhy;
+      $('db-loginwhy').textContent = barWhy;
       if (this.frameFor !== s.port && !this.loginWhy) this.login(s.port);
       return;
     }

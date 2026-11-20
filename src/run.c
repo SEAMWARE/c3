@@ -6759,6 +6759,16 @@ bool runDashboardOrigin(const char* origin)
 }
 
 //
+// runDashboardWidgetWrite - a widget's write through the proxy (serve.c lets it through), in the Dashboard's log
+//
+void runDashboardWidgetWrite(const char* method, const char* broker, const char* tenant, const char* path)
+{
+  if (dash.logPath[0] != 0)
+    logLine(dash.logPath, "a widget writes: %s %s%s%s%s", method, (broker != NULL) ? broker : "(no broker)", path,
+            ((tenant != NULL) && (tenant[0] != 0)) ? " - tenant " : "", ((tenant != NULL) && (tenant[0] != 0)) ? tenant : "");
+}
+
+//
 // dashboardBrokers - GET /api/run/dashboard/brokers: the brokers c3 knows (the configuration's), for the widgets'
 // broker picker - url, name, tenant and tenants only
 //
@@ -7036,6 +7046,7 @@ static void dashboardState(CorHttpConn* connP)
   }
   strAdd(&s, "]}");
   strAdd(&s, ", \"log\": ");       strAddJson(&s, dash.logPath);
+  strAddf(&s, ", \"widgetsWrite\": %s", configDashboardWrites() ? "true" : "false");
 
   int  running = 0;
   int  port    = 0;

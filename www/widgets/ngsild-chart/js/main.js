@@ -26,7 +26,7 @@
   var loadedFor = null;                          // the key the history was read for
   var note = null;                               // why there is no history (shown under the chart)
 
-  function pref(name) { return MashupPlatform.prefs.get(name); }
+  var pref = C3.pref;
   function hours() { return Math.max(0.1, Number(pref("hours")) || 6); }
   function since() { return Date.now() - hours() * 3600 * 1000; }
 
@@ -130,7 +130,7 @@
     hrs.step = "any";
     hrs.value = hours();
     var save = el("button", "", t("Save"));
-    save.addEventListener("click", function () { MashupPlatform.prefs.set({ attribute: attr.value, hours: Number(hrs.value) || 6 }); });
+    save.addEventListener("click", function () { C3.setPrefs({ attribute: attr.value, hours: Number(hrs.value) || 6 }); });
     box.append(el("label", "", t("Attribute")), attr, el("label", "", t("Hours")), hrs, save);
     view.replaceChildren(box);
   }
@@ -269,7 +269,7 @@
     draw();
   });
 
-  MashupPlatform.prefs.registerCallback(function () {
+  C3.onPrefs(function () {
     loadedFor = null;
     if (entities && pref("attribute")) history();
     draw();
