@@ -1,0 +1,39 @@
+/*
+ * dashboard.css - the Dashboard page: WireCloud's state and controls, then WireCloud itself in a frame
+ *
+ * Copyright 2026 Seamware
+ * SPDX-License-Identifier: Apache-2.0
+ */
+#page-dashboard { gap: 12px; }
+
+.db-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.db-doing { font-size: 14px; color: var(--muted); }
+.db-log {
+  margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; font-family: var(--mono); font-size: 12px; line-height: 17px;
+  white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2);
+}
+
+.db-powered { font-size: 12px; color: var(--dim); }
+.db-powered a { color: var(--muted); }
+
+/* WireCloud runs: a bar, then the frame filling the rest of the page */
+.db-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+}
+.db-bar .rdot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.db-bar .db-name { font-weight: 600; }
+.db-bar .db-url { font-size: 13px; color: var(--muted); }
+.db-bar .grow { flex: 1; }
+.db-bar a.btn { text-decoration: none; }
+
+.db-framewrap { flex: 1; display: flex; min-height: 480px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.db-frame { flex: 1; width: 100%; border: 0; }
+
+.chip.db-running { color: var(--ok); }
+.chip.db-failed, .chip.db-partly { color: var(--warn); }
+
+@media (max-width: 720px) {
+  .db-bar { padding: 8px; }
+  .db-framewrap { min-height: 360px; }
+}

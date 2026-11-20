@@ -67,6 +67,7 @@
 #include <string.h>                              // strcmp, strncmp, strlen
 #include <sys/socket.h>                          // socket, connect
 #include <sys/stat.h>                            // stat
+#include <sys/time.h>                            // struct timeval
 #include <sys/wait.h>                            // waitpid
 #include <time.h>                                // time
 #include <unistd.h>                              // close, write, usleep
@@ -119,21 +120,35 @@ typedef struct ServiceKind
   int          port;                             // in the container
   int          hostPort;                         // preferred, on 127.0.0.1
   const char*  volumePath;
-  const char*  env;                              // -e, or NULL
+  const char*  env[8];                           // -e each, "{set}" the set's name; NULL-terminated
   const char*  cmd[4];                           // the command, or none (the image's)
+  bool         secretEnv;                        // also --env-file: the set's generated keys (dashboardEnvFile)
 } ServiceKind;
 
 static const ServiceKind kinds[] =
 {
-  { "mongo",     "MongoDB",                  "mongo:8.2",                     27017, 37017, "/data/db",              NULL,                              { NULL } },
-  { "timescale", "PostgreSQL + TimescaleDB", "timescale/timescaledb-ha:pg16", 5432,  15432, "/home/postgres/pgdata", "POSTGRES_HOST_AUTH_METHOD=trust", { NULL } },
-  { "mosquitto", "Mosquitto",                "eclipse-mosquitto:2",           1883,  11883, "/mosquitto/data",       NULL,                              { "mosquitto", "-c", "/mosquitto-no-auth.conf", NULL } },
+  { "mongo",     "MongoDB",                  "mongo:8.2",                     27017, 37017, "/data/db",              { NULL },                             { NULL }, false },
+  { "timescale", "PostgreSQL + TimescaleDB", "timescale/timescaledb-ha:pg16", 5432,  15432, "/home/postgres/pgdata", { "POSTGRES_HOST_AUTH_METHOD=trust", NULL }, { NULL }, false },
+  { "mosquitto", "Mosquitto",                "eclipse-mosquitto:2",           1883,  11883, "/mosquitto/data",       { NULL },                             { "mosquitto", "-c", "/mosquitto-no-auth.conf", NULL }, false },
+
+  //
+  // The Dashboard's (dashboard.c reads these through runDashboard*): WireCloud and what it stores in. No
+  // published WireCloud 2 image yet (Ficodes/WireCloud#7): the one built from its source, by that name.
+  // MongoDB without a replica set has no transactions - WireCloud is told so instead of finding out.
+  //
+  { "elasticsearch", "Elasticsearch", "docker.elastic.co/elasticsearch/elasticsearch:8.13.4", 9200, 19200, "/usr/share/elasticsearch/data",
+    { "discovery.type=single-node", "xpack.security.enabled=false", "ES_JAVA_OPTS=-Xms512m -Xmx512m", NULL }, { NULL }, false },
+  { "wirecloud", "WireCloud", "wirecloud-fastapi:latest", 8000, 18000, "/var/lib/wirecloud",
+    { "WIRECLOUD_DB_HOST=c3-{set}-mongo", "WIRECLOUD_ES_HOST=c3-{set}-elasticsearch", "WIRECLOUD_DB_USE_TRANSACTIONS=false",
+      "WIRECLOUD_BASEDIR=/var/lib/wirecloud", NULL }, { NULL }, true },
 };
 
-#define KIND_MONGO      0
-#define KIND_TIMESCALE  1
-#define KIND_MOSQUITTO  2
-#define KINDS           3
+#define KIND_MONGO          0
+#define KIND_TIMESCALE      1
+#define KIND_MOSQUITTO      2
+#define KIND_ELASTICSEARCH  3
+#define KIND_WIRECLOUD      4
+#define KINDS               5
 
 
 
@@ -298,6 +313,25 @@ static Broker*         brokers[BROKERS_MAX];
 static int             nBrokers  = 0;
 static Service         svcs[SERVICES_MAX];
 static int             nSvcs     = 0;
+
+//
+// The Dashboard's state (its section: "The Dashboard", below)
+//
+#define DASHBOARD_SET   "dashboard"
+#define DASHBOARD_USER  "admin"
+
+typedef struct Dashboard
+{
+  bool     busy;                                 // a start or a stop runs
+  char     doing[200];                           // what it does now ("" when not busy)
+  char     why[600];                             // why the last start failed; "" - it did not
+  char     logPath[2300];
+  int64_t  logEnd;
+  SseSubs  subs;
+  time_t   lastBeat;
+} Dashboard;
+
+static Dashboard dash;                           // rMutex
 static char            runDir[2048];
 static char            svcDir[2100];
 static char            engine[2048];             // docker or podman, its path; "": none
@@ -2160,13 +2194,13 @@ static pid_t followerStart(const char* container, const char* logPath)
 //
 // engineToLog - the engine with these arguments, its output into a log file (a pull: progress lines), waited for
 //
-static int engineToLog(const char* logPath, int timeoutS, Argv* aP)
+static int engineToLogEnv(const char* logPath, int timeoutS, Argv* aP, char* const* envp)
 {
   int fd = open(logPath, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
   if (fd == -1)
     return -1;
 
-  ProcSpawn sp  = { aP->v, NULL, fd, NULL, true, false, SIGTERM };
+  ProcSpawn sp  = { aP->v, envp, fd, NULL, true, false, SIGTERM };
   pid_t     pid = procSpawn(&sp);
   close(fd);
 
@@ -2193,6 +2227,11 @@ static int engineToLog(const char* logPath, int timeoutS, Argv* aP)
   }
 
   return status;
+}
+
+static int engineToLog(const char* logPath, int timeoutS, Argv* aP)
+{
+  return engineToLogEnv(logPath, timeoutS, aP, NULL);
 }
 
 //
@@ -2249,6 +2288,124 @@ static bool networkEnsure(char* err, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// localHttp - one HTTP/1.0 request to 127.0.0.1:<port> (the Dashboard's WireCloud and Elasticsearch): the
+// status, the response's head into headP (when given) - -1: no answer. A body is sent as JSON.
+//
+static int localHttp(int port, const char* method, const char* path, const char* body, Str* headP, int timeoutS)
+{
+  int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (fd == -1)
+    return -1;
+
+  struct timeval tv = { timeoutS, 0 };
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+  struct sockaddr_in sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sin_family      = AF_INET;
+  sa.sin_port        = htons(port);
+  sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+  if (connect(fd, (struct sockaddr*) &sa, sizeof(sa)) != 0)
+  {
+    close(fd);
+    return -1;
+  }
+
+  Str req = { NULL, 0, 0 };
+  strAddf(&req, "%s %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\nAccept: */*\r\nUser-Agent: c3/" C3_VERSION "\r\n", method, path, port);   // WireCloud answers 500 without a User-Agent (Ficodes/WireCloud#8)
+  if (body != NULL)
+    strAddf(&req, "Content-Type: application/json\r\nContent-Length: %d\r\n", (int) strlen(body));
+  strAdd(&req, "\r\n");
+  if (body != NULL)
+    strAdd(&req, body);
+
+  bool sent = true;
+  for (int off = 0; off < req.len; )
+  {
+    int w = write(fd, req.s + off, req.len - off);
+    if (w <= 0)
+    {
+      sent = false;
+      break;
+    }
+    off += w;
+  }
+  strFree(&req);
+
+  char head[16 * 1024];
+  int  len = 0;
+
+  while (sent && (len < (int) sizeof(head) - 1))
+  {
+    int r = read(fd, head + len, sizeof(head) - 1 - len);
+    if (r <= 0)
+      break;
+    len += r;
+    head[len] = 0;
+    if (strstr(head, "\r\n\r\n") != NULL)
+      break;
+  }
+  close(fd);
+  head[len] = 0;
+
+  int status = -1;
+  if ((len > 12) && (strncmp(head, "HTTP/1.", 7) == 0))
+    status = atoi(&head[9]);
+
+  if (headP != NULL)
+  {
+    char* end = strstr(head, "\r\n\r\n");
+    strAddN(headP, head, (end != NULL) ? (int) (end - head) : len);
+  }
+
+  return status;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// secretEnvWrite - the env file a set's WireCloud starts with (--env-file): its JWT and secret keys, made once
+// and kept in secrets.json (credsDashboard). Mode 0600, removed again once the container is made.
+//
+static bool secretEnvWrite(const char* set, char* path, int pathLen, char* err, int errLen)
+{
+  char jwtKey[65];
+  char secretKey[65];
+
+  if (credsDashboard(NULL, 0, jwtKey, sizeof(jwtKey), secretKey, sizeof(secretKey), err, errLen) == false)
+    return false;
+
+  snprintf(path, pathLen, "%s/c3-%s-wirecloud.env", svcDir, set);
+
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  if (fd == -1)
+  {
+    snprintf(err, errLen, "%s: %s", path, strerror(errno));
+    path[0] = 0;
+    return false;
+  }
+
+  char text[256];
+  int  len = snprintf(text, sizeof(text), "WIRECLOUD_JWT_KEY=%s\nWIRECLOUD_SECRET_KEY=%s\n", jwtKey, secretKey);
+  bool ok  = (write(fd, text, len) == len);
+
+  close(fd);
+  if (ok == false)
+  {
+    snprintf(err, errLen, "%s: not written", path);
+    unlink(path);
+    path[0] = 0;
+  }
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // svcReady - is the service up and answering (from inside its container where a client is there)?
 //
 static bool svcReady(const Service* sP, int hostPort)
@@ -2263,6 +2420,12 @@ static bool svcReady(const Service* sP, int hostPort)
 
   if (sP->kind == KIND_TIMESCALE)
     return engineRun(out, sizeof(out), 15, "exec", sP->container, "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "postgres", NULL) == 0;
+
+  if (sP->kind == KIND_ELASTICSEARCH)
+    return localHttp(hostPort, "GET", "/_cluster/health?wait_for_status=yellow&timeout=1s", NULL, NULL, 5) == 200;
+
+  if (sP->kind == KIND_WIRECLOUD)                // its login page - "/" is 404 until populate has run
+    return localHttp(hostPort, "GET", "/login", NULL, NULL, 5) == 200;
 
   return true;                                   // mosquitto: accepting connections is ready
 }
@@ -2307,6 +2470,7 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
   int    port  = -1;
   time_t t0    = time(NULL);
   bool   fresh = false;
+  char   envFile[2400] = "";
 
   //
   // Running already: its port
@@ -2359,9 +2523,23 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
     argAdd(&a, "--network"); argAdd(&a, "c3");
     argAdd(&a, "-p");        argAddf(&a, "127.0.0.1:%d:%d", port, kinds[kind].port);
     argAdd(&a, "-v");        argAddf(&a, "%s:%s", name, kinds[kind].volumePath);
-    if (kinds[kind].env != NULL)
+    for (int ix = 0; kinds[kind].env[ix] != NULL; ix++)
     {
-      argAdd(&a, "-e");      argAdd(&a, kinds[kind].env);
+      const char* e   = kinds[kind].env[ix];
+      const char* tag = strstr(e, "{set}");
+
+      argAdd(&a, "-e");
+      if (tag != NULL) argAddf(&a, "%.*s%s%s", (int) (tag - e), e, set, tag + 5);
+      else             argAdd(&a, e);
+    }
+    if (kinds[kind].secretEnv)
+    {
+      if (secretEnvWrite(set, envFile, sizeof(envFile), err, errLen) == false)
+      {
+        argFree(&a);
+        goto fail;
+      }
+      argAdd(&a, "--env-file"); argAdd(&a, envFile);
     }
     argAdd(&a, kinds[kind].image);
     for (int ix = 0; kinds[kind].cmd[ix] != NULL; ix++)
@@ -2375,6 +2553,8 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
 
     int status = engineArgv(&a, out, sizeof(out), 120);
     argFree(&a);
+    if (envFile[0] != 0)                         // read by the run; not left on disk
+      unlink(envFile);
 
     if (status != 0)
     {
@@ -3659,6 +3839,7 @@ static void tailAll(void)
     tail(brokers[ix]->logPath, &brokers[ix]->logEnd, &brokers[ix]->subs, &brokers[ix]->lastBeat);
   for (int ix = 0; ix < nSvcs; ix++)
     tail(svcs[ix].logPath, &svcs[ix].logEnd, &svcs[ix].subs, &svcs[ix].lastBeat);
+  tail(dash.logPath, &dash.logEnd, &dash.subs, &dash.lastBeat);
   pthread_mutex_unlock(&rMutex);
 }
 
@@ -5962,6 +6143,465 @@ static void opcuaFiles(CorHttpConn* connP, bool post)
 
 // -----------------------------------------------------------------------------
 //
+// The Dashboard - WireCloud (Ficodes, AGPL-3.0), in containers of its own: the set "dashboard" - MongoDB,
+// Elasticsearch and WireCloud (c3-dashboard-mongo, -elasticsearch, -wirecloud), started in that order and
+// stopped in the other. c3 runs WireCloud as it is, a program of its own in a container: nothing of it is
+// linked into c3.
+//
+//   GET    /api/run/dashboard          its state: the three services, what a start or stop does now, why the
+//                                      last one failed
+//   POST   /api/run/dashboard/start    202: started (dashboardThread) - the first start also installs its
+//                                      widgets (populate) and makes its user admin, its password made by c3
+//   POST   /api/run/dashboard/stop     202: the three stopped, their volumes kept
+//   POST   /api/run/dashboard/login    c3 logs in as admin and hands the page WireCloud's session cookies -
+//                                      the password never goes to the page
+//   GET    /api/run/dashboard/log      what the starts and stops did - c3's lines, the commands
+//
+// The cookies: a browser keeps a cookie per host, not per port, so the cookies of WireCloud's login, set on
+// c3's answer, go to WireCloud on its own port of the same host. The page shows WireCloud on the host it
+// was itself loaded from (localhost or 127.0.0.1 - not one for the other: they are two sites).
+//
+
+static const int dashKinds[] = { KIND_MONGO, KIND_ELASTICSEARCH, KIND_WIRECLOUD };
+#define DASH_KINDS  3
+
+static void dashDoing(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+static void dashDoing(const char* fmt, ...)
+{
+  char    text[200];
+  va_list ap;
+
+  va_start(ap, fmt);
+  vsnprintf(text, sizeof(text), fmt, ap);
+  va_end(ap);
+
+  pthread_mutex_lock(&rMutex);
+  snprintf(dash.doing, sizeof(dash.doing), "%s", text);
+  pthread_mutex_unlock(&rMutex);
+  logLine(dash.logPath, "%s", text);
+}
+
+//
+// dashPort - WireCloud's port on 127.0.0.1, 0 when it does not run
+//
+static int dashPort(void)
+{
+  char name[96];
+  int  port = 0;
+
+  svcName(DASHBOARD_SET, KIND_WIRECLOUD, name, sizeof(name));
+  pthread_mutex_lock(&rMutex);
+  Service* sP = svcFind(name);
+  if ((sP != NULL) && (strcmp(sP->state, "running") == 0))
+    port = sP->hostPort;
+  pthread_mutex_unlock(&rMutex);
+  return port;
+}
+
+//
+// dashLogin - WireCloud's login as admin: its Set-Cookie lines into cookiesP (when given). The status: 302 -
+// logged in; 200 - wrong user or password (its login page again); else no answer (-1) or what it said.
+//
+static int dashLogin(int port, Str* cookiesP, char* err, int errLen)
+{
+  char password[65];
+
+  if (credsDashboard(password, sizeof(password), NULL, 0, NULL, 0, err, errLen) == false)
+    return -1;
+
+  Str body = { NULL, 0, 0 };
+  strAdd(&body, "{\"username\": \"" DASHBOARD_USER "\", \"password\": ");
+  strAddJson(&body, password);
+  strAdd(&body, "}");
+  memset(password, 0, sizeof(password));
+
+  Str head   = { NULL, 0, 0 };
+  int status = localHttp(port, "POST", "/login", body.s, &head, 30);
+  memset(body.s, 0, body.len);
+  strFree(&body);
+
+  if ((status == 302) && (cookiesP != NULL) && (head.s != NULL))
+  {
+    char* save = NULL;
+    for (char* line = strtok_r(head.s, "\r\n", &save); line != NULL; line = strtok_r(NULL, "\r\n", &save))
+    {
+      if (strncasecmp(line, "set-cookie:", 11) != 0)
+        continue;
+      char* v = &line[11];
+      while (*v == ' ')
+        ++v;
+      strAdd(cookiesP, v);
+      strAdd(cookiesP, "\n");
+    }
+  }
+  if ((status == 302) && ((cookiesP == NULL) || (cookiesP->len > 0)))
+  {
+    strFree(&head);
+    return 302;
+  }
+
+  if (status == 302)
+    snprintf(err, errLen, "WireCloud's login answered without its cookies");
+  else if (status == 200)
+    snprintf(err, errLen, "WireCloud does not take the password c3 made for its user " DASHBOARD_USER);
+  else if (status == -1)
+    snprintf(err, errLen, "WireCloud does not answer on 127.0.0.1:%d", port);
+  else
+    snprintf(err, errLen, "WireCloud's login answered %d", status);
+
+  strFree(&head);
+  return status;
+}
+
+//
+// dashExec - a command of WireCloud's in its container (python -m manage ...), its output into the log;
+// 'password' (or NULL) goes in through the environment of the exec - never on a command line
+//
+static int dashExec(const char* password, int timeoutS, const char* const* args)
+{
+  char container[96];
+  svcName(DASHBOARD_SET, KIND_WIRECLOUD, container, sizeof(container));
+
+  Argv a = { { NULL }, 0 };
+  argAdd(&a, engine);
+  argAdd(&a, "exec");
+  if (password != NULL)
+  {
+    argAdd(&a, "-e");                            // the value from the environment of the exec - not on its command line
+    argAdd(&a, "C3_PASSWORD");
+  }
+  argAdd(&a, container);
+  for (int ix = 0; args[ix] != NULL; ix++)
+    argAdd(&a, args[ix]);
+
+  Str cmd = { NULL, 0, 0 };
+  argCommand(&a, &cmd);
+  logLine(dash.logPath, "%s", cmd.s);
+  strFree(&cmd);
+
+  //
+  // c3's environment and C3_PASSWORD, for this one child - not setenv: another thread may start a broker now
+  //
+  char** envp = NULL;
+  char*  pwVar = NULL;
+  if (password != NULL)
+  {
+    int n = 0;
+    while (environ[n] != NULL)
+      ++n;
+    envp = calloc(n + 2, sizeof(char*));
+    for (int ix = 0; ix < n; ix++)
+      envp[ix] = environ[ix];
+    if (asprintf(&pwVar, "C3_PASSWORD=%s", password) == -1)
+      pwVar = NULL;
+    envp[n] = pwVar;
+  }
+
+  int status = engineToLogEnv(dash.logPath, timeoutS, &a, envp);
+
+  if (pwVar != NULL)
+  {
+    memset(pwVar, 0, strlen(pwVar));
+    free(pwVar);
+  }
+  free(envp);
+  argFree(&a);
+  return status;
+}
+
+//
+// dashboardThread - start: the three services, then WireCloud made ready for c3 (the first time: populate and
+// the user admin), and logged in once to see it is
+//
+static void* dashboardThread(void* vP)
+{
+  (void) vP;
+  char err[1024] = "";
+  char out[1024];
+
+  logLine(dash.logPath, "start the Dashboard");
+
+  //
+  // WireCloud's image: no published one yet - the one built from its source
+  //
+  if (engineRun(out, sizeof(out), 30, "image", "inspect", "--format", "{{.Id}}", kinds[KIND_WIRECLOUD].image, NULL) != 0)
+  {
+    snprintf(err, sizeof(err), "the image %s is not here - WireCloud 2 has no published image yet: build it from its source (github.com/Ficodes/WireCloud, docker/README.md)", kinds[KIND_WIRECLOUD].image);
+    goto fail;
+  }
+
+  int port   = -1;
+  int esPort = -1;
+  for (int ix = 0; ix < DASH_KINDS; ix++)
+  {
+    dashDoing("starting %s", kinds[dashKinds[ix]].label);
+    port = svcEnsure(DASHBOARD_SET, dashKinds[ix], dash.logPath, err, sizeof(err));
+    if (port <= 0)
+      goto fail;
+    if (dashKinds[ix] == KIND_ELASTICSEARCH)
+      esPort = port;
+  }
+
+  //
+  // Logged in already works: it was made ready before
+  //
+  char lerr[512];
+  int  status = dashLogin(port, NULL, lerr, sizeof(lerr));
+  if (status != 302)
+  {
+    if (status != 200)
+    {
+      snprintf(err, sizeof(err), "%s", lerr);
+      goto fail;
+    }
+
+    //
+    // The first start (or its data deleted): its widgets, its user
+    //
+    char password[65];
+    if (credsDashboard(password, sizeof(password), NULL, 0, NULL, 0, err, sizeof(err)) == false)
+      goto fail;
+
+    dashDoing("first start: installing WireCloud's widgets and operators (populate)");
+    const char* populate[] = { "python", "-m", "manage", "populate", NULL };
+    if (dashExec(NULL, 900, populate) != 0)
+    {
+      memset(password, 0, sizeof(password));
+      snprintf(err, sizeof(err), "WireCloud's populate failed - the log says why");
+      goto fail;
+    }
+
+    dashDoing("first start: making WireCloud's user " DASHBOARD_USER " (its password: c3's, in secrets.json)");
+    const char* superuser[] = { "sh", "-c", "exec python -m manage createsuperuser --username " DASHBOARD_USER " --email " DASHBOARD_USER "@localhost --password \"$C3_PASSWORD\"", NULL };
+    int made = dashExec(password, 120, superuser);
+    memset(password, 0, sizeof(password));
+    if (made != 0)
+    {
+      snprintf(err, sizeof(err), "WireCloud's createsuperuser failed - the log says why");
+      goto fail;
+    }
+
+    if (dashLogin(port, NULL, lerr, sizeof(lerr)) != 302)
+    {
+      snprintf(err, sizeof(err), "%s - when WireCloud's user " DASHBOARD_USER " was made outside c3, delete the Dashboard's data (its MongoDB volume) and start it again", lerr);
+      goto fail;
+    }
+  }
+
+  //
+  // WireCloud's search indexes: populate does not make them, and without them its search answers 500 (the
+  // Workspace Browser: "Invalid response from server") - made when Elasticsearch has none (the first start,
+  // or its volume deleted)
+  //
+  if (localHttp(esPort, "GET", "/workspaces", NULL, NULL, 10) == 404)
+  {
+    dashDoing("making WireCloud's search indexes (rebuildsearchindexes)");
+    const char* rebuild[] = { "python", "-m", "manage", "rebuildsearchindexes", NULL };
+    if (dashExec(NULL, 300, rebuild) != 0)
+    {
+      snprintf(err, sizeof(err), "WireCloud's rebuildsearchindexes failed - the log says why");
+      goto fail;
+    }
+  }
+
+  logLine(dash.logPath, "the Dashboard runs: WireCloud on 127.0.0.1:%d, logged in as " DASHBOARD_USER, port);
+  pthread_mutex_lock(&rMutex);
+  dash.busy     = false;
+  dash.doing[0] = 0;
+  dash.why[0]   = 0;
+  pthread_mutex_unlock(&rMutex);
+  return NULL;
+
+ fail:
+  logLine(dash.logPath, "the Dashboard did not start: %s", err);
+  pthread_mutex_lock(&rMutex);
+  dash.busy     = false;
+  dash.doing[0] = 0;
+  snprintf(dash.why, sizeof(dash.why), "%s", err);
+  pthread_mutex_unlock(&rMutex);
+  return NULL;
+}
+
+//
+// dashboardStopThread - WireCloud first, then what it stores in; the volumes kept
+//
+static void* dashboardStopThread(void* vP)
+{
+  (void) vP;
+
+  logLine(dash.logPath, "stop the Dashboard");
+  for (int ix = DASH_KINDS - 1; ix >= 0; ix--)
+  {
+    char name[96];
+    svcName(DASHBOARD_SET, dashKinds[ix], name, sizeof(name));
+    dashDoing("stopping %s", kinds[dashKinds[ix]].label);
+    svcStop(name, "the Dashboard stopped");
+  }
+
+  pthread_mutex_lock(&rMutex);
+  dash.busy     = false;
+  dash.doing[0] = 0;
+  pthread_mutex_unlock(&rMutex);
+  logLine(dash.logPath, "the Dashboard stopped - its data kept");
+  return NULL;
+}
+
+//
+// dashboardLoginThread - POST /api/run/dashboard/login: WireCloud's session cookies on c3's answer, its port
+//
+static void* dashboardLoginThread(void* vP)
+{
+  Job* jP   = (Job*) vP;
+  int  port = dashPort();
+  char err[512];
+
+  if (port <= 0)
+  {
+    jobError(jP, 409, "The Dashboard does not run", "start it first");
+    return NULL;
+  }
+
+  Str cookies = { NULL, 0, 0 };
+  if (dashLogin(port, &cookies, err, sizeof(err)) != 302)
+  {
+    strFree(&cookies);
+    jobError(jP, 502, "WireCloud's login failed", err);
+    return NULL;
+  }
+
+  //
+  // Each Set-Cookie as WireCloud set it - copied into the connection's memory, which outlives the answer
+  //
+  char* save = NULL;
+  for (char* line = strtok_r(cookies.s, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+    corHttpResponseHeader(jP->connP, "Set-Cookie", corAllocStrdup(&jP->connP->alloc, line));
+  memset(cookies.s, 0, cookies.len);
+  strFree(&cookies);
+
+  Str s = { NULL, 0, 0 };
+  strAddf(&s, "{\"port\": %d, \"user\": \"" DASHBOARD_USER "\"}", port);
+  jobAnswer(jP, 200, &s);
+  return NULL;
+}
+
+//
+// dashboardState - GET /api/run/dashboard
+//
+static void dashboardState(CorHttpConn* connP)
+{
+  Str s = { NULL, 0, 0 };
+
+  pthread_mutex_lock(&rMutex);
+
+  strAdd(&s, "{\"engine\": ");     strAddJson(&s, (engine[0] != 0) ? engineName : NULL);
+  strAdd(&s, ", \"engineWhy\": "); strAddJson(&s, (engine[0] == 0) ? engineWhy : NULL);
+  strAdd(&s, ", \"image\": ");     strAddJson(&s, kinds[KIND_WIRECLOUD].image);
+  strAddf(&s, ", \"busy\": %s", dash.busy ? "true" : "false");
+  strAdd(&s, ", \"doing\": ");     strAddJson(&s, (dash.doing[0] != 0) ? dash.doing : NULL);
+  strAdd(&s, ", \"why\": ");       strAddJson(&s, (dash.why[0] != 0) ? dash.why : NULL);
+  strAdd(&s, ", \"log\": ");       strAddJson(&s, dash.logPath);
+
+  int  running = 0;
+  int  port    = 0;
+  strAdd(&s, ", \"services\": [");
+  for (int ix = 0; ix < DASH_KINDS; ix++)
+  {
+    Service* sP = svcGet(DASHBOARD_SET, dashKinds[ix]);
+    if (sP == NULL)
+      continue;
+    strAdd(&s, (ix > 0) ? ", " : "");
+    svcRender(sP, &s);
+    if ((strcmp(sP->state, "running") == 0) && (sP->busy == false))
+      ++running;
+    if (dashKinds[ix] == KIND_WIRECLOUD)
+      port = sP->hostPort;
+  }
+  strAdd(&s, "]");
+
+  //
+  // busy: a start or a stop runs; failed: the last start did (why says why) - its containers may run;
+  // running: all three; stopped: none of them; else partly
+  //
+  const char* state = dash.busy ? "busy" : (dash.why[0] != 0) ? "failed" : (running == DASH_KINDS) ? "running" : (running == 0) ? "stopped" : "partly";
+  strAdd(&s, ", \"state\": ");     strAddJson(&s, state);
+  if ((strcmp(state, "running") == 0) && (port > 0)) strAddf(&s, ", \"port\": %d", port);
+  else                                                strAdd(&s, ", \"port\": null");
+  strAdd(&s, "}");
+
+  pthread_mutex_unlock(&rMutex);
+  respondStr(connP, 200, &s);
+}
+
+//
+// dashboardRequest - /api/run/dashboard[/<action>]
+//
+static void dashboardRequest(CorHttpConn* connP, const char* action)
+{
+  const char* method = connP->method.s;
+  bool        get    = (strcmp(method, "GET") == 0);
+  bool        post   = (strcmp(method, "POST") == 0);
+
+  if (action[0] == 0)
+  {
+    if (get) dashboardState(connP); else serveError(connP, 405, "Method not allowed", "/api/run/dashboard");
+    return;
+  }
+
+  if (get && (strcmp(action, "log") == 0))
+  {
+    pthread_mutex_lock(&rMutex);
+    logFollow(connP, dash.logPath, &dash.logEnd, &dash.subs, &dash.lastBeat);   // unlocks
+    return;
+  }
+
+  if (post && (strcmp(action, "login") == 0))
+  {
+    jobStart(connP, dashboardLoginThread, NULL);
+    return;
+  }
+
+  if (post && ((strcmp(action, "start") == 0) || (strcmp(action, "stop") == 0)))
+  {
+    bool start = (strcmp(action, "start") == 0);
+
+    if (engine[0] == 0)
+    {
+      serveError(connP, 409, "No container engine", engineWhy);
+      return;
+    }
+
+    pthread_mutex_lock(&rMutex);
+    if (dash.busy)
+    {
+      pthread_mutex_unlock(&rMutex);
+      serveError(connP, 409, "Busy", "a start or a stop of the Dashboard runs");
+      return;
+    }
+    dash.busy = true;
+    dash.why[0] = 0;
+    snprintf(dash.doing, sizeof(dash.doing), "%s", start ? "starting" : "stopping");
+    pthread_mutex_unlock(&rMutex);
+
+    if (threadStart(start ? dashboardThread : dashboardStopThread, NULL) == false)
+    {
+      pthread_mutex_lock(&rMutex);
+      dash.busy     = false;
+      dash.doing[0] = 0;
+      pthread_mutex_unlock(&rMutex);
+      serveError(connP, 500, "No thread", "no thread for the Dashboard");
+      return;
+    }
+    serveJson(connP, 202, "{}");
+    return;
+  }
+
+  serveError(connP, 405, "Method not allowed", action);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // runRequest - /api/run...
 //
 void runRequest(CorHttpConn* connP, const char* path)
@@ -6026,6 +6666,17 @@ void runRequest(CorHttpConn* connP, const char* path)
       if (opcuaPasswordKeep(connP, &d) == true)    // the password into its file, out of the Def
         brokerStart(connP, &d);
     }
+    return;
+  }
+
+  if (strcmp(path, "/api/run/dashboard") == 0)
+  {
+    dashboardRequest(connP, "");
+    return;
+  }
+  if (strncmp(path, "/api/run/dashboard/", 19) == 0)
+  {
+    dashboardRequest(connP, &path[19]);
     return;
   }
 
@@ -6182,6 +6833,7 @@ bool runInit(void)
   }
 
   snprintf(svcDir, sizeof(svcDir), "%s/services", runDir);
+  snprintf(dash.logPath, sizeof(dash.logPath), "%s/services/c3-dashboard.log", runDir);
   dirsMake(runDir);
   dirsMake(svcDir);
 

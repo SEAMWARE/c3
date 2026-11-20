@@ -32,7 +32,12 @@
 //
 // A token is never on the command line (ps shows it), never in c3.json, never sent to the page.
 //
+// The Dashboard's WireCloud (run.c) has its secrets here too, made by c3 the first time it is started
+// (credsDashboard): the password of its user admin, and WireCloud's own JWT and secret keys. They are in
+// secrets.json's "dashboard" - never sent to the page, never on a command line.
+//
 #include <errno.h>                               // errno
+#include <sys/random.h>                          // getrandom
 #include <fcntl.h>                               // open, O_*
 #include <pthread.h>                             // pthread_mutex_t
 #include <stdio.h>                               // snprintf
@@ -104,6 +109,10 @@ static Hdrs             hdrs[CREDS_MAX];
 static int              hdrsN = 0;
 static pthread_mutex_t  credsLock = PTHREAD_MUTEX_INITIALIZER;
 static char             secretsPath[4200];
+
+static char             dashPassword[65];        // the Dashboard's WireCloud: its admin's password
+static char             dashJwtKey[65];          // its WIRECLOUD_JWT_KEY
+static char             dashSecretKey[65];       // its WIRECLOUD_SECRET_KEY
 
 static const char*      tokenFile = NULL;        // --token-file
 static char*            fileToken = NULL;        // its token, as last read (malloc'ed)
@@ -331,7 +340,15 @@ static bool secretsWrite(char* errBuf, int errLen)
     }
     strAdd(&s, "]");
   }
-  strAdd(&s, "}}\n");
+  strAdd(&s, "}");
+  if (dashPassword[0] != 0)
+  {
+    strAdd(&s, ", \"dashboard\": {\"password\": ");  strAddJson(&s, dashPassword);
+    strAdd(&s, ", \"jwtKey\": ");                     strAddJson(&s, dashJwtKey);
+    strAdd(&s, ", \"secretKey\": ");                  strAddJson(&s, dashSecretKey);
+    strAdd(&s, "}");
+  }
+  strAdd(&s, "}\n");
 
   char tmp[4300];
   snprintf(tmp, sizeof(tmp), "%s.tmp", secretsPath);
@@ -454,6 +471,22 @@ static void secretsRead(void)
     }
   }
 
+  CorNode* dashP = ((treeP != NULL) && (treeP->type == CorObject)) ? corTreeLookup(treeP, "dashboard") : NULL;
+  if ((dashP != NULL) && (dashP->type == CorObject))
+  {
+    CorNode* pwP  = corTreeLookup(dashP, "password");
+    CorNode* jwtP = corTreeLookup(dashP, "jwtKey");
+    CorNode* secP = corTreeLookup(dashP, "secretKey");
+
+    if ((pwP != NULL) && (pwP->type == CorString) && (jwtP != NULL) && (jwtP->type == CorString) && (secP != NULL) && (secP->type == CorString) &&
+        (strlen(pwP->value.s) < sizeof(dashPassword)) && (strlen(jwtP->value.s) < sizeof(dashJwtKey)) && (strlen(secP->value.s) < sizeof(dashSecretKey)))
+    {
+      snprintf(dashPassword,  sizeof(dashPassword),  "%s", pwP->value.s);
+      snprintf(dashJwtKey,    sizeof(dashJwtKey),    "%s", jwtP->value.s);
+      snprintf(dashSecretKey, sizeof(dashSecretKey), "%s", secP->value.s);
+    }
+  }
+
   if (treeP == NULL)
   {
     printf("c3: %s is not JSON - no remembered tokens\n", secretsPath);
@@ -505,6 +538,61 @@ static const char* fileTokenGet(void)
 
   free(text);
   return fileToken;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// randomHex - 'bytes' random bytes as hex into out (2 * bytes + 1 long)
+//
+static bool randomHex(char* out, int bytes)
+{
+  unsigned char b[32];
+
+  if ((bytes > 32) || (getrandom(b, bytes, 0) != (ssize_t) bytes))
+    return false;
+
+  for (int ix = 0; ix < bytes; ix++)
+    snprintf(&out[2 * ix], 3, "%02x", b[ix]);
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// credsDashboard - the Dashboard's WireCloud secrets: its admin's password, its JWT key and secret key - made
+// and kept in secrets.json the first time. Any of the outputs may be NULL. false: why, in err.
+//
+bool credsDashboard(char* password, int passwordLen, char* jwtKey, int jwtKeyLen, char* secretKey, int secretKeyLen, char* err, int errLen)
+{
+  pthread_mutex_lock(&credsLock);
+
+  if (dashPassword[0] == 0)
+  {
+    if ((randomHex(dashPassword, 24) == false) || (randomHex(dashJwtKey, 32) == false) || (randomHex(dashSecretKey, 32) == false))
+    {
+      dashPassword[0] = 0;
+      pthread_mutex_unlock(&credsLock);
+      snprintf(err, errLen, "no random bytes for the Dashboard's secrets: %s", strerror(errno));
+      return false;
+    }
+
+    if (secretsWrite(err, errLen) == false)
+    {
+      dashPassword[0] = 0;
+      pthread_mutex_unlock(&credsLock);
+      return false;
+    }
+  }
+
+  if (password  != NULL) snprintf(password,  passwordLen,  "%s", dashPassword);
+  if (jwtKey    != NULL) snprintf(jwtKey,    jwtKeyLen,    "%s", dashJwtKey);
+  if (secretKey != NULL) snprintf(secretKey, secretKeyLen, "%s", dashSecretKey);
+
+  pthread_mutex_unlock(&credsLock);
+  return true;
 }
 
 

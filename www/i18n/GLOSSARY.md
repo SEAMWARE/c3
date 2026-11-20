@@ -13,7 +13,8 @@ assistant say the same thing. Change a word here first, then everywhere.
 ## Kept in English
 
 Product and protocol names: c³, coraine, Seamware, NGSI-LD, FIWARE, Smart Data Models, MQTT, DDS, ROS 2, OPC UA,
-Claude, Claude Code, corMcp, corCep, AI Assist, Coraine Assistant, Docker, Podman.
+Claude, Claude Code, corMcp, corCep, AI Assist, Coraine Assistant, Docker, Podman, WireCloud, Ficodes, MongoDB,
+Elasticsearch.
 **broker** and **tenant** (the FIWARE community writes them so in all three languages), **bridge** (as the
 `--bridges` option), **build** in German. Everything that is code: option names (`--port`), feature switches
 (`COR_FEATURE_X`), HTTP methods and paths, JSON members, NGSI-LD keywords used as such (`Property`,
@@ -54,6 +55,7 @@ for what ends by itself (`ls`, a build).
 | Compile (page) | Compilar | Compiler | Kompilieren |
 | Operate (page) | Operar | Exploiter | Betreiben |
 | Documentation (page) | Documentación | Documentation | Dokumentation |
+| Dashboard (page) | Panel | Tableau de bord | Dashboard |
 | graph / map (views) | grafo / mapa | graphe / carte | Graph / Karte |
 | highlight | resaltar | mettre en évidence | hervorheben |
 | Connect | Conectar | Connecter | Verbinden |

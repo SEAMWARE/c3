@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/run.css">
 <link rel="stylesheet" href="css/ddsmap.css">
 <link rel="stylesheet" href="css/opcuamap.css">
+<link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
 
@@ -36,6 +37,7 @@
       <a href="#compile" id="nav-compile">Compile</a>
       <a href="#run" id="nav-run">Operate</a>
       <a href="#connect" id="nav-connect" class="active" aria-current="page">Explore</a>
+      <a href="#dashboard" id="nav-dashboard">Dashboard</a>
       <a href="#docs" id="nav-docs">Documentation</a>
     </nav>
     <div class="top-right">
@@ -555,6 +557,59 @@
       </aside>
     </div>
   </main>
+  <main class="page" id="page-dashboard" hidden>
+    <div class="cp-wrap db-panel" id="db-panel">
+      <div class="cp-main">
+        <div class="cp-head">
+          <div>
+            <h1>Dashboard</h1>
+            <p>Dashboards you build yourself, from what your brokers hold: WireCloud, started by c³ in containers on this machine and shown here.</p>
+          </div>
+          <span class="chip host" id="db-state">-</span>
+        </div>
+
+        <section class="cp-card cp-unavail" id="db-noengine" hidden>
+          <h2 class="section">Containers are not available here</h2>
+          <p class="cp-note" id="db-noengine-why"></p>
+          <p class="cp-note">WireCloud runs in containers - MongoDB, Elasticsearch and WireCloud itself.</p>
+        </section>
+
+        <section class="cp-card" aria-label="WireCloud">
+          <div class="row"><h2 class="section">WireCloud</h2><span class="sub">three containers: MongoDB, Elasticsearch and WireCloud - stopped, their data kept in volumes</span></div>
+          <div class="rn-list" id="db-services"></div>
+          <p class="cp-note">The first start installs WireCloud's widgets and makes its user admin - c³ makes the password, keeps it in secrets.json and logs in for you.</p>
+          <p class="cp-note">Image: <span class="mono" id="db-image"></span> - WireCloud 2 has no published image yet: build it from its source (github.com/Ficodes/WireCloud, docker/README.md).</p>
+          <div class="db-acts">
+            <button type="button" class="btn primary" id="db-start">Start</button>
+            <button type="button" class="btn" id="db-stop" hidden>Stop</button>
+            <span class="db-doing" id="db-doing" aria-live="polite"></span>
+          </div>
+          <p class="cp-note warn" id="db-why" hidden></p>
+          <div id="db-logwrap" hidden>
+            <pre class="db-log" id="db-log"></pre>
+          </div>
+        </section>
+
+        <p class="db-powered">Powered by <a href="https://github.com/Ficodes/WireCloud" target="_blank" rel="noopener">WireCloud</a> - Ficodes, AGPL-3.0, run as a program of its own</p>
+      </div>
+    </div>
+
+    <div class="db-bar" id="db-bar" hidden>
+      <span class="rdot ok"></span>
+      <span class="db-name">WireCloud</span>
+      <span class="mono db-url" id="db-url"></span>
+      <span class="cp-note warn" id="db-loginwhy" hidden></span>
+      <span class="grow"></span>
+      <button type="button" class="btn" id="db-reload" title="Log in again and reload WireCloud">Reload</button>
+      <a class="btn" id="db-open" target="_blank" rel="noopener">Open in a tab</a>
+      <button type="button" class="btn" id="db-stop-bar">Stop</button>
+      <span class="db-powered">Powered by <a href="https://github.com/Ficodes/WireCloud" target="_blank" rel="noopener">WireCloud</a></span>
+    </div>
+    <div class="db-framewrap" id="db-framewrap" hidden>
+      <iframe id="db-frame" class="db-frame" title="WireCloud" src="about:blank"></iframe>
+    </div>
+  </main>
+
   <main class="page" id="page-docs" hidden>
     <section class="cp-card docs" id="docs-index" aria-label="Documentation">
       <h1>Documentation</h1>

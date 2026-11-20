@@ -168,6 +168,7 @@ extern char*  credsToken(const char* broker, const char** sourceP);       // mal
 extern int    credsHeaders(const char* broker, CorRestKeyValue* kv, int max);  // the broker's own + Authorization
 extern void   credsHeadersFree(CorRestKeyValue* kv, int n);
 extern void   credsRequest(CorHttpConn* connP, const char* path);         // /api/brokers/token(s), /headers
+extern bool   credsDashboard(char* password, int passwordLen, char* jwtKey, int jwtKeyLen, char* secretKey, int secretKeyLen, char* err, int errLen);
 
 
 
