@@ -19,6 +19,9 @@
 //   POST /api/window/minimize/<nonce>   Browser.setWindowBounds, windowState "normal" then "minimized" (Chrome
 //                                       minimises no full-screen window)
 //   POST /api/window/fullscreen/<nonce> "normal" then "fullscreen" - the page's, when it is shown again
+//   POST /api/window/width/<nonce>      {"width": <px>}: the window made at least that wide - Browser.setWindowBounds,
+//                                       its width only, when it is a "normal" window narrower than that (the page's
+//                                       header needs it, header.js); full-screen, maximised, minimised: nothing
 //   POST /api/window/close/<nonce>      Target.closeTarget - the last window closed, Chrome exits. c3 itself
 //                                       keeps running, as when the window is closed by its own X
 //   POST /api/window/open               the window, for a c3 started again (the dock's button) that finds this
@@ -528,6 +531,45 @@ static bool windowStateSet(CorAlloc* allocP, const char* targetId, const char* w
 
 // -----------------------------------------------------------------------------
 //
+// windowWidthSet - the window of the page targetId made at least width wide, when it is a "normal" window
+//
+static bool windowWidthSet(CorAlloc* allocP, const char* targetId, long long width, char* errBuf, int errLen)
+{
+  char params[256];
+
+  snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", targetId);
+
+  CorNode* resultP = cdp(allocP, "Browser.getWindowForTarget", params, errBuf, errLen);
+  CorNode* windowP = (resultP != NULL) ? corTreeLookup(resultP, "windowId") : NULL;
+
+  if ((windowP == NULL) || (windowP->type != CorInt))
+  {
+    if (resultP != NULL)
+      snprintf(errBuf, errLen, "Browser.getWindowForTarget: no windowId");
+    return false;
+  }
+
+  long long    windowId = windowP->value.i;
+  WindowBounds cur;
+  char         b[96];
+
+  if ((windowBounds(allocP, windowId, &cur) == false) || (strcmp(cur.state, "normal") != 0) || (cur.width >= width))
+    return true;
+
+  snprintf(params, sizeof(params), "{\"windowId\": %lld, \"bounds\": {\"width\": %lld, \"height\": %lld}}", windowId, width, cur.height);
+
+  bool ok = (cdp(allocP, "Browser.setWindowBounds", params, errBuf, errLen) != NULL);
+
+  printf("c3 window %lld -> width %lld (the header's top line): %s%s\n", windowId, width, boundsText(&cur, b, sizeof(b)), ok ? "" : " - FAILED");
+  fflush(stdout);
+
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // windowOpen - POST /api/window/open
 //
 static void windowOpen(CorHttpConn* connP)
@@ -697,7 +739,8 @@ void windowRequest(CorHttpConn* connP, const char* path)
   bool        minimize = (strncmp(path, "/api/window/minimize/", 21) == 0);
   bool        closing  = (strncmp(path, "/api/window/close/", 18) == 0);
   bool        full     = (strncmp(path, "/api/window/fullscreen/", 23) == 0);
-  const char* nonce    = minimize ? &path[21] : closing ? &path[18] : full ? &path[23] : NULL;
+  bool        widthSet = (strncmp(path, "/api/window/width/", 18) == 0);
+  const char* nonce    = minimize ? &path[21] : closing ? &path[18] : full ? &path[23] : widthSet ? &path[18] : NULL;
 
   if (nonce == NULL)
   {
@@ -723,6 +766,33 @@ void windowRequest(CorHttpConn* connP, const char* path)
 
   corAllocBufferInit(&alloc, buf, sizeof(buf), 1024 * 1024, NULL, "c3 window");
 
+  long long width = 0;
+
+  if (widthSet)
+  {
+    CorNode* widthP = NULL;
+
+    if ((connP->bodyRefused == false) && (connP->body.s != NULL) && (connP->body.len > 0))
+    {
+      CorJson  json;
+
+      corJsonCreate(&json, &alloc);
+
+      CorNode* bodyP = corJsonParse(&json, corAllocStrdup(&alloc, connP->body.s));
+
+      widthP = ((bodyP != NULL) && (bodyP->type == CorObject)) ? corTreeLookup(bodyP, "width") : NULL;
+    }
+
+    if ((widthP == NULL) || (widthP->type != CorInt) || (widthP->value.i < 200) || (widthP->value.i > 20000))
+    {
+      corAllocBufferReset(&alloc, false);
+      serveError(connP, 400, "Bad request", "the body: {\"width\": <pixels, 200 to 20000>}");
+      return;
+    }
+
+    width = widthP->value.i;
+  }
+
   const char* targetP  = pageOf(&alloc, nonce, err, sizeof(err));
   char        targetId[128];
   char        params[256];
@@ -737,6 +807,8 @@ void windowRequest(CorHttpConn* connP, const char* path)
       snprintf(params, sizeof(params), "{\"targetId\": \"%s\"}", targetId);
       ok = (cdp(&alloc, "Target.closeTarget", params, err, sizeof(err)) != NULL);
     }
+    else if (widthSet)
+      ok = windowWidthSet(&alloc, targetId, width, err, sizeof(err));
     else
       ok = windowStateSet(&alloc, targetId, full ? "fullscreen" : "minimized", err, sizeof(err));
   }

@@ -1,0 +1,71 @@
+//
+// header.js - the header's lines: the top line always one line, the page tabs beside it or under it
+//
+// Copyright 2026 Seamware
+// SPDX-License-Identifier: Apache-2.0
+//
+// The top line - the logo, c³'s name, AI Assist, the text size, the language, Seamware and the window's buttons -
+// is never broken. The page tabs are on it when the header is wide enough for both, on a line of their own under
+// it when not (the class two-lines, c3.css). The top line's width is the page's minimum width: a narrower
+// browser window scrolls the page sideways, and c³'s own window is made that wide again (window.js).
+//
+// Measured again whenever any of it changes size: the window, the text size, the language (the tabs' and the
+// buttons' words), the window's buttons shown or hidden.
+//
+import { windowWidthAtLeast } from './window.js';
+
+const $ = (id) => document.getElementById(id);
+
+const RIGHT_GAP = 64;                            // .top-right's margin-left on one line (c3.css)
+
+function width(el) {
+  return (!el || el.hidden) ? 0 : el.getBoundingClientRect().width;
+}
+
+//
+// fit - the top line's width, the page's minimum width, one line or two
+//
+function fit() {
+  const header = document.querySelector('header.top');
+  const cs = getComputedStyle(header);
+  const gap = parseFloat(cs.columnGap) || 0;
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const mark = header.querySelector('.mark');
+  const markGap = parseFloat(getComputedStyle(mark).marginRight) || 0;
+  const brand = header.querySelector('.brand');
+  const right = header.querySelector('.top-right');
+
+  const links = [...header.querySelectorAll('nav.pages > *')].filter((a) => !a.hidden);
+  const navGap = parseFloat(getComputedStyle(header.querySelector('nav.pages')).columnGap) || 0;
+  const nav = links.reduce((w, a) => w + width(a), 0) + navGap * Math.max(0, links.length - 1);
+
+  const top = Math.ceil(pad + width(mark) + markGap + gap + width(brand) + gap + width(right));
+  const one = top + nav + gap + RIGHT_GAP;
+
+  document.documentElement.style.minWidth = top + 'px';
+  header.classList.toggle('two-lines', header.clientWidth < one);
+
+  //
+  // The window's own width: what the page needs plus what the window has beside the page (its frame, the
+  // scrollbar)
+  //
+  windowWidthAtLeast(top + (window.outerWidth - document.documentElement.clientWidth));
+}
+
+export function headerInit() {
+  let queued = false;
+  const later = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; fit(); });    // not inside the observer's own delivery
+  };
+
+  const header = document.querySelector('header.top');
+  const ro = new ResizeObserver(later);
+  ro.observe(header);
+  [header.querySelector('.mark'), header.querySelector('.brand'), header.querySelector('.top-right'), ...header.querySelectorAll('nav.pages > *')]
+    .forEach((el) => ro.observe(el));
+  window.addEventListener('resize', later);
+  if (document.fonts) document.fonts.ready.then(later);
+  later();
+}

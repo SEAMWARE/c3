@@ -14,6 +14,7 @@ import { Run } from './run.js';
 import { Dashboard } from './dashboard.js';
 import { assistInit } from './assist.js';
 import { windowInit } from './window.js';
+import { headerInit } from './header.js';
 import { docsInit, docsShow } from './docs.js';
 import { i18nInit, t, plural, LANGUAGES, language, setLanguage } from './i18n.js';
 import { openMenu } from './menu.js';
@@ -186,6 +187,7 @@ async function main() {
 
   docsInit();
   windowInit();
+  headerInit();
   const connect = new Connect();
   connect.setBrokers(boot.config.brokers);
 

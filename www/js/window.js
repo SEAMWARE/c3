@@ -1,5 +1,5 @@
 //
-// window.js - minimise and close, for the full-screen window c³ opens
+// window.js - minimise and close, for the full-screen window c³ opens; its width kept at least the header's
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -17,13 +17,14 @@ function fullScreen() {
          (window.innerWidth >= screen.width && window.innerHeight >= screen.height);
 }
 
-async function act(what) {
+async function act(what, body) {
   const title = document.title;
   const nonce = 'c3-' + Math.random().toString(36).slice(2, 12);
 
   document.title = nonce;
   try {
-    const r = await fetch('/api/window/' + what + '/' + nonce, { method: 'POST' });
+    const r = await fetch('/api/window/' + what + '/' + nonce, body === undefined ? { method: 'POST' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) {
       const p = await r.json().catch(() => ({}));
       console.warn('c3: the window: ' + (p.detail || r.status));
@@ -35,9 +36,24 @@ async function act(what) {
   }
 }
 
+//
+// windowWidthAtLeast - c³'s own window made at least px wide (the header's top line, header.js): a moment after
+// the window was made narrower, so a drag is not fought. Not full-screen, not maximised (the desktop's size), not
+// a window c³ has no hold of (control: false - a browser's tab, whose page scrolls sideways instead)
+//
+let control = null;                              // null: not asked yet
+let widthTimer = null;
+
+export function windowWidthAtLeast(px) {
+  clearTimeout(widthTimer);
+  widthTimer = setTimeout(() => {
+    if (control !== true || fullScreen() || window.outerWidth >= px) return;
+    act('width', { width: Math.ceil(px) });
+  }, 600);
+}
+
 export async function windowInit() {
   const box = $('win-ctl');
-  let control = false;
 
   try {
     const r = await fetch('/api/window');
@@ -47,6 +63,7 @@ export async function windowInit() {
   }
 
   if (!control) return;
+  window.dispatchEvent(new Event('resize'));     // the header measures again: the window's width can be had now
 
   const show = () => { box.hidden = !fullScreen(); };
   show();
