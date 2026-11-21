@@ -568,7 +568,11 @@
             <h1>Dashboard</h1>
             <p>Dashboards you build yourself, from what your brokers hold: WireCloud, started by c³ in containers on this machine and shown here.</p>
           </div>
-          <span class="chip host" id="db-state">-</span>
+          <div class="db-head-acts">
+            <span class="chip" id="db-state" hidden></span>
+            <button type="button" class="btn" id="db-stop" hidden>Stop</button>
+            <button type="button" class="btn primary db-toggle" id="db-toggle" disabled>Start</button>
+          </div>
         </div>
 
         <section class="cp-card cp-unavail" id="db-noengine" hidden>
@@ -583,8 +587,6 @@
           <p class="cp-note">The first start installs WireCloud's widgets and makes its user admin - c³ makes the password, keeps it in secrets.json and logs in for you.</p>
           <p class="cp-note">Image: <span class="mono" id="db-image"></span> - WireCloud 2 has no published image yet: build it from its source (github.com/Ficodes/WireCloud, docker/README.md).</p>
           <div class="db-acts">
-            <button type="button" class="btn primary" id="db-start">Start</button>
-            <button type="button" class="btn" id="db-stop" hidden>Stop</button>
             <span class="db-doing" id="db-doing" aria-live="polite"></span>
           </div>
           <p class="cp-note warn" id="db-why" hidden></p>
@@ -615,7 +617,6 @@
       <label class="chk db-write" title="The widgets may create, change and delete entities at the brokers c³ knows, with c³'s access to them - each write is in the Dashboard's log"><input type="checkbox" id="db-write"> Widgets may write</label>
       <button type="button" class="btn" id="db-reload" title="Log in again and reload WireCloud">Reload</button>
       <a class="btn" id="db-open" target="_blank" rel="noopener">Open in a tab</a>
-      <button type="button" class="btn" id="db-stop-bar">Stop</button>
       <span class="db-powered">Powered by <a href="https://github.com/Ficodes/WireCloud" target="_blank" rel="noopener">WireCloud</a></span>
     </div>
     <div class="db-framewrap" id="db-framewrap" hidden>
