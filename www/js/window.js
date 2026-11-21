@@ -1,5 +1,5 @@
 //
-// window.js - minimise and close, for the full-screen window c³ opens; its width kept at least the header's
+// window.js - minimise and close, for the full-screen window c³ opens, and back to full-screen; its width kept at least the header's
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -65,7 +65,17 @@ export async function windowInit() {
   if (!control) return;
   window.dispatchEvent(new Event('resize'));     // the header measures again: the window's width can be had now
 
-  const show = () => { box.hidden = !fullScreen(); };
+  //
+  // Full-screen: minimise and close (no title bar). Not full-screen: a button back to full-screen - the title bar
+  // has minimise, maximise and close, and maximised is not full-screen
+  //
+  const show = () => {
+    const full = fullScreen();
+    box.hidden = false;
+    $('win-full').hidden = full;
+    $('win-min').hidden = !full;
+    $('win-close').hidden = !full;
+  };
   show();
   window.addEventListener('resize', show);
   window.matchMedia('(display-mode: fullscreen)').addEventListener('change', show);
@@ -102,4 +112,5 @@ export async function windowInit() {
     await act('minimize');
   });
   $('win-close').addEventListener('click', () => act('close'));
+  $('win-full').addEventListener('click', () => act('fullscreen'));
 }

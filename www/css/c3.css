@@ -180,9 +180,9 @@ header.top.two-lines nav.pages { order: 3; flex-basis: 100%; border-top: 1px sol
 .menu .micon { width: 21px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; box-shadow: 0 0 0 1px rgba(255,255,255,0.25); }
 .langbtn:hover, .langbtn[aria-expanded="true"] { border-color: var(--accent-2); }
 
-/* Minimise and close - full-screen only, where the window has no title bar (window.js) */
+/* Minimise and close - full-screen only, where the window has no title bar; not full-screen: back to it (window.js) */
 .winctl { display: flex; gap: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
-.winctl[hidden] { display: none; }
+.winctl[hidden], .winctl button[hidden] { display: none; }
 .winctl button {
   width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
   border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); cursor: pointer;

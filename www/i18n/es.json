@@ -1294,5 +1294,7 @@
   "＋ item": "＋ elemento",
   "＋ language": "＋ idioma",
   "＋ sub-attribute": "＋ subatributo",
-  "＋ {type}'s attributes ({n})": "＋ atributos de {type} ({n})"
+  "＋ {type}'s attributes ({n})": "＋ atributos de {type} ({n})",
+  "Full screen": "Pantalla completa",
+  "Make the window full-screen": "Poner la ventana en pantalla completa"
 }

@@ -1294,5 +1294,7 @@
   "＋ item": "＋ Element",
   "＋ language": "＋ Sprache",
   "＋ sub-attribute": "＋ Unterattribut",
-  "＋ {type}'s attributes ({n})": "＋ Attribute von {type} ({n})"
+  "＋ {type}'s attributes ({n})": "＋ Attribute von {type} ({n})",
+  "Full screen": "Vollbild",
+  "Make the window full-screen": "Fenster als Vollbild anzeigen"
 }
