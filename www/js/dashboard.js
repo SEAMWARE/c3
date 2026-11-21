@@ -65,9 +65,13 @@ export class Dashboard {
     this.frameFor = null;          // the port the frame was logged in for and shows; null: none
     this.loggingIn = false;
     this.loginWhy = null;
-    $('db-start').addEventListener('click', () => this.act('start'));
+    //
+    // One button, where the state is shown: Start (Start again) in the page's head while WireCloud does not run,
+    // Stop in the bar above WireCloud while it runs - the same button, moved and renamed by render()
+    //
+    this.toggleWhat = 'start';
+    $('db-toggle').addEventListener('click', () => this.act(this.toggleWhat));
     $('db-stop').addEventListener('click', () => this.act('stop'));
-    $('db-stop-bar').addEventListener('click', () => this.act('stop'));
     $('db-reload').addEventListener('click', () => { this.frameFor = null; this.render(); });
     this.progress = null;          // the dialog's: {what: 'start' | 'stop', error} while it is open
     $('db-pclose').addEventListener('click', () => this.progressClose());
@@ -118,7 +122,7 @@ export class Dashboard {
   }
 
   async act(what) {
-    $('db-start').disabled = $('db-stop').disabled = $('db-stop-bar').disabled = true;
+    $('db-toggle').disabled = $('db-stop').disabled = true;
     this.progressOpen(what);
     try {
       await (what === 'start' ? api.dashboardStart() : api.dashboardStop());
@@ -270,6 +274,8 @@ export class Dashboard {
     $('db-bar').hidden = !runs;
     $('db-framewrap').hidden = !runs || this.frameFor !== s.port;
 
+    this.toggleRender(s, runs);
+
     if (!s) {
       $('db-doing').textContent = !this.error ? ''
         : this.errorStatus === 404 ? t('This c³ does not know the Dashboard\'s API ({error}) - it is older than its page: restart c³ from the current build', { error: this.error })
@@ -283,9 +289,13 @@ export class Dashboard {
     $('db-noengine').hidden = !!s.engine;
     if (!s.engine) $('db-noengine-why').textContent = s.engineWhy || '';
 
+    //
+    // The state beside the button when the button alone does not say it: failed, partly running, busy
+    //
     const chip = $('db-state');
-    chip.textContent = stateName(s.state);
-    chip.className = 'chip host db-' + s.state;
+    chip.hidden = !(s.busy || s.state === 'failed' || s.state === 'partly');
+    chip.textContent = stateName(s.busy ? 'busy' : s.state);
+    chip.className = 'chip db-' + (s.busy ? 'busy' : s.state);
 
     if (runs) {
       $('db-url').textContent = '127.0.0.1:' + s.port;
@@ -312,14 +322,24 @@ export class Dashboard {
     $('db-why').textContent = s.why ? t('The last start failed: {why}', { why: s.why }) : '';
 
     const anyRuns = s.services.some((x) => x.state === 'running');
-    $('db-start').hidden = s.busy;
-    $('db-start').disabled = !s.engine;
-    $('db-start').textContent = anyRuns || s.state === 'failed' ? t('Start again') : t('Start');
-    $('db-stop').hidden = s.busy || !anyRuns;
+    $('db-stop').hidden = s.busy || !anyRuns;      // partly running: Stop beside Start again
     $('db-stop').disabled = false;
-    $('db-stop-bar').disabled = false;
     $('db-logwrap').hidden = !(s.busy || s.why || s.state === 'partly');
     $('db-image').textContent = s.image;
+  }
+
+  //
+  // toggleRender - the Start/Stop button: in the head (Start, Start again) or in the bar (Stop)
+  //
+  toggleRender(s, runs) {
+    const b = $('db-toggle');
+    const anyRuns = !!s && s.services.some((x) => x.state === 'running');
+    this.toggleWhat = runs ? 'stop' : 'start';
+    if (runs && b.parentNode !== $('db-bar')) $('db-bar').append(b);
+    else if (!runs && b.parentNode !== $('db-state').parentNode) $('db-state').parentNode.append(b);
+    b.textContent = runs ? t('Stop') : anyRuns || s?.state === 'failed' ? t('Start again') : t('Start');
+    b.classList.toggle('primary', !runs);
+    b.disabled = !s || !!s.busy || (!runs && !s.engine);
   }
 
   serviceItem(x) {
