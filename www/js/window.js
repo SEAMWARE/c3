@@ -37,18 +37,25 @@ async function act(what, body) {
 }
 
 //
-// windowWidthAtLeast - c³'s own window made at least px wide (the header's top line, header.js): a moment after
-// the window was made narrower (a drag ended), so a drag is not fought. Not full-screen, not maximised (the desktop's size), not
-// a window c³ has no hold of (control: false - a browser's tab, whose page scrolls sideways instead)
+// windowWidths - the header's widths in the screen's units (header.js): top, the top line's - the least the window
+// may be; one, the top line and the tabs on one line - the window's width when it leaves full-screen.
+//
+// Made narrower than top, c³'s own window is made that wide again, a moment after (a drag ended), so a drag is not
+// fought - Chrome has no minimum width a page can set, the desktop asks the window's program for it. Leaving
+// full-screen (F11, the desktop's), it is made one wide - the screen's width at most, the desktop sees to that.
+// Neither full-screen nor maximised (the desktop's size), nor a window c³ has no hold of (control: false - a
+// browser's tab, whose page scrolls sideways instead)
 //
 let control = null;                              // null: not asked yet
+let widths = { top: 0, one: 0 };
 let widthTimer = null;
 
-export function windowWidthAtLeast(px) {
+export function windowWidths(top, one) {
+  widths = { top: Math.ceil(top), one: Math.ceil(one) };
   clearTimeout(widthTimer);
   widthTimer = setTimeout(() => {
-    if (control !== true || fullScreen() || window.outerWidth >= px) return;
-    act('width', { width: Math.ceil(px) });
+    if (control !== true || fullScreen() || window.outerWidth >= widths.top) return;
+    act('width', { width: widths.top });
   }, 400);
 }
 
@@ -69,12 +76,23 @@ export async function windowInit() {
   // Full-screen: minimise and close (no title bar). Not full-screen: a button back to full-screen - the title bar
   // has minimise, maximise and close, and maximised is not full-screen
   //
+  let wasFull = fullScreen();
   const show = () => {
     const full = fullScreen();
     box.hidden = false;
     $('win-full').hidden = full;
     $('win-min').hidden = !full;
     $('win-close').hidden = !full;
+    if (wasFull && !full) {
+      //
+      // Out of full-screen: the width everything fits in on one line - once the header has measured itself in
+      // the window it is now (windowWidths) and the desktop is done with the change
+      //
+      setTimeout(() => {
+        if (!fullScreen() && widths.one > 0) act('width', { width: Math.max(widths.one, widths.top), exact: true });
+      }, 500);
+    }
+    wasFull = full;
   };
   show();
   window.addEventListener('resize', show);
