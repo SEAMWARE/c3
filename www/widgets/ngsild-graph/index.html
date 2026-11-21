@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NGSI-LD graph</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/graph.css">
+</head>
+<body>
+  <div class="viewport" id="viewport" tabindex="0" aria-label="Entity graph">
+    <div class="world" id="world">
+      <svg class="edges" id="edges" width="1" height="1" aria-hidden="true">
+        <defs>
+          <marker id="arrow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#5A616E"/></marker>
+          <marker id="arrow-hot" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#D0558A"/></marker>
+        </defs>
+        <g id="edge-lines"></g>
+        <g id="edge-labels"></g>
+      </svg>
+      <div id="boxes"></div>
+    </div>
+  </div>
+  <div class="bar">
+    <button type="button" id="out" aria-label="Zoom out">−</button>
+    <span id="pct">100%</span>
+    <button type="button" id="in" aria-label="Zoom in">+</button>
+    <button type="button" id="fit">Fit</button>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div id="note" hidden></div>
+  <script src="js/common/c3.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

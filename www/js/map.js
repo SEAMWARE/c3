@@ -22,7 +22,7 @@
 //
 // MapLibre and pmtiles are loaded when the map is first shown: the graph does not pay for them.
 //
-import { attributes, kindOf, relationshipTargets, typesOf, shortId, valueText } from './ngsild.js';
+import { attributes, kindOf, relationshipTargets, typesOf, shortId, valueText } from './entity.js';
 import { buildStyle, registerProtocols, setAreas, ATTRIBUTION, C, onlineState } from './basemap.js';
 import { glyphOf, stateColor, imageName, parseImageName, drawImage } from './icons.js';
 

@@ -1,19 +1,24 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-map" version="0.1.3">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-map" version="0.2.0">
   <details>
     <title>NGSI-LD map</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
     <authors>Seamware</authors>
     <image>images/icon.svg</image>
-    <description>The entities on c³'s map, by their location - an entity clicked is sent on as the selection</description>
+    <description>c³ Explore's map: the entities by their GeoProperties, coloured by type as in Explore, their Relationships as arrows, a moving one gliding - every source wired to it shown together; an entity clicked is sent on as the selection</description>
     <license>Apache-2.0</license>
   </details>
   <preferences>
-    <preference name="geo" type="text" label="GeoProperty" description="The GeoProperty drawn - empty: location, else the first GeoProperty" default=""/>
-    <preference name="attribute" type="text" label="Attribute" description="Its value shown under each entity - empty: none" default=""/>
+    <preference name="attribute" type="text" label="Label" description="The attribute whose value labels the entities - empty: their name, else their id" default=""/>
+    <preference name="relationships" type="list" label="Relationships" description="The Relationships drawn: every one, or only the selected entity's" default="all">
+      <option label="all" value="all"/>
+      <option label="selected" value="selected"/>
+    </preference>
+    <preference name="labelZoom" type="number" label="Labels from zoom" description="The zoom from which the entities have labels (as many as fit) - 0: always" default="0"/>
   </preferences>
   <wiring>
-    <inputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}, from an NGSI-LD source" friendcode="ngsild-entities"/>
+    <inputendpoint name="entities" type="text" label="Entities" description="{broker, tenant, type, entities}, from NGSI-LD sources - each source's entities kept, all of them drawn" friendcode="ngsild-entities"/>
+    <inputendpoint name="select" type="text" label="Select" description="{entities: [an entity]} - that entity selected and centred (a table's or a graph's selection)" friendcode="ngsild-entities"/>
     <outputendpoint name="selected" type="text" label="Selected entity" description="{broker, tenant, type, entities: [the entity clicked]}" friendcode="ngsild-entities"/>
   </wiring>
   <contents src="index.html" cacheable="false" useplatformstyle="true"/>

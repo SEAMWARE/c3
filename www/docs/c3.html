@@ -483,8 +483,17 @@ uploads it as <code>admin</code>. In WireCloud, add them to a workspace from <b>
   and <code>observedAt</code></td></tr>
   <tr><td>NGSI-LD chart</td><td>in <code>entities</code></td><td>a numeric attribute over the last hours, a line per
   entity (8 at most): its history from the broker's temporal API, then the values of every new read</td></tr>
-  <tr><td>NGSI-LD map</td><td>in <code>entities</code>, out <code>selected</code></td><td>the entities on c³'s map
-  (online tiles and the areas downloaded in c³), by their location; one clicked is sent on <code>selected</code></td></tr>
+  <tr><td>NGSI-LD graph</td><td>in <code>entities</code>, <code>select</code>; out <code>selected</code></td><td>Explore's
+  graph: a box per entity, coloured by type as in Explore, an arrow per Relationship. It keeps the entities of every
+  source wired to it and draws them together - wire one source per type (Building, Floor, Room) and it shows how they
+  relate. The values that change flash; the legend's types hide or show a type. A box clicked is sent on
+  <code>selected</code>; an entity on <code>select</code> is selected and centred</td></tr>
+  <tr><td>NGSI-LD map</td><td>in <code>entities</code>, <code>select</code>; out <code>selected</code></td><td>Explore's
+  map (online tiles and the areas downloaded in c³): the entities by their GeoProperties, coloured by type, icons for
+  the kinds Explore knows, their Relationships as arrows (all, or the selected entity's); a moving entity glides.
+  Every source wired to it is shown together, as in the graph. Its label: an attribute's value, else the name. One
+  clicked is sent on <code>selected</code>; an entity on <code>select</code> is selected and centred - wire the
+  graph's <code>selected</code> to the map's <code>select</code>, and back, to select in both</td></tr>
   <tr><td>corCep rules</td><td>out <code>selected</code></td><td>corCep's rules at a broker (its rules tenant,
   <code>cep</code>): what each watches and does, how often and when it last fired, its last error - the statistics
   corCep writes on its Rule entities; a rule that fired since the last read flashes. Its checkbox turns a rule on
