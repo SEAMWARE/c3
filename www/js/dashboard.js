@@ -71,6 +71,13 @@ export class Dashboard {
     $('db-reload').addEventListener('click', () => { this.frameFor = null; this.render(); });
     this.progress = null;          // the dialog's: {what: 'start' | 'stop', error} while it is open
     $('db-pclose').addEventListener('click', () => this.progressClose());
+    //
+    // AI Assist changed a dashboard (WireCloud's tools): WireCloud does not show it until it is loaded again
+    //
+    window.addEventListener('c3-dashboard-changed', (ev) => {
+      const path = ev.detail && ev.detail.path;   // the workspace changed ("owner/name"), else WireCloud's home
+      if (this.frameFor !== null) $('db-frame').src = this.wirecloudUrl(this.frameFor) + (path ? 'workspace/' + path : '');
+    });
     $('db-progress').addEventListener('cancel', () => { this.progress = null; });
     $('db-write').addEventListener('change', async (ev) => {
       try {

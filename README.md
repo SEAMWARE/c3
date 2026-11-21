@@ -1052,10 +1052,23 @@ it is part of c³.
   from WireCloud's origin that comes without one is refused the same. Each widget write is a line in the
   Dashboard's log (`a widget writes: <method> <broker><path> - tenant <t>`). Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
   `c3_port`, set with WireCloud's on the login answer.
+- **WireCloud's MCP server**, when the image has it (built with `WIRECLOUD_INSTALL_MCP=true` - c³ asks the image
+  once per image id: `python -c "import mcp"`): c³ starts WireCloud with the apps `wirecloud.oauth2provider` and
+  `wirecloud.mcp`, `WIRECLOUD_MCP_PUBLIC_URL=http://127.0.0.1:<port>/mcp` and dynamic client registration off,
+  and one OAuth client, `c3-assist`: client credentials (`client_secret_post`), acting as `admin`, scopes
+  `wirecloud:read`, `wirecloud:workspace:write`, `wirecloud:component:install` - nothing deleted or uninstalled.
+  Its secret is made by c³ and kept in `secrets.json` (`dashboard.assistClient`), and goes in through the env
+  file. The image's settings take no OAuth client from the environment
+  ([Ficodes/WireCloud#12](https://github.com/Ficodes/WireCloud/issues/12)): c³ mounts its own `settings.py` over
+  `/app/docker/settings.py` (from `run/services/c3-dashboard-wirecloud-settings/`) - it runs the image's own,
+  copied out of the image each time the container is made, and adds the client. c³'s AI Assist asks WireCloud
+  for a token (`POST /oauth2/token`, 15 minutes) at each question and builds and changes dashboards through
+  the MCP server's tools; the Dashboard's frame shows the workspace it changed when the answer ends. A
+  WireCloud started before its image had MCP keeps running without it: Stop and Start make it again.
 - **The image**: WireCloud 2 has no published one yet ([Ficodes/WireCloud#7](https://github.com/Ficodes/WireCloud/issues/7)).
-  Build it from its source: `docker compose -f docker/docker-compose.yml build wirecloud` in a clone of
-  Ficodes/WireCloud - at v2.0.0 with the Elasticsearch client pinned to `>=8,<9`
-  ([#5](https://github.com/Ficodes/WireCloud/issues/5)) and `createsuperuser` fixed
+  Build it from its source: `docker compose -f docker/docker-compose.yml build --build-arg WIRECLOUD_INSTALL_MCP=true wirecloud`
+  in a clone of Ficodes/WireCloud (without the build-arg: no MCP server) - at v2.0.0 with the Elasticsearch
+  client pinned to `>=8,<9` ([#5](https://github.com/Ficodes/WireCloud/issues/5)) and `createsuperuser` fixed
   ([#6](https://github.com/Ficodes/WireCloud/issues/6)).
 
 ## How it is built

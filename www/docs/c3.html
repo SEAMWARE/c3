@@ -522,7 +522,11 @@ rel="noopener">Ficodes/WireCloud#7</a>); c³ uses <code>wirecloud-fastapi:latest
 <code>docker/docker-compose.yml</code> builds:</p>
 <pre>git clone https://github.com/Ficodes/WireCloud
 cd WireCloud
-docker compose -f docker/docker-compose.yml build wirecloud</pre>
+docker compose -f docker/docker-compose.yml build --build-arg WIRECLOUD_INSTALL_MCP=true wirecloud</pre>
+<p>The build-arg adds WireCloud's MCP server: c³ then starts WireCloud with it, and with one OAuth client of its own
+(<code>c3-assist</code>: acting as <code>admin</code>, to read, change workspaces and install widgets - it
+deletes nothing), its secret made by c³ and kept beside the Dashboard's other secrets. Built without it,
+WireCloud runs the same, without the MCP server. A WireCloud started before the image had it: Stop, then Start.</p>
 <p>At v2.0.0 the build needs the Elasticsearch client pinned to the server's major version
 (<code>elasticsearch&gt;=8,&lt;9</code> in <code>requirements.txt</code> and <code>pyproject.toml</code>,
 <a href="https://github.com/Ficodes/WireCloud/issues/5" target="_blank" rel="noopener">#5</a>) and

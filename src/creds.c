@@ -113,6 +113,7 @@ static char             secretsPath[4200];
 static char             dashPassword[65];        // the Dashboard's WireCloud: its admin's password
 static char             dashJwtKey[65];          // its WIRECLOUD_JWT_KEY
 static char             dashSecretKey[65];       // its WIRECLOUD_SECRET_KEY
+static char             dashAssistSecret[65];    // the secret of its OAuth client c3-assist (AI Assist's way in to its MCP server)
 
 static const char*      tokenFile = NULL;        // --token-file
 static char*            fileToken = NULL;        // its token, as last read (malloc'ed)
@@ -346,6 +347,10 @@ static bool secretsWrite(char* errBuf, int errLen)
     strAdd(&s, ", \"dashboard\": {\"password\": ");  strAddJson(&s, dashPassword);
     strAdd(&s, ", \"jwtKey\": ");                     strAddJson(&s, dashJwtKey);
     strAdd(&s, ", \"secretKey\": ");                  strAddJson(&s, dashSecretKey);
+    if (dashAssistSecret[0] != 0)
+    {
+      strAdd(&s, ", \"assistClient\": ");             strAddJson(&s, dashAssistSecret);
+    }
     strAdd(&s, "}");
   }
   strAdd(&s, "}\n");
@@ -485,6 +490,10 @@ static void secretsRead(void)
       snprintf(dashJwtKey,    sizeof(dashJwtKey),    "%s", jwtP->value.s);
       snprintf(dashSecretKey, sizeof(dashSecretKey), "%s", secP->value.s);
     }
+
+    CorNode* acP = corTreeLookup(dashP, "assistClient");
+    if ((acP != NULL) && (acP->type == CorString) && (strlen(acP->value.s) < sizeof(dashAssistSecret)))
+      snprintf(dashAssistSecret, sizeof(dashAssistSecret), "%s", acP->value.s);
   }
 
   if (treeP == NULL)
@@ -591,6 +600,40 @@ bool credsDashboard(char* password, int passwordLen, char* jwtKey, int jwtKeyLen
   if (jwtKey    != NULL) snprintf(jwtKey,    jwtKeyLen,    "%s", dashJwtKey);
   if (secretKey != NULL) snprintf(secretKey, secretKeyLen, "%s", dashSecretKey);
 
+  pthread_mutex_unlock(&credsLock);
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// credsDashboardAssist - the secret of WireCloud's OAuth client c3-assist: made and kept in secrets.json the
+// first time it is asked for (a secrets.json of before has the other three only). false: why, in err.
+//
+bool credsDashboardAssist(char* secret, int secretLen, char* err, int errLen)
+{
+  if (credsDashboard(NULL, 0, NULL, 0, NULL, 0, err, errLen) == false)   // the others first: a dashboard of its own
+    return false;
+
+  pthread_mutex_lock(&credsLock);
+  if (dashAssistSecret[0] == 0)
+  {
+    if (randomHex(dashAssistSecret, 32) == false)
+    {
+      dashAssistSecret[0] = 0;
+      pthread_mutex_unlock(&credsLock);
+      snprintf(err, errLen, "no random bytes for AI Assist's WireCloud client: %s", strerror(errno));
+      return false;
+    }
+    if (secretsWrite(err, errLen) == false)
+    {
+      dashAssistSecret[0] = 0;
+      pthread_mutex_unlock(&credsLock);
+      return false;
+    }
+  }
+  snprintf(secret, secretLen, "%s", dashAssistSecret);
   pthread_mutex_unlock(&credsLock);
   return true;
 }

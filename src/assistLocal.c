@@ -22,22 +22,29 @@
 //
 //   start       {"session"}                         the conversation the question is part of
 //   text        {"text"}                            the answer, a piece at a time
-//   tool        {"id", "name", "input"}             a tool call (the name without mcp__ngsild__)
+//   tool        {"id", "kind", "name", "input"}     a tool call (the name without mcp__<server>__)
 //   toolResult  {"id", "isError", "text"}           its result, the text cut at 4000 characters
 //   usage       {"window", "utilization", "resetsAt"} how much of the plan's window is used
 //   end         {"answer", "turns", "seconds", "costUsd", "input", "output", "cacheRead", "isError"}
-//   error       {"detail"}                          no answer: why
-//   serverDown  {"server", "status"}                a tool server (ngsild, c3) did not connect - its tools are missing
+//   error       {"detail"}                          no answer: why (Claude Code's own reason, when it gives one)
+//   serverDown  {"server", "status"}                a tool server (ngsild, c3, wirecloud) did not connect - its tools are missing
 //   ui          {"call", "name", "args"}            a c3 command for the page to carry out - its result
 //                                                   comes back on POST /api/assist/ui
 //
-// A tool event's "kind" is "broker" (corMcp) or "c3" (a command - the page shows those from the ui event).
+// A tool event's "kind" is "broker" (corMcp), "c3" (a command - the page shows those from the ui event) or
+// "dashboard" (WireCloud's MCP server - the page shows the workspace changed when the answer ends).
 //
 // A conversation is Claude Code's session: --session-id on its first question, --resume on the next ones,
 // always run in the same (empty) directory - $XDG_DATA_HOME/c3/assist/work. The broker, the tenant and the
 // token are corMcp's command line and environment, in an MCP configuration file of mode 600 that lives as
 // long as the ask. No built-in tool of Claude Code's is offered, no setting file read, corMcp's write tools
-// are not enabled: the model reads the broker, nothing else.
+// are not enabled: the model reads the broker, nothing else in it.
+//
+// While c3's Dashboard runs with WireCloud's MCP server (run.c, runDashboardMcp), each ask also gets the server
+// "wirecloud": a token of WireCloud's OAuth client c3-assist (15 minutes) asked for at the ask's start, in the
+// same file only. With it the model builds and changes the user's dashboards - c3's widgets, their preferences,
+// layout and wiring - as WireCloud's admin; the client's scopes leave out deleting and uninstalling. Without
+// it, the instructions say why there is no Dashboard, so an ask for one is answered with what to do.
 //
 // Environment: C3_DEV=1 (else nothing here answers but "not available"), C3_ASSIST_MODEL (sonnet), C3_CORMCP
 // (corMcp's path; default: found in $PATH), C3_ASSIST_DIR (the coraine-assistant checkout).
@@ -124,6 +131,8 @@ typedef struct Ask
   bool            stopped;
   char            secret[33];                    // the path of c3's MCP server for this ask
   char*           uiTools;                       // the c3 commands the page offers (a JSON array), or NULL
+  bool            dashboard;                     // WireCloud's MCP server is in this ask's tools (the Dashboard runs)
+  char            dashboardWhy[400];             // why not, when not
 } Ask;
 
 static pthread_mutex_t aMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -471,6 +480,11 @@ static bool lineHandle(Ask* aP, CorNode* evP, bool* endedP)
           name = &name[9];
           kind = "c3";
         }
+        else if (strncmp(name, "mcp__wirecloud__", 16) == 0)
+        {
+          name = &name[16];
+          kind = "dashboard";
+        }
 
         strAdd(&s, "{\"id\": ");
         strAddJson(&s, id);
@@ -585,6 +599,35 @@ static bool lineHandle(Ask* aP, CorNode* evP, bool* endedP)
             nodeNumber((uP != NULL) ? corTreeLookup(uP, "output_tokens") : NULL, 0),
             nodeNumber((uP != NULL) ? corTreeLookup(uP, "cache_read_input_tokens") : NULL, 0),
             ((errP != NULL) && (errP->type == CorBoolean) && (errP->value.b == true)) ? "true" : "false");
+
+    //
+    // An error with no answer: Claude Code's own reason (its "errors", else its "subtype") - without it the
+    // panel had an answer of nothing and no why
+    //
+    if ((errP != NULL) && (errP->type == CorBoolean) && (errP->value.b == true) && ((answer == NULL) || (answer[0] == 0)))
+    {
+      Str      d    = { NULL, 0, 0 };
+      CorNode* erP  = corTreeLookup(evP, "errors");
+      const char* sub = nodeString(evP, "subtype");
+
+      if ((erP != NULL) && (erP->type == CorArray))
+      {
+        for (CorNode* eP = erP->value.head; eP != NULL; eP = eP->next)
+        {
+          if (eP->type == CorString)
+            strAddf(&d, "%s%s", (d.len > 0) ? "; " : "", eP->value.s);
+        }
+      }
+      if (d.len == 0)
+        strAddf(&d, "Claude Code ended without an answer (%s)", (sub != NULL) ? sub : "no reason given");
+
+      Str e = { NULL, 0, 0 };
+      strAdd(&e, "{\"detail\": ");
+      strAddJson(&e, d.s);
+      strAdd(&e, "}");
+      strFree(&d);
+      emit(aP, "error", &e);
+    }
 
     *endedP = true;
     return emit(aP, "end", &s);
@@ -799,6 +842,23 @@ static bool cfgWrite(Ask* aP, char* errBuf, int errLen)
     strAdd(&s, "]}");
   if (aP->uiTools != NULL)
     strAddf(&s, ", \"c3\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:%d/api/assist/mcp/%s\"}", (int) c3Port, aP->secret);
+
+  //
+  // c3's Dashboard: WireCloud's MCP server, while it runs - as its client c3-assist, with a token of 15 minutes
+  // (an ask lasts less), in this file only (mode 600, removed when the ask ends)
+  //
+  char mcpUrl[128];
+  char mcpToken[1024];
+  aP->dashboard = runDashboardMcp(mcpUrl, sizeof(mcpUrl), mcpToken, sizeof(mcpToken), aP->dashboardWhy, sizeof(aP->dashboardWhy));
+  if (aP->dashboard)
+  {
+    strAdd(&s, ", \"wirecloud\": {\"type\": \"http\", \"url\": ");
+    strAddJson(&s, mcpUrl);
+    strAdd(&s, ", \"headers\": {\"Authorization\": \"Bearer ");
+    strAdd(&s, mcpToken);
+    strAdd(&s, "\"}}");
+    memset(mcpToken, 0, sizeof(mcpToken));
+  }
   strAdd(&s, "}}\n");
 
   int fd = open(aP->cfgPath, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
@@ -812,6 +872,7 @@ static bool cfgWrite(Ask* aP, char* errBuf, int errLen)
 
   bool ok = (write(fd, s.s, s.len) == (ssize_t) s.len);
   close(fd);
+  memset(s.s, 0, s.len);                         // the tokens
   strFree(&s);
 
   if (ok == false)
@@ -831,6 +892,40 @@ static const char* language(const char* lang)
   if (strcmp(lang, "fr") == 0) return "French (français)";
   if (strcmp(lang, "de") == 0) return "German (Deutsch)";
   return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// dashboardPrompt - c3's Dashboard (WireCloud): its tools and c3's widgets, or why it is not there
+//
+static void dashboardPrompt(Ask* aP, Str* sP)
+{
+  if (aP->dashboard == false)
+  {
+    strAddf(sP, "\n\nc³'s Dashboard (WireCloud) is not connected: %s. If the user asks for a dashboard, say so - and what to do.", aP->dashboardWhy);
+    return;
+  }
+
+  strAddf(sP,
+          "\n\nThe wirecloud tools are c³'s Dashboard - WireCloud, as the user admin: you build and change the user's "
+          "dashboards (workspaces) with them, when asked. You cannot delete a workspace, a tab or a widget. "
+          "Build them from c³'s own widgets, vendor Seamware (get_resource gives each one's description): "
+          "ngsild-source reads the entities of a type from a broker (preferences broker - the broker's URL exactly, here %s - "
+          "tenant, type, q, attrs, refresh in seconds) and sends them on its output entities; "
+          "ngsild-table (input entities, output selected; preferences columns, decimals, rows), ngsild-chart (input entities; a "
+          "numeric attribute over the last hours from the broker's history; preferences attribute, hours, lines), ngsild-map "
+          "(input entities, output selected; preferences geo, attribute), ngsild-value (input entities; preferences entity, "
+          "attribute, label, unit, decimals) take what they are wired to; a table's or a map's selected goes to a chart, a "
+          "value or an ngsild-control (input entity; sets one attribute: preferences broker, tenant, entity, attribute, kind - "
+          "switch, button, slider or number - label, value, min, max, step). ngsild-rules (corCep's rules: broker, tenant - "
+          "cep) and ngsild-alarms (broker, tenant, type - Alert -, q, severity) read on their own. "
+          "Look at the broker's data first (its types, the attributes they have) and choose from it; give each widget its "
+          "preferences, place them in a sensible layout, then connect them in the wiring. A widget's layouts are keyed by "
+          "screen size id: \"2\" is Desktop - 12 columns, rows of 40 px (x, y, w, h in those); a source shows little - "
+          "h 3 is enough. In the wiring a widget's id is the one add_widget answered. Say the workspace's name at the "
+          "end: the user sees it in c³'s Dashboard page.", aP->broker);
 }
 
 
@@ -863,6 +958,7 @@ static void systemPrompt(Ask* aP, Str* sP)
     free(fresh);
     strAddf(sP, "\n\nConnected to: the broker at %s, tenant %s. The current time is %s.%s",
             aP->broker, (aP->tenant[0] != 0) ? aP->tenant : "(the default tenant)", now, langLine);
+    dashboardPrompt(aP, sP);
     return;
   }
 
@@ -885,6 +981,7 @@ static void systemPrompt(Ask* aP, Str* sP)
            "c³ shows the user the exact command and asks before any of these runs, so do not ask in words first. A build "
            "takes minutes: start it, say so, and do not wait for it in the same answer. Every change is recorded: when the "
            "user regrets one (\"undo that\", \"go back to what we had\"), use list_changes and undo.");
+  dashboardPrompt(aP, sP);
 }
 
 
@@ -1032,6 +1129,8 @@ static void askStart(CorHttpConn* connP, CorNode* bodyP)
   argv[argc++] = (char*) "mcp__ngsild";
   if (aP->uiTools != NULL)
     argv[argc++] = (char*) "mcp__c3";
+  if (aP->dashboard)
+    argv[argc++] = (char*) "mcp__wirecloud";
   argv[argc++] = (char*) "--system-prompt";
   argv[argc++] = sys.s;
   argv[argc++] = (char*) "--setting-sources";

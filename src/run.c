@@ -2415,10 +2415,116 @@ static int localHttp(int port, const char* method, const char* path, const char*
 
 // -----------------------------------------------------------------------------
 //
-// secretEnvWrite - the env file a set's WireCloud starts with (--env-file): its JWT and secret keys, made once
-// and kept in secrets.json (credsDashboard). Mode 0600, removed again once the container is made.
+// wirecloudMcp - was WireCloud's image built with its MCP part (WIRECLOUD_INSTALL_MCP=true: the MCP SDK in
+// it)? Asked of the image once per image id - a build of its anew is asked again.
 //
-static bool secretEnvWrite(const char* set, char* path, int pathLen, char* err, int errLen)
+static char mcpImageId[80];
+static bool mcpImageHas;
+
+static bool wirecloudMcp(void)
+{
+  char id[256];
+  char out[256];
+
+  if (engineRun(id, sizeof(id), 30, "image", "inspect", "--format", "{{.Id}}", kinds[KIND_WIRECLOUD].image, NULL) != 0)
+    return false;
+  if (strcmp(id, mcpImageId) == 0)
+    return mcpImageHas;
+
+  mcpImageHas = (engineRun(out, sizeof(out), 60, "run", "--rm", "--entrypoint", "python", kinds[KIND_WIRECLOUD].image, "-c", "import mcp", NULL) == 0);
+  snprintf(mcpImageId, sizeof(mcpImageId), "%s", id);
+  return mcpImageHas;
+}
+
+//
+// mcpSettingsWrite - WireCloud's Docker settings, and the OAuth client AI Assist reaches its MCP server with:
+// the image takes its settings from the environment, but not OAUTH2_CLIENTS. c3's settings.py is mounted over
+// the image's /app/docker/settings.py (its entrypoint puts /app/docker first in PYTHONPATH: nothing beside it
+// would be read); it runs the image's own - copied out of the image each time the container is made, so a
+// newer image's is the one run - and adds the client c3-assist: client credentials, acting as WireCloud's
+// user admin, to read, write workspaces and install components - nothing deleted.
+//
+static bool mcpSettingsWrite(const char* set, char* dir, int dirLen, char* err, int errLen)
+{
+  snprintf(dir, dirLen, "%s/c3-%s-wirecloud-settings", svcDir, set);
+  if ((mkdir(dir, 0755) != 0) && (errno != EEXIST))
+  {
+    snprintf(err, errLen, "%s: %s", dir, strerror(errno));
+    return false;
+  }
+
+  //
+  // The image's own settings, as they are in it
+  //
+  int   size = 256 * 1024;
+  char* orig = malloc(size);
+  if (orig == NULL)
+  {
+    snprintf(err, errLen, "out of memory");
+    return false;
+  }
+  if ((engineRun(orig, size, 60, "run", "--rm", "--entrypoint", "cat", kinds[KIND_WIRECLOUD].image, "/app/docker/settings.py", NULL) != 0) ||
+      ((int) strlen(orig) >= size - 2) || (strstr(orig, "INSTALLED_APPS") == NULL))
+  {
+    snprintf(err, errLen, "WireCloud's image: its /app/docker/settings.py could not be read (%.200s)", orig);
+    free(orig);
+    return false;
+  }
+
+  char path[2400];
+  snprintf(path, sizeof(path), "%s/docker_settings.py", dir);
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  bool copied = (fd != -1) && (write(fd, orig, strlen(orig)) == (ssize_t) strlen(orig)) && (write(fd, "\n", 1) == 1);
+  if (fd != -1)
+    close(fd);
+  free(orig);
+  if (copied == false)
+  {
+    snprintf(err, errLen, "%s: not written", path);
+    return false;
+  }
+
+  snprintf(path, sizeof(path), "%s/settings.py", dir);
+  const char* text =
+    "# c3's: WireCloud's own Docker settings, then the OAuth client c3's AI Assist reaches the MCP server with\n"
+    "# (client credentials, as the user " DASHBOARD_USER "; its secret from c3's secrets.json, in the environment)\n"
+    "exec(compile(open('/app/c3/docker_settings.py').read(), '/app/docker/settings.py', 'exec'))\n"
+    "\n"
+    "_c3_secret = os.environ.get('C3_ASSIST_CLIENT_SECRET', '')\n"
+    "if _c3_secret and MCP_PUBLIC_URL:\n"
+    "    OAUTH2_CLIENTS = [{\n"
+    "        'client_id': 'c3-assist',\n"
+    "        'client_name': \"c3's AI Assist\",\n"
+    "        'grant_types': ['client_credentials'],\n"
+    "        'token_endpoint_auth_method': 'client_secret_post',\n"
+    "        'client_secret': _c3_secret,\n"
+    "        'service_user': '" DASHBOARD_USER "',\n"
+    "        'resource_scopes': {MCP_PUBLIC_URL: ['wirecloud:read', 'wirecloud:workspace:write', 'wirecloud:component:install']},\n"
+    "    }]\n";
+
+  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  if (fd == -1)
+  {
+    snprintf(err, errLen, "%s: %s", path, strerror(errno));
+    return false;
+  }
+  bool ok = (write(fd, text, strlen(text)) == (ssize_t) strlen(text));
+  close(fd);
+  if (ok == false)
+    snprintf(err, errLen, "%s: not written", path);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// secretEnvWrite - the env file a set's WireCloud starts with (--env-file): its JWT and secret keys, made once
+// and kept in secrets.json (credsDashboard). Mode 0600, removed again once the container is made. With an
+// image that has the MCP part ('mcp'), also what turns it on: the OAuth and MCP apps, the MCP server's URL as
+// AI Assist reaches it (on 'port'), the secret of the client c3-assist (c3's settings.py reads it).
+//
+static bool secretEnvWrite(const char* set, int port, bool mcp, char* path, int pathLen, char* err, int errLen)
 {
   char jwtKey[65];
   char secretKey[65];
@@ -2436,9 +2542,28 @@ static bool secretEnvWrite(const char* set, char* path, int pathLen, char* err, 
     return false;
   }
 
-  char text[256];
+  char text[2048];
   int  len = snprintf(text, sizeof(text), "WIRECLOUD_JWT_KEY=%s\nWIRECLOUD_SECRET_KEY=%s\n", jwtKey, secretKey);
-  bool ok  = (write(fd, text, len) == len);
+  if (mcp)
+  {
+    char assist[65];
+    if (credsDashboardAssist(assist, sizeof(assist), err, errLen) == false)
+    {
+      close(fd);
+      unlink(path);
+      path[0] = 0;
+      return false;
+    }
+    len += snprintf(&text[len], sizeof(text) - len,
+                    "WIRECLOUD_INSTALLED_APPS=wirecloud.commons,wirecloud.platform,wirecloud.catalogue,wirecloud.proxy,wirecloud.fiware,wirecloud.keycloak,wirecloud.oauth2provider,wirecloud.mcp\n"
+                    "WIRECLOUD_MCP_PUBLIC_URL=http://127.0.0.1:%d/mcp\n"
+                    "WIRECLOUD_OAUTH2_PUBLIC_URL=http://127.0.0.1:%d\n"
+                    "WIRECLOUD_OAUTH2_DYNAMIC_REGISTRATION=false\n"
+                    "C3_ASSIST_CLIENT_SECRET=%s\n", port, port, assist);
+    memset(assist, 0, sizeof(assist));
+  }
+  bool ok  = (len < (int) sizeof(text)) && (write(fd, text, len) == len);
+  memset(text, 0, sizeof(text));
 
   close(fd);
   if (ok == false)
@@ -2447,6 +2572,67 @@ static bool secretEnvWrite(const char* set, char* path, int pathLen, char* err, 
     unlink(path);
     path[0] = 0;
   }
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// runDashboardMcp - for AI Assist: WireCloud's MCP server's URL and an access token (15 minutes) for the
+// client c3-assist, while the Dashboard runs with it. false: why, in 'why' (not running; the image without the
+// MCP part; WireCloud did not give one).
+//
+static int dashPort(void);                       // below, with the Dashboard
+
+bool runDashboardMcp(char* url, int urlLen, char* token, int tokenLen, char* why, int whyLen)
+{
+  int port = dashPort();
+  if (port <= 0)
+  {
+    snprintf(why, whyLen, "the Dashboard does not run");
+    return false;
+  }
+
+  char secret[65];
+  char err[256];
+  if (credsDashboardAssist(secret, sizeof(secret), err, sizeof(err)) == false)
+  {
+    snprintf(why, whyLen, "%s", err);
+    return false;
+  }
+
+  snprintf(url, urlLen, "http://127.0.0.1:%d/mcp", port);
+  char body[512];
+  snprintf(body, sizeof(body), "grant_type=client_credentials&client_id=c3-assist&client_secret=%s&resource=http%%3A%%2F%%2F127.0.0.1%%3A%d%%2Fmcp", secret, port);
+  memset(secret, 0, sizeof(secret));
+
+  Str      resp = { NULL, 0, 0 };
+  LocalReq r    = { "POST", "/oauth2/token", NULL, "application/x-www-form-urlencoded", body, -1, NULL, &resp, 15 };
+  int      st   = localRequest(port, &r);
+  memset(body, 0, sizeof(body));
+
+  bool ok = false;
+  if (st == 404)
+    snprintf(why, whyLen, "WireCloud runs without its MCP part - its image built with WIRECLOUD_INSTALL_MCP=true, the Dashboard stopped and started again");
+  else if (st != 200)
+    snprintf(why, whyLen, "WireCloud gave no token for AI Assist (%d) - when it was started before c3 knew of MCP, stop the Dashboard and start it again", st);
+  else
+  {
+    const char* at = (resp.s != NULL) ? strstr(resp.s, "\"access_token\"") : NULL;
+    const char* q1 = (at != NULL) ? strchr(at + 14, '"') : NULL;
+    const char* q2 = (q1 != NULL) ? strchr(q1 + 1, '"') : NULL;
+    if ((q2 != NULL) && (q2 - q1 - 1 < tokenLen))
+    {
+      snprintf(token, tokenLen, "%.*s", (int) (q2 - q1 - 1), q1 + 1);
+      ok = true;
+    }
+    else
+      snprintf(why, whyLen, "WireCloud's token answer has no access_token");
+  }
+  if (resp.s != NULL)
+    memset(resp.s, 0, resp.len);
+  strFree(&resp);
   return ok;
 }
 
@@ -2582,12 +2768,26 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
     }
     if (kinds[kind].secretEnv)
     {
-      if (secretEnvWrite(set, envFile, sizeof(envFile), err, errLen) == false)
+      bool mcp = (kind == KIND_WIRECLOUD) && wirecloudMcp();
+      char settingsDir[2300];
+
+      if (mcp && (mcpSettingsWrite(set, settingsDir, sizeof(settingsDir), err, errLen) == false))
+      {
+        argFree(&a);
+        goto fail;
+      }
+      if (secretEnvWrite(set, port, mcp, envFile, sizeof(envFile), err, errLen) == false)
       {
         argFree(&a);
         goto fail;
       }
       argAdd(&a, "--env-file"); argAdd(&a, envFile);
+      if (mcp)
+      {
+        argAdd(&a, "-v"); argAddf(&a, "%s:/app/c3:ro", settingsDir);
+        argAdd(&a, "-v"); argAddf(&a, "%s/settings.py:/app/docker/settings.py:ro", settingsDir);
+        logLine(logPath, "%s: its MCP server on (AI Assist builds dashboards) - 127.0.0.1:%d/mcp", name, port);
+      }
     }
     argAdd(&a, kinds[kind].image);
     for (int ix = 0; kinds[kind].cmd[ix] != NULL; ix++)
