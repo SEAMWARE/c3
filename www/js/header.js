@@ -5,9 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The top line - the logo, c³'s name, AI Assist, the text size, the language, Seamware and the window's buttons -
-// is never broken. The page tabs are on it when the header is wide enough for both, on a line of their own under
-// it when not (the class two-lines, c3.css). The top line's width is the page's minimum width: a narrower
-// browser window scrolls the page sideways, and c³'s own window is made that wide again (window.js).
+// is never broken: the logo and the name on the left, the rest on the right. The page tabs are on it, centred
+// between the two, when the header is wide enough for both, centred on a line of their own under it when not
+// (the class two-lines, c3.css). The top line's width is the page's minimum width: a narrower browser window
+// scrolls the page sideways, and c³'s own window is made that wide again (window.js).
 //
 // Measured again whenever any of it changes size: the window, the text size, the language (the tabs' and the
 // buttons' words), the window's buttons shown or hidden.
@@ -16,7 +17,7 @@ import { windowWidthAtLeast } from './window.js';
 
 const $ = (id) => document.getElementById(id);
 
-const RIGHT_GAP = 64;                            // .top-right's margin-left on one line (c3.css)
+const ROOM = 64;                                 // the least room on each side of the tabs on the top line
 
 function width(el) {
   return (!el || el.hidden) ? 0 : el.getBoundingClientRect().width;
@@ -40,7 +41,7 @@ function fit() {
   const nav = links.reduce((w, a) => w + width(a), 0) + navGap * Math.max(0, links.length - 1);
 
   const top = Math.ceil(pad + width(mark) + markGap + gap + width(brand) + gap + width(right));
-  const one = top + nav + gap + RIGHT_GAP;
+  const one = top + nav + 2 * ROOM;
 
   document.documentElement.style.minWidth = top + 'px';
   header.classList.toggle('two-lines', header.clientWidth < one);
