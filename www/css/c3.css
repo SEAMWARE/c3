@@ -140,25 +140,32 @@ h2.section {
 
 #app { min-height: 100%; display: flex; flex-direction: column; }
 
+/*
+ * The header: the top line - the logo and c³'s name on the left; AI Assist, the text size, the language, Seamware,
+ * the window's buttons on the right - never wraps; the page tabs are on it, centred between the two, when they
+ * fit, centred on a line of their own under it when not
+ * (.two-lines, header.js). The top line's width is the page's minimum width (header.js)
+ */
 header.top {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 24px;
-  padding: 0 32px; min-height: 64px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 24px;
+  padding: 0 16px 0 32px; min-height: 64px;
   background: var(--bg-deep); border-bottom: 1px solid var(--line);
 }
-header.top .mark { height: 56px; width: auto; margin-right: 24px; }
-.brand { display: flex; align-items: baseline; gap: 0.4em; }
+header.top .mark { height: 56px; width: auto; margin-right: 24px; flex-shrink: 0; }
+.brand { display: flex; align-items: baseline; gap: 0.4em; flex-shrink: 0; white-space: nowrap; }
 .brand .sep { letter-spacing: 0; }
 .word { font-family: var(--title); font-size: 2.75rem; font-weight: 400; color: var(--text); }
 .word .cube { color: var(--accent-2); }
 .brand .tag { font-family: var(--title); font-size: 1.9125rem; letter-spacing: 0.04em; color: var(--muted); }
 
-nav.pages { display: flex; gap: 4px; margin-left: auto; }
+nav.pages { display: flex; justify-content: center; gap: 4px; margin: 0 auto; flex-shrink: 0; }
 nav.pages a, nav.pages span {
-  padding: 18px 16px 20px; color: var(--muted); text-decoration: none;
+  padding: 18px 16px 20px; color: var(--muted); text-decoration: none; white-space: nowrap; flex-shrink: 0;
 }
 nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600; border-bottom: 3px solid var(--accent-2); }
 
-.top-right { margin-left: 64px; display: flex; align-items: center; gap: 16px; }
+.top-right { margin-left: auto; display: flex; align-items: center; gap: 16px; flex-shrink: 0; min-height: 64px; }
+header.top.two-lines nav.pages { order: 3; flex-basis: 100%; border-top: 1px solid var(--line); }
 .chip {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
   font-family: var(--mono); font-size: 0.975rem; color: var(--muted);
@@ -173,11 +180,11 @@ nav.pages a.active { padding-bottom: 17px; color: var(--text); font-weight: 600;
 .menu .micon { width: 21px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; box-shadow: 0 0 0 1px rgba(255,255,255,0.25); }
 .langbtn:hover, .langbtn[aria-expanded="true"] { border-color: var(--accent-2); }
 
-/* Minimise and close - full-screen only, where the window has no title bar (window.js) */
-.winctl { display: flex; gap: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
-.winctl[hidden] { display: none; }
+/* Minimise and close - full-screen only, where the window has no title bar; not full-screen: back to it (window.js) */
+.winctl { display: flex; gap: 1px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
+.winctl[hidden], .winctl button[hidden] { display: none; }
 .winctl button {
-  width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
+  width: 28px; height: 32px; display: grid; place-items: center; padding: 0;
   border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); cursor: pointer;
 }
 .winctl button:hover { background: var(--panel-2); border-color: var(--line); color: var(--text); }
@@ -288,10 +295,7 @@ header.top { position: relative; }
 }
 
 @media (max-width: 720px) {
-  header.top { padding: 0 16px; }
-  .brand .tag { display: none; }
-  nav.pages { margin-left: 0; }
-  nav.pages { margin-left: 0; }
+  header.top { padding: 0 8px 0 16px; }
   nav.pages a, nav.pages span { padding-left: 8px; padding-right: 8px; }
 }
 
