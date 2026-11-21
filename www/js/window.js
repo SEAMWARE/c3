@@ -38,7 +38,7 @@ async function act(what, body) {
 
 //
 // windowWidthAtLeast - c³'s own window made at least px wide (the header's top line, header.js): a moment after
-// the window was made narrower, so a drag is not fought. Not full-screen, not maximised (the desktop's size), not
+// the window was made narrower (a drag ended), so a drag is not fought. Not full-screen, not maximised (the desktop's size), not
 // a window c³ has no hold of (control: false - a browser's tab, whose page scrolls sideways instead)
 //
 let control = null;                              // null: not asked yet
@@ -49,7 +49,7 @@ export function windowWidthAtLeast(px) {
   widthTimer = setTimeout(() => {
     if (control !== true || fullScreen() || window.outerWidth >= px) return;
     act('width', { width: Math.ceil(px) });
-  }, 600);
+  }, 400);
 }
 
 export async function windowInit() {

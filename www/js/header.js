@@ -47,10 +47,13 @@ function fit() {
   header.classList.toggle('two-lines', header.clientWidth < one);
 
   //
-  // The window's own width: what the page needs plus what the window has beside the page (its frame, the
-  // scrollbar)
+  // The window's own width, in the screen's units (Chrome's): the page's width in CSS pixels times the browser's
+  // zoom (Ctrl +, kept per site) - outerWidth is in the screen's units, innerWidth in CSS pixels, so their ratio is
+  // the zoom, with the window's frame in it (a little more than needed, never less). The scrollbar: CSS pixels
   //
-  windowWidthAtLeast(top + (window.outerWidth - document.documentElement.clientWidth));
+  const inner = window.innerWidth;
+  const scrollbar = inner - document.documentElement.clientWidth;
+  if (inner > 0) windowWidthAtLeast(Math.ceil(window.outerWidth * (top + scrollbar) / inner) + 1);
 }
 
 export function headerInit() {
