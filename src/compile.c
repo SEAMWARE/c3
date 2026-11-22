@@ -9,7 +9,7 @@
 //   GET    /api/capabilities           what this machine can do: Compile needs coraine-build and its source
 //   GET    /api/compile/features       coraine-build --list-features --json: every switch, its default, its
 //                                      description, what it requires (cached per source tarball)
-//   POST   /api/builds/command         {name?, executable?, mode, httpServer?, features, bridges?, workload?}: the command a build would run,
+//   POST   /api/builds/command         {name?, executable?, image?, mode, httpServer?, features, bridges?, workload?}: the command a build would run,
 //                                      without running it
 //   POST   /api/builds                 the same body: start the build (202; 409 while one runs)
 //   GET    /api/builds                 the builds kept, newest first
@@ -379,12 +379,14 @@ typedef struct Build
 {
   char            name[65];
   char            executable[65];                // the broker's: install/bin/<executable> (coraine-build --name)
+  char            image[256];                    // coraine-build --image: the container image asked for; "": none
+  int             imageMiB;                      // its size, from coraine-build's "image <name> - <n> MiB" line
   char            mode[16];
   char            httpServer[16];                // mhd, builtin
   char            workload[2048];
   char*           featuresJson;                  // the features asked for, as JSON ({"REGISTRATIONS": false})
   char*           command;                       // as shown: shell-quoted
-  char*           argv[16];
+  char*           argv[20];
   char            dir[2300];
   char            logPath[2300];
   char            jsonPath[2300];
@@ -473,6 +475,10 @@ static void buildRender(Build* bP, Str* sP)
 
   strAdd(sP, "{\"name\": ");          strAddJson(sP, bP->name);
   strAdd(sP, ", \"executable\": ");   strAddJson(sP, bP->executable);
+  strAdd(sP, ", \"imageAsked\": ");   strAddJson(sP, (bP->image[0] != 0) ? bP->image : NULL);
+  strAdd(sP, ", \"image\": ");        strAddJson(sP, ((bP->image[0] != 0) && (strcmp(bP->state, "succeeded") == 0)) ? bP->image : NULL);
+  if (bP->imageMiB > 0) strAddf(sP, ", \"imageMiB\": %d", bP->imageMiB);
+  else                  strAdd(sP, ", \"imageMiB\": null");
   strAdd(sP, ", \"state\": ");        strAddJson(sP, bP->state);
   strAdd(sP, ", \"mode\": ");         strAddJson(sP, bP->mode);
   strAdd(sP, ", \"httpServer\": ");   strAddJson(sP, bP->httpServer);
@@ -608,8 +614,18 @@ static void outputAdd(Build* bP, const char* data, int len)
     int         lineLen = ix - start;
     const char* marker = "coraine-build: phase ";
     int         mLen    = strlen(marker);
+    const char* iMark   = "coraine-build: image ";   // "coraine-build: image <name> - <n> MiB, docker, on ubuntu:26.04"
 
     bP->lines += 1;
+
+    if ((lineLen > (int) sizeof("coraine-build: image ") - 1) && (strncmp(line, iMark, sizeof("coraine-build: image ") - 1) == 0))
+    {
+      const char* dash = memmem(line, lineLen, " - ", 3);
+      int         mib  = 0;
+
+      if ((dash != NULL) && (sscanf(dash + 3, "%d MiB", &mib) == 1))
+        bP->imageMiB = mib;
+    }
 
     if ((lineLen > mLen) && (strncmp(line, marker, mLen) == 0) && (bP->nPhases < PHASES_MAX))
     {
@@ -902,6 +918,7 @@ typedef struct Plan
 {
   char   name[65];
   char   executable[65];                         // coraine-build --name; coraine: its default, left out
+  char   image[256];                             // coraine-build --image; "": a binary only
   char   mode[16];
   char   httpServer[16];                         // mhd (coraine-build's default), builtin
   char   workload[2048];
@@ -909,7 +926,7 @@ typedef struct Plan
   Str    featuresArg;                            // NAME=ON,NAME=OFF
   bool   bridgesGiven;                           // false: coraine-build's default bridges
   char   bridges[256];                           // mqtt,dds - or none
-  char*  argv[16];
+  char*  argv[20];
   int    argc;
   char   dir[2300];
   Str    command;
@@ -1124,6 +1141,35 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   }
 
   //
+  // image - a container image of the build too (coraine-build --image): true, localhost/<executable>:<name> (the
+  // repository lower-case); a string, that name - coraine-build checks its form before it compiles anything
+  //
+  CorNode* imageP = corTreeLookup(bodyP, "image");
+  if ((imageP != NULL) && (imageP->type == CorBoolean) && imageP->value.b)
+  {
+    char repo[65];
+    int  ix = 0;
+
+    for (; pP->executable[ix] != 0; ix++)
+      repo[ix] = ((pP->executable[ix] >= 'A') && (pP->executable[ix] <= 'Z')) ? pP->executable[ix] + 32 : pP->executable[ix];
+    repo[ix] = 0;
+    snprintf(pP->image, sizeof(pP->image), "localhost/%s:%s", repo, pP->name);
+  }
+  else if ((imageP != NULL) && (imageP->type == CorString) && (imageP->value.s[0] != 0))
+  {
+    bool ok = (strlen(imageP->value.s) < sizeof(pP->image)) && (((imageP->value.s[0] >= 'a') && (imageP->value.s[0] <= 'z')) || ((imageP->value.s[0] >= '0') && (imageP->value.s[0] <= '9')));
+
+    for (const char* c = imageP->value.s; ok && (*c != 0); ++c)
+      ok = ((*c >= 'a') && (*c <= 'z')) || ((*c >= 'A') && (*c <= 'Z')) || ((*c >= '0') && (*c <= '9')) || (strchr("._/:-", *c) != NULL);
+    if (ok == false)
+    {
+      snprintf(errBuf, errLen, "\"image\": [registry[:port]/]repository[:tag] - a-z 0-9 . _ / : -, starting with a letter or a digit");
+      return false;
+    }
+    snprintf(pP->image, sizeof(pP->image), "%s", imageP->value.s);
+  }
+
+  //
   // The command
   //
   char modeArg[24];
@@ -1153,6 +1199,11 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     pP->argv[pP->argc++] = strdup("--name");
     pP->argv[pP->argc++] = strdup(pP->executable);
   }
+  if (pP->image[0] != 0)
+  {
+    pP->argv[pP->argc++] = strdup("--image");
+    pP->argv[pP->argc++] = strdup(pP->image);
+  }
   if (cP->sourceGiven)
   {
     pP->argv[pP->argc++] = strdup("--source");
@@ -1175,6 +1226,7 @@ static void planRender(Plan* pP, Str* sP)
 {
   strAdd(sP, "{\"name\": ");     strAddJson(sP, pP->name);
   strAdd(sP, ", \"executable\": "); strAddJson(sP, pP->executable);
+  strAdd(sP, ", \"image\": ");  strAddJson(sP, (pP->image[0] != 0) ? pP->image : NULL);
   strAdd(sP, ", \"mode\": ");    strAddJson(sP, pP->mode);
   strAdd(sP, ", \"httpServer\": "); strAddJson(sP, pP->httpServer);
   strAdd(sP, ", \"features\": "); strAdd(sP, pP->features.s);
@@ -1252,6 +1304,7 @@ static void buildStart(CorHttpConn* connP)
 
   snprintf(bP->name, sizeof(bP->name), "%s", plan.name);
   snprintf(bP->executable, sizeof(bP->executable), "%s", plan.executable);
+  snprintf(bP->image, sizeof(bP->image), "%s", plan.image);
   snprintf(bP->mode, sizeof(bP->mode), "%s", plan.mode);
   snprintf(bP->httpServer, sizeof(bP->httpServer), "%s", plan.httpServer);
   snprintf(bP->workload, sizeof(bP->workload), "%s", plan.workload);
