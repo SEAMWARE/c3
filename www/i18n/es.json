@@ -1425,7 +1425,6 @@
   "by hand: {command}": "a mano: {command}",
   "in the build's directory - and, with a Docker image, the image.": "en el directorio de la compilación - y, con imagen Docker, la imagen.",
   "not made: {why}": "no creada: {why}",
-  "on this distribution's base image, laid out as the published one - Operate runs it in a container": "sobre la imagen base de esta distribución, organizada como la publicada - Operar la arranca en un contenedor",
   "this build has no image - build it with Output: Binary and Docker image": "esta compilación no tiene imagen - compílala con Salida: Binario e imagen Docker",
   "{arch} · {distribution} · binary and Docker image": "{arch} · {distribution} · binario e imagen Docker",
   "(checked out)": "(en uso)",
