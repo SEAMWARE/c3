@@ -1434,7 +1434,6 @@
   "- **Branches of this clone**: a local branch - commits not pushed yet are in.": "- **Branches dieses Klons**: ein lokaler Branch - noch nicht gepushte Commits gehen hinein.",
   "- **HEAD**: whatever the clone has checked out right now.": "- **HEAD**: was der Klon gerade ausgecheckt hat.",
   "- **main (origin/main)**, the default: main as last fetched from GitHub - not the clone's own main branch, and not what is checked out.": "- **main (origin/main)**, die Vorgabe: main, wie zuletzt von GitHub geholt - nicht der eigene main-Branch des Klons und nicht, was ausgecheckt ist.",
-  "Branch": "Branch",
   "Branches at origin": "Branches auf origin",
   "Branches of this clone": "Branches dieses Klons",
   "Each repository goes into the build at the branch chosen here - its last commit, as this clone has it. The build takes committed work only: uncommitted changes in a clone are not in it.": "Jedes Repository geht mit dem hier gewählten Branch in den Build - dessen letzter Commit, wie dieser Klon ihn hat. Der Build nimmt nur Committetes: nicht committete Änderungen in einem Klon sind nicht darin.",
@@ -1442,8 +1441,6 @@
   "Fetching the {n} clones from origin (git fetch) and listing their branches again ...": "Die {n} Klone werden von origin geholt (git fetch) und ihre Branches neu aufgelistet ...",
   "HEAD - what is checked out": "HEAD - was ausgecheckt ist",
   "Refresh": "Aktualisieren",
-  "Repository": "Repository",
-  "Role": "Rolle",
   "Some clones could not be fetched: {errors}": "Einige Klone konnten nicht geholt werden: {errors}",
   "The branch of {repo} the build takes": "Der Branch von {repo}, den der Build nimmt",
   "The build takes the last commit of this branch, as this clone has it - uncommitted changes are not in it. origin/... as last fetched: Refresh fetches.": "Der Build nimmt den letzten Commit dieses Branches, wie dieser Klon ihn hat - nicht committete Änderungen sind nicht darin. origin/... wie zuletzt geholt: Aktualisieren holt neu.",
@@ -1452,5 +1449,5 @@
   "main (origin/main)": "main (origin/main)",
   "{ref} is not in this clone - choose another branch, or Refresh when it is new at origin": "{ref} ist nicht in diesem Klon - wählen Sie einen anderen Branch, oder Aktualisieren, wenn er auf origin neu ist",
   "{repo} has no {ref} - choose another branch under Source": "{repo} hat kein {ref} - wählen Sie unter Quelle einen anderen Branch",
-  "Select a branch for each repository - main (origin/main) unless another is chosen": "Wählen Sie für jedes Repository einen Branch - main (origin/main), sofern kein anderer gewählt ist"
+  "Select a branch for each repository": "Wählen Sie für jedes Repository einen Branch"
 }

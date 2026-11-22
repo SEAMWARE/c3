@@ -317,8 +317,8 @@ export class Source {
     //
     const look = (r) => !r.present || r.chosen || r.refFound === false || this.dirtyMatters(r) || r.elsewhere;
     const shown = this.showAll ? this.repos.repos : this.repos.repos.filter(look);
-    list.replaceChildren(this.headRow(shown.length < this.repos.repos.length || this.showAll), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
-    list.hidden = false;
+    list.replaceChildren(...shown.map((r) => this.repoRow(r, this.repos.dir)));
+    list.hidden = shown.length === 0;
 
     const missing = this.missing();
     const notRunning = missing.filter((r) => (this.clones.get(r.name) || {}).state !== 'running');
@@ -327,7 +327,7 @@ export class Source {
     if (this.busy) parts.push(el('span', 'cp-note', this.busy));
     else if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
     else if (missing.length) parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })));
-    else parts.push(el('span', 'cp-note', t('Select a branch for each repository - main (origin/main) unless another is chosen')));
+    else parts.push(el('span', 'cp-note', t('Select a branch for each repository')));
     const acts = el('span', 'cp-src-acts');
     if (notRunning.length > 1) {
       const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));
@@ -335,49 +335,32 @@ export class Source {
       all.addEventListener('click', () => this.clone(notRunning.map((r) => r.name)));
       acts.append(all);
     }
-    parts.push(acts);
-    foot.replaceChildren(...parts);
-  }
-
-  //
-  // headRow - the columns' names; the Branch column's '?' says what goes into a build. In its corner, what is
-  // about the rows: Show all / Hide (one button, the same place - the table grows below it) and Refresh
-  //
-  headRow(toggle) {
-    const row = el('div', 'cp-repo cp-repo-colhead');
-    const head = el('div', 'cp-repo-head');
-    const br = el('span', 'cp-repo-branch');
-    br.append(document.createTextNode(t('Branch') + ' '));
+    //
+    // Show all / Hide and Refresh: icons, after the line - above the table, so they stay where they are
+    //
+    if (shown.length < this.repos.repos.length || this.showAll) {
+      const tg = el('button', 'iconbtn cp-src-icon', this.showAll ? '−' : '+');
+      tg.type = 'button';
+      tg.title = this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length });
+      tg.setAttribute('aria-label', tg.title);
+      tg.setAttribute('aria-expanded', String(this.showAll));
+      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+      acts.append(tg);
+    }
+    const refresh = el('button', 'iconbtn cp-src-icon', '↻');
+    refresh.type = 'button';
+    refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
+    refresh.setAttribute('aria-label', t('Refresh'));
+    refresh.disabled = !!this.busy;
+    refresh.addEventListener('click', () => this.refresh());
     const q = el('button', 'cp-q inline', '?');
     q.type = 'button';
     q.title = t('What goes into the build?');
     q.setAttribute('aria-label', q.title);
     q.addEventListener('click', () => helpShow(t('What goes into the build'), BRANCH_HELP()));
-    br.append(q);
-    const lbl = el('span', 'cp-repo-branchlbl');
-    lbl.append(...br.childNodes);
-    br.append(lbl);
-    //
-    // Refresh - about the repositories: in the table's corner
-    //
-    const corner = el('span', 'cp-src-corner');
-    if (toggle) {
-      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
-      tg.type = 'button';
-      tg.setAttribute('aria-expanded', String(this.showAll));
-      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
-      corner.append(tg);
-    }
-    const refresh = el('button', 'btn cp-src-refresh', t('Refresh'));
-    refresh.type = 'button';
-    refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
-    refresh.disabled = !!this.busy;
-    refresh.addEventListener('click', () => this.refresh());
-    corner.append(refresh);
-    br.append(corner);
-    head.append(el('span', 'cp-repo-dot', ''), el('span', 'cp-repo-name', t('Repository')), el('span', 'cp-repo-role', t('Role')), br);
-    row.append(head);
-    return row;
+    acts.append(refresh, q);
+    parts.push(acts);
+    foot.replaceChildren(...parts);
   }
 
   //
