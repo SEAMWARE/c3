@@ -317,7 +317,7 @@ export class Source {
     //
     const look = (r) => !r.present || r.chosen || r.refFound === false || this.dirtyMatters(r) || r.elsewhere;
     const shown = this.showAll ? this.repos.repos : this.repos.repos.filter(look);
-    list.replaceChildren(this.headRow(), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
+    list.replaceChildren(this.headRow(shown.length < this.repos.repos.length || this.showAll), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
     list.hidden = false;
 
     const missing = this.missing();
@@ -326,8 +326,8 @@ export class Source {
     const present = this.repos.repos.length - missing.length;
     if (this.busy) parts.push(el('span', 'cp-note', this.busy));
     else if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
-    else parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })
-      + (shown.length < this.repos.repos.length ? ' - ' + (shown.length ? t('listed: the ones to look at') : t('nothing to look at')) : '')));
+    else if (missing.length) parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })));
+    else parts.push(el('span', 'cp-note', t('Select a branch for each repository - main (origin/main) unless another is chosen')));
     const acts = el('span', 'cp-src-acts');
     if (notRunning.length > 1) {
       const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));
@@ -335,21 +335,15 @@ export class Source {
       all.addEventListener('click', () => this.clone(notRunning.map((r) => r.name)));
       acts.append(all);
     }
-    if (shown.length < this.repos.repos.length || this.showAll) {     // last: Show all and Hide in the same place
-      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
-      tg.type = 'button';
-      tg.setAttribute('aria-expanded', String(this.showAll));
-      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
-      acts.append(tg);
-    }
     parts.push(acts);
     foot.replaceChildren(...parts);
   }
 
   //
-  // headRow - the columns' names; the Branch column's '?' says what goes into a build
+  // headRow - the columns' names; the Branch column's '?' says what goes into a build. In its corner, what is
+  // about the rows: Show all / Hide (one button, the same place - the table grows below it) and Refresh
   //
-  headRow() {
+  headRow(toggle) {
     const row = el('div', 'cp-repo cp-repo-colhead');
     const head = el('div', 'cp-repo-head');
     const br = el('span', 'cp-repo-branch');
@@ -366,12 +360,21 @@ export class Source {
     //
     // Refresh - about the repositories: in the table's corner
     //
+    const corner = el('span', 'cp-src-corner');
+    if (toggle) {
+      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
+      tg.type = 'button';
+      tg.setAttribute('aria-expanded', String(this.showAll));
+      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+      corner.append(tg);
+    }
     const refresh = el('button', 'btn cp-src-refresh', t('Refresh'));
     refresh.type = 'button';
     refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
     refresh.disabled = !!this.busy;
     refresh.addEventListener('click', () => this.refresh());
-    br.append(refresh);
+    corner.append(refresh);
+    br.append(corner);
     head.append(el('span', 'cp-repo-dot', ''), el('span', 'cp-repo-name', t('Repository')), el('span', 'cp-repo-role', t('Role')), br);
     row.append(head);
     return row;

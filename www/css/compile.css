@@ -262,7 +262,7 @@
 .cp-src-msg:empty { display: none; }
 /* the repositories: one grid, every row on its columns (subgrid) - dot, name, role, branch */
 .cp-repos {
-  display: grid; grid-template-columns: 18px max-content max-content minmax(0, 1fr); column-gap: 12px;
+  display: grid; grid-template-columns: 18px minmax(16ch, max-content) minmax(10ch, max-content) minmax(0, 1fr); column-gap: 12px;
   border: 1px solid var(--line-soft); border-radius: 8px;
 }
 .cp-repo {
@@ -292,7 +292,8 @@
 .cp-src-foot:empty { display: none; }
 .cp-sum .cp-warn { color: var(--warn); }
 .cp-src-acts { display: flex; align-items: center; gap: 10px; }
-.cp-src-toggle { min-width: 9ch; text-align: right; }
+.cp-src-corner { display: inline-flex; align-items: center; gap: 10px; }
+.cp-src-toggle { min-width: 11ch; text-align: right; }
 .cp-repo-colhead .cp-repo-branch { justify-content: space-between; }
 .cp-src-refresh { padding-top: 2px; padding-bottom: 2px; font-size: 0.9rem; }
 .cp-repo-branch .cp-q.inline { position: static; flex: 0 0 auto; }
