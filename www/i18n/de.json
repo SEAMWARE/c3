@@ -1454,6 +1454,5 @@
   "What goes into the build?": "Was geht in den Build?",
   "main (origin/main)": "main (origin/main)",
   "{ref} is not in this clone - choose another branch, or Refresh when it is new at origin": "{ref} ist nicht in diesem Klon - wählen Sie einen anderen Branch, oder Aktualisieren, wenn er auf origin neu ist",
-  "{repo} has no {ref} - choose another branch under Source": "{repo} hat kein {ref} - wählen Sie unter Quelle einen anderen Branch",
-  "{repo}: the build takes {ref} ...": "{repo}: der Build nimmt {ref} ..."
+  "{repo} has no {ref} - choose another branch under Source": "{repo} hat kein {ref} - wählen Sie unter Quelle einen anderen Branch"
 }

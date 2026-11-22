@@ -2000,21 +2000,38 @@ static void compileFeatures(CorHttpConn* connP)
   }
 
   //
-  // The key: coraine-build, the source and its mtime - and with refs the commits they are now (a fetch moves
-  // origin/main, a commit a branch: the lists are of the commits)
+  // The key: coraine-build, the source and its mtime - and the refs the lists read, as the commits they are now
+  // (a fetch moves origin/main, a commit a branch). The lists read coraine and the bridges' repositories: a
+  // library's ref is not in the key - choosing its branch does not list again (2.3 s). The bridges' repositories
+  // are the last answer's ("repository": "<name>"); with none yet, every ref
   //
   struct stat st;
   char        key[8400];
   char        shas[4096] = "";
-  stat(cP->source, &st);
-  if (cP->refs[0] != 0)
-  {
-    char  refs[4096];
-    char* av[72];
-    int   ac   = 0;
-    char* save = NULL;
+  char        listRefs[4096] = "";
+  int         len = 0;
+  char        refs[4096];
+  char*       save = NULL;
 
-    snprintf(refs, sizeof(refs), "%s", cP->refs);
+  stat(cP->source, &st);
+  snprintf(refs, sizeof(refs), "%s", cP->refs);
+  pthread_mutex_lock(&fMutex);
+  for (char* tok = strtok_r(refs, " ", &save); tok != NULL; tok = strtok_r(NULL, " ", &save))
+  {
+    char repoMember[128];
+    snprintf(repoMember, sizeof(repoMember), "\"repository\": \"%.*s\"", (int) strcspn(tok, "="), tok);
+    if ((fText == NULL) || (strncmp(tok, "coraine=", 8) == 0) || (strstr(fText, repoMember) != NULL))
+      len += snprintf(&listRefs[len], sizeof(listRefs) - len, "%s%s", (len > 0) ? " " : "", tok);
+  }
+  pthread_mutex_unlock(&fMutex);
+
+  if (listRefs[0] != 0)
+  {
+    char* av[72];
+    int   ac = 0;
+
+    snprintf(refs, sizeof(refs), "%s", listRefs);
+    save     = NULL;
     av[ac++] = (char*) "sh";
     av[ac++] = (char*) "-c";
     av[ac++] = (char*) "s=$1; shift; for r; do git -C \"$s/${r%%=*}\" rev-parse --short \"${r#*=}^{commit}\" 2>/dev/null || echo -; done";
@@ -2025,7 +2042,7 @@ static void compileFeatures(CorHttpConn* connP)
     av[ac] = NULL;
     runCapture(av, shas, sizeof(shas), 20);
   }
-  snprintf(key, sizeof(key), "%s|%s|%lld|%s|%s", cP->coraineBuild, cP->source, (long long) st.st_mtime, cP->refs, shas);
+  snprintf(key, sizeof(key), "%s|%s|%lld|%s|%s", cP->coraineBuild, cP->source, (long long) st.st_mtime, listRefs, shas);
 
   pthread_mutex_lock(&fMutex);
 

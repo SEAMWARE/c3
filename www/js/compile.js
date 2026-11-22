@@ -440,7 +440,11 @@ export class Compile {
   // refresh - capabilities, features and builds again (the page is shown: something may have been installed);
   // force: the source changed (another kind or directory, a repository cloned) - its features and bridges again
   //
-  async refresh(force) {
+  //
+  // refresh - capabilities, the feature list (force: read again), the Source card (unless keepSource: a branch chosen
+  // there changes nothing it shows), the builds
+  //
+  async refresh(force, keepSource) {
     try {
       this.caps = await api.capabilities();
     } catch (e) {
@@ -477,7 +481,7 @@ export class Compile {
     if (cc.available && !cc.mongoc && !('MONGOC' in this.choice.features)) this.choice.features.MONGOC = false;
 
     this.render();
-    await this.source.update(force);
+    if (!keepSource) await this.source.update(force);
     await this.loadBuilds();
 
     //
