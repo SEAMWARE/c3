@@ -616,8 +616,10 @@ is the command shown, run by the backend, the same build as on the command line.
   `$PATH`) and the source (`--source`, else the tarball `coraine-dev` installs) must both be there.
   Without `coraine-dev`, both come from `<clones>`: the directory of git clones c³ was built against
   (the makefile's `COR_LIBS`, made absolute - `C3_CLONES`; empty in a package). Its coraine clone's
-  `coraine-build` exports them as the packages' tarball is made: coraine at the commit checked out, each
-  lib at `origin/main` - committed trees only.
+  `coraine-build` exports them as the packages' tarball is made: each repository at `origin/main`, or the
+  branch chosen for it under Source (`--ref <repo>=<ref>`; `PUT /api/compile/repos/ref`, kept in c3.json
+  `compile.source.repoRefs`) - committed trees only. `GET /api/compile/repos` lists each clone's branches
+  (`&fetch=1`: `git fetch --prune origin` in each first - Source's Refresh).
   Without them the page is greyed with *Install coraine-dev to build brokers*; the builds kept are still
   listed and can be deleted. Also: whether `--pgo`/`--tune` can train here (`curl`, `wrk`, `python3`),
   whether the mongo-c driver v2 is installed (MONGOC), the host's architecture and distribution. Asked

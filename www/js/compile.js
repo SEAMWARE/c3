@@ -271,7 +271,7 @@ function mdRender(md) {
 //
 // helpShow - a section in a dialog; Escape, the button or a click beside it closes it
 //
-function helpShow(title, text) {
+export function helpShow(title, text) {
   const ov = el('div', 'overlay cp-modal');
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');

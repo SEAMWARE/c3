@@ -10,12 +10,15 @@
 //   GET  /api/compile/repos?bridges=<repo>,<repo>   the repositories a build from the clones needs - coraine, c3,
 //                                                   and what coraine's docker/vendor-libs.sh --list says, the
 //                                                   bridges' repositories only of the bridges ticked - each with
-//                                                   where it is, its branch and commit, and what goes into a build
+//                                                   where it is, the branch checked out, what goes into a build
+//                                                   (its ref) and the refs it could be: the clone's branches
+//        &fetch=1                                   git fetch --prune origin in each clone first (in parallel)
 //   POST /api/compile/clone {"repo"}                git clone it into the directory (202); the directory is made
 //   GET  /api/compile/clone                         the clones started: [{"repo", "state", "message"}]
 //
-// What goes into a build: coraine as its clone has it checked out (HEAD - uncommitted changes are NOT in it),
-// c3 and the libraries at origin/main as last fetched - coraine-build's default (LIBS_REF).
+// What goes into a build: each repository at origin/main as last fetched, or the ref chosen for it (c3.json
+// "repoRefs", PUT /api/compile/repos/ref) - a branch, a remote's branch, HEAD - passed to coraine-build as
+// --ref <repo>=<ref>. Committed trees only: uncommitted changes are NOT in a build.
 //
 // A repository found elsewhere (Source: "it is elsewhere") is kept in c3.json; coraine-build takes ONE directory
 // of siblings, so the source handed to it is then a directory of links (sourcesView): the clones' entries, and
@@ -238,6 +241,9 @@ typedef struct ReposJob
   char         kind[16];
   char         dir[1024];                        // the directory of clones
   char         bridges[1024];                    // the bridge repositories, comma separated
+  char         refs[4096];                       // the refs chosen: "repo=ref repo=ref ..." (configSourceRefs)
+  bool         fetch;                            // git fetch each clone first
+  char         fetchErrors[2048];                // what the fetches said that failed, a line each
   int          nPaths;
   char         names[PATHS_MAX][64];
   char         paths[PATHS_MAX][1024];
@@ -274,6 +280,30 @@ static const char* pathOf(ReposJob* jP, const char* repo, char* out, int outLen,
 
 
 //
+// refChosen - the ref chosen for a repository, from "repo=ref repo=ref ..." into out; false when none
+//
+static bool refChosen(const char* refs, const char* repo, char* out, int outLen)
+{
+  int         len = strlen(repo);
+  const char* p   = refs;
+
+  while ((p = strstr(p, repo)) != NULL)
+  {
+    if (((p == refs) || (p[-1] == ' ')) && (p[len] == '='))
+    {
+      p += len + 1;
+      int n = strcspn(p, " ");
+      snprintf(out, outLen, "%.*s", n, p);
+      return true;
+    }
+    p += len;
+  }
+  return false;
+}
+
+
+
+//
 // repoAdd - one repository's member of the answer
 //
 static void repoAdd(Str* sP, ReposJob* jP, const char* repo, const char* role, bool first)
@@ -283,7 +313,11 @@ static void repoAdd(Str* sP, ReposJob* jP, const char* repo, const char* role, b
   char        url[256];
   bool        elsewhere;
   struct stat st;
-  const char* ref = (strcmp(repo, "coraine") == 0) ? "HEAD" : "origin/main";
+  char        ref[256];
+  bool        chosen = refChosen(jP->refs, repo, ref, sizeof(ref));
+
+  if (chosen == false)
+    snprintf(ref, sizeof(ref), "origin/main");
 
   pathOf(jP, repo, path, sizeof(path), &elsewhere);
   snprintf(git, sizeof(git), "%s/.git", path);
@@ -299,36 +333,115 @@ static void repoAdd(Str* sP, ReposJob* jP, const char* repo, const char* role, b
   strAdd(sP, ", \"present\": ");      strAdd(sP, present ? "true" : "false");
   strAdd(sP, ", \"url\": ");          strAddJson(sP, url);
   strAdd(sP, ", \"ref\": ");          strAddJson(sP, ref);
+  strAdd(sP, ", \"chosen\": ");       strAdd(sP, chosen ? "true" : "false");
 
   if (present)
   {
     //
-    // One shell per repository: the branch, HEAD, the ref that goes in, the uncommitted changes
+    // One shell per repository, a line each: B the branch checked out, D the uncommitted changes, F whether the
+    // ref is there, L a local branch, R a remote one (origin's, but main - the default - and HEAD); the
+    // branches last-committed first
     //
-    char  out[1024];
-    char* argv[] = { (char*) "sh", (char*) "-c",
-                     (char*) "cd \"$1\" || exit 1; "
-                             "b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); "
-                             "h=$(git rev-parse --short HEAD 2>/dev/null); "
-                             "r=$(git rev-parse --short \"$2^{commit}\" 2>/dev/null); "
-                             "d=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l); "
-                             "echo \"${b:--} ${h:--} ${r:--} $d\"",
-                     (char*) "sh", path, (char*) ref, NULL };
-    char  branch[256] = "-", head[64] = "-", refSha[64] = "-";
-    int   dirty = 0;
+    int   outSize = 64 * 1024;
+    char* out     = (char*) malloc(outSize);
+    char* argv[]  = { (char*) "sh", (char*) "-c",
+                      (char*) "cd \"$1\" || exit 1; "
+                              "echo \"B $(git rev-parse --abbrev-ref HEAD 2>/dev/null)\"; "
+                              "echo \"D $(git status --porcelain --untracked-files=no 2>/dev/null | wc -l)\"; "
+                              "if git rev-parse --verify --quiet \"$2^{commit}\" > /dev/null; then echo 'F 1'; else echo 'F 0'; fi; "
+                              "git for-each-ref --sort=-committerdate --format='L %(refname:short)' refs/heads; "
+                              "git for-each-ref --sort=-committerdate --format='R %(refname:short)' refs/remotes/origin "
+                              "| grep -v -x -e 'R origin' -e 'R origin/HEAD' -e 'R origin/main'; "
+                              "exit 0",                // grep's 1 when no branch is left is no failure
+                      (char*) "sh", path, ref, NULL };
+    char  branch[256] = "";
+    int   dirty       = 0;
+    bool  found       = false;
+    Str   local       = { NULL, 0, 0 };
+    Str   remote      = { NULL, 0, 0 };
 
-    if (runCapture(argv, out, sizeof(out), 20) == 0)
-      sscanf(out, "%255s %63s %63s %d", branch, head, refSha, &dirty);
+    strAdd(&local, "[");
+    strAdd(&remote, "[");
+    if ((out != NULL) && (runCapture(argv, out, outSize, 20) == 0))
+    {
+      char* save = NULL;
+      for (char* line = strtok_r(out, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+      {
+        if ((line[0] == 0) || (line[1] != ' '))
+          continue;
+        const char* v = &line[2];
+        if (line[0] == 'B')
+          snprintf(branch, sizeof(branch), "%s", v);
+        else if (line[0] == 'D')
+          dirty = atoi(v);
+        else if (line[0] == 'F')
+          found = (v[0] == '1');
+        else if ((line[0] == 'L') || (line[0] == 'R'))
+        {
+          Str* lP = (line[0] == 'L') ? &local : &remote;
+          if (lP->len > 1)
+            strAdd(lP, ", ");
+          strAddJson(lP, v);
+        }
+      }
+    }
+    if (out != NULL) free(out);
+    strAdd(&local, "]");
+    strAdd(&remote, "]");
 
-    strAdd(sP, ", \"branch\": ");     strAddJson(sP, (strcmp(branch, "-") != 0) ? branch : NULL);
-    strAdd(sP, ", \"head\": ");       strAddJson(sP, (strcmp(head, "-") != 0) ? head : NULL);
-    strAdd(sP, ", \"refSha\": ");     strAddJson(sP, (strcmp(refSha, "-") != 0) ? refSha : NULL);
+    strAdd(sP, ", \"branch\": ");     strAddJson(sP, ((branch[0] != 0) && (strcmp(branch, "HEAD") != 0)) ? branch : NULL);
+    strAdd(sP, ", \"refFound\": ");   strAdd(sP, found ? "true" : "false");
 
     char n[32];
     snprintf(n, sizeof(n), "%d", dirty);
     strAdd(sP, ", \"dirty\": ");      strAdd(sP, n);
+    strAdd(sP, ", \"local\": ");      strAdd(sP, local.s);
+    strAdd(sP, ", \"remote\": ");     strAdd(sP, remote.s);
+    strFree(&local);
+    strFree(&remote);
   }
   strAdd(sP, "}");
+}
+
+
+
+//
+// reposFetch - git fetch --prune origin in each clone there, in parallel; what the failed ones said into
+// jP->fetchErrors ("<repo>: <git's last line>", a line each)
+//
+static void reposFetch(ReposJob* jP, char repos[][64], int n)
+{
+  char* argv[REPOS_MAX + 8];
+  char  paths[REPOS_MAX][1100];
+  int   argc = 0;
+
+  argv[argc++] = (char*) "sh";
+  argv[argc++] = (char*) "-c";
+  argv[argc++] = (char*) "for d in \"$@\"; do "
+                         "( o=$(GIT_TERMINAL_PROMPT=0 git -C \"$d\" fetch --quiet --prune origin 2>&1) "
+                         "|| echo \"$(basename \"$d\"): $(echo \"$o\" | tail -1)\" ) & "
+                         "done; wait";
+  argv[argc++] = (char*) "sh";
+  for (int ix = 0; ix < n; ix++)
+  {
+    char        git[1200];
+    bool        elsewhere;
+    struct stat st;
+
+    pathOf(jP, repos[ix], paths[ix], sizeof(paths[ix]), &elsewhere);
+    snprintf(git, sizeof(git), "%s/.git", paths[ix]);
+    if (stat(git, &st) == 0)
+      argv[argc++] = paths[ix];
+  }
+  argv[argc] = NULL;
+
+  char out[4096] = "";
+  runCapture(argv, out, sizeof(out), 120);
+
+  int len = strlen(out);
+  while ((len > 0) && ((out[len - 1] == '\n') || (out[len - 1] == ' ')))
+    out[--len] = 0;
+  snprintf(jP->fetchErrors, sizeof(jP->fetchErrors), "%s", out);
 }
 
 
@@ -374,21 +487,46 @@ static void* reposThread(void* vP)
     strAddJson(&s, "the libraries a build needs are listed by the coraine clone - clone coraine first");
   else
     strAddJson(&s, "this coraine clone cannot list the repositories a build needs (docker/vendor-libs.sh --list) - update it");
-  strAdd(&s, ", \"repos\": [");
 
-  repoAdd(&s, jP, "coraine", "broker", true);
-  repoAdd(&s, jP, "c3", "c3", false);
+  //
+  // The repositories: coraine, c3, then the libraries in vendor-libs.sh's order
+  //
+  char repos[REPOS_MAX][64];
+  int  n = 0;
 
+  snprintf(repos[n++], 64, "coraine");
+  snprintf(repos[n++], 64, "c3");
   if (libsStatus == 0)
   {
     char* save = NULL;
-    for (char* line = strtok_r(libs, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
+    for (char* line = strtok_r(libs, "\n", &save); (line != NULL) && (n < REPOS_MAX); line = strtok_r(NULL, "\n", &save))
     {
-      if (repoNameValid(line) == false)
-        continue;
-      bool bridge = (strstr(line, "Bridge") != NULL) && (strcmp(line, "corBridge") != 0);
-      repoAdd(&s, jP, line, bridge ? "bridge" : "library", false);
+      if (repoNameValid(line))
+        snprintf(repos[n++], 64, "%s", line);
     }
+  }
+
+  if (jP->fetch)
+    reposFetch(jP, repos, n);
+  strAdd(&s, ", \"fetched\": ");      strAdd(&s, jP->fetch ? "true" : "false");
+  strAdd(&s, ", \"fetchErrors\": ");  strAddJson(&s, (jP->fetchErrors[0] != 0) ? jP->fetchErrors : NULL);
+  strAdd(&s, ", \"repos\": [");
+
+  for (int ix = 0; ix < n; ix++)
+  {
+    //
+    // A bridge: one of the bridges' repositories the page asked for (corCep is the CEP bridge's) - by its name
+    // otherwise
+    //
+    const char* repo   = repos[ix];
+    char        inList[80];
+    char        list[1100];
+    snprintf(inList, sizeof(inList), ",%s,", repo);
+    snprintf(list, sizeof(list), ",%s,", jP->bridges);
+    bool        bridge = (strstr(list, inList) != NULL) || ((strstr(repo, "Bridge") != NULL) && (strcmp(repo, "corBridge") != 0));
+    const char* role   = (ix == 0) ? "broker" : (ix == 1) ? "c3" : bridge ? "bridge" : "library";
+
+    repoAdd(&s, jP, repo, role, ix == 0);
   }
   strAdd(&s, "\n]}");
 
@@ -414,6 +552,7 @@ static void reposList(CorHttpConn* connP)
 
   jP->connP  = connP;
   jP->nPaths = configSourceGet(jP->kind, sizeof(jP->kind), jP->dir, sizeof(jP->dir), jP->names, jP->paths, PATHS_MAX);
+  configSourceRefs(jP->refs, sizeof(jP->refs));
 
   //
   // The directory Compile builds from - capsFind's choice when none was made (the page shows it the same way)
@@ -442,6 +581,8 @@ static void reposList(CorHttpConn* connP)
     serveError(connP, 400, "No directory of clones", "choose one under Source");
     return;
   }
+
+  jP->fetch = (strstr(query, "fetch=1") != NULL);
 
   const char* b = strstr(query, "bridges=");
   if (b != NULL)

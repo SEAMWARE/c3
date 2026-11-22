@@ -100,7 +100,8 @@ export const buildDelete         = (name) => call('DELETE', '/api/builds/' + enc
 // from the clones needs, cloning a missing one (sources.c)
 //
 export const compileSource       = (source) => call('PUT', '/api/compile/source', source);
-export const compileRepos        = (bridgeRepos) => call('GET', '/api/compile/repos?bridges=' + encodeURIComponent(bridgeRepos.join(',')));
+export const compileRepos        = (bridgeRepos, fetch) => call('GET', '/api/compile/repos?bridges=' + encodeURIComponent(bridgeRepos.join(',')) + (fetch ? '&fetch=1' : ''));
+export const compileRepoRef      = (repo, ref) => call('PUT', '/api/compile/repos/ref', { repo, ref });
 export const compileRepoPath     = (repo, path) => call('PUT', '/api/compile/repos/path', { repo, path });
 export const cloneStart          = (repo) => call('POST', '/api/compile/clone', { repo });
 export const clones              = () => call('GET', '/api/compile/clone');

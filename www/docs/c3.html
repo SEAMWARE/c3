@@ -110,9 +110,14 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   the release it installs) or <b>Git clones</b>, a directory holding coraine, c3 and the libraries side by side
   (<code>~/git</code>). For the clones, the repositories a build needs are listed - coraine's
   <code>docker/vendor-libs.sh --list</code> names them; of the bridges' repositories only those of the bridges switched
-  on. What goes in: coraine's HEAD (what is committed), the others' <code>origin/main</code>. Listed are the ones to
-  look at - missing, uncommitted changes, checked out at something else than what the build takes, a clone elsewhere;
-  <b>Show all</b> lists every one with its branch and commit. A missing repository has <b>Clone</b> (into the
+  on. Each has a <b>Branch</b> pull-down - what of it goes in: <b>main (origin/main)</b>, the default, as last
+  fetched; a branch of the clone; a branch at origin; or HEAD, what is checked out - its last commit, committed work
+  only (the column's <b>?</b> says so). The build passes them to <code>coraine-build</code> as
+  <code>--ref &lt;repo&gt;=&lt;ref&gt;</code>, and the feature list is read at the same refs. <b>Refresh</b>, top right,
+  fetches every clone from origin (<code>git fetch --prune</code>, in parallel) and lists the branches again - branches
+  made since c³ started. Listed are the ones to look at - missing, another branch than main, a branch the clone does not
+  have (<b>Build</b> waits), uncommitted changes on the branch taken, a clone elsewhere; <b>Show all</b> lists every
+  one, <b>Hide</b> in the same place goes back. A missing repository has <b>Clone</b> (into the
   directory - <b>Clone the N missing</b> for all), the <code>git clone</code> command to copy, and <b>It is elsewhere</b>
   for a clone at another path (it must hold <code>.git</code>; <b>Forget this path</b> undoes it). <b>Build</b> waits
   while one is missing, and says so. A bridge whose repository is not cloned can be switched on - Source then lists it.
@@ -639,7 +644,8 @@ the page's name, marked as being in c³.</p>
   <tr><td><code>demos</code></td><td>named demos and their descriptors' URLs</td></tr>
   <tr><td><code>maps.areas</code></td><td>the map areas downloaded</td></tr>
   <tr><td><code>compile</code></td><td>Compile's current choice, the presets, and <code>source</code>: the package or
-  the directory of clones, and <code>repoPaths</code>, the clones elsewhere</td></tr>
+  the directory of clones, <code>repoPaths</code>, the clones elsewhere, and <code>repoRefs</code>, the branch chosen
+  per repository (main is not kept)</td></tr>
   <tr><td><code>run.brokers</code></td><td>the brokers Operate started, with their options</td></tr>
   <tr><td><code>ui.lastPage</code></td><td>the page shown last</td></tr>
   <tr><td><code>ui.lang</code>, <code>ui.textSize</code></td><td>the language c³ is shown in, and the size of its text
