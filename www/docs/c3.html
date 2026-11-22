@@ -132,6 +132,12 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   the training modes).</li>
   <li><b>Executable</b> - the broker's file name (<code>--name</code>, default <code>coraine</code>); Operate starts it
   by that name.</li>
+  <li><b>Output</b> - <b>Binary</b>, or <b>Binary and Docker image</b> (<code>--image</code>; with docker or podman):
+  the build on this distribution's base image (<code>ubuntu:26.04</code> on Ubuntu 26.04), the packages of the
+  libraries it links (the ones built from source copied), laid out as the published image - <code>/usr/local/bin</code>,
+  <code>/opt/seamware</code>, its entry point and healthcheck. <b>Image</b> names it, default
+  <code>localhost/&lt;executable&gt;:&lt;build&gt;</code>. 67 MiB with the default bridges (22 Nov 2026); a phase
+  <code>image</code> after <code>check</code>. The result shows the image, its size and a <code>docker run</code> line.</li>
   <li><b>The command</b> - the exact <code>argv</code> for the choice, one option a line; only the switches that differ
   from their defaults are passed. <b>Build</b> starts it.</li>
   <li><b>Following a build</b> - its output line by line, and a bar over the phases <code>coraine-build</code>
@@ -157,7 +163,8 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <tr><th>From</th><th>Runs</th></tr>
   <tr><td>the installed <code>coraine</code> (<code>$PATH</code>)</td><td>natively</td></tr>
   <tr><td>a build of Compile's</td><td>natively, with its <code>install/env</code> - and for a tuned build its
-  <code>install/etc/tune.env</code>, as the image's entry point applies it</td></tr>
+  <code>install/etc/tune.env</code>, as the image's entry point applies it; or, when Compile made its image, in a
+  container from that image. Either way with the bridges it was built with - one it lacks is refused</td></tr>
   <tr><td>an image, <code>quay.io/seamware/coraine:&lt;tag&gt;</code></td><td>in a container - the tag picked from the
   images here and the tags published on quay.io, or typed; pulled at the start when it is not here</td></tr>
 </table>

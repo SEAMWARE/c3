@@ -1653,6 +1653,14 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
     return false;
   }
 
+  if (stringMember(bodyP, "output", false, 16, &s, errBuf, errLen) == false)
+    return false;
+  if ((s != NULL) && (strcmp(s, "binary") != 0) && (strcmp(s, "image") != 0))
+  {
+    snprintf(errBuf, errLen, "\"output\" is binary or image (a Docker image too)");
+    return false;
+  }
+
   CorNode* featuresP = corTreeLookup(bodyP, "features");
   if (featuresP != NULL)
   {

@@ -33,7 +33,12 @@ const PHASES = {
   pgo:     ['unpack', 'build', 'tools', 'train', 'install', 'bridges', 'check', 'done'],
   tune:    ['unpack', 'build', 'tools', 'train', 'install', 'bridges', 'check', 'done'],
 };
-const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, done: 0 };
+// phasesOf - a build's phases: its mode's, and 'image' before 'done' when it makes a Docker image too
+const phasesOf = (b) => {
+  const names = PHASES[b.mode] || PHASES.release;
+  return b.imageAsked ? [...names.slice(0, -1), 'image', 'done'] : names;
+};
+const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, image: 40, done: 0 };
 // pgo and tune: 'train' holds the instrumented build, the training and the rebuild with the profile - the
 // most of such a build (12 min and more on a laptop), 'build' only the libraries
 const MODE_WEIGHTS = { pgo: { build: 20, train: 900 }, tune: { build: 20, train: 900 } };
@@ -49,6 +54,7 @@ const PHASE_WHAT = {
   install: tk('Installing into install/.'),
   bridges: tk('Building the bridges ticked.'),
   check:   tk('Checking the result: --version, the features compiled in.'),
+  image:   tk('Making the Docker image: the base image of this distribution, the libraries the broker links, the build.'),
 };
 
 const MODES = [
@@ -382,7 +388,7 @@ export class Compile {
     this.featureError = '';
     this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
     this.bridges = [];            // [{name, default, description, available, why}] - coraine-build --list-bridges
-    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '' };
+    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '', output: 'binary' };
     this.presets = [];
     this.builds = [];
     this.plan = null;             // the last POST /api/builds/command answer
@@ -403,6 +409,7 @@ export class Compile {
     $('cp-building').addEventListener('click', () => this.showRun());
     $('cp-name').addEventListener('input', () => this.commandSoon());
     $('cp-exe').addEventListener('input', () => this.commandSoon());
+    $('cp-image').addEventListener('input', () => this.commandSoon());
     $('cp-workload-path').addEventListener('input', () => { this.choice.workload = $('cp-workload-path').value.trim(); this.changed(); });
     $('cp-preset-save').addEventListener('click', () => this.presetSave());
     $('cp-preset-load').addEventListener('click', () => this.presetLoad());
@@ -422,6 +429,7 @@ export class Compile {
         features: { ...(c.choice.features || {}) },
         bridges: { ...(c.choice.bridges || {}) },
         workload: c.choice.workload || '',
+        output: c.choice.output === 'image' ? 'image' : 'binary',
       };
     }
     this.presets = Array.isArray(c.presets) ? c.presets : [];
@@ -701,8 +709,33 @@ export class Compile {
     return this.doc.has(title) ? { title, text: this.doc.get(title) } : null;
   }
 
+  //
+  // imageOn - a Docker image of the build too: chosen, and an engine here (docker or podman, as Operate's)
+  //
+  imageOn() { return this.choice.output === 'image' && !!(this.caps && this.caps.run && this.caps.run.containers); }
+
+  //
+  // renderOutput - Binary, or Binary and Docker image (greyed without docker or podman); the image's name
+  //
+  renderOutput() {
+    const run = (this.caps && this.caps.run) || {};
+    const cont = !!run.containers;
+    $('cp-output').replaceChildren(...[['binary', t('Binary')], ['image', t('Binary and Docker image')]].map(([v, label]) => {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(v === 'image' ? this.imageOn() : !this.imageOn()));
+      if (v === 'image' && !cont) b.disabled = true;
+      b.addEventListener('click', () => { if (this.choice.output !== v) { this.choice.output = v; this.changed(); } });
+      return b;
+    }));
+    $('cp-output-note').textContent = !cont ? (run.containersWhy || t('install docker or podman'))
+      : this.imageOn() ? t('on this distribution\'s base image, laid out as the published one - Operate runs it in a container') : '';
+    $('cp-image-row').hidden = !this.imageOn();
+  }
+
   render() {
     const cc = (this.caps && this.caps.compile) || {};
+    this.renderOutput();
 
     //
     // HTTP server: libmicrohttpd or corHttp - corHttp not with a training build (coraine-build refuses)
@@ -898,7 +931,8 @@ export class Compile {
     //
     const off = shown.filter((f) => !(this.isOn(f.name) && this.forcedBy(f).length === 0)).map((f) => f.name);
     const arch = (this.caps && this.caps.arch) || '';
-    $('cp-sum-target').textContent = t('{arch} · {distribution} · binary', { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') });
+    const tv = { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') };
+    $('cp-sum-target').textContent = this.imageOn() ? t('{arch} · {distribution} · binary and Docker image', tv) : t('{arch} · {distribution} · binary', tv);
     $('cp-sum-server').textContent = this.choice.httpServer === 'mhd' ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL[this.choice.httpServer]) }) : t(HTTP_LABEL[this.choice.httpServer]);
     $('cp-sum-stores').textContent = t('{stores}; history none, corDB, timescale', { stores: mongoc ? 'corDB + mongoc' : t('corDB only') });
     $('cp-sum-opt').textContent = t(MODE_LABEL[this.choice.mode]) + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
@@ -918,7 +952,7 @@ export class Compile {
     this.source.update();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload }).catch(() => {});
+      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload, output: this.choice.output }).catch(() => {});
     }, 400);
   }
 
@@ -932,6 +966,7 @@ export class Compile {
     const exe = $('cp-exe').value.trim();
     if (exe && exe !== 'coraine') b.executable = exe;
     if (this.choice.mode === 'tune') b.workload = this.choice.workload;
+    if (this.imageOn()) b.image = $('cp-image').value.trim() || true;
     return b;
   }
 
@@ -961,6 +996,7 @@ export class Compile {
       box.textContent = lines.join(' \\\n  ');
       box.classList.remove('err');
       $('cp-name').placeholder = p.name;
+      if (p.image && !$('cp-image').value.trim()) $('cp-image').placeholder = p.image;
       const blocking = this.source.blocking();
       $('cp-build').disabled = !(this.caps && this.caps.compile.available) || (this.run && this.run.state === 'running') || !!blocking;
       $('cp-build').title = blocking ? t('Waits: {why}', { why: blocking }) : '';
@@ -1187,7 +1223,7 @@ export class Compile {
     $('cp-cancel').disabled = false;
     this.renderElapsed();
 
-    const names = PHASES[b.mode] || PHASES.release;
+    const names = phasesOf(b);
     //
     // The phases as a flow, unpack -> build -> ...: finished green, the current one magenta, the rest grey; the
     // phase a build ended in red when it failed (outlined when it was cancelled)
@@ -1244,7 +1280,7 @@ export class Compile {
     bar.className = 'cp-bar ' + (b.state === 'failed' || b.state === 'interrupted' ? 'failed' : b.state === 'cancelled' ? 'cancelled' : '');
     if (b.state === 'succeeded') { $('cp-bar-fill').style.width = '100%'; return; }
 
-    const names = PHASES[b.mode] || PHASES.release;
+    const names = phasesOf(b);
     const prev = this.builds.find((x) => x.state === 'succeeded' && x.mode === b.mode && x.name !== b.name && x.phases && x.phases.length);
     const at = (build, n) => {             // [line, time] at which phase n started in 'build'
       if (n === 'unpack') return [2, new Date(build.started).getTime() / 1000];
@@ -1306,6 +1342,17 @@ export class Compile {
       row(t('Features'), asked || t('the defaults'));
     }
     if (b.version) row('--version', el('pre', 'cp-ver', b.version.trim()));
+    if (b.image) {
+      const img = el('span', 'cp-chips');
+      const nm = el('span', 'mono', b.image);
+      const cp = el('button', 'btn', t('Copy'));
+      cp.type = 'button';
+      cp.addEventListener('click', () => navigator.clipboard && navigator.clipboard.writeText(b.image));
+      img.append(nm, cp);
+      if (b.imageMiB) img.append(el('span', 'cp-note', t('{n} MiB', { n: b.imageMiB })));
+      img.append(el('span', 'cp-note', t('by hand: {command}', { command: 'docker run --rm -p 1026:1026 ' + b.image + ' --database corDB' })));
+      row(t('Image'), img);
+    } else if (b.imageAsked && b.state !== 'running') row(t('Image'), t('not made: {why}', { why: b.error || stateText(b.state) }));
 
     const dir = el('span', 'cp-chips');
     const path = el('span', 'mono', b.state === 'succeeded' ? b.install : b.dir);
@@ -1356,6 +1403,7 @@ export class Compile {
       open.type = 'button';
       const meta = [MODE_LABEL[b.mode] ? t(MODE_LABEL[b.mode]) : b.mode, when(b.started)];
       if (b.installBytes) meta.push(mib(b.installBytes));
+      if (b.image) meta.push(t('Docker image'));
       const off = Object.entries(b.features || {}).filter(([, v]) => !v).map(([n]) => n);
       if (off.length) meta.push(t('{list} off', { list: off.join(', ') }));
       open.append(el('span', 'bn', b.name), el('span', 'bm', meta.join(' · ')));
@@ -1423,7 +1471,7 @@ export class Compile {
   presetLoad() {
     const p = this.presets.find((x) => x.name === $('cp-preset').value);
     if (!p) return;
-    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, bridges: { ...(p.bridges || {}) }, workload: p.workload || '' };
+    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, bridges: { ...(p.bridges || {}) }, workload: p.workload || '', output: p.output === 'image' ? 'image' : 'binary' };
     this.changed();
   }
 

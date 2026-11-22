@@ -759,14 +759,15 @@ static char* buildVersion(const char* build)
 
 // -----------------------------------------------------------------------------
 //
-// buildExecutable - the broker's file name in a build's install/bin, from its record ("executable",
-// coraine-build --name): coraine for a record without one (made before it was there) or no record
+// buildMember - a string of a build's record: "executable" (the broker's file name in install/bin, coraine-build
+// --name), "image" (its container image, coraine-build --image); 'dflt' for a record without it (made before it
+// was there) or no record. No '/' in an executable; an image's name has them
 //
-static void buildExecutable(const char* build, char* out, int outLen)
+static void buildMember(const char* build, const char* member, const char* dflt, char* out, int outLen)
 {
   char path[2300];
 
-  snprintf(out, outLen, "coraine");
+  snprintf(out, outLen, "%s", dflt);
   buildDirOf(build, path, sizeof(path) - 8);
   strncat(path, ".json", sizeof(path) - strlen(path) - 1);
 
@@ -782,9 +783,9 @@ static void buildExecutable(const char* build, char* out, int outLen)
   corJsonCreate(&json, &alloc);
 
   CorNode* recP = corJsonParse(&json, text);
-  CorNode* eP   = (recP != NULL) ? corTreeLookup(recP, "executable") : NULL;
+  CorNode* eP   = (recP != NULL) ? corTreeLookup(recP, member) : NULL;
 
-  if ((eP != NULL) && (eP->type == CorString) && (eP->value.s[0] != 0) && (strchr(eP->value.s, '/') == NULL))
+  if ((eP != NULL) && (eP->type == CorString) && (eP->value.s[0] != 0) && ((strcmp(member, "image") == 0) || (strchr(eP->value.s, '/') == NULL)))
     snprintf(out, outLen, "%s", eP->value.s);
 
   corAllocBufferReset(&alloc, false);
@@ -1723,11 +1724,6 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       snprintf(err, errLen, "a build: \"build\" names one of Compile's builds");
       return false;
     }
-    if (strcmp(dP->where, "container") == 0)
-    {
-      snprintf(err, errLen, "a build runs natively - Compile makes no image yet");
-      return false;
-    }
   }
   else
     dP->build[0] = 0;
@@ -2025,6 +2021,30 @@ static void defRender(const Def* dP, Str* sP)
 //
 // needs - the services a broker's options need (a bit per kind)
 //
+// -----------------------------------------------------------------------------
+//
+// defImage - the image a broker runs in a container: the one named (from an image), or the build's own (Compile's
+// Output: Docker image - coraine-build --image); false, and why, when a build has none
+//
+static bool defImage(const Def* dP, char* out, int outLen, char* err, int errLen)
+{
+  if (strcmp(dP->from, "build") != 0)
+  {
+    snprintf(out, outLen, "%s", dP->image);
+    return true;
+  }
+
+  buildMember(dP->build, "image", "", out, outLen);
+  if (out[0] == 0)
+  {
+    snprintf(err, errLen, "the build '%s' has no image - build it again with Output: Binary and Docker image, or run it natively", dP->build);
+    return false;
+  }
+  return true;
+}
+
+
+
 static bool hasBridge(const Def* dP, const char* name)
 {
   char  copy[128];
@@ -2123,32 +2143,63 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     return false;
   }
 
-  if (container && (dP->ckan[0] != 0))
+  bool published = (strcmp(dP->from, "image") == 0);      // the published image: no ckan, opcua or aas bridge
+
+  if (published && (dP->ckan[0] != 0))
   {
     snprintf(err, errLen, "CKAN datasets need a native broker: the image has no ckan bridge");
     return false;
   }
 
-  if (container && hasBridge(dP, "opcua"))
+  if (published && hasBridge(dP, "opcua"))
   {
     snprintf(err, errLen, "the OPC UA bridge needs a native broker: the image has no opcua bridge");
     return false;
   }
 
-  if (container && hasBridge(dP, "aas"))
+  if (published && hasBridge(dP, "aas"))
   {
     snprintf(err, errLen, "the AAS bridge needs a native broker: the image has no aas bridge");
     return false;
+  }
+
+  //
+  // A build - natively or in its image - has the bridges it was built with, no others
+  //
+  if (strcmp(dP->from, "build") == 0)
+  {
+    char  copy[128];
+    char* save = NULL;
+    char  bdir[2300];
+
+    buildDirOf(dP->build, bdir, sizeof(bdir));
+    snprintf(copy, sizeof(copy), "%s%s", dP->bridges, (dP->ckan[0] != 0) && !hasBridge(dP, "ckan") ? ",ckan" : "");
+    for (char* b = strtok_r(copy, ",", &save); b != NULL; b = strtok_r(NULL, ",", &save))
+    {
+      char so[2600];
+
+      snprintf(so, sizeof(so), "%s/install/plugins/bridge/%s.so", bdir, b);
+      if (access(so, R_OK) != 0)
+      {
+        snprintf(err, errLen, "the build '%s' has no %s bridge - tick it in Compile and build again", dP->build, b);
+        return false;
+      }
+    }
   }
 
   if (container)
   {
     char name[96];
     char vol[96];
+    char image[512];
 
     if (engine[0] == 0)
     {
       snprintf(err, errLen, "%s", engineWhy);
+      return false;
+    }
+    if (defImage(dP, image, sizeof(image), err, errLen) == false)
+    {
       return false;
     }
 
@@ -2209,7 +2260,7 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     {
       argAdd(aP, "--entrypoint"); argAdd(aP, "timeout");
     }
-    argAdd(aP, dP->image);
+    argAdd(aP, image);
     if (discovery)
     {
       argAdd(aP, "120"); argAdd(aP, "coraine-start");
@@ -2224,7 +2275,7 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     char exe[65];
 
     buildDirOf(dP->build, bdir, sizeof(bdir));
-    buildExecutable(dP->build, exe, sizeof(exe));
+    buildMember(dP->build, "executable", "coraine", exe, sizeof(exe));
     snprintf(env, sizeof(env), "%s/install/env", bdir);
     snprintf(path, sizeof(path), "%s/install/bin/%s", bdir, exe);
 
@@ -3898,11 +3949,13 @@ static void* startThread(void* vP)
     char out[2048];
     char name[96];
     char vol[96];
+    char image[512] = "";
 
     brokerContainer(d.name, name, sizeof(name));
     brokerVolume(d.name, vol, sizeof(vol));
 
-    if ((networkEnsure(err, sizeof(err)) == false) || (imageEnsure(d.image, bP->logPath, err, sizeof(err)) == false))
+    if ((networkEnsure(err, sizeof(err)) == false) || (defImage(&d, image, sizeof(image), err, sizeof(err)) == false) ||
+        (imageEnsure(image, bP->logPath, err, sizeof(err)) == false))
     {
       argFree(&a);
       startFail(bP, err);
@@ -4810,7 +4863,7 @@ static void runState(CorHttpConn* connP)
 // -----------------------------------------------------------------------------
 //
 // runSources - GET /api/run/sources: the installed broker and the builds that succeeded, with what each has
-// compiled in (their --version), and the bridge plugins each one has
+// compiled in (their --version), the bridge plugins each one has - and a build its image, when Compile made one
 //
 static void bridgesOf(const char* pluginDir, Str* sP)
 {
@@ -4899,6 +4952,10 @@ static void runSources(CorHttpConn* connP)
         strAdd(&s, ", \"version\": ");  strAddJson(&s, v);
         strAdd(&s, ", \"plugins\": ");  strAddJson(&s, pd);
         strAdd(&s, ", \"bridges\": ");  bridgesOf(pd, &s);
+
+        char image[512];
+        buildMember(name, "image", "", image, sizeof(image));
+        strAdd(&s, ", \"image\": ");    strAddJson(&s, (image[0] != 0) ? image : NULL);
         strAdd(&s, "}");
         first = false;
         free(v);
@@ -5748,7 +5805,9 @@ static bool discoverStart(Def* dP, Discovery* xP, char* err, int errLen)
     close(fd);
     fd = -1;
 
-    if (imageEnsure(dP->image, xP->logPath, err, errLen) == true)
+    char image[512] = "";
+
+    if ((defImage(dP, image, sizeof(image), err, errLen) == true) && (imageEnsure(image, xP->logPath, err, errLen) == true))
     {
       Str cmd = { NULL, 0, 0 };
       argCommand(&a, &cmd);

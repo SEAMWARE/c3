@@ -187,7 +187,7 @@ export class Run {
   renderChannels() {
     const box = $('rn-ou-chans');
     const o = this.f.opcua;
-    const cont = this.f.where === 'container';
+    const cont = this.f.from === 'image';
     box.replaceChildren();
     o.channels.forEach((c, ix) => {
       const card = el('div', 'rn-ouch');
@@ -217,7 +217,7 @@ export class Run {
   //
   browseBroker() {
     const k = this.kept(this.f.name);
-    if (this.f.where === 'container') return { url: null, why: '' };
+    if (this.f.from === 'image') return { url: null, why: '' };
     if (!this.f.opcua.url) return { url: null, why: t('Browsing asks a running broker: give the server, start the broker, then browse.') };
     if (!k || k.state !== 'running') return { url: null, why: t('Browsing asks the running broker\'s bridge: start {name}, then browse - and stop and start it again for what you pick.', { name: this.f.name || t('the broker') }) };
     if (!k.def.admin) return { url: null, why: t('Browsing needs the admin API in the broker (Switches).') };
@@ -1159,7 +1159,8 @@ export class Run {
     //
     this.seg('rn-where', [
       ['native', t('Natively'), f.from === 'image' ? t('an image runs in a container') : ''],
-      ['container', t('In a container'), f.from === 'image' ? '' : f.from === 'build' ? t('Compile makes no image yet') : t('the installed broker runs natively - a published image runs in a container')],
+      ['container', t('In a container'), f.from === 'image' ? '' : f.from === 'build' ? (src && src.image ? (cont ? '' : noCont) : t('this build has no image - build it with Output: Binary and Docker image'))
+        : t('the installed broker runs natively - a published image runs in a container')],
     ], f.where, (v) => { f.where = v; this.changed(); });
 
     //
@@ -1244,7 +1245,7 @@ export class Run {
         .catch(() => { this.ckanSets = []; this.renderCkan(cont); });
     }
     const sets = this.ckanSets || [];
-    const why = f.where === 'container' ? t('a native broker only: the image has no ckan bridge')
+    const why = f.from === 'image' ? t('a native broker only: the image has no ckan bridge')
       : (f.bridgeConfig ? t('not with a bridge configuration file of one\'s own') : '');
     $('rn-ckan').replaceChildren(...sets.map((ds) => {
       const l = el('label', 'rn-check');
@@ -1270,7 +1271,7 @@ export class Run {
   //
   renderOpcua() {
     const o = this.f.opcua;
-    const cont = this.f.where === 'container';             // the image has no opcua bridge
+    const cont = this.f.from === 'image';                  // the published image has no opcua bridge (a build's image: its own)
     const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
     set('rn-ou-url', o.url); set('rn-ou-roots', o.roots); set('rn-ou-mode', o.mode); set('rn-ou-policy', o.policy);
     set('rn-ou-cert', o.certificate); set('rn-ou-key', o.privateKey); set('rn-ou-appuri', o.applicationUri);
@@ -1296,7 +1297,7 @@ export class Run {
 
   renderOpcuaSum() {
     const o = this.f.opcua;
-    const cont = this.f.where === 'container';
+    const cont = this.f.from === 'image';
     const secure = o.mode !== 'None';
     const roots = o.roots.split('\n').map((x) => x.trim()).filter(Boolean).length;
     const chans = o.channels.length;
