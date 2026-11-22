@@ -41,8 +41,6 @@
 .cp-seg button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent-2); font-weight: 600; }
 .cp-seg button:disabled { cursor: default; }
 .cp-seg button:disabled:not([aria-pressed="true"]) { opacity: 0.45; }
-.cp-later { opacity: 0.55; }
-.cp-later .cp-note { color: var(--muted); font-size: 0.975rem; }
 .cp-note { font-size: 0.975rem; line-height: 1.3125rem; color: var(--muted); }
 .cp-note.warn { color: var(--warn); }
 
