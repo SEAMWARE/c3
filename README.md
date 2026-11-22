@@ -738,7 +738,7 @@ pulled at the start, its progress in the broker's log. Images are named by their
   on by default; off and greyed for a broker built without REGISTRATIONS), `-v`.
 - **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
   configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
-  the DDS domain and mapping for dds, the CKAN datasets ticked, the OPC UA server.
+  the DDS domain and mapping for dds, the CKAN datasets ticked, the OPC UA server, the AAS server.
 - **DDS** - the bridge configuration file (`--bridgeConfig`) and the default user `@context` file
   (`--defaultUserContext`), and **Map DDS topics, services and actions**, the width of the form, active with
   the dds bridge ticked: the DDS mapper (below). A container broker with the dds bridge runs with
@@ -766,6 +766,23 @@ pulled at the start, its progress in the broker's log. Images are named by their
   **Map an OPC UA server**, under the DDS mapper's button, active with the opcua bridge ticked: the OPC UA
   mapper (below) - the whole address space at once, before a broker runs, written into a bridge
   configuration file of its own.
+- **AAS** (native brokers - the image has no aas bridge; corAasBridge, a prototype: `coraine-build --bridges
+  aas`) - an Asset Administration Shell server: its URL (`http[s]://host:port[/base path]`), the
+  Authorization header's value, the CAs its certificate is verified against (a PEM file) or not verified.
+  Filling in the URL ticks the aas bridge. The Authorization is sent once, on Start: c³ keeps it in
+  `<run>/<name>/aas.authorization` (mode 600) and hands it to the broker in its environment,
+  `C3_AAS_AUTHORIZATION` (the bridge's `authorizationEnv` in `bridges.json`); it is never in `c3.json`, the
+  bridge configuration or the API, which says only `authorizationSet`. Empty keeps the one c³ has.
+  **AssetChannels** - a shell's (or a submodel's) id each, its model a graph of entities: which nodes become
+  entities (`natural` - the shell and each submodel - or rules: a node kind, a semanticId, the entity type;
+  the first match wins), what a collection that is no entity becomes (`attributeLayout`), the direction
+  (`in`, or `both`: a client's write goes to the server first) and the poll interval (`pollInterval`, ISO
+  8601; none: the bridge's 10 s) - the bridge's `assetChannels` in `bridges.json`.
+  **Discover the server** - a broker of c³'s own with the aas bridge alone (`POST /api/run/aas/discover`):
+  the server's shells and submodels and each one's model, and what an AssetChannel on each makes - its
+  entities' types and ids, as the broker makes them. **+ AssetChannel** adds a shell; **+ entity rule** on a
+  submodel or a collection of its model makes it an entity of its own (the rules start as what `natural`
+  makes).
 - **More options** - anything else, as typed (quotes keep words together).
 - What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
   without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
@@ -1140,6 +1157,7 @@ The backend's API, used by the pages:
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
 | `POST /api/run/opcua/discover` `{broker}` | the OPC UA server's address space - the opcua bridge's inventory, crawled (`GET /admin/bridges/opcua/inventory`), from a broker of its own started and stopped for it: `200` `{url, complete, nodes, objects}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not reach |
+| `POST /api/run/aas/discover` `{broker}` | the AAS server's shells and submodels, and each one's model - the aas bridge's inventory (`GET /admin/bridges/aas/inventory`, then `?from=<id>` per shell and per submodel no shell refers to, at most 200), from a broker of its own started and stopped for it, with the Authorization given or kept: `200` `{url, complete, shells, submodels, models, errors}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not read |
 | `GET /api/run/opcua/files` | the OPC UA mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done; its `user` says `passwordSet`, never the password) |
 | `POST /api/run/opcua/files` `{url, security, user, vocabulary, channels, models, terms}` | write them from a mapping: `201` with the same answer; `400` with why |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |

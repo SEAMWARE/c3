@@ -16,7 +16,7 @@ on this machine and does the work; the browser window is the interface.</p>
   <li><a href="#dashboard">Dashboard<span>dashboards built by the user from what the brokers hold: WireCloud, in containers c³ starts, shown in the page and logged in by c³</span></a></li>
   <li><a href="#docs">Documentation<span>these guides - searchable, offline - and every component, with its guide and its repository</span></a></li>
 </ul>
-<p>The DDS and OPC UA mappings are in Operate's broker form. The <b>AI Assist</b> button in the header says what is planned; nothing
+<p>The DDS, OPC UA and AAS mappings are in Operate's broker form. The <b>AI Assist</b> button in the header says what is planned; nothing
 of it is built.</p>
 
 <h2 id="start">Starting it</h2>
@@ -159,7 +159,7 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   the admin API, distributed operations, <code>-v</code>.</li>
   <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
   configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS domain and mapping, the CKAN
-  datasets ticked, an OPC UA server and its channels (native brokers).</li>
+  datasets ticked, an OPC UA server and its channels, an AAS server and its AssetChannels (native brokers).</li>
   <li><b>DDS</b> - the bridge configuration file and the default user <code>@context</code> file
   (<code>--bridgeConfig</code>, <code>--defaultUserContext</code>), and, under them, <b>Map DDS topics, services and
   actions</b>, the width of the form, active with the dds bridge ticked (<a href="#docs/c3/dds-mapper">the DDS mapper</a>),
@@ -294,6 +294,52 @@ opens, and the mapper opens on it.</p>
   <li><b>The files screen</b> - as the DDS mapper's: <b>Start the broker</b> or <b>Put it in the broker form</b> -
   a native broker with the opcua bridge and the two files; the form's own OPC UA server and Channels are emptied, the
   server is in the file.</li>
+</ul>
+
+<!-- ======================================================================= -->
+<h3 id="aas">AAS - an Asset Administration Shell server</h3>
+<p>The broker form's <b>AAS</b>: the aas bridge (<a href="https://github.com/SEAMWARE-cor/corAasBridge">corAasBridge</a>,
+a prototype - <code>coraine-build --bridges aas</code>; native brokers, the image has no aas bridge) reads an AAS
+server's shells and submodels over the AAS HTTP API (IDTA Part 2, V3) and the broker makes each one picked a graph of
+entities - an AssetChannel (coraine's <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/aas.md">AAS</a> and <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/asset-channels.md">AssetChannels</a>).</p>
+<ul>
+  <li><b>The server</b> - its URL (<code>http[s]://host:port[/base path]</code>, <code>/api/v3.0</code> on some
+  servers); the <b>Authorization header</b> (<code>Bearer ...</code>), sent once: c³ keeps it in the broker's
+  directory (mode 600) and hands it to the broker in its environment (<code>C3_AAS_AUTHORIZATION</code>, the bridge's
+  <code>authorizationEnv</code>) - never in <code>c3.json</code> or the bridge configuration; the <b>CAs</b> the
+  server's certificate is verified against (a PEM file; none: the system's), or <b>do not verify</b>.</li>
+  <li><b>Discover the server</b> - a broker of c³'s own, the aas bridge alone, reads the server: its shells, its
+  submodels and each one's model, whole (<code>/admin/bridges/aas/inventory</code>, then <code>?from=&lt;id&gt;</code>
+  per shell and per submodel no shell refers to - at most 200), and stops: a few seconds. The Authorization typed, else
+  the one c³ keeps for the broker, goes with it.</li>
+  <li><b>The list</b> - each shell (and each submodel of no shell) with <b>what it makes</b>: the entities an
+  AssetChannel on it makes, their types and ids - the shell's and a submodel's own id (an IRI), else
+  <code>urn:ngsi-ld:&lt;type&gt;:&lt;the names from the shell&gt;</code>. ▸ opens its model as the bridge hands it to
+  the broker: submodels, collections, Properties with their values, semanticIds, Operations with their inputs.
+  <b>+ AssetChannel</b> adds it to the broker form.</li>
+  <li><b>An AssetChannel</b> - the shell's or submodel's id, and:
+    <ul>
+      <li><b>entities</b> - <i>the shell and each submodel</i> (<code>"natural"</code>: the shell an entity of type
+      <code>Shell</code>, each submodel one of its idShort, the shell's submodels Relationships), or <i>by rules</i>:
+      a node kind (shell, submodel, collection), a semanticId it must have (none: any) and the entity type; the first
+      rule a node matches names its type, a node no rule matches goes into the entity above it. Switched to rules, the
+      rules start as what natural makes: the shell, each submodel by its semanticId, a catch-all for the others.
+      <b>+ entity rule</b> on a submodel or collection of the model adds one for it, before its kind's catch-all - a
+      collection without a semanticId makes every collection an entity, as the button says.</li>
+      <li><b>a collection</b> that is no entity - an attribute per element (<code>attributes</code>), one attribute
+      with its elements as sub-attributes (<code>subAttributes</code>), or one JSON attribute (<code>value</code>).</li>
+      <li><b>direction</b> - read from the server, or also a client's write to the server first
+      (<code>channelDirection</code> <code>both</code>: <code>PATCH .../$value</code>; refused, the broker stores
+      nothing).</li>
+      <li><b>read every</b> - the poll interval, an ISO 8601 duration (<code>PT2S</code>); none: 10 s.</li>
+    </ul></li>
+  <li><b>Start</b> - c³ writes the <code>aas</code> member of the broker's <code>bridges.json</code>: the server, and an
+  <code>assetChannels</code> entry per AssetChannel. <code>GET /ngsi-ld/v1/assetChannels</code> of the broker says how
+  each one does - <code>dormant</code> with why (a 401: the Authorization) or <code>available</code>, the entities
+  written.</li>
+  <li>Not yet: an Operation is a service of its entity only through a Service Registration of one's own (endpoint
+  <code>aas+http://.../submodels/&lt;id&gt;/submodel-elements/&lt;path&gt;</code>, corAasBridge's README); c³ makes
+  none.</li>
 </ul>
 
 <h2 id="explore">Explore - the graph and the map</h2>
@@ -588,6 +634,7 @@ run/&lt;name&gt;/broker.log    a broker's output and c3's lines about it; broker
 run/&lt;name&gt;/state.json   a native broker that runs: its pid and the process's start time
 run/&lt;name&gt;/data/        --dbDir of a native corDB
 run/&lt;name&gt;/bridges.json the bridge configuration c3 writes
+run/&lt;name&gt;/opcua.password, aas.authorization   the OPC UA password, the AAS Authorization header (mode 600)
 run/services/&lt;container&gt;.log
 run/services/c3-dashboard.log  the Dashboard's starts and stops: c3's lines, the commands, their output
 maps/&lt;id&gt;.pmtiles       a downloaded map area

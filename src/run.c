@@ -27,6 +27,8 @@
 //   POST   /api/run/opcua/discover              {broker, its opcua server}: the server's address space - a broker of
 //                                               its own (opcuaDiscoverThread)
 //   GET    /api/run/opcua/files                 the OPC UA configuration the mapper wrote: its files and mapping
+//   POST   /api/run/aas/discover                {broker, its aas server}: the server's shells and submodels, each one's
+//                                               model - a broker of its own (aasDiscoverThread)
 //   POST   /api/run/opcua/files                 {url, security, user, vocabulary, channels, models, terms}: written (opcuaFiles)
 //
 // Where it lives: $XDG_DATA_HOME/c3/run (else ~/.local/share/c3/run) -
@@ -229,6 +231,16 @@ typedef struct Def
     char  username[128];                         // "": anonymous
     char  password[256];                         // WRITE-ONLY: as a request gave it, kept in <broker dir>/opcua.password (0600) and wiped
   } opcua;
+  struct                                         // the aas bridge's server and AssetChannels - the bridge configuration c3 writes
+  {
+    char  url[512];                              // http[s]://host[:port][/base path]; "": no AAS
+    char  caFile[1024];                          // the CAs the server's certificate is verified against, a PEM file; "": the system's
+    bool  insecure;                              // the server's certificate not verified
+    char  channels[16384];                       // the AssetChannels - a line each: shell (or submodel) id, entities ("natural" or the
+                                                 // rules as JSON), attributeLayout, channelDirection, pollInterval ("": the bridge's) - tab-separated
+    char  authorization[2048];                   // WRITE-ONLY: the Authorization header's value as a request gave it, kept in
+                                                 // <broker dir>/aas.authorization (0600) and wiped
+  } aas;
   struct                                         // the dds bridge's mapping - the bridge configuration c3 writes
   {
     int   domain;                                // the DDS domain
@@ -942,7 +954,7 @@ static bool memberList(CorNode* oP, const char* name, const char** allowed, char
   return true;
 }
 
-static const char* bridgeNames[] = { "ckan", "dds", "loopback", "modbus", "mqtt", "opcua", NULL };
+static const char* bridgeNames[] = { "aas", "ckan", "dds", "loopback", "modbus", "mqtt", "opcua", NULL };
 
 
 
@@ -1309,6 +1321,213 @@ static bool opcuaParse(CorNode* opP, Def* dP, char* err, int errLen)
   return true;
 }
 
+
+
+// -----------------------------------------------------------------------------
+//
+// aasRulesText - an AssetChannel's "entities" rules, [{ "from", "type", "semanticId" }], as compact JSON in 'out':
+// "from" shell, submodel or collection (the AAS node kinds coraine's AssetMap makes entities of), "type" the
+// entity type, "semanticId" (optional) the meaning a node must have - false with why
+//
+static bool aasRulesText(CorNode* rulesP, char* out, int outLen, char* err, int errLen)
+{
+  Str s = { NULL, 0, 0 };
+
+  if ((rulesP->type != CorArray) || (rulesP->value.head == NULL))
+  {
+    snprintf(err, errLen, "\"aas.channels[].entities\" is \"natural\" or a non-empty array of rules: { \"from\", \"type\", \"semanticId\" }");
+    return false;
+  }
+
+  strAdd(&s, "[");
+  for (CorNode* rP = rulesP->value.head; rP != NULL; rP = rP->next)
+  {
+    CorNode* fromP = (rP->type == CorObject) ? corTreeLookup(rP, "from")       : NULL;
+    CorNode* typeP = (rP->type == CorObject) ? corTreeLookup(rP, "type")       : NULL;
+    CorNode* semP  = (rP->type == CorObject) ? corTreeLookup(rP, "semanticId") : NULL;
+
+    if ((fromP == NULL) || (fromP->type != CorString) ||
+        ((strcmp(fromP->value.s, "shell") != 0) && (strcmp(fromP->value.s, "submodel") != 0) && (strcmp(fromP->value.s, "collection") != 0)))
+    {
+      snprintf(err, errLen, "an AAS entity rule's \"from\" is shell, submodel or collection - the kind of node it makes an entity of");
+      strFree(&s);
+      return false;
+    }
+    if ((typeP == NULL) || (typeP->type != CorString) || (typeP->value.s[0] == 0) || (strpbrk(typeP->value.s, " \t\n\"<>") != NULL))
+    {
+      snprintf(err, errLen, "an AAS entity rule's \"type\" is the entity type it makes - a name without spaces (Nameplate)");
+      strFree(&s);
+      return false;
+    }
+    if ((semP != NULL) && (semP->type != CorNull) && ((semP->type != CorString) || (strpbrk(semP->value.s, "\t\n") != NULL)))
+    {
+      snprintf(err, errLen, "an AAS entity rule's \"semanticId\" is a string - the meaning a node must have (its semanticId's first key)");
+      strFree(&s);
+      return false;
+    }
+
+    strAdd(&s, (rP == rulesP->value.head) ? "{\"from\": " : ", {\"from\": ");
+    strAddJson(&s, fromP->value.s);
+    if ((semP != NULL) && (semP->type == CorString) && (semP->value.s[0] != 0))
+    {
+      strAdd(&s, ", \"semanticId\": ");
+      strAddJson(&s, semP->value.s);
+    }
+    strAdd(&s, ", \"type\": ");
+    strAddJson(&s, typeP->value.s);
+    strAdd(&s, "}");
+  }
+  strAdd(&s, "]");
+
+  if (s.len >= outLen)
+  {
+    snprintf(err, errLen, "an AAS AssetChannel's entity rules are too long");
+    strFree(&s);
+    return false;
+  }
+  snprintf(out, outLen, "%s", s.s);
+  strFree(&s);
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasChannelsParse - "channels": [{ "id", "entities", "attributeLayout", "channelDirection", "pollInterval" }] - an
+// AssetChannel each, its endpoint a shell's (or a submodel's) id - as aas.channels' lines
+//
+static bool aasChannelsParse(CorNode* chP, char* out, int outLen, char* err, int errLen)
+{
+  int len = 0;
+
+  out[0] = 0;
+  if ((chP == NULL) || (chP->type == CorNull))
+    return true;
+
+  if (chP->type != CorArray)
+  {
+    snprintf(err, errLen, "\"aas.channels\" is an array: an AssetChannel each - { \"id\", \"entities\", \"attributeLayout\", \"channelDirection\", \"pollInterval\" }");
+    return false;
+  }
+
+  for (CorNode* cP = chP->value.head; cP != NULL; cP = cP->next)
+  {
+    char id[1024]      = "";
+    char layout[16]    = "";
+    char direction[8]  = "";
+    char poll[32]      = "";
+    char entities[4096];
+
+    if (cP->type != CorObject)
+    {
+      snprintf(err, errLen, "an AAS AssetChannel is an object: { \"id\", \"entities\", \"attributeLayout\", \"channelDirection\", \"pollInterval\" }");
+      return false;
+    }
+
+    if (!memberString(cP, "id",               id,        sizeof(id),        err, errLen) ||
+        !memberString(cP, "attributeLayout",  layout,    sizeof(layout),    err, errLen) ||
+        !memberString(cP, "channelDirection", direction, sizeof(direction), err, errLen) ||
+        !memberString(cP, "pollInterval",     poll,      sizeof(poll),      err, errLen))
+      return false;
+
+    if ((id[0] == 0) || (strpbrk(id, "\t\n") != NULL))
+    {
+      snprintf(err, errLen, "an AAS AssetChannel's \"id\" is the id of a shell or a submodel of the server");
+      return false;
+    }
+
+    CorNode* entP = corTreeLookup(cP, "entities");
+
+    if ((entP == NULL) || (entP->type == CorNull) || ((entP->type == CorString) && (strcmp(entP->value.s, "natural") == 0)))
+      snprintf(entities, sizeof(entities), "natural");
+    else if (entP->type == CorString)
+    {
+      snprintf(err, errLen, "\"aas.channels[].entities\" is \"natural\" or an array of rules: { \"from\", \"type\", \"semanticId\" }");
+      return false;
+    }
+    else if (aasRulesText(entP, entities, sizeof(entities), err, errLen) == false)
+      return false;
+
+    if (layout[0] == 0)
+      snprintf(layout, sizeof(layout), "attributes");
+    if ((strcmp(layout, "attributes") != 0) && (strcmp(layout, "subAttributes") != 0) && (strcmp(layout, "value") != 0))
+    {
+      snprintf(err, errLen, "\"aas.channels[].attributeLayout\" is attributes, subAttributes or value - what a collection that is no entity becomes");
+      return false;
+    }
+
+    if (direction[0] == 0)
+      snprintf(direction, sizeof(direction), "in");
+    if ((strcmp(direction, "in") != 0) && (strcmp(direction, "both") != 0))
+    {
+      snprintf(err, errLen, "\"aas.channels[].channelDirection\" is in or both (a client's write goes to the AAS server first)");
+      return false;
+    }
+
+    bool pollOk = (poll[0] == 0) || ((strncmp(poll, "PT", 2) == 0) && (poll[2] != 0) && (strspn(&poll[2], "0123456789.HMS") == strlen(&poll[2])) &&
+                                     (strchr("HMS", poll[strlen(poll) - 1]) != NULL));
+    if (pollOk == false)
+    {
+      snprintf(err, errLen, "\"aas.channels[].pollInterval\" is an ISO 8601 duration: PT10S, PT0.5S, PT1M - or none, the bridge's (10 s)");
+      return false;
+    }
+
+    int n = snprintf(&out[len], outLen - len, "%s%s\t%s\t%s\t%s\t%s", (len > 0) ? "\n" : "", id, entities, layout, direction, poll);
+    if (n >= outLen - len)
+    {
+      snprintf(err, errLen, "too many AAS AssetChannels");
+      return false;
+    }
+    len += n;
+  }
+
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasParse - "aas": { "url", "caFile", "insecure", "authorization", "channels": [...] } - the bridge's own "server"
+// shape (corAasBridge's README) but the Authorization header's value, which c3 keeps in a file and hands the
+// broker in its environment
+//
+static bool aasParse(CorNode* aP, Def* dP, char* err, int errLen)
+{
+  if ((aP == NULL) || (aP->type == CorNull))
+    return true;
+
+  if (aP->type != CorObject)
+  {
+    snprintf(err, errLen, "\"aas\" is an object");
+    return false;
+  }
+
+  if (!memberString(aP, "url",           dP->aas.url,           sizeof(dP->aas.url),           err, errLen) ||
+      !memberString(aP, "caFile",        dP->aas.caFile,        sizeof(dP->aas.caFile),        err, errLen) ||
+      !memberBool(aP,   "insecure",      &dP->aas.insecure,     err, errLen) ||
+      !memberString(aP, "authorization", dP->aas.authorization, sizeof(dP->aas.authorization), err, errLen) ||
+      !aasChannelsParse(corTreeLookup(aP, "channels"), dP->aas.channels, sizeof(dP->aas.channels), err, errLen))
+    return false;
+
+  const char* u = dP->aas.url;
+
+  if ((u[0] != 0) && (((strncmp(u, "http://", 7) != 0) && (strncmp(u, "https://", 8) != 0)) || (strpbrk(u, " \t\n\"") != NULL)))
+  {
+    snprintf(err, errLen, "\"aas.url\" is http[s]://<host>[:<port>][/<base path>] - where the AAS API is (/api/v3.0 on some servers)");
+    return false;
+  }
+
+  if ((strpbrk(dP->aas.authorization, "\r\n") != NULL))
+  {
+    snprintf(err, errLen, "\"aas.authorization\" is the Authorization header's value, one line (Bearer ...)");
+    return false;
+  }
+
+  return true;
+}
+
 static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 {
   if ((oP == NULL) || (oP->type != CorObject))
@@ -1361,6 +1580,7 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberList(oP,   "bridges",      bridgeNames,      dP->bridges, sizeof(dP->bridges), err, errLen) ||
       !memberList(oP,   "ckan",         NULL,             dP->ckan,    sizeof(dP->ckan),    err, errLen) ||
       !opcuaParse(corTreeLookup(oP, "opcua"), dP, err, errLen) ||
+      !aasParse(corTreeLookup(oP, "aas"), dP, err, errLen) ||
       !ddsParse(corTreeLookup(oP, "dds"), dP, err, errLen))
     return false;
 
@@ -1384,6 +1604,33 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
   else if (listHas(dP->bridges, "opcua") && (dP->bridgeConfig[0] == 0))
   {
     snprintf(err, errLen, "the opcua bridge needs an OPC UA server (its URL) - or a bridge configuration file of one's own");
+    return false;
+  }
+
+  //
+  // An AAS server is the aas bridge's, in the bridge configuration c3 writes - as OPC UA's
+  //
+  if (dP->aas.url[0] != 0)
+  {
+    if (dP->bridgeConfig[0] != 0)
+    {
+      snprintf(err, errLen, "the AAS server goes in the bridge configuration c3 writes - not with a bridge configuration file of one's own");
+      return false;
+    }
+    if (!listHas(dP->bridges, "aas"))
+    {
+      int len = strlen(dP->bridges);
+      snprintf(&dP->bridges[len], sizeof(dP->bridges) - len, "%saas", (len > 0) ? "," : "");
+    }
+  }
+  else if (listHas(dP->bridges, "aas") && (dP->bridgeConfig[0] == 0))
+  {
+    snprintf(err, errLen, "the aas bridge needs an AAS server (its URL) - or a bridge configuration file of one's own");
+    return false;
+  }
+  else if (dP->aas.channels[0] != 0)
+  {
+    snprintf(err, errLen, "AAS AssetChannels need the AAS server (its URL)");
     return false;
   }
 
@@ -1565,6 +1812,93 @@ static void opcuaPasswordPath(const char* name, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
+// aasAuthorizationPath - where c3 keeps a broker's AAS Authorization header value: its directory, 0600
+//
+static void aasAuthorizationPath(const char* name, char* out, int outLen)
+{
+  char dir[2300];
+
+  brokerDir(name, dir, sizeof(dir));
+  snprintf(out, outLen, "%s/aas.authorization", dir);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasChannelsJson - the AAS AssetChannels (aas.channels' lines): as the API has them, an array of { "id", "entities",
+// "attributeLayout", "channelDirection", "pollInterval" } - or 'keyed', the bridge configuration's "assetChannels":
+// an object by id, the poll interval in "channelInfo"
+//
+static void aasChannelsJson(Str* sP, const char* lines, bool keyed)
+{
+  char* copy  = strdup(lines);
+  char* save  = NULL;
+  bool  first = true;
+
+  strAdd(sP, keyed ? "{" : "[");
+  for (char* line = (copy != NULL) ? strtok_r(copy, "\n", &save) : NULL; line != NULL; line = strtok_r(NULL, "\n", &save))
+  {
+    char* f[5] = { line, NULL, NULL, NULL, NULL };
+
+    for (int ix = 1; ix < 5; ix++)
+    {
+      char* tab = strchr(f[ix - 1], '\t');
+      if (tab == NULL)
+        break;
+      *tab  = 0;
+      f[ix] = tab + 1;
+    }
+    if (f[4] == NULL)
+      continue;
+
+    strAdd(sP, first ? "" : ", ");
+    first = false;
+
+    if (keyed)
+    {
+      strAddJson(sP, f[0]);
+      strAdd(sP, ": {\"entities\": ");
+    }
+    else
+    {
+      strAdd(sP, "{\"id\": ");
+      strAddJson(sP, f[0]);
+      strAdd(sP, ", \"entities\": ");
+    }
+
+    if (f[1][0] == '[')                          // the rules, JSON aasRulesText made
+      strAdd(sP, f[1]);
+    else
+      strAddJson(sP, f[1]);
+
+    strAdd(sP, ", \"attributeLayout\": ");  strAddJson(sP, f[2]);
+    strAdd(sP, ", \"channelDirection\": "); strAddJson(sP, f[3]);
+
+    if (keyed)
+    {
+      if (f[4][0] != 0)
+      {
+        strAdd(sP, ", \"channelInfo\": [{\"key\": \"pollInterval\", \"value\": ");
+        strAddJson(sP, f[4]);
+        strAdd(sP, "}]");
+      }
+    }
+    else
+    {
+      strAdd(sP, ", \"pollInterval\": ");
+      strAddJson(sP, (f[4][0] != 0) ? f[4] : NULL);
+    }
+    strAdd(sP, "}");
+  }
+  strAdd(sP, keyed ? "}" : "]");
+  free(copy);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // opcuaServerJson - the OPC UA server as the API has it, a broker's "opcua" and the mapper's mapping: "url",
 // "security", "user" - never the password: whether c3 keeps one (passwordSet)
 //
@@ -1649,6 +1983,22 @@ static void defRender(const Def* dP, Str* sP)
     strAdd(sP, ", \"channels\": ");              channelsJson(sP, dP->opcua.channels, false);
     strAdd(sP, "}");
   }
+  if (dP->aas.url[0] != 0)
+  {
+    //
+    // The AAS server - never the Authorization header's value: the API says whether c3 keeps one
+    //
+    char        authPath[2400];
+    struct stat st;
+
+    aasAuthorizationPath(dP->name, authPath, sizeof(authPath));
+
+    strAdd(sP, ", \"aas\": {\"url\": ");        strAddJson(sP, dP->aas.url);
+    strAdd(sP, ", \"caFile\": ");                strAddJson(sP, (dP->aas.caFile[0] != 0) ? dP->aas.caFile : NULL);
+    strAddf(sP, ", \"insecure\": %s, \"authorizationSet\": %s", dP->aas.insecure ? "true" : "false", (stat(authPath, &st) == 0) ? "true" : "false");
+    strAdd(sP, ", \"channels\": ");              aasChannelsJson(sP, dP->aas.channels, false);
+    strAdd(sP, "}");
+  }
   if ((dP->dds.domain != 0) || (dP->dds.transport[0] != 0) || (dP->dds.interfaces[0] != 0) || (dP->dds.vocabulary[0] != 0) ||
       (dP->dds.topics[0] != 0) || (dP->dds.services[0] != 0) || (dP->dds.actions[0] != 0))
   {
@@ -1724,12 +2074,12 @@ static void ddsContextPath(const char* name, char* out, int outLen)  { snprintf(
 
 // -----------------------------------------------------------------------------
 //
-// bridgesConfigOwn - c3 writes the broker's bridge configuration: a bridge that needs one (mqtt, dds, opcua) or
+// bridgesConfigOwn - c3 writes the broker's bridge configuration: a bridge that needs one (mqtt, dds, opcua, aas) or
 // CKAN datasets, and no file of the user's
 //
 static bool bridgesConfigOwn(const Def* dP)
 {
-  return (hasBridge(dP, "mqtt") || hasBridge(dP, "dds") || (dP->ckan[0] != 0) || (dP->opcua.url[0] != 0)) && (dP->bridgeConfig[0] == 0);
+  return (hasBridge(dP, "mqtt") || hasBridge(dP, "dds") || (dP->ckan[0] != 0) || (dP->opcua.url[0] != 0) || (dP->aas.url[0] != 0)) && (dP->bridgeConfig[0] == 0);
 }
 
 
@@ -1782,6 +2132,12 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   if (container && hasBridge(dP, "opcua"))
   {
     snprintf(err, errLen, "the OPC UA bridge needs a native broker: the image has no opcua bridge");
+    return false;
+  }
+
+  if (container && hasBridge(dP, "aas"))
+  {
+    snprintf(err, errLen, "the AAS bridge needs a native broker: the image has no aas bridge");
     return false;
   }
 
@@ -3153,6 +3509,90 @@ static void opcuaMember(const Def* dP, Str* sP)
 
 
 
+//
+// aasMember - a broker's aas member: the server (the Authorization header's value in the broker's environment,
+// C3_AAS_AUTHORIZATION, when c3 keeps one - aasEnv), an AssetChannel per shell or submodel picked
+//
+static void aasMember(const Def* dP, bool authorization, Str* sP)
+{
+  strAdd(sP, "\"aas\": {\"server\": {\"url\": ");
+  strAddJson(sP, dP->aas.url);
+  if (dP->aas.caFile[0] != 0)
+  {
+    strAdd(sP, ", \"caFile\": ");
+    strAddJson(sP, dP->aas.caFile);
+  }
+  if (dP->aas.insecure)
+    strAdd(sP, ", \"insecure\": true");
+  if (authorization)
+    strAdd(sP, ", \"authorizationEnv\": \"C3_AAS_AUTHORIZATION\"");
+  strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"assetChannels\": ");
+  aasChannelsJson(sP, dP->aas.channels, true);
+  strAdd(sP, "}}");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasEnv - a native broker's environment: cleanEnv's, and with an AAS server and the Authorization header's value
+// c3 keeps for it, C3_AAS_AUTHORIZATION (the bridge's authorizationEnv) - *varP the string to wipe and free after
+// the start (NULL: none)
+//
+static char** aasEnv(const Def* dP, char** varP)
+{
+  char** env = cleanEnv();
+  char   path[2400];
+
+  *varP = NULL;
+  if (dP->aas.url[0] == 0)
+    return env;
+
+  aasAuthorizationPath(dP->name, path, sizeof(path));
+
+  char* text = fileText(path);
+  if (text == NULL)
+    return env;
+
+  char* nl = strchr(text, '\n');
+  if (nl != NULL)
+    *nl = 0;
+
+  int n = 0;
+  while (env[n] != NULL)
+    ++n;
+
+  char** more = realloc(env, (n + 2) * sizeof(char*));
+  if ((more != NULL) && (asprintf(varP, "C3_AAS_AUTHORIZATION=%s", text) != -1))
+  {
+    env      = more;
+    env[n]   = *varP;
+    env[n+1] = NULL;
+  }
+  else
+  {
+    if (more != NULL)
+      env = more;
+    *varP = NULL;
+  }
+
+  memset(text, 0, strlen(text));
+  free(text);
+  return env;
+}
+
+static void aasEnvFree(char** env, char* var)
+{
+  if (var != NULL)
+  {
+    memset(var, 0, strlen(var));
+    free(var);
+  }
+  free(env);
+}
+
+
+
 // -----------------------------------------------------------------------------
 //
 // ddsContextWriteTo - an @context: each entity type and attribute the DDS mapping names, a term in the
@@ -3335,6 +3775,15 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
     strAdd(&s, (s.len > 1) ? ", " : "");
     opcuaMember(dP, &s);
   }
+  if (dP->aas.url[0] != 0)
+  {
+    char        authPath[2400];
+    struct stat st;
+
+    aasAuthorizationPath(dP->name, authPath, sizeof(authPath));
+    strAdd(&s, (s.len > 1) ? ", " : "");
+    aasMember(dP, stat(authPath, &st) == 0, &s);
+  }
   strAdd(&s, "}\n");
 
   int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
@@ -3511,10 +3960,11 @@ static void* startThread(void* vP)
     // A session of its own: no terminal, nothing of c3's process group - it outlives c3, which reaps it
     // while it runs and attaches to it again after a restart
     //
-    char**    env = cleanEnv();
-    ProcSpawn sp  = { a.v, env, fd, dir, false, true, 0 };
-    pid_t     pid = procSpawn(&sp);
-    free(env);
+    char*     aasVar = NULL;
+    char**    env    = aasEnv(&d, &aasVar);     // with an AAS server: the Authorization header's value c3 keeps
+    ProcSpawn sp     = { a.v, env, fd, dir, false, true, 0 };
+    pid_t     pid    = procSpawn(&sp);
+    aasEnvFree(env, aasVar);
     close(fd);
     argFree(&a);
 
@@ -4663,34 +5113,42 @@ static void logRotate(const char* path)
 // opcuaPasswordKeep - a password the request gave: into <broker dir>/opcua.password (0600), and wiped from the
 // Def - c3.json and the API never hold it. None given: the file c3 keeps stays (empty keeps it). false: answered
 //
-static bool opcuaPasswordKeep(CorHttpConn* connP, Def* dP)
+// aasAuthorizationKeep - the same for the AAS server's Authorization header value: <broker dir>/aas.authorization
+//
+static void secretWrite(const char* path, const char* secret, const char* what, char* err, int errLen);
+
+static bool secretKeep(CorHttpConn* connP, const char* name, char* secret, int secretSize, void (*pathOf)(const char*, char*, int), const char* what)
 {
-  if (dP->opcua.password[0] == 0)
+  if (secret[0] == 0)
     return true;
 
   char dir[2300];
   char path[2400];
+  char err[2600] = "";
 
-  brokerDir(dP->name, dir, sizeof(dir));
+  brokerDir(name, dir, sizeof(dir));
   dirsMake(dir);
-  opcuaPasswordPath(dP->name, path, sizeof(path));
+  pathOf(name, path, sizeof(path));
+  secretWrite(path, secret, what, err, sizeof(err));
+  memset(secret, 0, secretSize);
 
-  int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-  int  n  = strlen(dP->opcua.password);
-  bool ok = (fd != -1) && (fchmod(fd, 0600) == 0) && (write(fd, dP->opcua.password, n) == n) && (write(fd, "\n", 1) == 1);
-
-  if (fd != -1)
-    close(fd);
-
-  memset(dP->opcua.password, 0, sizeof(dP->opcua.password));
-
-  if (ok == false)
+  if (err[0] != 0)
   {
-    serveError(connP, 500, "Internal error", "the OPC UA password cannot be kept");
+    serveError(connP, 500, "Internal error", err);
     return false;
   }
 
   return true;
+}
+
+static bool opcuaPasswordKeep(CorHttpConn* connP, Def* dP)
+{
+  return secretKeep(connP, dP->name, dP->opcua.password, sizeof(dP->opcua.password), opcuaPasswordPath, "the OPC UA password");
+}
+
+static bool aasAuthorizationKeep(CorHttpConn* connP, Def* dP)
+{
+  return secretKeep(connP, dP->name, dP->aas.authorization, sizeof(dP->aas.authorization), aasAuthorizationPath, "the AAS Authorization header");
 }
 
 
@@ -5314,10 +5772,11 @@ static bool discoverStart(Def* dP, Discovery* xP, char* err, int errLen)
     logLine(xP->logPath, "%s", cmd.s);
     strFree(&cmd);
 
-    char**    env = cleanEnv();
-    ProcSpawn sp  = { a.v, env, fd, dir, true, false, SIGKILL };   // its own group (stopped as one), dies with c3
+    char*     aasVar = NULL;
+    char**    env    = aasEnv(dP, &aasVar);
+    ProcSpawn sp     = { a.v, env, fd, dir, true, false, SIGKILL };   // its own group (stopped as one), dies with c3
     xP->pid = procSpawn(&sp);
-    free(env);
+    aasEnvFree(env, aasVar);
 
     if (xP->pid < 0)
       snprintf(err, errLen, "fork: %s", strerror(errno));
@@ -5480,9 +5939,12 @@ static void discoverPrepare(Def* dP, const char* bridge)
   dP->dds.actions[0]    = 0;
   dP->opcua.roots[0]    = 0;
   dP->opcua.channels[0] = 0;
+  dP->aas.channels[0]   = 0;
 
   if (strcmp(bridge, "opcua") != 0)
     dP->opcua.url[0] = 0;
+  if (strcmp(bridge, "aas") != 0)
+    dP->aas.url[0] = 0;
 }
 
 
@@ -5697,7 +6159,7 @@ static bool opcuaCrawl(const Discovery* xP, const char* url, Str* sP, char* err,
 // user's password: the one the request gave, else the one the mapper keeps - for the discovery's broker in its
 // own directory (opcuaPasswordPath), as for any broker
 //
-static void opcuaPasswordWrite(const char* path, const char* password, char* err, int errLen);
+static void secretWrite(const char* path, const char* secret, const char* what, char* err, int errLen);
 static void opcuaMapperPath(const char* file, char* out, int outLen);
 
 static void* opcuaDiscoverThread(void* vP)
@@ -5727,7 +6189,7 @@ static void* opcuaDiscoverThread(void* vP)
       opcuaPasswordPath(d.name, path, sizeof(path));
 
       if (d.opcua.password[0] != 0)
-        opcuaPasswordWrite(path, d.opcua.password, err, sizeof(err));
+        secretWrite(path, d.opcua.password, "the OPC UA password", err, sizeof(err));
       else
       {
         char  kept[2400];
@@ -5739,7 +6201,7 @@ static void* opcuaDiscoverThread(void* vP)
           char* nl = strchr(text, '\n');
           if (nl != NULL)
             *nl = 0;
-          opcuaPasswordWrite(path, text, err, sizeof(err));
+          secretWrite(path, text, "the OPC UA password", err, sizeof(err));
           memset(text, 0, strlen(text));
           free(text);
         }
@@ -5754,6 +6216,243 @@ static void* opcuaDiscoverThread(void* vP)
 
     char path[2400];                             // the discovery's copy of the password: gone with it
     opcuaPasswordPath(d.name, path, sizeof(path));
+    unlink(path);
+  }
+
+  discoverEnd(djP, &s, err);
+  return NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasPathAdd - 'id' percent-encoded onto a path (a query's value)
+//
+static void aasPathAdd(char* path, int pathSize, const char* id)
+{
+  int len = strlen(path);
+
+  for (const char* c = id; (*c != 0) && (len < pathSize - 4); c++)
+  {
+    unsigned char u = (unsigned char) *c;
+    if (((u >= 'A') && (u <= 'Z')) || ((u >= 'a') && (u <= 'z')) || ((u >= '0') && (u <= '9')) || (u == '-') || (u == '.') || (u == '_') || (u == '~'))
+      path[len++] = *c;
+    else
+      len += snprintf(&path[len], pathSize - len, "%%%02X", u);
+  }
+  path[len] = 0;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasModels - the inventory (the server's shells and submodels) and every shell's model, and every model of a
+// submodel no shell refers to - the aas bridge's inventory?from=<id>, a whole model per GET - at most 200. The
+// answer: { "url", "complete", "shells": [...], "submodels": [...], "models": { "<id>": <the node tree> },
+// "errors": { "<id>": why } }
+//
+static bool aasModels(const Discovery* xP, const char* url, Str* sP, char* err, int errLen)
+{
+  CorAlloc  alloc;
+  char      buf[16 * 1024];
+  CorJson   json;
+  Str       body  = { NULL, 0, 0 };
+  CorNode*  rootP = NULL;
+  bool      ok    = false;
+  int       code  = 0;
+
+  corAllocBufferInit(&alloc, buf, sizeof(buf), 4 * 1024 * 1024, NULL, "c3 aas inventory");
+  corJsonCreate(&json, &alloc);
+
+  //
+  // The bridge reads the server's lists when asked: a server that is not up yet answers on a later try - asked
+  // again for at most 10 s while the broker answers 503
+  //
+  for (int ix = 0; ix < 20; ix++)
+  {
+    strFree(&body);
+    code = discoverGet(xP, "/admin/bridges/aas/inventory", 30000, &body, err, errLen);
+    if (code != 503)
+      break;
+    usleep(500 * 1000);
+  }
+
+  if (code == 200)
+    rootP = corJsonParse(&json, corAllocStrdup(&alloc, (body.s != NULL) ? body.s : ""));
+
+  CorNode* shellsP    = (rootP != NULL) ? corTreeLookup(rootP, "shells")    : NULL;
+  CorNode* submodelsP = (rootP != NULL) ? corTreeLookup(rootP, "submodels") : NULL;
+
+  if (code == 0)
+    ;
+  else if (code != 200)
+    snprintf(err, errLen, "the aas bridge did not read %s - the discovery's broker answered %d: %.700s", url, code, (body.s != NULL) ? body.s : "");
+  else if ((shellsP == NULL) || (shellsP->type != CorArray) || (submodelsP == NULL) || (submodelsP->type != CorArray))
+    snprintf(err, errLen, "the aas bridge's inventory is not { \"shells\": [...], \"submodels\": [...] }");
+  else
+  {
+    Str  models   = { NULL, 0, 0 };
+    Str  errors   = { NULL, 0, 0 };
+    int  requests = 0;
+    bool complete = true;
+
+    //
+    // The ids to read: each shell, then each submodel no shell refers to
+    //
+    const char* ids[400];
+    int         n = 0;
+
+    for (CorNode* shP = shellsP->value.head; (shP != NULL) && (n < 400); shP = shP->next)
+    {
+      CorNode* idP = corTreeLookup(shP, "id");
+      if ((idP != NULL) && (idP->type == CorString))
+        ids[n++] = idP->value.s;
+    }
+
+    for (CorNode* smP = submodelsP->value.head; (smP != NULL) && (n < 400); smP = smP->next)
+    {
+      CorNode* idP     = corTreeLookup(smP, "id");
+      bool     inShell = false;
+
+      if ((idP == NULL) || (idP->type != CorString))
+        continue;
+
+      for (CorNode* shP = shellsP->value.head; (shP != NULL) && !inShell; shP = shP->next)
+      {
+        CorNode* refsP = corTreeLookup(shP, "submodels");
+        for (CorNode* rP = ((refsP != NULL) && (refsP->type == CorArray)) ? refsP->value.head : NULL; (rP != NULL) && !inShell; rP = rP->next)
+          inShell = (rP->type == CorString) && (strcmp(rP->value.s, idP->value.s) == 0);
+      }
+
+      if (!inShell)
+        ids[n++] = idP->value.s;
+    }
+
+    for (int ix = 0; ix < n; ix++)
+    {
+      if (requests >= 200)
+      {
+        complete = false;
+        break;
+      }
+
+      char path[2400] = "/admin/bridges/aas/inventory?from=";
+      Str  one        = { NULL, 0, 0 };
+      char why[1024]  = "";
+
+      aasPathAdd(path, sizeof(path), ids[ix]);
+      requests++;
+
+      int c = discoverGet(xP, path, 30000, &one, why, sizeof(why));
+
+      if ((c == 200) && (one.s != NULL) && (one.s[0] == '{'))
+      {
+        strAdd(&models, (models.len > 0) ? ", " : "");
+        strAddJson(&models, ids[ix]);
+        strAdd(&models, ": ");
+        strAdd(&models, one.s);
+      }
+      else
+      {
+        if (c != 0)
+          snprintf(why, sizeof(why), "%d: %.700s", c, (one.s != NULL) ? one.s : "");
+        strAdd(&errors, (errors.len > 0) ? ", " : "");
+        strAddJson(&errors, ids[ix]);
+        strAdd(&errors, ": ");
+        strAddJson(&errors, why);
+      }
+      strFree(&one);
+    }
+
+    if (n >= 400)
+      complete = false;
+
+    strAdd(sP, "{\"url\": ");           strAddJson(sP, url);
+    strAddf(sP, ", \"complete\": %s, \"shells\": ", complete ? "true" : "false");
+    {
+      int   size = corJsonRenderSize(&json, shellsP) + 2;
+      char* text = malloc(size);
+      if (text != NULL) { corJsonRender(&json, shellsP, text); strAdd(sP, text); free(text); } else strAdd(sP, "[]");
+    }
+    strAdd(sP, ", \"submodels\": ");
+    {
+      int   size = corJsonRenderSize(&json, submodelsP) + 2;
+      char* text = malloc(size);
+      if (text != NULL) { corJsonRender(&json, submodelsP, text); strAdd(sP, text); free(text); } else strAdd(sP, "[]");
+    }
+    strAdd(sP, ", \"models\": {");  strAdd(sP, (models.s != NULL) ? models.s : "");  strAdd(sP, "}");
+    strAdd(sP, ", \"errors\": {");  strAdd(sP, (errors.s != NULL) ? errors.s : "");  strAdd(sP, "}}");
+
+    strFree(&models);
+    strFree(&errors);
+    ok = true;
+  }
+
+  strFree(&body);
+  corAllocBufferReset(&alloc, false);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasDiscoverThread - the aas bridge's view of the server: its shells and submodels, each model whole (aasModels).
+// The Authorization header's value: the one the request gave, else the one c3 keeps for the form's broker - for the
+// discovery's broker in its own directory (aasAuthorizationPath), gone with it
+//
+static void* aasDiscoverThread(void* vP)
+{
+  DiscoverJob* djP = (DiscoverJob*) vP;
+  Def          d   = djP->def;
+  Discovery    x   = { 0, -1, "", "" };
+  char         err[1024] = "";
+  Str          s   = { NULL, 0, 0 };
+  char         kept[2400];
+
+  aasAuthorizationPath(d.name, kept, sizeof(kept));   // the form's broker's, before discoverPrepare renames it
+  discoverPrepare(&d, "aas");
+  memset(djP->def.aas.authorization, 0, sizeof(djP->def.aas.authorization));
+
+  char path[2400];                               // the discovery's copy of the Authorization: gone with it
+  aasAuthorizationPath(d.name, path, sizeof(path));
+
+  if (d.aas.url[0] == 0)
+    snprintf(err, sizeof(err), "the AAS server to discover: its URL (http[s]://host:port[/base path])");
+  else if (strcmp(d.where, "container") == 0)
+    snprintf(err, sizeof(err), "AAS discovery needs a native broker - an installed coraine or a build: the image has no aas bridge");
+  else
+  {
+    char dir[2300];
+
+    brokerDir(d.name, dir, sizeof(dir));
+    dirsMake(dir);
+    unlink(path);
+
+    if (d.aas.authorization[0] != 0)
+      secretWrite(path, d.aas.authorization, "the AAS Authorization header", err, sizeof(err));
+    else
+    {
+      char* text = fileText(kept);
+
+      if (text != NULL)
+      {
+        char* nl = strchr(text, '\n');
+        if (nl != NULL)
+          *nl = 0;
+        secretWrite(path, text, "the AAS Authorization header", err, sizeof(err));
+        memset(text, 0, strlen(text));
+        free(text);
+      }
+    }
+    memset(d.aas.authorization, 0, sizeof(d.aas.authorization));
+
+    if ((err[0] == 0) && (discoverStart(&d, &x, err, sizeof(err)) == true))
+      aasModels(&x, d.aas.url, &s, err, sizeof(err));
+
+    discoverStop(&x);
     unlink(path);
   }
 
@@ -5792,6 +6491,7 @@ static void discoverRequest(CorHttpConn* connP, void* (*thread)(void*))
   if (busy)
   {
     memset(djP->def.opcua.password, 0, sizeof(djP->def.opcua.password));
+    memset(djP->def.aas.authorization, 0, sizeof(djP->def.aas.authorization));
     free(djP);
     serveError(connP, 409, "A discovery runs", "one discovery at a time - wait for the one that runs");
     return;
@@ -5973,19 +6673,19 @@ static void opcuaMapperPath(const char* file, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// opcuaPasswordWrite - a password, into a file only its owner reads (0600), and a newline after it - the
-// bridge's passwordFile reads its first line
+// secretWrite - a secret (a password, an Authorization header's value), into a file only its owner reads (0600), and
+// a newline after it - the opcua bridge's passwordFile reads its first line, as c3 does (aasEnv); 'what' names it in err
 //
-static void opcuaPasswordWrite(const char* path, const char* password, char* err, int errLen)
+static void secretWrite(const char* path, const char* secret, const char* what, char* err, int errLen)
 {
   int  fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-  int  n  = strlen(password);
-  bool ok = (fd != -1) && (fchmod(fd, 0600) == 0) && (write(fd, password, n) == n) && (write(fd, "\n", 1) == 1);
+  int  n  = strlen(secret);
+  bool ok = (fd != -1) && (fchmod(fd, 0600) == 0) && (write(fd, secret, n) == n) && (write(fd, "\n", 1) == 1);
 
   if (fd != -1)
     close(fd);
   if (!ok)
-    snprintf(err, errLen, "the OPC UA password cannot be kept in %s: %s", path, strerror(errno));
+    snprintf(err, errLen, "%s cannot be kept in %s: %s", what, path, strerror(errno));
 }
 
 
@@ -6323,7 +7023,7 @@ static void opcuaFiles(CorHttpConn* connP, bool post)
   if (dP->opcua.username[0] == 0)
     unlink(pwPath);
   else if (dP->opcua.password[0] != 0)
-    opcuaPasswordWrite(pwPath, dP->opcua.password, err, sizeof(err));
+    secretWrite(pwPath, dP->opcua.password, "the OPC UA password", err, sizeof(err));
   else if (stat(pwPath, &st) != 0)
   {
     snprintf(err, sizeof(err), "the OPC UA user '%s' has no password: give it once, c3 keeps it", dP->opcua.username);
@@ -7424,6 +8124,11 @@ void runRequest(CorHttpConn* connP, const char* path)
     if (post) discoverRequest(connP, opcuaDiscoverThread); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
+  if (strcmp(path, "/api/run/aas/discover") == 0)
+  {
+    if (post) discoverRequest(connP, aasDiscoverThread); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
   if (strcmp(path, "/api/run/opcua/files") == 0)
   {
     if (post || get) opcuaFiles(connP, post); else serveError(connP, 405, "Method not allowed", path);
@@ -7441,7 +8146,7 @@ void runRequest(CorHttpConn* connP, const char* path)
       serveError(connP, 405, "Method not allowed", path);
     else if (bodyDef(connP, &d))
     {
-      if (opcuaPasswordKeep(connP, &d) == true)    // the password into its file, out of the Def
+      if ((opcuaPasswordKeep(connP, &d) == true) && (aasAuthorizationKeep(connP, &d) == true))    // the secrets into their files, out of the Def
         brokerStart(connP, &d);
     }
     return;

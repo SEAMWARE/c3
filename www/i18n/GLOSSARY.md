@@ -58,6 +58,8 @@ for what ends by itself (`ls`, a build).
 | Dashboard (page) | Panel | Tableau de bord | Dashboard |
 | graph / map (views) | grafo / mapa | graphe / carte | Graph / Karte |
 | highlight | resaltar | mettre en évidence | hervorheben |
+| submodel (AAS) | submodelo | sous-modèle | Submodell |
+| shell (AAS - the node kind), AssetChannel, semanticId | shell, AssetChannel, semanticId | shell, AssetChannel, semanticId | Shell, AssetChannel, semanticId |
 | Connect | Conectar | Connecter | Verbinden |
 | Undo | Deshacer | Annuler | Rückgängig |
 | Do it (confirm a change) | Hacerlo | Exécuter | Ausführen |
