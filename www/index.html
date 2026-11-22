@@ -374,6 +374,27 @@
             <span class="cp-note">the opcua bridge (native brokers): a Variable a value (a Channel), an Object a model of entities (a model root). Browse a running broker's server to pick them. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
           </div>
 
+          <div class="cp-field">
+            <span class="cp-label">AAS</span>
+            <details class="rn-drop" id="rn-aas-drop">
+              <summary id="rn-aas-sum">none</summary>
+              <div class="rn-stack">
+                <input class="cp-input" id="rn-aas-url" placeholder="http://aas-server:8081/api/v3.0 - the AAS server (empty: no AAS)" spellcheck="false" autocomplete="off" aria-label="AAS server URL">
+                <input class="cp-input" id="rn-aas-auth" type="password" placeholder="Authorization header (Bearer ...)" autocomplete="new-password" aria-label="AAS Authorization header">
+                <input class="cp-input" id="rn-aas-ca" placeholder="the CAs its certificate is verified against - a PEM file (none: the system's)" spellcheck="false" autocomplete="off" aria-label="AAS server CA file">
+                <label class="rn-check"><input type="checkbox" id="rn-aas-insecure"> do not verify the server's certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
+                <div class="rn-ouchans" id="rn-aas-chans" aria-label="AssetChannels"></div>
+                <div class="rn-row rn-oubtns">
+                  <button type="button" class="btn" id="rn-aas-add">+ AssetChannel</button>
+                  <button type="button" class="btn" id="rn-aas-discover">Discover the server</button>
+                </div>
+                <span class="cp-note" id="rn-aas-status"></span>
+                <div class="rn-outree" id="rn-aas-tree" hidden aria-label="The AAS server's shells and submodels"></div>
+              </div>
+            </details>
+            <span class="cp-note">the aas bridge (native brokers; a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header in the broker's directory (0600), never in c3.json</span>
+          </div>
+
           <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
 
           <div class="rn-svcneed" id="rn-need"></div>

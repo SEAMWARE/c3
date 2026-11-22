@@ -155,6 +155,7 @@ export const runDdsDiscover   = (def) => call('POST', '/api/run/dds/discover', d
 export const runDdsFiles      = () => call('GET', '/api/run/dds/files');                // the DDS configuration written, and its mapping
 export const runDdsFilesWrite = (mapping) => call('POST', '/api/run/dds/files', mapping); // the DDS configuration from a mapping
 export const runOpcuaDiscover   = (def) => call('POST', '/api/run/opcua/discover', def);     // the OPC UA server's address space (a few seconds)
+export const runAasDiscover     = (def) => call('POST', '/api/run/aas/discover', def);       // the AAS server's shells, submodels and models (a few seconds)
 export const runOpcuaFiles      = () => call('GET', '/api/run/opcua/files');                // the OPC UA configuration written, and its mapping
 export const runOpcuaFilesWrite = (mapping) => call('POST', '/api/run/opcua/files', mapping); // the OPC UA configuration from a mapping
 

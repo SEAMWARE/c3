@@ -123,6 +123,20 @@
 .rn-ouid { font-family: var(--mono, monospace); font-size: 0.825rem; color: var(--muted); overflow-wrap: anywhere; }
 .rn-ouval { font-family: var(--mono, monospace); font-size: 0.9rem; }
 .rn-ourow .btn { padding: 1px 8px; font-size: 0.9rem; }
+.rn-aasch { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.rn-aashead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+.rn-aasopts { display: flex; flex-direction: column; gap: 4px; }
+.rn-aasopts > * { flex: none; width: 100%; min-width: 0; }
+.rn-aaspoll { font-family: var(--mono, monospace); }
+.rn-aasrules { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.rn-aasrule { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto auto; gap: 2px 6px; align-items: end;
+              border-left: 2px solid var(--line); padding-left: 6px; }
+.rn-aasrule > .rn-select { grid-column: 1; grid-row: 1; }
+.rn-aasrule .rn-aastype { grid-column: 2; grid-row: 1; }
+.rn-aasrule .rn-aassem { grid-column: 1 / -1; grid-row: 2; }
+.rn-aasrules > .btn { align-self: flex-start; }
+.rn-aasbtn { padding: 1px 8px; }
+.rn-aasmade { padding: 0 0 4px 22px; font-size: 0.825rem; color: var(--muted); overflow-wrap: anywhere; }
 
 /* DDS: the mapping, and what the domain announced */
 .rn-ddstypes { grid-column: 1 / 4; font-family: var(--mono, monospace); font-size: 0.825rem; color: var(--muted); overflow-wrap: anywhere; }

@@ -13,6 +13,7 @@ import * as api from './api.js';
 import { Metrics } from './metrics.js';
 import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
+import { AasForm } from './aasform.js';
 import { t, tk, plural } from './i18n.js';
 
 //
@@ -163,6 +164,7 @@ export class Run {
     this.ddsMap = new DdsMapper(this);
     $('rn-dds-map').addEventListener('click', () => this.ddsMap.open());
     this.ddsMap.load().then(() => this.renderDds());
+    this.aas = new AasForm(this);                       // AAS - the aas bridge's server and its AssetChannels (aasform.js)
     this.opcuaMap = new OpcuaMapper(this);
     $('rn-opcua-map').addEventListener('click', () => this.opcuaMap.open());
     this.opcuaMap.load().then(() => this.renderOpcuaMap());
@@ -315,6 +317,11 @@ export class Run {
     return { node: v.id, entityId: 'urn:ngsi-ld:' + type + ':' + pct(idPart), entityType: type, attribute };
   }
 
+  // aasDefaults - before the AasForm exists (the form's first defaults) as after
+  aasDefaults() {
+    return { url: '', caFile: '', insecure: false, authorization: '', authorizationSet: false, channels: [] };
+  }
+
   opcuaDefaults() {
     return { url: '', roots: '', mode: 'None', policy: '', certificate: '', privateKey: '', applicationUri: '',
              trustList: '', trustAny: false, username: '', password: '', passwordSet: false, channels: [] };
@@ -376,7 +383,7 @@ export class Run {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
       store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
       ws: true, admin: true, distributed: true, verbose: true, bridges: [], bridgeConfig: '', userContext: '', ckan: [], args: '',
-      opcua: this.opcuaDefaults(), dds: this.ddsDefaults(),
+      opcua: this.opcuaDefaults(), dds: this.ddsDefaults(), aas: this.aasDefaults(),
     };
   }
 
@@ -679,7 +686,7 @@ export class Run {
       store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
       ws: (d.transports || []).includes('ws'), admin: d.admin, distributed: d.distributed !== false, verbose: d.verbose, bridges: [...(d.bridges || [])],
       bridgeConfig: d.bridgeConfig || '', userContext: d.userContext || '', ckan: [...(d.ckan || [])], args: d.args || '',
-      opcua: this.opcuaDefaults(), dds: this.ddsDefaults(),
+      opcua: this.opcuaDefaults(), dds: this.ddsDefaults(), aas: this.aasDefaults(),
     };
     if (d.dds) {
       const row = (kind, key) => (x) => ({ ...x, kind, name: x[key] });
@@ -699,6 +706,7 @@ export class Run {
         passwordSet: !!u.passwordSet,
       });
     }
+    this.f.aas = this.aas.fromDef(d.aas);
     this.nameTouched = true;
     this.editing = d.name;
     this.portsChosen = true;
@@ -1216,6 +1224,7 @@ export class Run {
     if ($('rn-uctx').value !== f.userContext) $('rn-uctx').value = f.userContext;
     this.renderCkan(cont);
     this.renderOpcua();
+    this.aas.render();
     this.renderDds();
     this.renderOpcuaMap();
     if ($('rn-args').value !== f.args) $('rn-args').value = f.args;
@@ -1324,6 +1333,8 @@ export class Run {
         if (withSecret && o.password) d.opcua.user.password = o.password;      // on Start only - never in the command preview
       }
     }
+    const aas = this.aas ? this.aas.toDef(withSecret) : undefined;        // the Authorization on Start only - never in the command preview
+    if (aas) d.aas = aas;
     if (f.bridges.includes('dds') && !f.bridgeConfig) {
       const rows = f.dds.rows.filter((r) => r.name || r.entityId || r.entityType || r.attribute);
       const pick = (kind, key, extra) => rows.filter((r) => r.kind === kind).map((r) => {
@@ -1399,6 +1410,7 @@ export class Run {
   async start() {
     const d = this.def(true);
     this.f.opcua.password = '';                       // sent once: c3 keeps it, the page does not
+    this.aas.started();
     $('rn-start').disabled = true;
     try {
       const b = await api.runStart(d);

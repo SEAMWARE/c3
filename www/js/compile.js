@@ -129,7 +129,7 @@ const DOC_BASE = 'https://github.com/SEAMWARE/coraine/blob/main/doc/';
 const MODE_DOC = { release: 'Build mode: Release', pgo: 'Build mode: Profile-guided', tune: 'Build mode: Tuned for a workload', debug: 'Build mode: Debug' };
 const HTTP_DOC = { mhd: 'HTTP server: libmicrohttpd', builtin: 'HTTP server: corHttp (built in)' };
 const STORE_DOC = { false: 'Store: corDB only', true: 'Store: corDB + mongoc' };
-const BRIDGE_DOC = { mqtt: 'MQTT', modbus: 'Modbus', dds: 'DDS', ckan: 'CKAN', opcua: 'OPC UA' };
+const BRIDGE_DOC = { mqtt: 'MQTT', modbus: 'Modbus', dds: 'DDS', ckan: 'CKAN', opcua: 'OPC UA', aas: 'AAS' };
 
 function docSections(md) {
   const out = new Map();
