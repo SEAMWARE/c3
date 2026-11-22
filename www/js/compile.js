@@ -705,24 +705,6 @@ export class Compile {
     const cc = (this.caps && this.caps.compile) || {};
 
     //
-    // Target and HTTP server: not in coraine-build yet - the host's own shown, greyed
-    //
-    const seg = (id, labels, current) => {
-      const box = $(id);
-      box.replaceChildren(...labels.map((label) => {
-        const b = el('button', '', t(label));
-        b.type = 'button';
-        b.disabled = true;
-        b.setAttribute('aria-pressed', String(label === current));
-        return b;
-      }));
-    };
-    const arch = (this.caps && this.caps.arch) || '';
-    seg('cp-arch', ['amd64', 'arm64'], arch === 'x86_64' ? 'amd64' : arch === 'aarch64' ? 'arm64' : '');
-    seg('cp-dist', [tk('this machine')], tk('this machine'));
-    seg('cp-output', [tk('Binary'), tk('Docker image'), tk('Debian package')], tk('Binary'));
-
-    //
     // HTTP server: libmicrohttpd or corHttp - corHttp not with a training build (coraine-build refuses)
     //
     const isTraining = (m) => (m === 'pgo' || m === 'tune');
@@ -915,6 +897,7 @@ export class Compile {
     // This build
     //
     const off = shown.filter((f) => !(this.isOn(f.name) && this.forcedBy(f).length === 0)).map((f) => f.name);
+    const arch = (this.caps && this.caps.arch) || '';
     $('cp-sum-target').textContent = t('{arch} · {distribution} · binary', { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') });
     $('cp-sum-server').textContent = this.choice.httpServer === 'mhd' ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL[this.choice.httpServer]) }) : t(HTTP_LABEL[this.choice.httpServer]);
     $('cp-sum-stores').textContent = t('{stores}; history none, corDB, timescale', { stores: mongoc ? 'corDB + mongoc' : t('corDB only') });

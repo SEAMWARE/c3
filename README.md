@@ -5,7 +5,7 @@ it, configure its bridges, watch it live, and learn it - including how to write 
 
 | Part | What it does |
 |---|---|
-| **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the target hardware - the result as a binary, a container image or a Debian package. Drives `coraine-build` from the `coraine-dev` package. |
+| **Compile** | Build a broker for a deployment: the features compiled in or out, profile training (PGO) and tuning on a workload, the bridges built - for the machine it runs on (amd64 or arm64, its distribution), as a binary. Drives `coraine-build` from the `coraine-dev` package. |
 | **Operate** | Start and stop brokers - natively or in a container - and the services they need: MongoDB, PostgreSQL/TimescaleDB, Mosquitto; the brokers themselves, several at once: live logs, log and trace levels changed on a running broker, metrics as charts, health. |
 | **Explore** | A live connection to a running broker: entities as boxes, Relationships as arrows, zoom, pan, entities dragged into place; the entities with a GeoProperty on a map; values as they change. |
 | **Dashboard** | Dashboards built by the user from what the brokers hold: [WireCloud](https://github.com/Ficodes/WireCloud) (Ficodes, AGPL-3.0) in containers c³ starts - MongoDB, Elasticsearch, WireCloud - shown in the page, logged in by c³. |
