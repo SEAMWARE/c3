@@ -113,6 +113,8 @@ typedef struct Caps
   bool  packageInstalled;                        // coraine-dev's source tarball is there
   char  kind[16];                                // "package" or "clones"
   char  clonesDir[1024];                         // the directory of clones (not the view of links)
+  char  refs[4096];                              // clones: coraine-build's --ref's, "repo=ref repo=ref ..." - coraine's always
+  char  refsGone[1024];                          // the refs chosen that their clone does not have - left out of refs; no build
   char  version[128];
   bool  pgo;
   char  pgoWhy[128];
@@ -139,10 +141,10 @@ static bool sourceIsDir(const char* source)
 
 //
 // sourceVersion - the version in the tarball's SOURCE file (version=...), cached per tarball; of a
-// directory of clones, what its coraine clone's packaging/deb/version.sh says (not cached: a commit
-// changes it)
+// directory of clones, what its coraine clone's packaging/deb/version.sh says of the ref that goes in (refs'
+// coraine=; not cached: a commit changes it)
 //
-static void sourceVersion(const char* source, char* out, int outLen)
+static void sourceVersion(const char* source, const char* refs, char* out, int outLen)
 {
   struct stat st;
 
@@ -154,10 +156,14 @@ static void sourceVersion(const char* source, char* out, int outLen)
   {
     char  script[2200];
     char  text[256];
+    char  env[300] = "CORAINE_REF=HEAD";
+    const char* c  = strstr(refs, "coraine=");
 
+    if ((c != NULL) && ((c == refs) || (c[-1] == ' ')))
+      snprintf(env, sizeof(env), "CORAINE_REF=%.*s", (int) strcspn(&c[8], " "), &c[8]);
     snprintf(script, sizeof(script), "%s/coraine/packaging/deb/version.sh", source);
 
-    char* argv[] = { script, NULL };
+    char* argv[] = { (char*) "env", env, script, NULL };
 
     if (runCapture(argv, text, sizeof(text), 10) == 0)
       snprintf(out, outLen, "%.*s", (int) strcspn(text, "\r\n"), text);
@@ -300,10 +306,97 @@ static void capsFind(Caps* cP, bool withVersion)
   else if ((cP->why[0] == 0) && ((stat(cP->source, &st) != 0) || !S_ISREG(st.st_mode)))
     snprintf(cP->why, sizeof(cP->why), "no coraine source at %s - %s", cP->source, cP->fromFlag ? "--source names another" : "reinstall coraine-dev, or build from git clones (Source)");
 
+  //
+  // The refs: coraine at the one chosen or origin/main (coraine-build's own default is its HEAD), the others at
+  // the one chosen - a clone that is not there left out (a bridge not ticked need not be cloned). A coraine-build
+  // without --ref builds coraine at HEAD and the rest at origin/main; a ref chosen is then refused.
+  //
+  if ((strcmp(cP->kind, "clones") == 0) && (cP->coraineBuild[0] != 0))
+  {
+    char  chosen[4096];
+    char* script    = fileText(cP->coraineBuild);
+    bool  supported = (script != NULL) && (strstr(script, "--ref)") != NULL);
+    int   len       = 0;
+
+    if (script != NULL) free(script);
+    configSourceRefs(chosen, sizeof(chosen));
+
+    if (supported)
+    {
+      const char* c = strstr(chosen, "coraine=");
+      if ((c != NULL) && ((c == chosen) || (c[-1] == ' ')))
+        len = snprintf(cP->refs, sizeof(cP->refs), "coraine=%.*s", (int) strcspn(&c[8], " "), &c[8]);
+      else
+        len = snprintf(cP->refs, sizeof(cP->refs), "coraine=origin/main");
+
+      char* save = NULL;
+      for (char* tok = strtok_r(chosen, " ", &save); tok != NULL; tok = strtok_r(NULL, " ", &save))
+      {
+        char git[2400];
+        int  nameLen = strcspn(tok, "=");
+
+        if ((strncmp(tok, "coraine=", 8) == 0) || (tok[nameLen] != '='))
+          continue;
+        snprintf(git, sizeof(git), "%s/%.*s/.git", cP->source, nameLen, tok);
+        if ((stat(git, &st) == 0) && (len + (int) strlen(tok) + 2 < (int) sizeof(cP->refs)))
+          len += snprintf(&cP->refs[len], sizeof(cP->refs) - len, " %s", tok);
+      }
+    }
+    else if ((chosen[0] != 0) && (cP->why[0] == 0))
+      snprintf(cP->why, sizeof(cP->why), "this coraine clone's coraine-build cannot build another branch (--ref) - update coraine, or choose main for every repository under Source");
+
+    //
+    // A ref its clone does not have (a branch deleted, or not fetched yet) is left out - the lists then read that
+    // clone at coraine-build's default - and kept in refsGone: a build is refused, not built from main
+    //
+    if (cP->refs[0] != 0)
+    {
+      char  refs[4096];
+      char* av[72];
+      int   ac   = 0;
+      char* save = NULL;
+      char  out[4096] = "";
+
+      snprintf(refs, sizeof(refs), "%s", cP->refs);
+      av[ac++] = (char*) "sh";
+      av[ac++] = (char*) "-c";
+      av[ac++] = (char*) "s=$1; shift; for r; do git -C \"$s/${r%%=*}\" rev-parse --verify --quiet \"${r#*=}^{commit}\" > /dev/null || echo \"$r\"; done";
+      av[ac++] = (char*) "sh";
+      av[ac++] = cP->source;
+      for (char* tok = strtok_r(refs, " ", &save); (tok != NULL) && (ac < 70); tok = strtok_r(NULL, " ", &save))
+        av[ac++] = tok;
+      av[ac] = NULL;
+
+      if ((runCapture(av, out, sizeof(out), 20) == 0) && (out[0] != 0))
+      {
+        char kept[4096] = "";
+        char lines[4200];                        // "\n<ref>\n<ref>\n": a ref found as "\n<ref>\n"
+        int  len        = 0;
+        int  gone       = 0;
+
+        snprintf(lines, sizeof(lines), "\n%s", out);
+        snprintf(refs, sizeof(refs), "%s", cP->refs);
+        save = NULL;
+        for (char* tok = strtok_r(refs, " ", &save); tok != NULL; tok = strtok_r(NULL, " ", &save))
+        {
+          char line[300];
+          snprintf(line, sizeof(line), "\n%s\n", tok);
+          bool missing = (strstr(lines, line) != NULL);
+
+          if (missing)
+            gone += snprintf(&cP->refsGone[gone], sizeof(cP->refsGone) - gone, "%s%s", (gone > 0) ? " " : "", tok);
+          else
+            len += snprintf(&kept[len], sizeof(kept) - len, "%s%s", (len > 0) ? " " : "", tok);
+        }
+        snprintf(cP->refs, sizeof(cP->refs), "%s", kept);
+      }
+    }
+  }
+
   cP->available = (cP->why[0] == 0);
 
   if (cP->available && withVersion)
-    sourceVersion(cP->source, cP->version, sizeof(cP->version));
+    sourceVersion(cP->source, cP->refs, cP->version, sizeof(cP->version));
 
   //
   // --pgo and --tune train the broker: coraine-build needs curl, wrk and python3 for that
@@ -386,7 +479,7 @@ typedef struct Build
   char            workload[2048];
   char*           featuresJson;                  // the features asked for, as JSON ({"REGISTRATIONS": false})
   char*           command;                       // as shown: shell-quoted
-  char*           argv[20];
+  char*           argv[96];
   char            dir[2300];
   char            logPath[2300];
   char            jsonPath[2300];
@@ -926,7 +1019,7 @@ typedef struct Plan
   Str    featuresArg;                            // NAME=ON,NAME=OFF
   bool   bridgesGiven;                           // false: coraine-build's default bridges
   char   bridges[256];                           // mqtt,dds - or none
-  char*  argv[20];
+  char*  argv[96];
   int    argc;
   char   dir[2300];
   Str    command;
@@ -1209,6 +1302,14 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     pP->argv[pP->argc++] = strdup("--source");
     pP->argv[pP->argc++] = strdup(cP->source);
   }
+  char  refs[4096];
+  char* save = NULL;
+  snprintf(refs, sizeof(refs), "%s", cP->refs);
+  for (char* tok = strtok_r(refs, " ", &save); (tok != NULL) && (pP->argc < 92); tok = strtok_r(NULL, " ", &save))
+  {
+    pP->argv[pP->argc++] = strdup("--ref");
+    pP->argv[pP->argc++] = strdup(tok);
+  }
   pP->argv[pP->argc++] = strdup(pP->dir);
   pP->argv[pP->argc]   = NULL;
 
@@ -1261,6 +1362,12 @@ static void buildStart(CorHttpConn* connP)
   if (cap.available == false)
   {
     serveError(connP, 503, "Compile is not available", cap.why);
+    return;
+  }
+  if (cap.refsGone[0] != 0)
+  {
+    snprintf(err, sizeof(err), "%s - a branch its clone does not have: choose another under Source, or Refresh", cap.refsGone);
+    serveError(connP, 409, "A branch is not there", err);
     return;
   }
 
@@ -1738,7 +1845,7 @@ static void buildLog(CorHttpConn* connP, const char* name)
 //
 static pthread_mutex_t fMutex = PTHREAD_MUTEX_INITIALIZER;
 static char*           fText  = NULL;            // the answer: {"source", "version", "features": [...]}
-static char            fKey[4200];
+static char            fKey[8400];
 static bool            fRunning = false;
 static CorHttpConn*    fWaitV[64];
 static int             fWaiting = 0;
@@ -1756,9 +1863,17 @@ static void featuresAnswer(CorHttpConn* connP, const char* text, int status)
 static void* featuresThread(void* vP)
 {
   Caps* cP = (Caps*) vP;
-  char* argv[8];
+  char* argv[96];
   int   argc = 0;
   char  out[256 * 1024];
+  char  refs[4096];
+  char* refV[64];                                // the --ref arguments, for both lists
+  int   refsN = 0;
+  char* save   = NULL;
+
+  snprintf(refs, sizeof(refs), "%s", cP->refs);
+  for (char* tok = strtok_r(refs, " ", &save); (tok != NULL) && (refsN < 64); tok = strtok_r(NULL, " ", &save))
+    refV[refsN++] = tok;
 
   argv[argc++] = cP->coraineBuild;
   argv[argc++] = (char*) "--list-features";
@@ -1768,13 +1883,18 @@ static void* featuresThread(void* vP)
     argv[argc++] = (char*) "--source";
     argv[argc++] = cP->source;
   }
+  for (int ix = 0; ix < refsN; ix++)
+  {
+    argv[argc++] = (char*) "--ref";
+    argv[argc++] = refV[ix];
+  }
   argv[argc] = NULL;
 
   int  status = runCapture(argv, out, sizeof(out), 120);
   Str  s      = { NULL, 0, 0 };
   int  http   = 200;
 
-  sourceVersion(cP->source, cP->version, sizeof(cP->version));
+  sourceVersion(cP->source, cP->refs, cP->version, sizeof(cP->version));
 
   char* list = out;
   while ((*list == ' ') || (*list == '\n'))
@@ -1811,7 +1931,7 @@ static void* featuresThread(void* vP)
     //
     int         bridgesSize = 64 * 1024;
     char*       bridges     = (char*) malloc(bridgesSize);
-    char*       bargv[8];
+    char*       bargv[96];
     int         bargc = 0;
 
     bargv[bargc++] = cP->coraineBuild;
@@ -1821,6 +1941,11 @@ static void* featuresThread(void* vP)
     {
       bargv[bargc++] = (char*) "--source";
       bargv[bargc++] = cP->source;
+    }
+    for (int ix = 0; ix < refsN; ix++)
+    {
+      bargv[bargc++] = (char*) "--ref";
+      bargv[bargc++] = refV[ix];
     }
     bargv[bargc] = NULL;
 
@@ -1874,10 +1999,33 @@ static void compileFeatures(CorHttpConn* connP)
     return;
   }
 
+  //
+  // The key: coraine-build, the source and its mtime - and with refs the commits they are now (a fetch moves
+  // origin/main, a commit a branch: the lists are of the commits)
+  //
   struct stat st;
-  char        key[4200];
+  char        key[8400];
+  char        shas[4096] = "";
   stat(cP->source, &st);
-  snprintf(key, sizeof(key), "%s|%s|%lld", cP->coraineBuild, cP->source, (long long) st.st_mtime);
+  if (cP->refs[0] != 0)
+  {
+    char  refs[4096];
+    char* av[72];
+    int   ac   = 0;
+    char* save = NULL;
+
+    snprintf(refs, sizeof(refs), "%s", cP->refs);
+    av[ac++] = (char*) "sh";
+    av[ac++] = (char*) "-c";
+    av[ac++] = (char*) "s=$1; shift; for r; do git -C \"$s/${r%%=*}\" rev-parse --short \"${r#*=}^{commit}\" 2>/dev/null || echo -; done";
+    av[ac++] = (char*) "sh";
+    av[ac++] = cP->source;
+    for (char* tok = strtok_r(refs, " ", &save); (tok != NULL) && (ac < 70); tok = strtok_r(NULL, " ", &save))
+      av[ac++] = tok;
+    av[ac] = NULL;
+    runCapture(av, shas, sizeof(shas), 20);
+  }
+  snprintf(key, sizeof(key), "%s|%s|%lld|%s|%s", cP->coraineBuild, cP->source, (long long) st.st_mtime, cP->refs, shas);
 
   pthread_mutex_lock(&fMutex);
 

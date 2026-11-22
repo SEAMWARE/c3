@@ -3,14 +3,17 @@
 //
 // Two kinds: the coraine-dev package (a release's source, installed with apt) or a directory of git clones
 // (~/git). For the clones the card lists the repositories the build needs - coraine, c3, the libraries and
-// the repositories of the bridges ticked, nothing else - with what of each goes in. A missing one is cloned
-// from here (into the directory of clones), or its path given when it is a clone somewhere else.
+// the repositories of the bridges ticked, nothing else - each with the branch that goes in: main (origin/main,
+// as last fetched) unless another is chosen in its pull-down. Refresh fetches every clone and lists the
+// branches again. A missing one is cloned from here (into the directory of clones), or its path given when it
+// is a clone somewhere else.
 //
 // The card is outside Compile's gate: when the source is not usable the rest of the page is greyed, and this
 // card is where it is fixed.
 //
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { helpShow } from './compile.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -22,6 +25,20 @@ function el(tag, cls, text) {
 }
 
 const ROLE = { broker: tk('the broker'), c3: 'c³', library: tk('library'), bridge: tk('bridge') };
+
+//
+// BRANCH_HELP - the Branch column's '?': what of each clone goes into a build
+//
+const BRANCH_HELP = () => [
+  t('Each repository goes into the build at the branch chosen here - its last commit, as this clone has it. The build takes committed work only: uncommitted changes in a clone are not in it.'),
+  '',
+  t('- **main (origin/main)**, the default: main as last fetched from GitHub - not the clone\'s own main branch, and not what is checked out.'),
+  t('- **Branches of this clone**: a local branch - commits not pushed yet are in.'),
+  t('- **Branches at origin**: a branch as last fetched (origin/feat/x) - what is on GitHub, whatever the clone has checked out.'),
+  t('- **HEAD**: whatever the clone has checked out right now.'),
+  '',
+  t('**Refresh** fetches every clone from origin: branches made since c³ started appear, and origin/main is GitHub\'s again. A build\'s MANIFEST.txt (in its directory) names the branch and commit of each repository that went in.'),
+].join('\n');
 
 export class Source {
   //
@@ -64,15 +81,25 @@ export class Source {
 
   blocking() {
     const m = this.missing();
-    if (m.length === 0) return '';
-    return plural(m.length, '{name} is not cloned - see Source', '{n} repositories are not cloned - see Source', { name: m[0].name, n: m.length });
+    if (m.length) return plural(m.length, '{name} is not cloned - see Source', '{n} repositories are not cloned - see Source', { name: m[0].name, n: m.length });
+    const gone = this.isClones() && this.repos && Array.isArray(this.repos.repos) ? this.repos.repos.filter((r) => r.present && r.refFound === false) : [];
+    if (gone.length) return t('{repo} has no {ref} - choose another branch under Source', { repo: gone[0].name, ref: gone[0].ref });
+    return '';
+  }
+
+  //
+  // dirtyMatters - uncommitted changes in the clone that the build might have been meant to take: what goes in
+  // is what is checked out (HEAD), or its branch - here or at origin
+  //
+  dirtyMatters(r) {
+    return !!r.dirty && !!r.branch && (r.ref === 'HEAD' || r.ref === r.branch || r.ref === 'origin/' + r.branch);
   }
 
   //
   // update - after Compile's refresh or a bridge switched: the repository list again when what it depends on
   // changed (or always, with force)
   //
-  async update(force) {
+  async update(force, fetch) {
     if (!this.isClones()) {
       this.repos = null;
       this.bridgeKey = null;
@@ -84,8 +111,9 @@ export class Source {
     if (!force && key === this.bridgeKey) { this.render(); return; }
     this.bridgeKey = key;
     try {
-      this.repos = await api.compileRepos(bridges);
+      this.repos = await api.compileRepos(bridges, fetch);
       this.reposError = '';
+      if (fetch) this.message = this.repos.fetchErrors ? t('Some clones could not be fetched: {errors}', { errors: this.repos.fetchErrors }) : '';
     } catch (e) {
       this.repos = null;
       this.reposError = e.message;
@@ -151,6 +179,37 @@ export class Source {
     }, 1000);
   }
 
+  //
+  // refresh - every clone fetched (git fetch --prune origin), the branches listed again: the ones made since
+  // c3 started, origin/main as it is now
+  //
+  async refresh() {
+    const n = this.repos && Array.isArray(this.repos.repos) ? this.repos.repos.filter((r) => r.present).length : 0;
+    this.busy = t('Fetching the {n} clones from origin (git fetch) and listing their branches again ...', { n });
+    this.render();
+    this.bridgeKey = null;
+    await this.update(true, true);
+    this.busy = '';
+    await this.compile.refresh(true);                    // origin/main moved: the feature list is the new one's
+  }
+
+  //
+  // chooseRef - what of 'repo' goes into the build; '' the default, main (origin/main)
+  //
+  async chooseRef(repo, ref) {
+    this.busy = t('{repo}: the build takes {ref} ...', { repo, ref: ref || 'main' });
+    this.render();
+    try {
+      await api.compileRepoRef(repo, ref);
+      this.message = '';
+    } catch (e) {
+      this.message = repo + ': ' + e.message;
+    }
+    this.busy = '';
+    this.bridgeKey = null;
+    await this.compile.refresh(true);
+  }
+
   async elsewhere(repo, path) {
     try {
       await api.compileRepoPath(repo, path);
@@ -212,6 +271,10 @@ export class Source {
     $('cp-src-note').textContent = note;
     $('cp-src-msg').textContent = this.message || '';
 
+    const refresh = $('cp-src-refresh');
+    refresh.hidden = cc.sourceKind !== 'clones';
+    refresh.disabled = !!this.busy || !this.repos;
+
     //
     // The repositories (clones only)
     //
@@ -235,12 +298,12 @@ export class Source {
       return;
     }
     //
-    // The repositories that need a look - missing, uncommitted changes, not at what the build takes, elsewhere -
-    // the others on "Show all"
+    // The repositories that need a look - missing, another branch than main, a branch that is not there,
+    // uncommitted changes it might have been meant to take, elsewhere - the others on "Show all"
     //
-    const look = (r) => !r.present || r.dirty || r.elsewhere || (r.ref !== 'HEAD' && r.refSha && r.head && r.refSha !== r.head);
+    const look = (r) => !r.present || r.chosen || r.refFound === false || this.dirtyMatters(r) || r.elsewhere;
     const shown = this.showAll ? this.repos.repos : this.repos.repos.filter(look);
-    list.replaceChildren(...shown.map((r) => this.repoRow(r, this.repos.dir)));
+    list.replaceChildren(...(shown.length ? [this.headRow()] : []), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
     list.hidden = shown.length === 0;
 
     const missing = this.missing();
@@ -251,24 +314,77 @@ export class Source {
     else parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })
       + (shown.length < this.repos.repos.length ? ' - ' + (shown.length ? t('listed: the ones to look at') : t('nothing to look at')) : '')));
     const acts = el('span', 'cp-src-acts');
-    if (shown.length < this.repos.repos.length || this.showAll) {
-      const tg = el('button', 'cp-linkbtn', this.showAll ? t('Only the ones to look at') : t('Show all {n}', { n: this.repos.repos.length }));
-      tg.type = 'button';
-      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
-      acts.append(tg);
-    }
     if (notRunning.length > 1) {
       const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));
       all.type = 'button';
       all.addEventListener('click', () => this.clone(notRunning.map((r) => r.name)));
       acts.append(all);
     }
+    if (shown.length < this.repos.repos.length || this.showAll) {     // last: Show all and Hide in the same place
+      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
+      tg.type = 'button';
+      tg.setAttribute('aria-expanded', String(this.showAll));
+      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+      acts.append(tg);
+    }
     parts.push(acts);
     foot.replaceChildren(...parts);
   }
 
   //
-  // repoRow - one repository: name and role; what of it goes in, or how to get it
+  // headRow - the columns' names; the Branch column's '?' says what goes into a build
+  //
+  headRow() {
+    const row = el('div', 'cp-repo cp-repo-colhead');
+    const head = el('div', 'cp-repo-head');
+    const br = el('span', 'cp-repo-branch');
+    br.append(document.createTextNode(t('Branch') + ' '));
+    const q = el('button', 'cp-q inline', '?');
+    q.type = 'button';
+    q.title = t('What goes into the build?');
+    q.setAttribute('aria-label', q.title);
+    q.addEventListener('click', () => helpShow(t('What goes into the build'), BRANCH_HELP()));
+    br.append(q);
+    head.append(el('span', 'cp-repo-dot', ''), el('span', 'cp-repo-name', t('Repository')), el('span', 'cp-repo-role', t('Role')), br);
+    row.append(head);
+    return row;
+  }
+
+  //
+  // refSelect - the pull-down of what of a clone goes in: main (origin/main) first, the local branches, origin's,
+  // HEAD - each group last-committed first
+  //
+  refSelect(r) {
+    const s = el('select', 'cp-input cp-repo-ref');
+    s.setAttribute('aria-label', t('The branch of {repo} the build takes', { repo: r.name }));
+    s.title = t('The build takes the last commit of this branch, as this clone has it - uncommitted changes are not in it. origin/... as last fetched: Refresh fetches.');
+    s.disabled = !!this.busy;
+    const opt = (value, label) => { const o = el('option', '', label); o.value = value; return o; };
+    s.append(opt('', t('main (origin/main)')));
+    const local = (r.local || []);
+    const remote = (r.remote || []);
+    if (local.length) {
+      const g = el('optgroup');
+      g.label = t('Branches of this clone');
+      for (const b of local) g.append(opt(b, b + (b === r.branch ? ' ' + t('(checked out)') : '')));
+      s.append(g);
+    }
+    if (remote.length) {
+      const g = el('optgroup');
+      g.label = t('Branches at origin');
+      for (const b of remote) g.append(opt(b, b));
+      s.append(g);
+    }
+    s.append(opt('HEAD', t('HEAD - what is checked out') + (r.branch ? ' (' + r.branch + ')' : '')));
+    const value = r.chosen ? r.ref : '';
+    if (value && !local.includes(value) && !remote.includes(value) && value !== 'HEAD') s.append(opt(value, value + ' ' + t('(not in this clone)')));
+    s.value = value;
+    s.addEventListener('change', () => this.chooseRef(r.name, s.value));
+    return s;
+  }
+
+  //
+  // repoRow - one repository: name, role, the branch that goes in; or how to get it
   //
   repoRow(r, dir) {
     const row = el('div', 'cp-repo' + (r.present ? '' : ' missing'));
@@ -276,16 +392,14 @@ export class Source {
     head.append(el('span', 'cp-repo-dot', r.present ? '✓' : '!'), el('span', 'cp-repo-name', r.name), el('span', 'cp-repo-role', ROLE[r.role] ? t(ROLE[r.role]) : (r.role || '')));
 
     if (r.present) {
-      const what = el('span', 'cp-repo-what');
-      const ref = r.ref === 'HEAD' ? t('its HEAD') : r.ref;
-      what.append(el('span', 'mono', (r.branch || t('detached')) + ' · ' + (r.head || '?')));
-      what.append(document.createTextNode(' - ' + t('the build takes {ref}', { ref: ref + (r.ref !== 'HEAD' && r.refSha ? ' (' + r.refSha + ')' : '') })));
-      head.append(what);
+      const br = el('span', 'cp-repo-branch');
+      br.append(this.refSelect(r));
+      head.append(br);
       row.append(head);
       const warn = [];
-      if (r.ref !== 'HEAD' && r.refSha && r.head && r.refSha !== r.head) warn.push(t('checked out {head}, not what the build takes: {ref} is {sha}', { head: r.head, ref: r.ref, sha: r.refSha }));
-      if (r.dirty) warn.push(plural(r.dirty, '{n} uncommitted change - not in the build', '{n} uncommitted changes - not in the build', { n: r.dirty })
-                            + ' (' + (r.ref === 'HEAD' ? t('only what is committed goes in') : t('it takes {ref}', { ref: r.ref })) + ')');
+      if (r.refFound === false) warn.push(t('{ref} is not in this clone - choose another branch, or Refresh when it is new at origin', { ref: r.ref }));
+      if (this.dirtyMatters(r)) warn.push(plural(r.dirty, '{n} uncommitted change - not in the build', '{n} uncommitted changes - not in the build', { n: r.dirty })
+                                          + ' (' + t('only what is committed goes in') + ')');
       for (const w of warn) row.append(el('div', 'cp-repo-warn', w));
       if (r.elsewhere) {
         const at = el('div', 'cp-repo-at');
@@ -359,6 +473,9 @@ export class Source {
       if (d) this.use({ kind: 'clones', dir: d });
     };
     $('cp-src-use').addEventListener('click', use);
+    const refresh = $('cp-src-refresh');
+    refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
+    refresh.addEventListener('click', () => this.refresh());
     $('cp-src-dir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
   }
 }

@@ -572,6 +572,8 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configCompileSource);
   else if ((strcmp(path, "/api/compile/repos/path") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configCompileRepoPath);
+  else if ((strcmp(path, "/api/compile/repos/ref") == 0) && (strcmp(method, "PUT") == 0))
+    serveConfigChange(connP, configCompileRepoRef);
   else if ((strcmp(path, "/api/capabilities") == 0) || (strncmp(path, "/api/compile/", 13) == 0) ||
            (strcmp(path, "/api/builds") == 0) || (strncmp(path, "/api/builds/", 12) == 0))
     compileRequest(connP, path);

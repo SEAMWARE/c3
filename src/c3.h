@@ -160,6 +160,8 @@ extern bool         configCompilePreset(char* body, char* errBuf, int errLen);  
 extern bool         configCompilePresetDelete(char* body, char* errBuf, int errLen); // DELETE /api/compile/presets
 extern bool         configCompileSource(char* body, char* errBuf, int errLen);       // PUT /api/compile/source
 extern bool         configCompileRepoPath(char* body, char* errBuf, int errLen);     // PUT /api/compile/repos/path
+extern bool         configCompileRepoRef(char* body, char* errBuf, int errLen);      // PUT /api/compile/repos/ref
+extern void         configSourceRefs(char* out, int outLen);
 extern int          configSourceGet(char* kind, int kindLen, char* dir, int dirLen, char names[][64], char paths[][1024], int max);
 
 

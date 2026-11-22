@@ -1946,13 +1946,20 @@ bool configCompileSource(char* body, char* errBuf, int errLen)
 
   CorNode* compileP = compileObject(&doc);
   CorNode* oldP     = corTreeLookup(compileP, "source");
-  CorNode* pathsP   = (oldP != NULL) ? corTreeLookup(oldP, "repoPaths") : NULL;     // the repositories found elsewhere stay
 
-  if ((pathsP != NULL) && (strcmp(kind, "clones") == 0))
+  //
+  // The repositories found elsewhere and the refs chosen stay
+  //
+  for (int ix = 0; (ix < 2) && (oldP != NULL) && (strcmp(kind, "clones") == 0); ix++)
   {
-    corTreeChildRemove(oldP, pathsP);            // unlinked first: added, its 'next' would bring its siblings along
-    pathsP->next = NULL;
-    corTreeChildAddOrReplace(srcP, "repoPaths", pathsP);
+    const char* name   = (ix == 0) ? "repoPaths" : "repoRefs";
+    CorNode*    keptP  = corTreeLookup(oldP, name);
+
+    if (keptP == NULL)
+      continue;
+    corTreeChildRemove(oldP, keptP);             // unlinked first: added, its 'next' would bring its siblings along
+    keptP->next = NULL;
+    corTreeChildAddOrReplace(srcP, name, keptP);
   }
 
   corTreeChildAddOrReplace(compileP, "source", srcP);
@@ -2038,6 +2045,131 @@ bool configCompileRepoPath(char* body, char* errBuf, int errLen)
  done:
   docRelease(&doc);
   return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// refValid - a git ref as coraine-build --ref takes it: A-Z a-z 0-9 . _ / @ ^ ~ -, not starting with '-', no ".."
+//
+static bool refValid(const char* ref)
+{
+  if ((ref[0] == 0) || (ref[0] == '-') || (strlen(ref) > 200) || (strstr(ref, "..") != NULL))
+    return false;
+
+  for (const char* c = ref; *c != 0; c++)
+  {
+    if (!(((*c >= 'a') && (*c <= 'z')) || ((*c >= 'A') && (*c <= 'Z')) || ((*c >= '0') && (*c <= '9')) || (strchr("._/@^~-", *c) != NULL)))
+      return false;
+  }
+  return true;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompileRepoRef - PUT /api/compile/repos/ref {"repo", "ref"}: what of a clone goes into a build - a branch
+// (feat/x), a remote's (origin/feat/x), HEAD; "ref": "" is the default again (origin/main). Kept as
+// "compile": {"source": {"repoRefs": {...}}}.
+//
+bool configCompileRepoRef(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* repo;
+  const char* ref;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (stringMember(bodyP, "repo", true, 64, &repo, errBuf, errLen) == false) ||
+      (stringMember(bodyP, "ref", true, 256, &ref, errBuf, errLen) == false))
+    goto done;
+
+  for (const char* c = repo; *c != 0; c++)
+  {
+    if (!(((*c >= 'a') && (*c <= 'z')) || ((*c >= 'A') && (*c <= 'Z')) || ((*c >= '0') && (*c <= '9')) || (*c == '-') || (*c == '_')))
+    {
+      snprintf(errBuf, errLen, "\"repo\": %s is not a repository name", repo);
+      goto done;
+    }
+  }
+  if ((ref[0] != 0) && (refValid(ref) == false))
+  {
+    snprintf(errBuf, errLen, "\"ref\": %s is not a git ref (a branch, origin/<branch>, HEAD)", ref);
+    goto done;
+  }
+
+  CorNode* srcP = corTreeLookup(compileObject(&doc), "source");
+  if ((srcP == NULL) || (srcP->type != CorObject))
+  {
+    snprintf(errBuf, errLen, "the source is not a directory of clones - choose one first");
+    goto done;
+  }
+
+  CorNode* refsP = corTreeLookup(srcP, "repoRefs");
+  if ((refsP == NULL) || (refsP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(srcP, "repoRefs", corTreeObject(&doc.alloc, "repoRefs"));
+    refsP = corTreeLookup(srcP, "repoRefs");
+  }
+
+  if ((ref[0] == 0) || (strcmp(ref, "origin/main") == 0))   // the default is not kept
+  {
+    CorNode* oldP = corTreeLookup(refsP, repo);
+    if (oldP != NULL)
+      corTreeChildRemove(refsP, oldP);
+  }
+  else
+    corTreeChildAddOrReplace(refsP, repo, corTreeString(&doc.alloc, repo, corAllocStrdup(&doc.alloc, ref)));
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configSourceRefs - the refs chosen for the clones, "repo=ref repo=ref ..." into out ("" when none); only the
+// valid ones (c3.json is edited by hand too)
+//
+void configSourceRefs(char* out, int outLen)
+{
+  Doc doc;
+  int len = 0;
+
+  out[0] = 0;
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* compileP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "compile") : NULL;
+  CorNode* srcP     = (compileP != NULL) ? corTreeLookup(compileP, "source") : NULL;
+  CorNode* refsP    = ((srcP != NULL) && (srcP->type == CorObject)) ? corTreeLookup(srcP, "repoRefs") : NULL;
+
+  if ((refsP != NULL) && (refsP->type == CorObject))
+  {
+    for (CorNode* rP = refsP->value.head; rP != NULL; rP = rP->next)
+    {
+      if ((rP->type != CorString) || (refValid(rP->value.s) == false) || (strchr(rP->name, ' ') != NULL) || (strchr(rP->name, '=') != NULL))
+        continue;
+      int n = snprintf(&out[len], outLen - len, "%s%s=%s", (len > 0) ? " " : "", rP->name, rP->value.s);
+      if ((n < 0) || (n >= outLen - len))        // no room: the ones that fit
+      {
+        out[len] = 0;
+        break;
+      }
+      len += n;
+    }
+  }
+
+  docRelease(&doc);
 }
 
 
