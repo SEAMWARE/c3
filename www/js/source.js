@@ -190,24 +190,36 @@ export class Source {
     this.bridgeKey = null;
     await this.update(true, true);
     this.busy = '';
+    this.render();
     await this.compile.refresh(true);                    // origin/main moved: the feature list is the new one's
   }
 
   //
-  // chooseRef - what of 'repo' goes into the build; '' the default, main (origin/main)
+  // chooseRef - what of r goes into the build; '' the default, main (origin/main). The pull-down already shows it:
+  // nothing of the card is drawn again (Refresh does that) - only a "not in this clone" warning of the row goes.
+  // Kept (PUT), then the command shown again; the feature and bridge lists read coraine and the bridges'
+  // repositories only - for those they are read again, the card left as it is
   //
-  async chooseRef(repo, ref) {
-    this.busy = t('{repo}: the build takes {ref} ...', { repo, ref: ref || 'main' });
-    this.render();
-    try {
-      await api.compileRepoRef(repo, ref);
-      this.message = '';
-    } catch (e) {
-      this.message = repo + ': ' + e.message;
+  async chooseRef(r, ref, sel) {
+    const was = { ref: r.ref, chosen: r.chosen, refFound: r.refFound };
+    r.ref = ref || 'origin/main';
+    r.chosen = !!ref;
+    if (r.refFound === false) {
+      r.refFound = true;                                  // the pull-down offers what the clone has
+      const row = sel.closest('.cp-repo');
+      for (const w of row.querySelectorAll('.cp-repo-warn.gone')) w.remove();
+      for (const o of sel.querySelectorAll('option.gone')) o.remove();
     }
-    this.busy = '';
-    this.bridgeKey = null;
-    await this.compile.refresh(true);
+    try {
+      await api.compileRepoRef(r.name, ref);
+    } catch (e) {
+      Object.assign(r, was);
+      sel.value = r.chosen ? r.ref : '';
+      $('cp-src-msg').textContent = r.name + ': ' + e.message;
+      return;
+    }
+    this.compile.sourceChanged();                         // Build, the summary, the command
+    if (r.role === 'broker' || r.role === 'bridge') this.compile.refresh(true, true);
   }
 
   async elsewhere(repo, path) {
@@ -262,8 +274,13 @@ export class Source {
     //
     // The note under the kind: what this source is
     //
+    //
+    // The note under the kind: what this source is - the same while the card works (it would change the card's
+    // height): what it does is said in the table's foot, or here only while there is no table (a kind switched)
+    //
+    const tableShown = cc.sourceKind === 'clones' && !!this.repos && !this.reposError;
     let note;
-    if (this.busy) note = this.busy;
+    if (this.busy && !tableShown) note = this.busy;
     else if (cc.sourceFlag) note = t('c³ was started with --source {source}: that decides, not this card.', { source: cc.source });
     else if (cc.sourceKind === 'package') note = cc.packageInstalled ? (cc.version ? t('The source of the release coraine-dev installed - coraine {version}.', { version: cc.version }) : t('The source of the release coraine-dev installed.'))
                                                                        : t('coraine-dev is not installed: sudo apt install coraine-dev - or build from git clones.');
@@ -271,9 +288,6 @@ export class Source {
     $('cp-src-note').textContent = note;
     $('cp-src-msg').textContent = this.message || '';
 
-    const refresh = $('cp-src-refresh');
-    refresh.hidden = cc.sourceKind !== 'clones';
-    refresh.disabled = !!this.busy || !this.repos;
 
     //
     // The repositories (clones only)
@@ -303,16 +317,17 @@ export class Source {
     //
     const look = (r) => !r.present || r.chosen || r.refFound === false || this.dirtyMatters(r) || r.elsewhere;
     const shown = this.showAll ? this.repos.repos : this.repos.repos.filter(look);
-    list.replaceChildren(...(shown.length ? [this.headRow()] : []), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
-    list.hidden = shown.length === 0;
+    list.replaceChildren(this.headRow(shown.length < this.repos.repos.length || this.showAll), ...shown.map((r) => this.repoRow(r, this.repos.dir)));
+    list.hidden = false;
 
     const missing = this.missing();
     const notRunning = missing.filter((r) => (this.clones.get(r.name) || {}).state !== 'running');
     const parts = [];
     const present = this.repos.repos.length - missing.length;
-    if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
-    else parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })
-      + (shown.length < this.repos.repos.length ? ' - ' + (shown.length ? t('listed: the ones to look at') : t('nothing to look at')) : '')));
+    if (this.busy) parts.push(el('span', 'cp-note', this.busy));
+    else if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
+    else if (missing.length) parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })));
+    else parts.push(el('span', 'cp-note', t('Select a branch for each repository - main (origin/main) unless another is chosen')));
     const acts = el('span', 'cp-src-acts');
     if (notRunning.length > 1) {
       const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));
@@ -320,21 +335,15 @@ export class Source {
       all.addEventListener('click', () => this.clone(notRunning.map((r) => r.name)));
       acts.append(all);
     }
-    if (shown.length < this.repos.repos.length || this.showAll) {     // last: Show all and Hide in the same place
-      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
-      tg.type = 'button';
-      tg.setAttribute('aria-expanded', String(this.showAll));
-      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
-      acts.append(tg);
-    }
     parts.push(acts);
     foot.replaceChildren(...parts);
   }
 
   //
-  // headRow - the columns' names; the Branch column's '?' says what goes into a build
+  // headRow - the columns' names; the Branch column's '?' says what goes into a build. In its corner, what is
+  // about the rows: Show all / Hide (one button, the same place - the table grows below it) and Refresh
   //
-  headRow() {
+  headRow(toggle) {
     const row = el('div', 'cp-repo cp-repo-colhead');
     const head = el('div', 'cp-repo-head');
     const br = el('span', 'cp-repo-branch');
@@ -345,6 +354,27 @@ export class Source {
     q.setAttribute('aria-label', q.title);
     q.addEventListener('click', () => helpShow(t('What goes into the build'), BRANCH_HELP()));
     br.append(q);
+    const lbl = el('span', 'cp-repo-branchlbl');
+    lbl.append(...br.childNodes);
+    br.append(lbl);
+    //
+    // Refresh - about the repositories: in the table's corner
+    //
+    const corner = el('span', 'cp-src-corner');
+    if (toggle) {
+      const tg = el('button', 'cp-linkbtn cp-src-toggle', this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length }));
+      tg.type = 'button';
+      tg.setAttribute('aria-expanded', String(this.showAll));
+      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+      corner.append(tg);
+    }
+    const refresh = el('button', 'btn cp-src-refresh', t('Refresh'));
+    refresh.type = 'button';
+    refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
+    refresh.disabled = !!this.busy;
+    refresh.addEventListener('click', () => this.refresh());
+    corner.append(refresh);
+    br.append(corner);
     head.append(el('span', 'cp-repo-dot', ''), el('span', 'cp-repo-name', t('Repository')), el('span', 'cp-repo-role', t('Role')), br);
     row.append(head);
     return row;
@@ -377,9 +407,13 @@ export class Source {
     }
     s.append(opt('HEAD', t('HEAD - what is checked out') + (r.branch ? ' (' + r.branch + ')' : '')));
     const value = r.chosen ? r.ref : '';
-    if (value && !local.includes(value) && !remote.includes(value) && value !== 'HEAD') s.append(opt(value, value + ' ' + t('(not in this clone)')));
+    if (value && !local.includes(value) && !remote.includes(value) && value !== 'HEAD') {
+      const gone = opt(value, value + ' ' + t('(not in this clone)'));
+      gone.className = 'gone';
+      s.append(gone);
+    }
     s.value = value;
-    s.addEventListener('change', () => this.chooseRef(r.name, s.value));
+    s.addEventListener('change', () => this.chooseRef(r, s.value, s));
     return s;
   }
 
@@ -396,11 +430,9 @@ export class Source {
       br.append(this.refSelect(r));
       head.append(br);
       row.append(head);
-      const warn = [];
-      if (r.refFound === false) warn.push(t('{ref} is not in this clone - choose another branch, or Refresh when it is new at origin', { ref: r.ref }));
-      if (this.dirtyMatters(r)) warn.push(plural(r.dirty, '{n} uncommitted change - not in the build', '{n} uncommitted changes - not in the build', { n: r.dirty })
-                                          + ' (' + t('only what is committed goes in') + ')');
-      for (const w of warn) row.append(el('div', 'cp-repo-warn', w));
+      if (r.refFound === false) row.append(el('div', 'cp-repo-warn gone', t('{ref} is not in this clone - choose another branch, or Refresh when it is new at origin', { ref: r.ref })));
+      if (this.dirtyMatters(r)) row.append(el('div', 'cp-repo-warn', plural(r.dirty, '{n} uncommitted change - not in the build', '{n} uncommitted changes - not in the build', { n: r.dirty })
+                                                                     + ' (' + t('only what is committed goes in') + ')'));
       if (r.elsewhere) {
         const at = el('div', 'cp-repo-at');
         at.append(el('span', 'cp-note', t('a clone elsewhere: {path}', { path: r.path })));
@@ -473,9 +505,7 @@ export class Source {
       if (d) this.use({ kind: 'clones', dir: d });
     };
     $('cp-src-use').addEventListener('click', use);
-    const refresh = $('cp-src-refresh');
-    refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
-    refresh.addEventListener('click', () => this.refresh());
+
     $('cp-src-dir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
   }
 }

@@ -1398,12 +1398,10 @@
   "from {source} (--source)": "aus {source} (--source)",
   "git clones": "Git-Klone",
   "library": "Bibliothek",
-  "listed: the ones to look at": "gelistet: die zu prüfenden",
   "no output for {time} - still working": "seit {time} keine Ausgabe - arbeitet noch",
   "not in {dir}": "nicht in {dir}",
   "not installed - sudo apt install coraine-dev": "nicht installiert - sudo apt install coraine-dev",
   "not started": "nicht begonnen",
-  "nothing to look at": "nichts zu prüfen",
   "only what is committed goes in": "nur Committetes geht hinein",
   "see the backend's output": "siehe die Ausgabe des Backends",
   "the clone failed: {error}": "das Klonen schlug fehl: {error}",
@@ -1455,5 +1453,5 @@
   "main (origin/main)": "main (origin/main)",
   "{ref} is not in this clone - choose another branch, or Refresh when it is new at origin": "{ref} ist nicht in diesem Klon - wählen Sie einen anderen Branch, oder Aktualisieren, wenn er auf origin neu ist",
   "{repo} has no {ref} - choose another branch under Source": "{repo} hat kein {ref} - wählen Sie unter Quelle einen anderen Branch",
-  "{repo}: the build takes {ref} ...": "{repo}: der Build nimmt {ref} ..."
+  "Select a branch for each repository - main (origin/main) unless another is chosen": "Wählen Sie für jedes Repository einen Branch - main (origin/main), sofern kein anderer gewählt ist"
 }
