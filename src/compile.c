@@ -93,6 +93,7 @@ char* c3Source       = NULL;
 #define CANCEL_GRACE_S      5                    // SIGTERM to SIGKILL
 #define LINE_MAX_BYTES      (64 * 1024)          // a "line" longer than this is cut into several
 #define PHASES_MAX          16
+#define REPO_PATHS_MAX      32                   // repositories found elsewhere
 
 
 
@@ -106,7 +107,12 @@ typedef struct Caps
   char  why[256];
   char  coraineBuild[2048];
   char  source[2048];
-  bool  sourceGiven;                             // --source: passed on to coraine-build
+  bool  sourceGiven;                             // passed on to coraine-build as --source (a directory of clones, or --source's)
+  bool  fromFlag;                                // c3's --source
+  bool  chosen;                                  // chosen in Compile (c3.json "compile": {"source"})
+  bool  packageInstalled;                        // coraine-dev's source tarball is there
+  char  kind[16];                                // "package" or "clones"
+  char  clonesDir[1024];                         // the directory of clones (not the view of links)
   char  version[128];
   bool  pgo;
   char  pgoWhy[128];
@@ -190,8 +196,74 @@ static void sourceVersion(const char* source, char* out, int outLen)
 static void capsFind(Caps* cP, bool withVersion)
 {
   struct stat st;
+  char        kind[16];
+  char        dir[1024];
+  char        names[REPO_PATHS_MAX][64];
+  char        paths[REPO_PATHS_MAX][1024];
+  int         nPaths = configSourceGet(kind, sizeof(kind), dir, sizeof(dir), names, paths, REPO_PATHS_MAX);
+  const char* home   = getenv("HOME");
+  char        homeGit[1100];
 
   memset(cP, 0, sizeof(*cP));
+  cP->packageInstalled = (stat(SOURCE_DEFAULT, &st) == 0);
+  snprintf(homeGit, sizeof(homeGit), "%s/git", (home != NULL) ? home : "");
+
+  //
+  // The source: --source; else the choice made in Compile (the coraine-dev package, or a directory of git
+  // clones); else coraine-dev's tarball when it is installed; else the clones c3 was built against; else ~/git
+  // when it holds a coraine clone
+  //
+  if (c3Source != NULL)
+  {
+    char* real = realpath(c3Source, NULL);
+    snprintf(cP->source, sizeof(cP->source), "%s", (real != NULL) ? real : c3Source);
+    free(real);
+    cP->sourceGiven = true;
+    snprintf(cP->kind, sizeof(cP->kind), "%s", sourceIsDir(cP->source) ? "clones" : "package");
+    if (sourceIsDir(cP->source))
+      snprintf(cP->clonesDir, sizeof(cP->clonesDir), "%s", cP->source);
+    cP->fromFlag = true;
+  }
+  else if ((strcmp(kind, "clones") == 0) && (dir[0] != 0))
+  {
+    snprintf(cP->kind, sizeof(cP->kind), "clones");
+    snprintf(cP->clonesDir, sizeof(cP->clonesDir), "%s", dir);
+    //
+    // Repositories found elsewhere: coraine-build takes ONE directory of siblings - a directory of links,
+    // the clones' entries and the ones elsewhere, is that directory
+    //
+    if (nPaths > 0)
+      sourcesView(dir, names, paths, nPaths, cP->source, sizeof(cP->source));
+    else
+      snprintf(cP->source, sizeof(cP->source), "%s", dir);
+    cP->sourceGiven = true;
+    cP->chosen      = true;
+  }
+  else if ((strcmp(kind, "package") == 0) || cP->packageInstalled)
+  {
+    snprintf(cP->kind, sizeof(cP->kind), "package");
+    snprintf(cP->source, sizeof(cP->source), "%s", SOURCE_DEFAULT);
+    cP->chosen = (strcmp(kind, "package") == 0);
+  }
+  else
+  {
+    char probe[1200];
+
+    snprintf(probe, sizeof(probe), "%s/coraine/.git", C3_CLONES);
+    const char* clones = ((C3_CLONES[0] != 0) && (stat(probe, &st) == 0)) ? C3_CLONES : homeGit;
+
+    snprintf(cP->kind, sizeof(cP->kind), "clones");
+    snprintf(cP->clonesDir, sizeof(cP->clonesDir), "%s", clones);
+    snprintf(cP->source, sizeof(cP->source), "%s", clones);
+    cP->sourceGiven = true;
+  }
+
+  //
+  // coraine-build: --coraine-build; for clones, the coraine clone's own (it matches the source it exports);
+  // else coraine-dev's, in $PATH
+  //
+  char cloned[2200];
+  snprintf(cloned, sizeof(cloned), "%s/coraine/packaging/deb/coraine-build", cP->source);
 
   if (c3CoraineBuild != NULL)
   {
@@ -205,37 +277,15 @@ static void capsFind(Caps* cP, bool withVersion)
       cP->coraineBuild[0] = 0;
     }
   }
+  else if ((strcmp(cP->kind, "clones") == 0) && (access(cloned, X_OK) == 0))
+    snprintf(cP->coraineBuild, sizeof(cP->coraineBuild), "%s", cloned);
   else if (inPath("coraine-build", cP->coraineBuild, sizeof(cP->coraineBuild)) == false)
   {
-    //
-    // No coraine-dev: the coraine clone's own, beside the clones c3 was built against
-    //
-    char cloned[2048];
-
-    snprintf(cloned, sizeof(cloned), "%s/coraine/packaging/deb/coraine-build", C3_CLONES);
-    if ((C3_CLONES[0] != 0) && (access(cloned, X_OK) == 0))
-      snprintf(cP->coraineBuild, sizeof(cP->coraineBuild), "%s", cloned);
+    if (strcmp(cP->kind, "clones") == 0)
+      snprintf(cP->why, sizeof(cP->why), "no coraine clone in %s - clone it under Source", cP->clonesDir);
     else
-      snprintf(cP->why, sizeof(cP->why), "install coraine-dev to build brokers - or clone coraine beside the Cor-Libs");
+      snprintf(cP->why, sizeof(cP->why), "coraine-dev is not installed - install it, or build from git clones (Source)");
   }
-
-  if (c3Source != NULL)
-  {
-    char* real = realpath(c3Source, NULL);
-    snprintf(cP->source, sizeof(cP->source), "%s", (real != NULL) ? real : c3Source);
-    free(real);
-    cP->sourceGiven = true;
-  }
-  else if ((stat(SOURCE_DEFAULT, &st) != 0) && (C3_CLONES[0] != 0) && sourceIsDir(C3_CLONES))
-  {
-    //
-    // No coraine-dev: the clones c3 was built against - coraine-build exports them as the packages' tarball
-    //
-    snprintf(cP->source, sizeof(cP->source), "%s", C3_CLONES);
-    cP->sourceGiven = true;
-  }
-  else
-    snprintf(cP->source, sizeof(cP->source), "%s", SOURCE_DEFAULT);
 
   if (sourceIsDir(cP->source))
   {
@@ -243,10 +293,12 @@ static void capsFind(Caps* cP, bool withVersion)
 
     snprintf(clone, sizeof(clone), "%s/coraine/packaging/deb/source.sh", cP->source);
     if ((cP->why[0] == 0) && (access(clone, X_OK) != 0))
-      snprintf(cP->why, sizeof(cP->why), "no coraine clone in %s", cP->source);
+      snprintf(cP->why, sizeof(cP->why), "no coraine clone in %s - clone it under Source", cP->clonesDir);
   }
+  else if ((strcmp(cP->kind, "clones") == 0) && (cP->why[0] == 0))
+    snprintf(cP->why, sizeof(cP->why), "no coraine clone in %s - clone it under Source", cP->clonesDir);
   else if ((cP->why[0] == 0) && ((stat(cP->source, &st) != 0) || !S_ISREG(st.st_mode)))
-    snprintf(cP->why, sizeof(cP->why), "no coraine source at %s - %s", cP->source, cP->sourceGiven ? "--source names another" : "reinstall coraine-dev");
+    snprintf(cP->why, sizeof(cP->why), "no coraine source at %s - %s", cP->source, cP->fromFlag ? "--source names another" : "reinstall coraine-dev, or build from git clones (Source)");
 
   cP->available = (cP->why[0] == 0);
 
@@ -279,6 +331,21 @@ static void capsFind(Caps* cP, bool withVersion)
   cP->mongoc = (stat("/opt/seamware/lib/pkgconfig/mongoc2.pc", &st) == 0) || (runCapture(argv, out, sizeof(out), 5) == 0);
   if (cP->mongoc == false)
     snprintf(cP->mongocWhy, sizeof(cP->mongocWhy), "needs the mongo-c driver v2 (pkg-config mongoc2) - install it, or build without it");
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// compileClonesDir - the directory of clones Compile builds from: the one chosen, --source's, else the default
+// capsFind picks (the page shows it the same way); "" when the source is not clones
+//
+void compileClonesDir(char* out, int outLen)
+{
+  Caps cap;
+
+  capsFind(&cap, false);
+  snprintf(out, outLen, "%s", (strcmp(cap.kind, "clones") == 0) ? cap.clonesDir : "");
 }
 
 
@@ -1850,6 +1917,11 @@ static void capabilities(CorHttpConn* connP)
   strAdd(&s, ", \"why\": ");               strAddJson(&s, cap.available ? NULL : cap.why);
   strAdd(&s, ", \"coraineBuild\": ");      strAddJson(&s, (cap.coraineBuild[0] != 0) ? cap.coraineBuild : NULL);
   strAdd(&s, ", \"source\": ");            strAddJson(&s, cap.source);
+  strAdd(&s, ", \"sourceKind\": ");        strAddJson(&s, cap.kind);
+  strAdd(&s, ", \"clonesDir\": ");         strAddJson(&s, (cap.clonesDir[0] != 0) ? cap.clonesDir : NULL);
+  strAdd(&s, ", \"sourceChosen\": ");      strAdd(&s, cap.chosen ? "true" : "false");
+  strAdd(&s, ", \"sourceFlag\": ");        strAdd(&s, cap.fromFlag ? "true" : "false");
+  strAdd(&s, ", \"packageInstalled\": ");  strAdd(&s, cap.packageInstalled ? "true" : "false");
   strAdd(&s, ", \"version\": ");           strAddJson(&s, (cap.version[0] != 0) ? cap.version : NULL);
   strAdd(&s, ", \"builds\": ");            strAddJson(&s, buildsDir);
   strAdd(&s, ", \"pgo\": ");               strAdd(&s, cap.pgo ? "true" : "false");

@@ -96,6 +96,16 @@ export const build               = (name) => call('GET', '/api/builds/' + encode
 export const buildDelete         = (name) => call('DELETE', '/api/builds/' + encodeURIComponent(name));
 
 //
+// Compile's source: the coraine-dev package or a directory of git clones (c3.json), the repositories a build
+// from the clones needs, cloning a missing one (sources.c)
+//
+export const compileSource       = (source) => call('PUT', '/api/compile/source', source);
+export const compileRepos        = (bridgeRepos) => call('GET', '/api/compile/repos?bridges=' + encodeURIComponent(bridgeRepos.join(',')));
+export const compileRepoPath     = (repo, path) => call('PUT', '/api/compile/repos/path', { repo, path });
+export const cloneStart          = (repo) => call('POST', '/api/compile/clone', { repo });
+export const clones              = () => call('GET', '/api/compile/clone');
+
+//
 // brokerGet - a GET to the broker, through the backend's proxy
 //
 // pathAndQuery starts with /ngsi-ld/, or is /version or /admin/tenants; the broker's tenant (setTenant)

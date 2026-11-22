@@ -1,0 +1,364 @@
+//
+// source.js - Compile's Source card: what coraine-build builds from
+//
+// Two kinds: the coraine-dev package (a release's source, installed with apt) or a directory of git clones
+// (~/git). For the clones the card lists the repositories the build needs - coraine, c3, the libraries and
+// the repositories of the bridges ticked, nothing else - with what of each goes in. A missing one is cloned
+// from here (into the directory of clones), or its path given when it is a clone somewhere else.
+//
+// The card is outside Compile's gate: when the source is not usable the rest of the page is greyed, and this
+// card is where it is fixed.
+//
+import * as api from './api.js';
+import { t, tk, plural } from './i18n.js';
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+const ROLE = { broker: tk('the broker'), c3: 'c³', library: tk('library'), bridge: tk('bridge') };
+
+export class Source {
+  //
+  // compile: the Compile page - its capabilities (caps.compile), its bridges, refresh() after a change
+  //
+  constructor(compile) {
+    this.compile = compile;
+    this.repos = null;                    // the last /api/compile/repos answer
+    this.reposError = '';
+    this.bridgeKey = null;                // the bridge repositories the list was read for
+    this.clones = new Map();              // repo -> {state, message}
+    this.elsewhereOpen = new Set();       // repos whose "It is elsewhere" input is shown
+    this.pollTimer = null;
+    this.busy = '';                       // what the card is doing - shown, the controls wait
+    this.showAll = false;                 // every repository listed, not only the ones that need a look
+  }
+
+  cc() { return (this.compile.caps && this.compile.caps.compile) || {}; }
+
+  isClones() { return this.cc().sourceKind === 'clones'; }
+
+  //
+  // bridgeRepos - the repositories of the bridges ticked (a bridge not in this source can be ticked when the
+  // source is clones: its repository is then listed as missing)
+  //
+  bridgeRepos() {
+    return this.compile.bridges
+      .filter((br) => br.repository && this.compile.isBridgeOn(br))
+      .map((br) => br.repository)
+      .sort();
+  }
+
+  //
+  // missing - the needed repositories that are not there; blocking() - why Build waits, or ''
+  //
+  missing() {
+    if (!this.isClones() || !this.repos || !Array.isArray(this.repos.repos)) return [];
+    return this.repos.repos.filter((r) => !r.present);
+  }
+
+  blocking() {
+    const m = this.missing();
+    if (m.length === 0) return '';
+    return plural(m.length, '{name} is not cloned - see Source', '{n} repositories are not cloned - see Source', { name: m[0].name, n: m.length });
+  }
+
+  //
+  // update - after Compile's refresh or a bridge switched: the repository list again when what it depends on
+  // changed (or always, with force)
+  //
+  async update(force) {
+    if (!this.isClones()) {
+      this.repos = null;
+      this.bridgeKey = null;
+      this.render();
+      return;
+    }
+    const bridges = this.bridgeRepos();
+    const key = (this.cc().clonesDir || '') + '|' + bridges.join(',');
+    if (!force && key === this.bridgeKey) { this.render(); return; }
+    this.bridgeKey = key;
+    try {
+      this.repos = await api.compileRepos(bridges);
+      this.reposError = '';
+    } catch (e) {
+      this.repos = null;
+      this.reposError = e.message;
+    }
+    this.render();
+    this.compile.sourceChanged();
+  }
+
+  //
+  // use - the source chosen: the package, or the clones in 'dir'
+  //
+  async use(body) {
+    this.busy = body.kind === 'clones' ? t('Looking for the clones in {dir} ...', { dir: body.dir }) : t('Switching to the coraine-dev package ...');
+    this.render();
+    try {
+      await api.compileSource(body);
+      this.message = '';
+    } catch (e) {
+      this.message = e.message;
+    }
+    this.busy = '';
+    this.bridgeKey = null;
+    await this.compile.refresh(true);
+  }
+
+  async clone(repos) {
+    for (const repo of repos) {
+      this.clones.set(repo, { state: 'running', message: null });
+      try {
+        await api.cloneStart(repo);
+      } catch (e) {
+        this.clones.set(repo, { state: 'failed', message: e.message });
+      }
+    }
+    this.render();
+    this.poll();
+  }
+
+  //
+  // poll - the clones' states every second while one runs; when the last ends, everything again (a clone of
+  // coraine makes Compile available, a bridge's clone makes the bridge buildable)
+  //
+  poll() {
+    clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(async () => {
+      let list = [];
+      try { list = await api.clones(); } catch (e) { list = []; }
+      let running = false;
+      for (const c of list) {
+        const mine = this.clones.get(c.repo);
+        if (!mine) continue;
+        this.clones.set(c.repo, { state: c.state, message: c.message });
+        if (c.state === 'running') running = true;
+      }
+      if (running) {
+        this.render();
+        this.poll();
+        return;
+      }
+      for (const [repo, c] of this.clones) if (c.state === 'done') this.clones.delete(repo);
+      this.bridgeKey = null;
+      await this.compile.refresh(true);
+    }, 1000);
+  }
+
+  async elsewhere(repo, path) {
+    try {
+      await api.compileRepoPath(repo, path);
+      this.elsewhereOpen.delete(repo);
+      this.message = '';
+    } catch (e) {
+      this.message = repo + ': ' + e.message;
+    }
+    this.bridgeKey = null;
+    await this.compile.refresh(true);
+  }
+
+  //
+  // render
+  //
+  render() {
+    const cc = this.cc();
+    const card = $('cp-source');
+    if (!card) return;
+
+    //
+    // The kind: package or clones; c3 started with --source decides alone
+    //
+    const kind = $('cp-src-kind');
+    const pkg = el('button', '', t('coraine-dev package'));
+    const git = el('button', '', t('Git clones'));
+    for (const [b, k] of [[pkg, 'package'], [git, 'clones']]) {
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(cc.sourceKind === k));
+      b.disabled = !!cc.sourceFlag || !!this.busy;
+    }
+    if (!cc.packageInstalled) {
+      pkg.disabled = true;
+      pkg.title = t('not installed - sudo apt install coraine-dev');
+    }
+    pkg.addEventListener('click', () => { if (cc.sourceKind !== 'package') this.use({ kind: 'package' }); });
+    git.addEventListener('click', () => { if (cc.sourceKind !== 'clones') this.use({ kind: 'clones', dir: $('cp-src-dir').value.trim() || '~/git' }); });
+    kind.replaceChildren(pkg, git);
+
+    //
+    // The directory of clones
+    //
+    const dirRow = $('cp-src-dirrow');
+    dirRow.hidden = cc.sourceKind !== 'clones';
+    const dir = $('cp-src-dir');
+    if (document.activeElement !== dir) dir.value = cc.clonesDir || '';
+    dir.disabled = !!cc.sourceFlag || !!this.busy;
+    $('cp-src-use').disabled = dir.disabled;
+
+    //
+    // The note under the kind: what this source is
+    //
+    let note;
+    if (this.busy) note = this.busy;
+    else if (cc.sourceFlag) note = t('c³ was started with --source {source}: that decides, not this card.', { source: cc.source });
+    else if (cc.sourceKind === 'package') note = cc.packageInstalled ? (cc.version ? t('The source of the release coraine-dev installed - coraine {version}.', { version: cc.version }) : t('The source of the release coraine-dev installed.'))
+                                                                       : t('coraine-dev is not installed: sudo apt install coraine-dev - or build from git clones.');
+    else note = t('The directory holding coraine, c3 and the libraries as git clones, side by side - a missing one is cloned into it.');
+    $('cp-src-note').textContent = note;
+    $('cp-src-msg').textContent = this.message || '';
+
+    //
+    // The repositories (clones only)
+    //
+    const list = $('cp-src-repos');
+    const foot = $('cp-src-foot');
+    if (cc.sourceKind !== 'clones') {
+      list.replaceChildren();
+      list.hidden = true;
+      foot.replaceChildren();
+      return;
+    }
+    list.hidden = false;
+    if (this.reposError || !this.repos) {
+      list.replaceChildren(el('div', 'cp-note', this.reposError ? t('The repositories could not be listed: {error}', { error: this.reposError }) : t('Listing the repositories ...')));
+      foot.replaceChildren();
+      return;
+    }
+    if (this.repos.why && !(this.repos.repos || []).length) {
+      list.replaceChildren(this.repoRow({ name: 'coraine', role: 'broker', present: false, url: 'https://github.com/SEAMWARE/coraine.git' }, this.repos.dir));
+      foot.replaceChildren(el('div', 'cp-note', t('coraine first: its build scripts say which other repositories a build needs.')));
+      return;
+    }
+    //
+    // The repositories that need a look - missing, uncommitted changes, not at what the build takes, elsewhere -
+    // the others on "Show all"
+    //
+    const look = (r) => !r.present || r.dirty || r.elsewhere || (r.ref !== 'HEAD' && r.refSha && r.head && r.refSha !== r.head);
+    const shown = this.showAll ? this.repos.repos : this.repos.repos.filter(look);
+    list.replaceChildren(...shown.map((r) => this.repoRow(r, this.repos.dir)));
+    list.hidden = shown.length === 0;
+
+    const missing = this.missing();
+    const notRunning = missing.filter((r) => (this.clones.get(r.name) || {}).state !== 'running');
+    const parts = [];
+    const present = this.repos.repos.length - missing.length;
+    if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
+    else parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })
+      + (shown.length < this.repos.repos.length ? ' - ' + (shown.length ? t('listed: the ones to look at') : t('nothing to look at')) : '')));
+    const acts = el('span', 'cp-src-acts');
+    if (shown.length < this.repos.repos.length || this.showAll) {
+      const tg = el('button', 'cp-linkbtn', this.showAll ? t('Only the ones to look at') : t('Show all {n}', { n: this.repos.repos.length }));
+      tg.type = 'button';
+      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+      acts.append(tg);
+    }
+    if (notRunning.length > 1) {
+      const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));
+      all.type = 'button';
+      all.addEventListener('click', () => this.clone(notRunning.map((r) => r.name)));
+      acts.append(all);
+    }
+    parts.push(acts);
+    foot.replaceChildren(...parts);
+  }
+
+  //
+  // repoRow - one repository: name and role; what of it goes in, or how to get it
+  //
+  repoRow(r, dir) {
+    const row = el('div', 'cp-repo' + (r.present ? '' : ' missing'));
+    const head = el('div', 'cp-repo-head');
+    head.append(el('span', 'cp-repo-dot', r.present ? '✓' : '!'), el('span', 'cp-repo-name', r.name), el('span', 'cp-repo-role', ROLE[r.role] ? t(ROLE[r.role]) : (r.role || '')));
+
+    if (r.present) {
+      const what = el('span', 'cp-repo-what');
+      const ref = r.ref === 'HEAD' ? t('its HEAD') : r.ref;
+      what.append(el('span', 'mono', (r.branch || t('detached')) + ' · ' + (r.head || '?')));
+      what.append(document.createTextNode(' - ' + t('the build takes {ref}', { ref: ref + (r.ref !== 'HEAD' && r.refSha ? ' (' + r.refSha + ')' : '') })));
+      head.append(what);
+      row.append(head);
+      const warn = [];
+      if (r.ref !== 'HEAD' && r.refSha && r.head && r.refSha !== r.head) warn.push(t('checked out {head}, not what the build takes: {ref} is {sha}', { head: r.head, ref: r.ref, sha: r.refSha }));
+      if (r.dirty) warn.push(plural(r.dirty, '{n} uncommitted change - not in the build', '{n} uncommitted changes - not in the build', { n: r.dirty })
+                            + ' (' + (r.ref === 'HEAD' ? t('only what is committed goes in') : t('it takes {ref}', { ref: r.ref })) + ')');
+      for (const w of warn) row.append(el('div', 'cp-repo-warn', w));
+      if (r.elsewhere) {
+        const at = el('div', 'cp-repo-at');
+        at.append(el('span', 'cp-note', t('a clone elsewhere: {path}', { path: r.path })));
+        const forget = el('button', 'cp-linkbtn', t('Forget this path'));
+        forget.type = 'button';
+        forget.addEventListener('click', () => this.elsewhere(r.name, ''));
+        at.append(forget);
+        row.append(at);
+      }
+      return row;
+    }
+
+    //
+    // Missing: Clone, the command, or the path of a clone elsewhere
+    //
+    const c = this.clones.get(r.name);
+    const st = el('span', 'cp-repo-what');
+    if (c && c.state === 'running') st.textContent = t('cloning into {path} ...', { path: dir + '/' + r.name });
+    else if (c && c.state === 'failed') st.textContent = t('the clone failed: {error}', { error: c.message || t('see the backend\'s output') });
+    else st.textContent = t('not in {dir}', { dir });
+    head.append(st);
+    row.append(head);
+
+    const acts = el('div', 'cp-repo-acts');
+    const cl = el('button', 'btn primary', t('Clone'));
+    cl.type = 'button';
+    cl.disabled = !!(c && c.state === 'running');
+    cl.addEventListener('click', () => this.clone([r.name]));
+    const cmdText = 'git clone ' + r.url + ' ' + dir + '/' + r.name;
+    const cmd = el('code', 'cp-repo-cmd', cmdText);
+    const copy = el('button', 'cp-linkbtn', t('Copy'));
+    copy.type = 'button';
+    copy.addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdText).then(() => { copy.textContent = t('Copied'); setTimeout(() => { copy.textContent = t('Copy'); }, 1500); }).catch(() => {});
+    });
+    const other = el('button', 'cp-linkbtn', t('It is elsewhere ...'));
+    other.type = 'button';
+    other.addEventListener('click', () => {
+      if (this.elsewhereOpen.has(r.name)) this.elsewhereOpen.delete(r.name); else this.elsewhereOpen.add(r.name);
+      this.render();
+      const i = document.getElementById('cp-src-at-' + r.name);
+      if (i) i.focus();
+    });
+    acts.append(cl, cmd, copy, other);
+    row.append(acts);
+
+    if (this.elsewhereOpen.has(r.name)) {
+      const f = el('form', 'cp-repo-at');
+      const i = el('input', 'cp-input');
+      i.id = 'cp-src-at-' + r.name;
+      i.placeholder = '/path/to/' + r.name;
+      i.spellcheck = false;
+      i.autocomplete = 'off';
+      i.setAttribute('aria-label', t('The path of the {repo} clone', { repo: r.name }));
+      const ok = el('button', 'btn', t('Use'));
+      ok.type = 'submit';
+      f.append(i, ok);
+      f.addEventListener('submit', (e) => { e.preventDefault(); if (i.value.trim()) this.elsewhere(r.name, i.value.trim()); });
+      row.append(f);
+    }
+    return row;
+  }
+
+  //
+  // bind - the static controls (once)
+  //
+  bind() {
+    const use = () => {
+      const d = $('cp-src-dir').value.trim();
+      if (d) this.use({ kind: 'clones', dir: d });
+    };
+    $('cp-src-use').addEventListener('click', use);
+    $('cp-src-dir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
+  }
+}

@@ -158,6 +158,9 @@ extern char*        configMapsAreasText(CorAlloc* allocP);                   // 
 extern bool         configCompileChoice(char* body, char* errBuf, int errLen);       // PUT /api/compile/choice
 extern bool         configCompilePreset(char* body, char* errBuf, int errLen);       // PUT /api/compile/presets
 extern bool         configCompilePresetDelete(char* body, char* errBuf, int errLen); // DELETE /api/compile/presets
+extern bool         configCompileSource(char* body, char* errBuf, int errLen);       // PUT /api/compile/source
+extern bool         configCompileRepoPath(char* body, char* errBuf, int errLen);     // PUT /api/compile/repos/path
+extern int          configSourceGet(char* kind, int kindLen, char* dir, int dirLen, char names[][64], char paths[][1024], int max);
 
 
 
@@ -225,6 +228,13 @@ extern char* c3Source;                           // --source: the source tarball
 
 extern bool  compileInit(void);
 extern void  compileRequest(CorHttpConn* connP, const char* path);
+extern void  compileClonesDir(char* out, int outLen);                   // the directory of clones Compile builds from, or ""
+
+//
+// sources.c - Compile's source as git clones: the repositories a build needs, cloning one, the ones elsewhere
+//
+extern void  sourcesRequest(CorHttpConn* connP, const char* path);    // /api/compile/repos, /api/compile/clone
+extern void  sourcesView(const char* dir, char names[][64], char paths[][1024], int n, char* out, int outLen);
 extern void  compileShutdown(void);
 
 
