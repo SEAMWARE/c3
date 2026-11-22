@@ -732,9 +732,13 @@ export class Compile {
       b.addEventListener('click', () => { if (this.choice.output !== v) { this.choice.output = v; this.changed(); } });
       return b;
     }));
-    $('cp-output-note').textContent = !cont ? (run.containersWhy || t('install docker or podman'))
-      : this.imageOn() ? t('on this distribution\'s base image, laid out as the published one - Operate runs it in a container') : '';
-    $('cp-image-row').hidden = !this.imageOn();
+    //
+    // Nothing appears or goes on a click (the card would change size): the note only says why there is no image,
+    // and the image's name is always there - greyed for a binary
+    //
+    $('cp-output-note').textContent = !cont ? (run.containersWhy || t('install docker or podman')) : '';
+    $('cp-image').disabled = !this.imageOn();
+    $('cp-image-row').classList.toggle('off', !this.imageOn());
   }
 
   render() {
@@ -1000,7 +1004,7 @@ export class Compile {
       box.textContent = lines.join(' \\\n  ');
       box.classList.remove('err');
       $('cp-name').placeholder = p.name;
-      if (p.image && !$('cp-image').value.trim()) $('cp-image').placeholder = p.image;
+      $('cp-image').placeholder = p.image || 'localhost/' + (p.executable || 'coraine').toLowerCase() + ':' + p.name;   // the default, greyed too
       const blocking = this.source.blocking();
       $('cp-build').disabled = !(this.caps && this.caps.compile.available) || (this.run && this.run.state === 'running') || !!blocking;
       $('cp-build').title = blocking ? t('Waits: {why}', { why: blocking }) : '';

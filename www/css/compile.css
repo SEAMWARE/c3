@@ -117,6 +117,7 @@
 .cp-cmd.err { color: var(--bad); }
 .cp-name { display: flex; align-items: center; gap: 10px; }
 .cp-name .cp-input { flex: 1; }
+.cp-name.off { opacity: 0.5; }
 .cp-build { min-height: 48px; font-size: 1.1875rem; }
 
 /* presets */

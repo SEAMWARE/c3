@@ -39,7 +39,7 @@ for what ends by itself (`ls`, a build).
 | query | consulta | requête | Abfrage |
 | index | índice | index | Index |
 | temporal history | histórico temporal | historique temporel | zeitlicher Verlauf |
-| store (the database) | almacén | stockage | Speicher |
+| store (the database) | base de datos | stockage | Speicher |
 | plugin | plugin | plugin | Plugin |
 | channel (of a bridge) | canal | canal | Kanal |
 | rule (corCep) | regla | règle | Regel |
