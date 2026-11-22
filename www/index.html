@@ -96,7 +96,7 @@
         <div class="cp-head">
           <div>
             <h1>Build a broker</h1>
-            <p>Choose what goes into the binary, train it on your workload - built here by <span class="mono">coraine-build</span>, from the source <span class="mono">coraine-dev</span> installs.</p>
+            <p>Choose what goes into the binary, train it on your workload - built here by <span class="mono">coraine-build</span>, <span id="cp-sub-source">from the source below</span>.</p>
           </div>
           <span class="chip host" id="cp-host">build host</span>
         </div>
@@ -118,10 +118,27 @@
             <button class="btn" type="button" id="cp-run-close" aria-label="Close">×</button>
           </div>
           <div class="cp-phases" id="cp-phases"></div>
+          <div class="cp-now" id="cp-now" aria-live="off"></div>
           <div class="cp-bar" id="cp-bar"><div id="cp-bar-fill"></div></div>
           <pre class="cp-log" id="cp-log" tabindex="0" aria-label="The build's output"></pre>
           <div class="cp-note" id="cp-log-note"></div>
           <dl class="cp-result" id="cp-result" hidden></dl>
+        </section>
+
+        <section class="cp-card cp-source" id="cp-source" aria-label="Source">
+          <div class="cp-src-top">
+            <h2 class="section">Source</h2>
+            <div class="cp-seg" id="cp-src-kind" aria-label="What coraine-build builds from"></div>
+          </div>
+          <div class="cp-src-dirrow" id="cp-src-dirrow" hidden>
+            <label class="cp-label" for="cp-src-dir">Directory of clones</label>
+            <input class="cp-input" id="cp-src-dir" placeholder="~/git" spellcheck="false" autocomplete="off">
+            <button class="btn" type="button" id="cp-src-use">Use</button>
+          </div>
+          <span class="cp-note" id="cp-src-note"></span>
+          <span class="cp-note cp-src-msg" id="cp-src-msg" role="status"></span>
+          <div class="cp-repos" id="cp-src-repos" hidden aria-label="The repositories the build needs"></div>
+          <div class="cp-src-foot" id="cp-src-foot"></div>
         </section>
 
         <div class="cp-gate" id="cp-gate">
@@ -185,6 +202,7 @@
           <pre class="cp-cmd" id="cp-cmd" aria-label="The command"></pre>
           <span class="cp-note">Exactly what runs: c³ builds nothing itself. The result is <span class="mono">install/</span> in the build's directory.</span>
           <button class="btn primary cp-build" type="button" id="cp-build">Build</button>
+          <button class="cp-building" type="button" id="cp-building" hidden title="Show the build - its phases and its output"></button>
         </section>
 
         <section class="cp-card cp-gate2" aria-label="Presets">

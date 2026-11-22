@@ -12,6 +12,7 @@
 //
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { Source } from './source.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -33,6 +34,22 @@ const PHASES = {
   tune:    ['unpack', 'build', 'tools', 'train', 'install', 'bridges', 'check', 'done'],
 };
 const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, done: 0 };
+// pgo and tune: 'train' holds the instrumented build, the training and the rebuild with the profile - the
+// most of such a build (12 min and more on a laptop), 'build' only the libraries
+const MODE_WEIGHTS = { pgo: { build: 20, train: 900 }, tune: { build: 20, train: 900 } };
+
+// What a phase does - under the phase chips while it runs: a phase of minutes says what it is busy with
+const PHASE_WHAT = {
+  unpack:  tk('Unpacking the source.'),
+  build:   tk('Compiling.'),
+  tools:   tk('Building the tools the training drives the broker with (wrk scripts, the notification receiver).'),
+  train:   tk('Training: the broker is built instrumented, run under every standard request shape - queries, '
+         + 'PATCHes, creates, notifications, a forwarding chain - to record where its time goes, then built again '
+         + 'with that profile. This is the longest phase: 10 minutes and more, with a line per scenario.'),
+  install: tk('Installing into install/.'),
+  bridges: tk('Building the bridges ticked.'),
+  check:   tk('Checking the result: --version, the features compiled in.'),
+};
 
 const MODES = [
   ['release', tk('Release'),              tk('Optimised build, no training. Traces compiled out.')],
@@ -377,16 +394,20 @@ export class Compile {
     this.cmdTimer = null;
     this.elapsedTimer = null;
     this.armed = null;            // the build whose Delete was pressed once
+    this.source = new Source(this);   // the Source card
+    this.featuresFrom = '';       // the source the features and bridges were read from
 
     $('cp-build').addEventListener('click', () => this.start());
     $('cp-cancel').addEventListener('click', () => this.cancel());
     $('cp-run-close').addEventListener('click', () => this.closeRun());
+    $('cp-building').addEventListener('click', () => this.showRun());
     $('cp-name').addEventListener('input', () => this.commandSoon());
     $('cp-exe').addEventListener('input', () => this.commandSoon());
     $('cp-workload-path').addEventListener('input', () => { this.choice.workload = $('cp-workload-path').value.trim(); this.changed(); });
     $('cp-preset-save').addEventListener('click', () => this.presetSave());
     $('cp-preset-load').addEventListener('click', () => this.presetLoad());
     $('cp-preset-del').addEventListener('click', () => this.presetDelete());
+    this.source.bind();
   }
 
   //
@@ -408,9 +429,10 @@ export class Compile {
   }
 
   //
-  // refresh - capabilities, features and builds again (the page is shown: something may have been installed)
+  // refresh - capabilities, features and builds again (the page is shown: something may have been installed);
+  // force: the source changed (another kind or directory, a repository cloned) - its features and bridges again
   //
-  async refresh() {
+  async refresh(force) {
     try {
       this.caps = await api.capabilities();
     } catch (e) {
@@ -422,9 +444,11 @@ export class Compile {
     $('page-compile').classList.toggle('cp-off', !cc.available);
     $('cp-unavail').hidden = !!cc.available;
     $('cp-unavail-why').textContent = cc.why ? cc.why.charAt(0).toUpperCase() + cc.why.slice(1) + '.' : '';
-    $('cp-build').disabled = !cc.available;
+    $('cp-build').disabled = !cc.available || !!this.source.blocking();
 
-    if (cc.available && this.features.length === 0) {
+    const from = (cc.source || '') + '|' + (cc.version || '');
+    if (cc.available && (this.features.length === 0 || force || from !== this.featuresFrom)) {
+      this.featuresFrom = from;
       try {
         const f = await api.compileFeatures();
         this.features = f.features || [];
@@ -434,6 +458,9 @@ export class Compile {
       } catch (e) {
         this.featureError = e.message;
       }
+    } else if (!cc.available) {
+      this.bridges = [];              // the old source's - the list of repositories asks for none
+      this.featuresFrom = '';
     }
 
     //
@@ -442,6 +469,7 @@ export class Compile {
     if (cc.available && !cc.mongoc && !('MONGOC' in this.choice.features)) this.choice.features.MONGOC = false;
 
     this.render();
+    await this.source.update(force);
     await this.loadBuilds();
 
     //
@@ -608,9 +636,43 @@ export class Compile {
   //
   bridgesArg() {
     if (!this.bridges.length) return undefined;
-    const on = this.bridges.filter((br) => br.available && this.isBridgeOn(br)).map((br) => br.name);
+    const on = this.bridges.filter((br) => this.canTick(br) && this.isBridgeOn(br)).map((br) => br.name);
     const def = this.bridges.filter((br) => br.default).map((br) => br.name);
     return (on.join(',') === def.join(',')) ? undefined : on;
+  }
+
+  //
+  // canTick - a bridge that can be switched on: buildable here, or its repository not cloned yet when the
+  // source is git clones (Source then lists it as missing, and Build waits for the clone)
+  //
+  cloneable(br) {
+    return !br.available && !!br.repository && br.why === 'not in this source' && this.source.isClones();
+  }
+
+  canTick(br) {
+    return br.available || this.cloneable(br);
+  }
+
+  //
+  // sourceChanged - the Source card read the repositories: the subtitle, the summary, Build
+  //
+  sourceChanged() {
+    this.renderSourceText();
+    this.commandSoon();
+  }
+
+  renderSourceText() {
+    const cc = (this.caps && this.caps.compile) || {};
+    let sub;
+    if (cc.sourceFlag) sub = t('from {source} (--source)', { source: cc.source });
+    else if (cc.sourceKind === 'clones') sub = t('from the git clones in {dir}', { dir: cc.clonesDir || '?' });
+    else if (cc.sourceKind === 'package') sub = t('from the source coraine-dev installs');
+    else sub = t('from the source below');
+    $('cp-sub-source').textContent = sub;
+    const blocking = this.source.blocking();
+    $('cp-sum-source').textContent = blocking ? blocking
+      : (cc.sourceKind === 'clones' ? t('git clones') + ', ' : '') + (cc.version ? 'coraine ' + cc.version : (cc.source || '-'));
+    $('cp-sum-source').classList.toggle('cp-warn', !!blocking);
   }
 
   changedFeatures() {
@@ -765,23 +827,25 @@ export class Compile {
     // Bridges: plugins built from repositories of their own (coraine-build --bridges), a group of their own
     //
     const bridgeButton = (br) => {
-      const isOn = br.available && this.isBridgeOn(br);
+      const tickable = this.canTick(br);
+      const isOn = tickable && this.isBridgeOn(br);
       const changed = this.isBridgeOn(br) !== !!br.default;
       const b = el('button', 'cp-feature' + (changed ? ' changed' : ''));
       b.type = 'button';
       b.setAttribute('role', 'switch');
       b.setAttribute('aria-checked', String(isOn));
-      if (!br.available) b.setAttribute('aria-disabled', 'true');
-      b.title = br.available ? br.description : t('Not here: {why}', { why: br.why });
+      if (!tickable) b.setAttribute('aria-disabled', 'true');
+      b.title = br.available ? br.description : this.cloneable(br) ? t('Its repository, {repo}, is not cloned - switched on, Source lists it to clone', { repo: br.repository }) : t('Not here: {why}', { why: br.why });
       const txt = el('span', 'txt');
       txt.append(el('span', 'fn', br.name), el('span', 'fd', br.description));
       const section = this.docAt('Bridge: ' + (BRIDGE_DOC[br.name] || br.name));
       const size = docSize(section && section.text);
       if (size) txt.append(el('span', 'fsz', t('on: {size}', { size: sizeText(size) })));
-      if (!br.available) txt.append(el('span', 'fr', t('Not here: {why}', { why: br.why })));
+      if (this.cloneable(br)) txt.append(el('span', 'fr', isOn ? t('Not cloned: {repo} - clone it under Source', { repo: br.repository }) : t('Not cloned: {repo} - switch on to clone it', { repo: br.repository })));
+      else if (!br.available) txt.append(el('span', 'fr', t('Not here: {why}', { why: br.why })));
       txt.append(el('span', 'fdef', (br.default ? t('default on') : t('default off')) + (changed ? ' · ' + t('changed') : '')));
       b.append(el('span', 'cp-fbox'), txt);
-      b.addEventListener('click', () => { if (!br.available) return; this.choice.bridges[br.name] = !this.isBridgeOn(br); this.changed(); });
+      b.addEventListener('click', () => { if (!tickable) return; this.choice.bridges[br.name] = !this.isBridgeOn(br); this.changed(); });
       return { b: withHelp(b, section, 'cp-fwrap'), isOn };
     };
     if (this.bridges.length) {
@@ -821,7 +885,7 @@ export class Compile {
     };
     $('cp-fcount').textContent = shown.length ? t('{on} of {n} compiled in · a feature switched off is not in the binary at all', { on, n: shown.length }) : '';
     $('cp-fnote').textContent = this.featureError ? t('The feature list could not be read: {error}', { error: this.featureError })
-      : (!cc.available ? t('The switches come from the source coraine-dev installs.') : '');
+      : (!cc.available ? t('The switches come from the source - choose it under Source.') : '');
 
     //
     // Optimisation
@@ -856,9 +920,9 @@ export class Compile {
     $('cp-sum-stores').textContent = t('{stores}; history none, corDB, timescale', { stores: mongoc ? 'corDB + mongoc' : t('corDB only') });
     $('cp-sum-opt').textContent = t(MODE_LABEL[this.choice.mode]) + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
     $('cp-sum-features').textContent = shown.length ? (off.length ? t('{n} off: {list}', { n: off.length, list: off.join(', ') }) : t('all {n} on', { n: shown.length })) : '-';
-    const brOn = this.bridges.filter((br) => br.available && this.isBridgeOn(br)).map((br) => br.name);
+    const brOn = this.bridges.filter((br) => this.canTick(br) && this.isBridgeOn(br)).map((br) => br.name);
     $('cp-sum-bridges').textContent = this.bridges.length ? (brOn.length ? brOn.join(', ') : t('none')) : '-';
-    $('cp-sum-source').textContent = cc.version ? 'coraine ' + cc.version : (cc.source || '-');
+    this.renderSourceText();
 
     this.commandSoon();
   }
@@ -868,6 +932,7 @@ export class Compile {
   //
   changed() {
     this.render();
+    this.source.update();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload }).catch(() => {});
@@ -913,7 +978,9 @@ export class Compile {
       box.textContent = lines.join(' \\\n  ');
       box.classList.remove('err');
       $('cp-name').placeholder = p.name;
-      $('cp-build').disabled = !(this.caps && this.caps.compile.available) || (this.run && this.run.state === 'running');
+      const blocking = this.source.blocking();
+      $('cp-build').disabled = !(this.caps && this.caps.compile.available) || (this.run && this.run.state === 'running') || !!blocking;
+      $('cp-build').title = blocking ? t('Waits: {why}', { why: blocking }) : '';
     } catch (e) {
       this.plan = null;
       box.textContent = e.message;
@@ -935,6 +1002,7 @@ export class Compile {
       $('cp-name').value = '';
       this.open(build);
       this.loadBuilds();
+      this.showRun();
     } catch (e) {
       const box = $('cp-cmd');
       box.textContent = e.message;
@@ -955,6 +1023,7 @@ export class Compile {
     this.stopFollowing();
     this.run = null;
     $('cp-run').hidden = true;
+    $('cp-building').hidden = true;
     this.renderBuilds();
     this.commandSoon();
   }
@@ -972,10 +1041,13 @@ export class Compile {
     this.stopFollowing();
     this.run = build;
     this.runLines = build.lines || 0;
+    this.lastLine = '';
+    this.lastLineAt = Date.now();
+    this.viewPicked = false;
     $('cp-run').hidden = false;
     $('cp-log').replaceChildren();
     $('cp-log-note').textContent = '';
-    $('cp-result').hidden = true;
+    this.showView('log');
     this.renderRun();
     this.renderBuilds();
     this.elapsedTimer = setInterval(() => this.renderElapsed(), 1000);
@@ -1045,6 +1117,7 @@ export class Compile {
     const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
     const frag = document.createDocumentFragment();
     for (const line of text.split('\n')) {
+      if (line.trim() !== '') { this.lastLine = line.trim(); this.lastLineAt = Date.now(); }
       let cls = '';
       if (line.startsWith('coraine-build: phase ')) cls = 'ph';
       else if (line.startsWith('c3: ')) cls = 'c3';
@@ -1062,6 +1135,62 @@ export class Compile {
     if (!b) return;
     const s = b.ended ? b.seconds : Math.max(0, Math.round((Date.now() - new Date(b.started).getTime()) / 1000));
     $('cp-run-elapsed').textContent = duration(s);
+    this.renderNow();
+    if (b.state === 'running') this.renderProgress();
+  }
+
+  //
+  // showRun - the build panel scrolled into view: Build is in the side column, the panel at the page's top
+  //
+  showRun() {
+    const panel = $('cp-run');
+    if (panel.hidden) return;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('cp-log').focus({ preventScroll: true });
+  }
+
+  //
+  // renderNow - while a build runs: the phase and how long it has run, the last line of output - and, when
+  // nothing came for a while, for how long (PGO's training runs minutes without a line); the same, short,
+  // under the side column's Build button
+  //
+  renderNow() {
+    const b = this.run;
+    const now = $('cp-now');
+    const side = $('cp-building');
+    //
+    // Nothing changes size while the panel is open: the line keeps its height (CSS) and says how the build ended,
+    // the side column's line stays until the panel is closed
+    //
+    if (!b) { now.replaceChildren(); side.hidden = true; return; }
+    if (b.state !== 'running') {
+      const how = t('{state} in {time}', { state: stateText(b.state), time: duration(b.seconds || 0) });
+      const view = (v, label) => {
+        const btn = el('button', 'btn small cp-view', label);
+        btn.type = 'button';
+        btn.dataset.v = v;
+        btn.setAttribute('aria-pressed', String(this.view === v));
+        btn.addEventListener('click', () => { this.viewPicked = true; this.showView(v); });
+        return btn;
+      };
+      if (!now.querySelector('.cp-view')) now.replaceChildren(el('span', '', how + ' '), view('result', t('Result')), view('log', t('Output')));
+      side.hidden = false;
+      side.textContent = b.name + ' - ' + how + ' · show ↑';
+      return;
+    }
+    const p = b.phases && b.phases.find((x) => x.name === b.phase);
+    const since = p ? p.at : b.started;
+    const inPhase = Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 1000));
+    const quiet = Math.round((Date.now() - (this.lastLineAt || Date.now())) / 1000);
+    const parts = [el('span', '', t('{phase} for {time}', { phase: b.phase || 'unpack', time: duration(inPhase) }))];
+    if (quiet >= 15) parts.push(el('span', 'quiet', ' · ' + t('no output for {time} - still working', { time: duration(quiet) })));
+    if (this.lastLine) parts.push(document.createTextNode(' · '), el('span', 'ln', this.lastLine));
+    const what = PHASE_WHAT[b.phase || 'unpack'] ? t(PHASE_WHAT[b.phase || 'unpack']) : '';
+    if (b.mode === 'tune' && b.phase === 'train') parts.push(el('div', 'what', t('Training on your workload, then measuring the allocator and lock policy on it - 10 minutes and more.')));
+    else if (what) parts.push(el('div', 'what', what));
+    now.replaceChildren(...parts);
+    side.hidden = false;
+    side.textContent = t('Building {name} - {phase}, {time} · show ↑', { name: b.name, phase: b.phase || 'unpack', time: $('cp-run-elapsed').textContent });
   }
 
   renderRun() {
@@ -1071,23 +1200,55 @@ export class Compile {
     const st = $('cp-run-state');
     st.textContent = stateText(b.state);
     st.className = 'badge ' + b.state;
-    $('cp-cancel').hidden = b.state !== 'running';
+    $('cp-cancel').style.visibility = b.state === 'running' ? 'visible' : 'hidden';   // keeps its place: nothing beside it moves
     $('cp-cancel').disabled = false;
     this.renderElapsed();
 
     const names = PHASES[b.mode] || PHASES.release;
-    const reached = new Set(['unpack', ...b.phases.map((p) => p.name)]);
-    $('cp-phases').replaceChildren(...names.filter((n) => n !== 'done').map((n) => {
-      const cls = (n === b.phase && b.state === 'running') ? 'now' : (reached.has(n) ? 'done' : '');
-      return el('span', 'cp-phase ' + cls, n);
-    }));
+    //
+    // The phases as a flow, unpack -> build -> ...: finished green, the current one magenta, the rest grey; the
+    // phase a build ended in red when it failed (outlined when it was cancelled)
+    //
+    const shown = names.filter((n) => n !== 'done');
+    const cur = b.phase === 'done' ? shown.length : Math.max(0, shown.indexOf(b.phase || 'unpack'));
+    const flow = [];
+    shown.forEach((n, i) => {
+      let cls = 'todo';
+      let what = t('not started');
+      if (b.state === 'succeeded' || i < cur) { cls = 'done'; what = t('finished'); }
+      else if (i === cur && b.state === 'running') { cls = 'now'; what = t('running'); }
+      else if (i === cur && b.state === 'failed') { cls = 'failed'; what = t('failed here'); }
+      else if (i === cur) { cls = 'stopped'; what = t('{state} here', { state: stateText(b.state) }); }
+      if (i > 0) {
+        const arrow = el('span', 'cp-arrow ' + (cls === 'todo' ? 'todo' : cls === 'now' || cls === 'failed' || cls === 'stopped' ? 'into' : 'done'));
+        arrow.setAttribute('aria-hidden', 'true');
+        flow.push(arrow);
+      }
+      const step = el('span', 'cp-phase ' + cls);
+      step.append(el('span', 'dot', cls === 'done' ? '✓' : cls === 'failed' ? '✕' : ''), el('span', 'lbl', n));
+      step.title = n + ' - ' + what;
+      step.setAttribute('aria-label', n + ', ' + what);
+      flow.push(step);
+    });
+    $('cp-phases').replaceChildren(...flow);
     this.renderProgress();
 
     if (b.state === 'running') {
-      $('cp-result').hidden = true;
+      this.showView('log');
       return;
     }
     this.renderResult(b);
+    if (!this.viewPicked) this.showView('result');
+  }
+
+  //
+  // showView - the result or the output, in the same box: a finished build's result does not push the page down
+  //
+  showView(v) {
+    this.view = v;
+    $('cp-result').hidden = v !== 'result';
+    $('cp-log').hidden = v === 'result';
+    for (const btn of document.querySelectorAll('#cp-now .cp-view')) btn.setAttribute('aria-pressed', String(btn.dataset.v === v));
   }
 
   //
@@ -1109,8 +1270,9 @@ export class Compile {
     };
     const weight = {};
     const lines = {};
+    const mw = MODE_WEIGHTS[b.mode] || {};
     names.forEach((n, i) => {
-      weight[n] = WEIGHTS[n] || 1;
+      weight[n] = mw[n] || WEIGHTS[n] || 1;
       if (prev && i + 1 < names.length) {
         const a = at(prev, n);
         const z = (i + 1 < names.length) ? at(prev, names[i + 1]) : null;
@@ -1123,8 +1285,18 @@ export class Compile {
     for (let i = 0; i < cur; i++) done += weight[names[i]];
     const start = at(b, names[cur]);
     let frac = 0.5;
-    if (start && lines[names[cur]]) frac = Math.min(0.97, Math.max(0, (this.runLines - start[0]) / lines[names[cur]]));
-    else if (start) frac = Math.min(0.9, (Date.now() / 1000 - start[1]) / (weight[names[cur]] * 1.5 || 1));
+    let over = false;                      // the phase has outrun its estimate: the bar says "working", not a number
+    if (start && lines[names[cur]]) {
+      const f = (this.runLines - start[0]) / lines[names[cur]];
+      over = f >= 0.97;
+      frac = Math.min(0.97, Math.max(0, f));
+    } else if (start) {
+      const f = (Date.now() / 1000 - start[1]) / (weight[names[cur]] * 1.5 || 1);
+      over = f >= 0.9;
+      frac = Math.min(0.9, f);
+    }
+    const quiet = Date.now() - (this.lastLineAt || Date.now()) >= 15000;
+    if (b.state === 'running' && (over || quiet)) bar.classList.add('busy');
     const pct = Math.min(99, Math.round(100 * (done + weight[names[cur]] * frac) / total));
     $('cp-bar-fill').style.width = pct + '%';
     $('cp-bar').title = pct + '%';
@@ -1173,7 +1345,6 @@ export class Compile {
     ri.append(runIt, el('span', 'cp-note', t('opens Run with this build - by hand: {command}', { command: '. ' + b.install + '/env; ' + (b.executable || 'coraine') + ' --database corDB' })));
     if (b.state === 'succeeded') row('', ri);
 
-    dl.hidden = false;
   }
 
   // ------------------------------------------------------------------ builds kept

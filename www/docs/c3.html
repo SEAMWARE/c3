@@ -56,8 +56,9 @@ brokers and services it started keep running and the new one attaches to them, a
   default: <code>coraine-build</code> in <code>$PATH</code> (the <code>coraine-dev</code> package), else the coraine
   clone's, beside the Cor-Libs c³ was built against</td></tr>
   <tr><td>--source, -src &lt;path&gt;<span class="env">C3_SOURCE</span></td><td>the coraine source Compile builds
-  from, a tarball or a directory of clones - default: the tarball <code>coraine-dev</code> installs, else the
-  clones</td></tr>
+  from, a tarball or a directory of clones - given, it decides and Compile's <b>Source</b> only shows it. Default:
+  Compile's <b>Source</b> choice, else the tarball <code>coraine-dev</code> installs, else the clones c³ was built
+  against, else <code>~/git</code></td></tr>
   <tr><td>--token-file, -tf &lt;file&gt;<span class="env">C3_TOKEN_FILE</span></td><td>a file holding the access token
   sent to every broker that has none of its own, read again whenever it changes - default:
   <code>$C3_TOKEN</code></td></tr>
@@ -88,8 +89,9 @@ running one and exits; any other program on the port is an error.</p>
   <tr><th>Part</th><th>Needs</th></tr>
   <tr><td>Explore</td><td>a running NGSI-LD broker - coraine (<a href="#docs/installation">Installation</a>) or any
   other; for live values without the broker's WebSocket transport, a broker that can reach c³'s port</td></tr>
-  <tr><td>Compile</td><td>the <code>coraine-dev</code> package (its <code>coraine-build</code> and source tarball) - or,
-  without it, the git clones c³ was built against, with coraine beside the Cor-Libs. For profile training and tuning:
+  <tr><td>Compile</td><td>the <code>coraine-dev</code> package (its <code>coraine-build</code> and source tarball) - or
+  a directory of git clones, coraine beside the Cor-Libs; Compile's <b>Source</b> lists what is missing and clones it
+  (<code>git</code>). For profile training and tuning:
   <code>curl</code>, <code>wrk</code>, <code>python3</code></td></tr>
   <tr><td>Operate</td><td>an installed <code>coraine</code> or a build of Compile's for a native broker; Docker or Podman
   for a broker in a container and for the services</td></tr>
@@ -104,6 +106,17 @@ running one and exits; any other program on the port is an error.</p>
 <p>A front-end to <code>coraine-build</code>: c³ builds nothing itself. Every build is the command the page shows, run
 by the backend - the same build as on the command line (<a href="#docs/building">Building from source</a>).</p>
 <ul>
+  <li><b>Source</b> - what <code>coraine-build</code> builds from: the <b>coraine-dev package</b> (the source of
+  the release it installs) or <b>Git clones</b>, a directory holding coraine, c3 and the libraries side by side
+  (<code>~/git</code>). For the clones, the repositories a build needs are listed - coraine's
+  <code>docker/vendor-libs.sh --list</code> names them; of the bridges' repositories only those of the bridges switched
+  on. What goes in: coraine's HEAD (what is committed), the others' <code>origin/main</code>. Listed are the ones to
+  look at - missing, uncommitted changes, checked out at something else than what the build takes, a clone elsewhere;
+  <b>Show all</b> lists every one with its branch and commit. A missing repository has <b>Clone</b> (into the
+  directory - <b>Clone the N missing</b> for all), the <code>git clone</code> command to copy, and <b>It is elsewhere</b>
+  for a clone at another path (it must hold <code>.git</code>; <b>Forget this path</b> undoes it). <b>Build</b> waits
+  while one is missing, and says so. A bridge whose repository is not cloned can be switched on - Source then lists it.
+  This card works when the rest of Compile is greyed: with no coraine clone, coraine is what it offers to clone first.</li>
   <li><b>Features</b> - from <code>coraine-build --list-features --json</code>, never a copy: each switch with its
   default and description; one changed from its default is marked, one whose requirements are off is greyed with what
   it needs. MONGOC is the <b>Stores</b> choice (corDB only, or corDB + mongoc).</li>
@@ -124,7 +137,12 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   from their defaults are passed. <b>Build</b> starts it.</li>
   <li><b>Following a build</b> - its output line by line, and a bar over the phases <code>coraine-build</code>
   announces (<code>build</code>, <code>install</code>, <code>bridges</code>, <code>check</code>, <code>done</code>;
-  <code>tools</code> and <code>train</code> for the training modes). <b>Cancel</b>: SIGTERM to the build's process
+  <code>tools</code> and <code>train</code> for the training modes). Under the phases: the current one, how long it
+  has run, the last line of output and what the phase does; nothing printed for 15 s says so, and the bar turns
+  striped (still working) when the phase outruns its estimate. <code>train</code> holds the instrumented build, the
+  training and the rebuild with the profile - 13 minutes on a laptop, a line per scenario. Build scrolls to the
+  panel; while a build runs, a line under Build names it, its phase and its time, and brings the panel back into
+  view. <b>Cancel</b>: SIGTERM to the build's process
   group, SIGKILL 5 s later. One build at a time; no make, gcc or training broker outlives a build, nor c³.</li>
   <li><b>The result</b> - the size of <code>install/</code> and of the broker, its <code>--version</code> with the
   features as the built broker reports them, the directory, the whole log. <b>Run it</b> opens Operate with that
@@ -614,7 +632,8 @@ the page's name, marked as being in c³.</p>
   login's issuer, client id and scope</td></tr>
   <tr><td><code>demos</code></td><td>named demos and their descriptors' URLs</td></tr>
   <tr><td><code>maps.areas</code></td><td>the map areas downloaded</td></tr>
-  <tr><td><code>compile</code></td><td>Compile's current choice and the presets</td></tr>
+  <tr><td><code>compile</code></td><td>Compile's current choice, the presets, and <code>source</code>: the package or
+  the directory of clones, and <code>repoPaths</code>, the clones elsewhere</td></tr>
   <tr><td><code>run.brokers</code></td><td>the brokers Operate started, with their options</td></tr>
   <tr><td><code>ui.lastPage</code></td><td>the page shown last</td></tr>
   <tr><td><code>ui.lang</code>, <code>ui.textSize</code></td><td>the language c³ is shown in, and the size of its text
@@ -630,6 +649,8 @@ directories are the truth, not the configuration:</p>
 <pre>builds/&lt;name&gt;/           coraine-build's directory: the source, the build tree, install/ (the result)
 builds/&lt;name&gt;.json       the build's record: options, command, phases, exit status, sizes, --version
 builds/&lt;name&gt;.log        everything coraine-build wrote
+clones-view/            with clones elsewhere: a link per repository - the directory of clones, the ones elsewhere
+                        in their place - given to coraine-build as --source
 run/&lt;name&gt;/broker.log    a broker's output and c3's lines about it; broker.log.1 the run before
 run/&lt;name&gt;/state.json   a native broker that runs: its pid and the process's start time
 run/&lt;name&gt;/data/        --dbDir of a native corDB

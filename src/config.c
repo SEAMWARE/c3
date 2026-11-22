@@ -1863,6 +1863,227 @@ bool configCompilePresetDelete(char* body, char* errBuf, int errLen)
 
 // -----------------------------------------------------------------------------
 //
+// homeExpand - "~" or "~/..." as $HOME's; other text as it is
+//
+static void homeExpand(const char* in, char* out, int outLen)
+{
+  const char* home = getenv("HOME");
+
+  if ((in[0] == '~') && ((in[1] == 0) || (in[1] == '/')) && (home != NULL))
+    snprintf(out, outLen, "%s%s", home, &in[1]);
+  else
+    snprintf(out, outLen, "%s", in);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompileSource - PUT /api/compile/source {"kind": "package"} or {"kind": "clones", "dir": "~/git"}: where
+// Compile's source is - the coraine-dev package, or a directory of git clones (made when a repository is cloned
+// into it: it need not be there yet). Kept as "compile": {"source": {...}}, the directory absolute.
+//
+bool configCompileSource(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* kind;
+  const char* dir;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (stringMember(bodyP, "kind", true, 16, &kind, errBuf, errLen) == false) ||
+      (stringMember(bodyP, "dir", false, 1024, &dir, errBuf, errLen) == false))
+    goto done;
+
+  CorNode* srcP = corTreeObject(&doc.alloc, "source");
+
+  if (strcmp(kind, "package") == 0)
+    corTreeChildAddOrReplace(srcP, "kind", corTreeString(&doc.alloc, "kind", "package"));
+  else if (strcmp(kind, "clones") == 0)
+  {
+    char abs[1100];
+
+    if ((dir == NULL) || (dir[0] == 0))
+    {
+      snprintf(errBuf, errLen, "\"dir\" is missing - the directory of the git clones");
+      goto done;
+    }
+    homeExpand(dir, abs, sizeof(abs));
+    if (abs[0] != '/')
+    {
+      snprintf(errBuf, errLen, "\"dir\": %s is not an absolute path (~/git is)", dir);
+      goto done;
+    }
+    int len = strlen(abs);
+    while ((len > 1) && (abs[len - 1] == '/'))
+      abs[--len] = 0;
+
+    struct stat st;
+    if ((stat(abs, &st) == 0) && !S_ISDIR(st.st_mode))
+    {
+      snprintf(errBuf, errLen, "%s is not a directory", abs);
+      goto done;
+    }
+    corTreeChildAddOrReplace(srcP, "kind", corTreeString(&doc.alloc, "kind", "clones"));
+    corTreeChildAddOrReplace(srcP, "dir",  corTreeString(&doc.alloc, "dir", corAllocStrdup(&doc.alloc, abs)));
+  }
+  else
+  {
+    snprintf(errBuf, errLen, "\"kind\" is package or clones");
+    goto done;
+  }
+
+  CorNode* compileP = compileObject(&doc);
+  CorNode* oldP     = corTreeLookup(compileP, "source");
+  CorNode* pathsP   = (oldP != NULL) ? corTreeLookup(oldP, "repoPaths") : NULL;     // the repositories found elsewhere stay
+
+  if ((pathsP != NULL) && (strcmp(kind, "clones") == 0))
+  {
+    corTreeChildRemove(oldP, pathsP);            // unlinked first: added, its 'next' would bring its siblings along
+    pathsP->next = NULL;
+    corTreeChildAddOrReplace(srcP, "repoPaths", pathsP);
+  }
+
+  corTreeChildAddOrReplace(compileP, "source", srcP);
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configCompileRepoPath - PUT /api/compile/repos/path {"repo", "path"}: a repository of the clones' that is
+// elsewhere - a git clone at 'path'; "path": "" forgets it. Kept as "compile": {"source": {"repoPaths": {...}}}.
+//
+bool configCompileRepoPath(char* body, char* errBuf, int errLen)
+{
+  Doc         doc;
+  const char* repo;
+  const char* path;
+  bool        ok = false;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
+  if ((bodyP == NULL) || (stringMember(bodyP, "repo", true, 64, &repo, errBuf, errLen) == false) ||
+      (stringMember(bodyP, "path", true, 1024, &path, errBuf, errLen) == false))
+    goto done;
+
+  for (const char* c = repo; *c != 0; c++)
+  {
+    if (!(((*c >= 'a') && (*c <= 'z')) || ((*c >= 'A') && (*c <= 'Z')) || ((*c >= '0') && (*c <= '9')) || (*c == '-') || (*c == '_')))
+    {
+      snprintf(errBuf, errLen, "\"repo\": %s is not a repository name", repo);
+      goto done;
+    }
+  }
+
+  CorNode* srcP = corTreeLookup(compileObject(&doc), "source");
+  if ((srcP == NULL) || (srcP->type != CorObject))
+  {
+    snprintf(errBuf, errLen, "the source is not a directory of clones - choose one first");
+    goto done;
+  }
+
+  CorNode* pathsP = corTreeLookup(srcP, "repoPaths");
+  if ((pathsP == NULL) || (pathsP->type != CorObject))
+  {
+    corTreeChildAddOrReplace(srcP, "repoPaths", corTreeObject(&doc.alloc, "repoPaths"));
+    pathsP = corTreeLookup(srcP, "repoPaths");
+  }
+
+  if (path[0] == 0)
+  {
+    CorNode* oldP = corTreeLookup(pathsP, repo);
+    if (oldP != NULL)
+      corTreeChildRemove(pathsP, oldP);
+  }
+  else
+  {
+    char        abs[1100];
+    char        git[1200];
+    struct stat st;
+
+    homeExpand(path, abs, sizeof(abs));
+    int len = strlen(abs);
+    while ((len > 1) && (abs[len - 1] == '/'))
+      abs[--len] = 0;
+    snprintf(git, sizeof(git), "%s/.git", abs);
+    if ((abs[0] != '/') || (stat(git, &st) != 0))
+    {
+      snprintf(errBuf, errLen, "%s is not a git clone (no .git in it)", abs);
+      goto done;
+    }
+    corTreeChildAddOrReplace(pathsP, repo, corTreeString(&doc.alloc, repo, corAllocStrdup(&doc.alloc, abs)));
+  }
+
+  ok = commitIfChanged(&doc, errBuf, errLen);
+
+ done:
+  docRelease(&doc);
+  return ok;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// configSourceGet - Compile's source as chosen: kind "" (never chosen), "package" or "clones" (and 'dir'); the
+// repositories found elsewhere into names/paths (up to max), their number the return value
+//
+int configSourceGet(char* kind, int kindLen, char* dir, int dirLen, char names[][64], char paths[][1024], int max)
+{
+  Doc doc;
+  int n = 0;
+
+  kind[0] = 0;
+  dir[0]  = 0;
+
+  docInit(&doc);
+  doc.treeP = docParse(&doc, cfgText);
+
+  CorNode* compileP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "compile") : NULL;
+  CorNode* srcP     = (compileP != NULL) ? corTreeLookup(compileP, "source") : NULL;
+
+  if ((srcP != NULL) && (srcP->type == CorObject))
+  {
+    CorNode* kP = corTreeLookup(srcP, "kind");
+    CorNode* dP = corTreeLookup(srcP, "dir");
+    CorNode* pP = corTreeLookup(srcP, "repoPaths");
+
+    if ((kP != NULL) && (kP->type == CorString))
+      snprintf(kind, kindLen, "%s", kP->value.s);
+    if ((dP != NULL) && (dP->type == CorString))
+      snprintf(dir, dirLen, "%s", dP->value.s);
+    if ((pP != NULL) && (pP->type == CorObject))
+    {
+      for (CorNode* rP = pP->value.head; (rP != NULL) && (n < max); rP = rP->next)
+      {
+        if (rP->type != CorString)
+          continue;
+        snprintf(names[n], 64, "%s", rP->name);
+        snprintf(paths[n], 1024, "%s", rP->value.s);
+        ++n;
+      }
+    }
+  }
+
+  docRelease(&doc);
+  return n;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // runBrokers - the configuration's "run": {"brokers": [...]}, created if missing
 //
 static CorNode* runBrokers(Doc* docP)

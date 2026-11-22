@@ -135,16 +135,53 @@
 .cp-runhead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .cp-runhead .nm { font-family: var(--mono); font-size: 1.05rem; }
 .cp-runhead .grow { flex: 1; }
-.cp-runhead .el { color: var(--muted); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.cp-runhead .el { color: var(--muted); font-size: 1.05rem; font-variant-numeric: tabular-nums; min-width: 11ch; text-align: right; }
 
-.cp-phases { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-phase { padding: 2px 10px; border-radius: 6px; font-size: 0.975rem; color: var(--dim); border: 1px solid var(--line-soft); }
-.cp-phase.done { color: var(--text-2); border-color: var(--line); }
-.cp-phase.now  { color: #fff; background: var(--accent); border-color: var(--accent-2); }
+/* the phases as a flow - a stepper, not buttons: a dot and a name per phase, a line with an arrowhead between;
+   finished green, the current one magenta, not started grey */
+.cp-phases { display: flex; align-items: center; gap: 0; cursor: default; user-select: none; }
+.cp-phase { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 1.275rem; color: var(--faint); }
+.cp-phase .dot { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  box-sizing: border-box; border: 2px solid var(--faint); font-size: 12px; font-weight: 700; line-height: 1; }   /* in pixels, as its circle */
+.cp-phase.done          { color: var(--ok); }
+.cp-phase.done .dot     { background: var(--ok); border-color: var(--ok); color: var(--bg-deep); }
+.cp-phase.now           { color: var(--text); font-weight: 600; }
+.cp-phase.now .dot      { background: var(--accent-2); border-color: var(--accent-2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 30%, transparent); }
+.cp-phase.failed        { color: var(--bad); }
+.cp-phase.failed .dot   { background: var(--bad); border-color: var(--bad); color: var(--bg-deep); }
+.cp-phase.stopped       { color: var(--dim); }
+.cp-phase.stopped .dot  { border-style: dashed; border-color: var(--dim); }
+.cp-arrow { position: relative; flex: 1 1 28px; min-width: 22px; max-width: 120px; height: 2px; margin: 0 10px 0 8px; background: var(--line-box); }
+.cp-arrow::after { content: ''; position: absolute; right: -2px; top: 50%; width: 7px; height: 7px; transform: translateY(-50%) rotate(45deg);
+  border-top: 2px solid var(--line-box); border-right: 2px solid var(--line-box); }
+.cp-arrow.done, .cp-arrow.into { background: var(--ok); }
+.cp-arrow.done::after { border-color: var(--ok); }
+.cp-arrow.into { background: linear-gradient(90deg, var(--ok), var(--accent-2)); }
+.cp-arrow.into::after { border-color: var(--accent-2); }
 .cp-bar { height: 6px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
 .cp-bar div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-text)); transition: width 0.4s ease; }
 .cp-bar.failed div { background: var(--bad); }
 .cp-bar.cancelled div { background: var(--faint); }
+.cp-bar.busy div {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 10px, var(--accent-text) 10px 20px);
+  background-size: 28px 28px; animation: cp-busy 1s linear infinite;
+}
+@keyframes cp-busy { to { background-position: 28px 0; } }
+@media (prefers-reduced-motion: reduce) { .cp-bar.busy div { animation: none; } }
+/* a fixed height: the phases' sentences differ in length, and a line that grows and shrinks moves the page */
+.cp-now { font-size: 0.975rem; line-height: 18px; color: var(--muted); font-variant-numeric: tabular-nums; height: 76px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-now > span:first-child { color: var(--text); }
+.cp-now .ln { font-family: var(--mono); font-size: 0.9rem; color: var(--text-2); }
+.cp-now .quiet { color: var(--accent-text); }
+.cp-now .what { white-space: normal; color: var(--text-2); margin-top: 4px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.cp-building { display: block; width: 100%; margin-top: 8px; padding: 8px 10px; text-align: left; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+  background: var(--bg-deep); border: 1px solid var(--accent-2); border-radius: 8px; color: var(--text-2); font: inherit; font-size: 0.975rem; }
+.cp-building:hover, .cp-building:focus-visible { border-color: var(--accent-text); color: var(--text); }
+.cp-building[hidden] { display: none; }
 
 .cp-log {
   margin: 0; height: 360px; overflow: auto; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px;
@@ -154,7 +191,12 @@
 .cp-log .c3 { color: var(--muted); }
 .cp-log .er { color: var(--bad); }
 
-.cp-result { display: grid; grid-template-columns: auto 1fr; column-gap: 16px; row-gap: 8px; font-size: 1.125rem; margin: 0; }
+/* in the log's place and of its height: a finished build's result does not move the page */
+.cp-result { display: grid; grid-template-columns: auto 1fr; align-content: start; column-gap: 16px; row-gap: 8px; font-size: 1.125rem; margin: 0;
+  height: 360px; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.cp-result[hidden], .cp-log[hidden] { display: none; }
+.cp-now .cp-view { margin-left: 6px; vertical-align: middle; }
+.cp-now .cp-view[aria-pressed="true"] { border-color: var(--accent-2); color: var(--text); }
 .cp-result dt { color: var(--muted); }
 .cp-result dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .cp-result .mono { font-size: 0.975rem; }
@@ -209,3 +251,36 @@
 .cp-doc strong { color: var(--text); }
 .cp-doc a { color: var(--accent-text); }
 .cp-doc pre { margin: 0; padding: 10px; overflow: auto; border-radius: 6px; background: var(--bg-deep); font-family: var(--mono); font-size: 0.9rem; }
+
+/*
+ * Source - the coraine-dev package or a directory of git clones, and the repositories a build needs
+ */
+.cp-source { display: flex; flex-direction: column; gap: 8px; }
+.cp-src-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.cp-src-top h2 { margin: 0; }
+.cp-src-dirrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cp-src-dirrow .cp-input { flex: 1 1 260px; min-width: 0; font-family: var(--mono, monospace); }
+.cp-src-msg { color: var(--warn); min-height: 0; }
+.cp-src-msg:empty { display: none; }
+.cp-repos { display: flex; flex-direction: column; border: 1px solid var(--line-soft); border-radius: 8px; }
+.cp-repo { padding: 7px 10px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 4px; }
+.cp-repo:first-child { border-top: 0; }
+.cp-repo-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.cp-repo-dot { width: 18px; flex: none; text-align: center; font-weight: 700; color: var(--ok); }
+.cp-repo.missing .cp-repo-dot { color: var(--warn); }
+.cp-repo-name { font-weight: 600; flex: none; min-width: 9ch; }
+.cp-repo-role { font-size: 0.9rem; color: var(--muted); flex: none; min-width: 9ch; }
+.cp-repo-what { font-size: 0.975rem; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-repo-what .mono { color: var(--text); }
+.cp-repo-warn { font-size: 0.975rem; line-height: 18px; color: var(--warn); margin-left: 28px; }
+.cp-repo-acts, .cp-repo-at { display: flex; align-items: center; gap: 8px; margin-left: 28px; flex-wrap: wrap; }
+.cp-repo-at .cp-input { flex: 1 1 260px; min-width: 0; font-family: var(--mono, monospace); }
+.cp-repo-cmd { font-family: var(--mono, monospace); font-size: 0.9rem; color: var(--muted); min-width: 0; flex: 1 1 200px; overflow-wrap: anywhere; user-select: all; }
+.cp-linkbtn { background: none; border: 0; padding: 2px 4px; color: var(--accent-2); cursor: pointer; font: inherit; font-size: 0.975rem; }
+.cp-linkbtn:hover { text-decoration: underline; }
+.cp-linkbtn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+.cp-src-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cp-src-foot:empty { display: none; }
+.cp-sum .cp-warn { color: var(--warn); }
+.cp-src-acts { display: flex; align-items: center; gap: 10px; }
