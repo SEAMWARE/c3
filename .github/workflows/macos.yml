@@ -50,3 +50,32 @@ jobs:
 
       - name: c3's tests
         run: make -C c3 test
+
+  homebrew:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The formula in a tap of its own - this branch of c3, and of each lib that has it
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          brew tap-new --no-git seamware/test
+          tap="$(brew --repository)/Library/Taps/seamware/homebrew-test/Formula"
+          branches=""
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+            if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then
+              branches="$branches\"$lib\" => \"$BRANCH\", "
+            fi
+          done
+          sed -e "s|c3.git\", branch: \"main\"|c3.git\", branch: \"$BRANCH\"|" \
+              -e "s|COR_LIB_BRANCHES = {}.freeze|COR_LIB_BRANCHES = { ${branches%, } }.freeze|" \
+              packaging/homebrew/c3.rb > "$tap/c3.rb"
+          grep -n -E 'branch|BRANCHES' "$tap/c3.rb"
+
+      - name: brew install --HEAD
+        run: brew install --HEAD seamware/test/c3
+
+      - name: brew test
+        run: brew test seamware/test/c3
+
