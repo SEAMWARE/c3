@@ -21,6 +21,9 @@ values** over the broker's WebSocket transport or HTTP notifications; **Dashboar
 made ready (its widgets, its user `admin`, its search indexes) and shown, logged in. [doc/design.md](doc/design.md) is
 the plan, [doc/areas.md](doc/areas.md) the parts of the work, [design/](design/) the screen designs.
 
+**Install** - [INSTALL.md](INSTALL.md): c³ on macOS (Homebrew) and Linux; the broker anywhere - on the same
+machine in Docker, one command (`docker compose -f docker/compose.yml up -d`), or on any other; AI Assist.
+
 **Demos** - [seamware-cor.github.io/c3-demos](https://seamware-cor.github.io/c3-demos/): AI Assist on video, and the
 factory floor, Boston's bike stations and Madrid to run on your machine
 ([SEAMWARE-cor/c3-demos](https://github.com/SEAMWARE-cor/c3-demos)).
@@ -40,9 +43,10 @@ The backend builds against the cor-libs as coraine does - sibling checkouts, eac
 
 ```sh
 mkdir seamware && cd seamware
-for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest c3; do
-  git clone https://github.com/SEAMWARE/$r
+for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest; do
+  git clone https://github.com/SEAMWARE-cor/$r
 done
+git clone https://github.com/SEAMWARE/c3
 for r in corBase corLog corAlloc corArgs corTree corJson corHttp corRest; do make -C $r; done
 cd c3
 ```

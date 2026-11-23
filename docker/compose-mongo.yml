@@ -1,0 +1,54 @@
+#
+# compose-mongo.yml - a coraine broker for c³ on MongoDB (the entities) and TimescaleDB (their history), three
+# containers, the data on volumes. Runs wherever Docker runs - the Mac c³ runs on, or any other machine: c³'s
+# Connect takes the broker's URL. Only the broker's port is published.
+#
+#   docker compose -f docker/compose-mongo.yml up -d    # the broker on http://localhost:1026
+#   docker compose -f docker/compose-mongo.yml down     # stopped; the data stays (down -v: gone too)
+#
+#   CORAINE_PORT=1030 ...                              # another port on this machine
+#   CORAINE_TAG=<tag> ...                              # another image: quay.io/seamware/coraine's tags
+#
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
+services:
+  mongo:
+    image: mongo:8.2
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  timescale:
+    image: timescale/timescaledb-ha:pg16                # with PostGIS, which the broker's history needs (geo-properties)
+    environment:
+      POSTGRES_PASSWORD: coraine                       # reachable by the broker only: no port published
+    volumes:
+      - timescale-data:/home/postgres/pgdata
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  coraine:
+    image: quay.io/seamware/coraine:${CORAINE_TAG:-0.7.0-post-2026-11-23-82bb93c3}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      timescale:
+        condition: service_healthy
+    ports:
+      - "${CORAINE_PORT:-1026}:1026"
+    command: [ "--database", "mongoc", "--dbHost", "mongo",
+               "--troe", "timescale", "--troeHost", "timescale", "--troePwd", "coraine",
+               "--apiPlugins", "admin" ]
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  timescale-data:

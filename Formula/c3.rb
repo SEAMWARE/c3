@@ -1,6 +1,10 @@
 #
-# c3.rb - the Homebrew formula of c³: `brew install --HEAD seamware/c3/c3` (the tap SEAMWARE/homebrew-c3 holds
-# a copy of this file). Built on the Mac from the sources: c3, corMcp (AI Assist's tool server) and the eight
+# c3.rb - the Homebrew formula of c³. This repository is its tap (INSTALL.md):
+#
+#   brew tap seamware/c3 https://github.com/SEAMWARE/c3
+#   brew install --HEAD seamware/c3/c3
+#
+# Built on the Mac from the sources: c3, corMcp (AI Assist's tool server) and the eight
 # cor-libs they link, their main.
 #
 # Copyright 2026 Seamware

@@ -78,7 +78,7 @@ jobs:
           done
           sed -e "s|c3.git\", branch: \"main\"|c3.git\", branch: \"$BRANCH\"|" \
               -e "s|COR_LIB_BRANCHES = {}.freeze|COR_LIB_BRANCHES = { ${branches%, } }.freeze|" \
-              packaging/homebrew/c3.rb > "$tap/c3.rb"
+              Formula/c3.rb > "$tap/c3.rb"
           grep -n -E 'branch|BRANCHES' "$tap/c3.rb"
 
       - name: brew install --HEAD
