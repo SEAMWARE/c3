@@ -2,6 +2,8 @@
 # macOS - c3 built and tested on a Mac (Apple silicon): the cor-libs' static archives, corBase's and corHttp's
 # own tests (the event loop on kqueue, the eventfd stand-in, sendfile), c3, and c3's `make test`.
 #
+# -Wno-nonportable-include-path: corAlloc.h and CorAlloc.h are one file on macOS, either spelling finds it.
+#
 # The cor-libs come from SEAMWARE-cor: the branch named as this one where a lib has it (a change that needs
 # a lib change is tested with it), else main.
 #
@@ -34,14 +36,14 @@ jobs:
         run: |
           SSL=$(brew --prefix openssl@3)
           for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
-            make -C "$lib" BUILD=release COR_HTTP_SERVER=builtin EXTRA_CFLAGS="-I$SSL/include" "lib$lib.a"
+            make -C "$lib" BUILD=release COR_HTTP_SERVER=builtin EXTRA_CFLAGS="-I$SSL/include -Wno-nonportable-include-path" "lib$lib.a"
           done
 
       - name: corBase's tests - coroutines on the event loop (kqueue)
-        run: make -C corBase BUILD=debug obj/debug/corBaseTest && corBase/obj/debug/corBaseTest
+        run: make -C corBase BUILD=debug EXTRA_CFLAGS="-Wno-nonportable-include-path" obj/debug/corBaseTest && corBase/obj/debug/corBaseTest
 
       - name: corHttp's tests - listening, files (sendfile) and streams (the eventfd)
-        run: make -C corHttp BUILD=debug listenTest streamTest
+        run: make -C corHttp BUILD=debug EXTRA_CFLAGS="-Wno-nonportable-include-path" listenTest streamTest
 
       - name: Build c3
         run: make -C c3

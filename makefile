@@ -61,11 +61,12 @@ COR_ARCHIVES = $(COR_LIBS)/corHttp/libcorHttp.a   \
 LIBS        = $(COR_ARCHIVES) -lssl -lcrypto -lz -lpthread -lm
 
 #
-# macOS: clang (no -Wformat-truncation: unknown there) and Homebrew's OpenSSL - OPENSSL=<prefix> for another
+# macOS: clang (no -Wformat-truncation: unknown there; corAlloc.h and CorAlloc.h are one file, either spelling
+# finds it) and Homebrew's OpenSSL - OPENSSL=<prefix> for another
 #
 ifeq ($(shell uname -s),Darwin)
   OPENSSL    ?= $(shell brew --prefix openssl@3 2>/dev/null)
-  CFLAGS     += -Wno-unknown-warning-option -I$(OPENSSL)/include
+  CFLAGS     += -Wno-unknown-warning-option -Wno-nonportable-include-path -I$(OPENSSL)/include
   LDFLAGS    += -L$(OPENSSL)/lib
 endif
 
