@@ -15,6 +15,7 @@
 #include <sys/types.h>                           // pid_t
 #include <time.h>                                // time_t
 
+#include "corBase/corLinux.h"                   // pipe2, socket flags, close_range, MSG_NOSIGNAL (macOS: corBase stand-ins)
 #include "corHttp/CorHttp.h"                     // CorHttpConn
 #include "corRest/CorRestKeyValue.h"              // CorRestKeyValue
 

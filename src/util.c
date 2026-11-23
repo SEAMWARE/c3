@@ -13,9 +13,15 @@
 #include <fcntl.h>                               // open, O_*
 #include <ftw.h>                                 // nftw
 #include <poll.h>                                // poll
+#if defined(__linux__)
 #include <sys/prctl.h>                           // prctl, PR_SET_PDEATHSIG
+#endif
 #include <signal.h>                              // kill, SIGTERM, SIGKILL
 #include <spawn.h>                               // posix_spawn
+#if defined(__APPLE__)
+#include <libproc.h>                             // proc_pidinfo
+#include <sys/proc.h>                            // SZOMB
+#endif
 #include <stdarg.h>                              // va_list
 #include <stdio.h>                               // snprintf
 #include <stdlib.h>                              // realloc, free, getenv
@@ -154,7 +160,9 @@ int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
   posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
   posix_spawn_file_actions_adddup2(&fa, fds[1], 1);
   posix_spawn_file_actions_adddup2(&fa, fds[1], 2);
+#if defined(__linux__)
   posix_spawn_file_actions_addclosefrom_np(&fa, 3);
+#endif
 
   posix_spawnattr_t attr;
   sigset_t          none, dfl;
@@ -164,7 +172,11 @@ int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
   posix_spawnattr_init(&attr);
   posix_spawnattr_setsigmask(&attr, &none);
   posix_spawnattr_setsigdefault(&attr, &dfl);
+#if defined(__APPLE__)
+  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_CLOEXEC_DEFAULT);   // fds 0-2 only
+#else
   posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
+#endif
 
   pid_t pid;
   int   r = posix_spawnp(&pid, argv[0], &fa, &attr, argv, environ);
@@ -485,8 +497,10 @@ pid_t procSpawn(const ProcSpawn* sP)
   else if (sP->group)
     setpgid(0, 0);
 
+#if defined(__linux__)
   if (sP->deathSig != 0)
-    prctl(PR_SET_PDEATHSIG, sP->deathSig);
+    prctl(PR_SET_PDEATHSIG, sP->deathSig);   // macOS has none: a child outlives a c3 killed outright
+#endif
 
   int null = open("/dev/null", O_RDWR);
   if (null != -1)
@@ -526,9 +540,24 @@ pid_t procSpawn(const ProcSpawn* sP)
 
 // -----------------------------------------------------------------------------
 //
-// procStartTime - when a process started, in clock ticks since boot (/proc/<pid>/stat, field 22); 0 when
-// there is no such process. A pid and its start time name one process: a pid used again is another start.
+// procStartTime - when a process started (Linux: clock ticks since boot, /proc/<pid>/stat field 22; macOS:
+// microseconds since the epoch, proc_pidinfo); 0 when there is no such process. A pid and its start time name
+// one process: a pid used again is another start.
 //
+#if defined(__APPLE__)
+long long procStartTime(pid_t pid)
+{
+  struct proc_bsdinfo info;
+
+  if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != (int) sizeof(info))
+    return 0;
+
+  if (info.pbi_status == SZOMB)                  // a zombie has not run since it ended
+    return 0;
+
+  return (long long) info.pbi_start_tvsec * 1000000LL + (long long) info.pbi_start_tvusec;
+}
+#else
 long long procStartTime(pid_t pid)
 {
   char path[64];
@@ -568,6 +597,7 @@ long long procStartTime(pid_t pid)
 
   return atoll(p);
 }
+#endif
 
 
 

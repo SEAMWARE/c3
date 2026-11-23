@@ -1,0 +1,89 @@
+#
+# macOS - c3 built and tested on a Mac (Apple silicon): the cor-libs' static archives, corBase's and corHttp's
+# own tests (the event loop on kqueue, the eventfd stand-in, sendfile), c3, and c3's `make test`.
+#
+# -Wno-nonportable-include-path: corAlloc.h and CorAlloc.h are one file on macOS, either spelling finds it.
+#
+# The cor-libs come from SEAMWARE-cor: the branch named as this one where a lib has it (a change that needs
+# a lib change is tested with it), else main.
+#
+name: macOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: c3
+
+      - name: The cor-libs - this branch where a lib has it, else main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest corMcp; do
+            ref=main
+            if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then ref=$BRANCH; fi
+            echo "$lib: $ref"
+            git clone -q --depth 1 -b "$ref" "https://github.com/SEAMWARE-cor/$lib" "$lib"
+          done
+
+      - name: Build the cor-libs (static archives)
+        run: |
+          SSL=$(brew --prefix openssl@3)
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+            make -C "$lib" BUILD=release COR_HTTP_SERVER=builtin EXTRA_CFLAGS="-I$SSL/include -Wno-nonportable-include-path" "lib$lib.a"
+          done
+
+      - name: corBase's tests - coroutines on the event loop (kqueue)
+        run: make -C corBase BUILD=debug EXTRA_CFLAGS="-Wno-nonportable-include-path" obj/debug/corBaseTest && corBase/obj/debug/corBaseTest
+
+      - name: corHttp's tests - listening, files (sendfile) and streams (the eventfd)
+        run: make -C corHttp BUILD=debug EXTRA_CFLAGS="-Wno-nonportable-include-path" listenTest streamTest
+
+      - name: Build c3
+        run: make -C c3
+
+      - name: c3's tests
+        run: make -C c3 test
+
+      - name: corMcp - AI Assist's tool server - built, and its tools listed over stdio
+        run: |
+          make -C corMcp
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+                         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | corMcp/corMcp --broker http://127.0.0.1:1 2>/dev/null \
+            | python3 -c 'import json,sys; n=[len(json.loads(l)["result"]["tools"]) for l in sys.stdin if l.strip() and json.loads(l).get("id")==2]; print("corMcp tools:", n); sys.exit(0 if n and n[0] > 0 else 1)'
+
+  homebrew:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The formula in a tap of its own - this branch of c3, and of each lib that has it
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          brew tap-new --no-git seamware/test
+          tap="$(brew --repository)/Library/Taps/seamware/homebrew-test/Formula"
+          branches=""
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest corMcp; do
+            if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then
+              branches="$branches\"$lib\" => \"$BRANCH\", "
+            fi
+          done
+          sed -e "s|c3.git\", branch: \"main\"|c3.git\", branch: \"$BRANCH\"|" \
+              -e "s|COR_LIB_BRANCHES = {}.freeze|COR_LIB_BRANCHES = { ${branches%, } }.freeze|" \
+              Formula/c3.rb > "$tap/c3.rb"
+          grep -n -E 'branch|BRANCHES' "$tap/c3.rb"
+
+      - name: brew install --HEAD
+        run: brew install --HEAD seamware/test/c3
+
+      - name: brew test
+        run: brew test seamware/test/c3
+

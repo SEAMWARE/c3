@@ -52,6 +52,7 @@
 #include <time.h>                                // time, gmtime_r, strftime
 #include <unistd.h>                              // write, close, fsync, read
 
+#include "corBase/corFileMtimeNs.h"             // corFileMtimeNs
 #include "corAlloc/CorAlloc.h"                   // CorAlloc
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocBufferInit.h"         // corAllocBufferInit
@@ -471,8 +472,7 @@ static const char* cfgFresh(void)
   if (stat(c3ConfigPath, &st) != 0)
     return cfgText;                              // no file (yet): this c3's copy is all there is
 
-  if (cfgSeenValid && (st.st_ino == cfgSeen.st_ino) && (st.st_size == cfgSeen.st_size) &&
-      (st.st_mtim.tv_sec == cfgSeen.st_mtim.tv_sec) && (st.st_mtim.tv_nsec == cfgSeen.st_mtim.tv_nsec))
+  if (cfgSeenValid && (st.st_ino == cfgSeen.st_ino) && (st.st_size == cfgSeen.st_size) && (corFileMtimeNs(&st) == corFileMtimeNs(&cfgSeen)))
     return cfgText;
 
   configLoad();

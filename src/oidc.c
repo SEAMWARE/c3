@@ -23,7 +23,7 @@
 #include <stdio.h>                               // snprintf
 #include <stdlib.h>                              // malloc, free
 #include <string.h>                              // strlen, strcmp, strncmp, memcpy
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <time.h>                                // time
 #include <unistd.h>                              // sleep
 
@@ -139,7 +139,7 @@ static bool randomText(char* out)
 {
   unsigned char bytes[32];
 
-  if (getrandom(bytes, sizeof(bytes), 0) != (ssize_t) sizeof(bytes))
+  if (getentropy(bytes, sizeof(bytes)) != 0)
     return false;
 
   b64url(bytes, sizeof(bytes), out);

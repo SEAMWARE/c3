@@ -1,0 +1,26 @@
+#
+# compose.yml - a coraine broker for c³, one container: corDB keeps the entities and their history (--troe corDB)
+# on a volume, so they survive a restart. Runs wherever Docker runs - the Mac c³ runs on, or any other machine:
+# c³'s Connect takes the broker's URL.
+#
+#   docker compose -f docker/compose.yml up -d          # the broker on http://localhost:1026
+#   docker compose -f docker/compose.yml down           # stopped; the data stays (down -v: gone too)
+#
+#   CORAINE_PORT=1030 ...                              # another port on this machine
+#   CORAINE_TAG=<tag> ...                              # another image: quay.io/seamware/coraine's tags
+#
+# Copyright 2026 Seamware
+# SPDX-License-Identifier: Apache-2.0
+#
+services:
+  coraine:
+    image: quay.io/seamware/coraine:${CORAINE_TAG:-0.7.0-post-2026-11-23-82bb93c3}
+    ports:
+      - "${CORAINE_PORT:-1026}:1026"
+    volumes:
+      - coraine-data:/data
+    command: [ "--database", "corDB", "--dbDir", "/data", "--troe", "corDB", "--apiPlugins", "admin" ]
+    restart: unless-stopped
+
+volumes:
+  coraine-data:

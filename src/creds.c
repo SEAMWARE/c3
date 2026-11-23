@@ -37,7 +37,7 @@
 // secrets.json's "dashboard" - never sent to the page, never on a command line.
 //
 #include <errno.h>                               // errno
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <fcntl.h>                               // open, O_*
 #include <pthread.h>                             // pthread_mutex_t
 #include <stdio.h>                               // snprintf
@@ -47,6 +47,7 @@
 #include <sys/stat.h>                            // stat
 #include <unistd.h>                              // write, close, fsync, unlink
 
+#include "corBase/corFileMtimeNs.h"             // corFileMtimeNs
 #include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corJson/CorJson.h"                     // CorJson
@@ -117,7 +118,7 @@ static char             dashAssistSecret[65];    // the secret of its OAuth clie
 
 static const char*      tokenFile = NULL;        // --token-file
 static char*            fileToken = NULL;        // its token, as last read (malloc'ed)
-static struct timespec  fileMtime;
+static long long        fileMtimeNs;
 static off_t            fileSize  = -1;
 
 
@@ -524,13 +525,13 @@ static const char* fileTokenGet(void)
     return NULL;
   }
 
-  if ((fileToken != NULL) && (st.st_size == fileSize) && (st.st_mtim.tv_sec == fileMtime.tv_sec) && (st.st_mtim.tv_nsec == fileMtime.tv_nsec))
+  if ((fileToken != NULL) && (st.st_size == fileSize) && (corFileMtimeNs(&st) == fileMtimeNs))
     return fileToken;
 
   free(fileToken);
   fileToken = NULL;
   fileSize  = st.st_size;
-  fileMtime = st.st_mtim;
+  fileMtimeNs = corFileMtimeNs(&st);
 
   char* text = fileText(tokenFile);
   if (text == NULL)
@@ -559,7 +560,7 @@ static bool randomHex(char* out, int bytes)
 {
   unsigned char b[32];
 
-  if ((bytes > 32) || (getrandom(b, bytes, 0) != (ssize_t) bytes))
+  if ((bytes > 32) || (getentropy(b, bytes) != 0))
     return false;
 
   for (int ix = 0; ix < bytes; ix++)
