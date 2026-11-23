@@ -296,10 +296,9 @@ html { scroll-padding-top: var(--head-h, 0px); }
 .aip-form textarea:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -1px; }
 .aip-row { display: flex; align-items: center; gap: 8px; }
 .aip-usage { flex: 1; min-width: 0; font-size: 0.825rem; color: var(--dim); }
-@media (max-width: 1000px) {
-  .aipanel { width: 100%; border-left: 0; }
-  #app.ai-docked .page { margin-right: 0; }
-}
+/* Narrower than 1000px the page keeps its width and the panel lies over its right side; phone-narrow, the whole width */
+@media (max-width: 1000px) { #app.ai-docked .page { margin-right: 0; } }
+@media (max-width: 600px)  { .aipanel { width: 100%; border-left: 0; } }
 
 @media (max-width: 720px) {
   header.top { padding: 0 8px 0 16px; }
