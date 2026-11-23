@@ -39,6 +39,8 @@ for what ends by itself (`ls`, a build).
 | query | consulta | requête | Abfrage |
 | index | índice | index | Index |
 | temporal history | histórico temporal | historique temporel | zeitlicher Verlauf |
+| instant (of a history) | instante | instant | Zeitpunkt |
+| fill (a broker with test data) | llenar | remplir | befüllen |
 | store (the database) | base de datos | stockage | Speicher |
 | database (Server and databases, Current-state databases) | base de datos | base de données | Datenbank |
 | plugin | plugin | plugin | Plugin |
