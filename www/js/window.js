@@ -42,7 +42,7 @@ async function act(what, body) {
 //
 // Made narrower than top, c³'s own window is made that wide again, a moment after (a drag ended), so a drag is not
 // fought - Chrome has no minimum width a page can set, the desktop asks the window's program for it. Leaving
-// full-screen (F11, the desktop's), it is made one wide - the screen's width at most, the desktop sees to that.
+// full-screen (F11, the desktop's), it is made one wide - the screen's width at most (a wider one, the desktop drops).
 // Neither full-screen nor maximised (the desktop's size), nor a window c³ has no hold of (control: false - a
 // browser's tab, whose page scrolls sideways instead)
 //
@@ -77,8 +77,10 @@ export async function windowInit() {
   // has minimise, maximise and close, and maximised is not full-screen
   //
   let wasFull = fullScreen();
+  let screenW = 0;                               // the window's width full-screen: the screen's, in outerWidth's units
   const show = () => {
     const full = fullScreen();
+    if (full) screenW = window.outerWidth;
     box.hidden = false;
     $('win-full').hidden = full;
     $('win-min').hidden = !full;
@@ -86,10 +88,13 @@ export async function windowInit() {
     if (wasFull && !full) {
       //
       // Out of full-screen: the width everything fits in on one line - once the header has measured itself in
-      // the window it is now (windowWidths) and the desktop is done with the change
+      // the window it is now (windowWidths) and the desktop is done with the change. The screen's width at most:
+      // a wider window is not narrowed by the desktop, the change is dropped (the window stays as narrow as it was)
       //
       setTimeout(() => {
-        if (!fullScreen() && widths.one > 0) act('width', { width: Math.max(widths.one, widths.top), exact: true });
+        if (fullScreen() || widths.one <= 0) return;
+        const want = Math.max(widths.one, widths.top);
+        act('width', { width: screenW > 0 ? Math.min(want, screenW) : want, exact: true });
       }, 500);
     }
     wasFull = full;
