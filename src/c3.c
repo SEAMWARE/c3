@@ -25,6 +25,7 @@
 #include <netinet/in.h>                          // sockaddr_in, INADDR_LOOPBACK
 #include <sys/socket.h>                          // socket, connect
 
+#include "corBase/corExePath.h"                  // corExePath
 #include "corArgs/corArgs.h"                     // corArgsInit, corArgsParse
 #include "corArgs/CorArg.h"                      // CorArg
 #include "corRest/corRestClient.h"               // corRestClientMulti*
@@ -108,11 +109,8 @@ static bool wwwResolve(const char* argv0)
   }
 
   char exe[3072];
-  int  len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
 
-  if (len > 0)
-    exe[len] = 0;
-  else
+  if (corExePath(exe, sizeof(exe)) == false)
   {
     char* real = realpath(argv0, NULL);
     snprintf(exe, sizeof(exe), "%s", (real != NULL) ? real : argv0);
@@ -261,6 +259,10 @@ static bool portTaken(unsigned short port)
 //
 static bool earlierBuild(int pid)
 {
+#if !defined(__linux__)
+  (void) pid;
+  return false;                                  // macOS: no "(deleted)" to see - the earlier c3 keeps the port
+#else
   char self[PATH_MAX];
   char other[PATH_MAX + 16];
   char link[64];
@@ -276,6 +278,7 @@ static bool earlierBuild(int pid)
   other[otherLen] = 0;
 
   return (strncmp(other, self, selfLen) == 0) && (strcmp(&other[selfLen], " (deleted)") == 0);
+#endif
 }
 
 

@@ -37,7 +37,7 @@
 // secrets.json's "dashboard" - never sent to the page, never on a command line.
 //
 #include <errno.h>                               // errno
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <fcntl.h>                               // open, O_*
 #include <pthread.h>                             // pthread_mutex_t
 #include <stdio.h>                               // snprintf
@@ -559,7 +559,7 @@ static bool randomHex(char* out, int bytes)
 {
   unsigned char b[32];
 
-  if ((bytes > 32) || (getrandom(b, bytes, 0) != (ssize_t) bytes))
+  if ((bytes > 32) || (getentropy(b, bytes) != 0))
     return false;
 
   for (int ix = 0; ix < bytes; ix++)

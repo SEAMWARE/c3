@@ -1,0 +1,50 @@
+#
+# macOS - c3 built and tested on a Mac (Apple silicon): the cor-libs' static archives, corBase's and corHttp's
+# own tests (the event loop on kqueue, the eventfd stand-in, sendfile), c3, and c3's `make test`.
+#
+# The cor-libs come from SEAMWARE-cor: the branch named as this one where a lib has it (a change that needs
+# a lib change is tested with it), else main.
+#
+name: macOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: c3
+
+      - name: The cor-libs - this branch where a lib has it, else main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+            ref=main
+            if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then ref=$BRANCH; fi
+            echo "$lib: $ref"
+            git clone -q --depth 1 -b "$ref" "https://github.com/SEAMWARE-cor/$lib" "$lib"
+          done
+
+      - name: Build the cor-libs (static archives)
+        run: |
+          SSL=$(brew --prefix openssl@3)
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+            make -C "$lib" BUILD=release COR_HTTP_SERVER=builtin EXTRA_CFLAGS="-I$SSL/include" "lib$lib.a"
+          done
+
+      - name: corBase's tests - coroutines on the event loop (kqueue)
+        run: make -C corBase BUILD=debug obj/debug/corBaseTest && corBase/obj/debug/corBaseTest
+
+      - name: corHttp's tests - listening, files (sendfile) and streams (the eventfd)
+        run: make -C corHttp BUILD=debug listenTest streamTest
+
+      - name: Build c3
+        run: make -C c3
+
+      - name: c3's tests
+        run: make -C c3 test

@@ -19,7 +19,7 @@
 #include <stdlib.h>                              // malloc, realloc, free
 #include <string.h>                              // memcpy, strncmp, strstr
 #include <strings.h>                             // strncasecmp
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <sys/socket.h>                          // send, recv, connect, setsockopt
 #include <sys/time.h>                            // struct timeval
 #include <unistd.h>                              // close
@@ -196,7 +196,7 @@ static bool wsSend(WsConn* wP, int opcode, const char* data, int len)
   if (wP->client)
   {
     unsigned char mask[4];
-    if (getrandom(mask, 4, 0) != 4)
+    if (getentropy(mask, 4) != 0)
       memset(mask, 0x5A, 4);
     memcpy(&frame[o], mask, 4);
     o += 4;
@@ -453,7 +453,7 @@ int wsConnect(WsConn* wP, const char* url, const char* path, const CorRestKeyVal
   char          key[32];
   char          accept[64];
 
-  if (getrandom(nonce, sizeof(nonce), 0) != sizeof(nonce))
+  if (getentropy(nonce, sizeof(nonce)) != 0)
     memset(nonce, 0x42, sizeof(nonce));
   EVP_EncodeBlock((unsigned char*) key, nonce, sizeof(nonce));
   wsAcceptKey(key, accept, sizeof(accept));

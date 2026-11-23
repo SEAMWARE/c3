@@ -50,7 +50,7 @@
 #include <stdlib.h>                              // malloc, calloc, free
 #include <string.h>                              // strcmp, strncmp, strlen, strrchr
 #include <strings.h>                             // strcasecmp, strcasestr
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <sys/socket.h>                          // shutdown
 #include <time.h>                                // clock_gettime
 #include <unistd.h>                              // close, usleep
@@ -1554,7 +1554,7 @@ static void pageTake(int fd, char* extra, int extraLen, void* cls)
   }
 
   unsigned char r[16];
-  if (getrandom(r, sizeof(r), 0) != sizeof(r))
+  if (getentropy(r, sizeof(r)) != 0)
   {
     free(s);
     close(fd);

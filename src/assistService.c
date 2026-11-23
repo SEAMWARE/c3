@@ -49,8 +49,10 @@
 #include <stdio.h>                               // snprintf
 #include <stdlib.h>                              // getenv, malloc, realloc, free
 #include <string.h>                              // strcmp, strlen, memchr, memmove, strerror
+#if defined(__linux__)
 #include <sys/prctl.h>                           // prctl, PR_SET_PDEATHSIG
-#include <sys/random.h>                          // getrandom
+#endif
+#include <sys/random.h>                          // getentropy
 #include <sys/wait.h>                            // waitpid
 #include <time.h>                                // time, clock_gettime
 #include <unistd.h>                              // pipe2, read, write, close, unlink, fork, execve
@@ -189,7 +191,7 @@ static bool hexNew(char* out, int bytes)
 {
   unsigned char b[32];
 
-  if ((bytes > 32) || (getrandom(b, bytes, 0) != (ssize_t) bytes))
+  if ((bytes > 32) || (getentropy(b, bytes) != 0))
     return false;
 
   for (int ix = 0; ix < bytes; ix++)
@@ -585,7 +587,9 @@ static bool mcpStart(Ask* aP)
   if (pid == 0)
   {
     setpgid(0, 0);
+#if defined(__linux__)
     prctl(PR_SET_PDEATHSIG, SIGTERM);
+#endif
     if (getppid() != parent)
       _exit(1);
 

@@ -60,6 +60,15 @@ COR_ARCHIVES = $(COR_LIBS)/corHttp/libcorHttp.a   \
 
 LIBS        = $(COR_ARCHIVES) -lssl -lcrypto -lz -lpthread -lm
 
+#
+# macOS: clang (no -Wformat-truncation: unknown there) and Homebrew's OpenSSL - OPENSSL=<prefix> for another
+#
+ifeq ($(shell uname -s),Darwin)
+  OPENSSL    ?= $(shell brew --prefix openssl@3 2>/dev/null)
+  CFLAGS     += -Wno-unknown-warning-option -I$(OPENSSL)/include
+  LDFLAGS    += -L$(OPENSSL)/lib
+endif
+
 QT_WEBENGINE := $(shell pkg-config --exists Qt6WebEngineWidgets 2>/dev/null && echo yes)
 
 all: c3 $(if $(QT_WEBENGINE),c3-window)
@@ -72,7 +81,7 @@ c3-window: qt/c3window.cpp qt/CMakeLists.txt
 	cp build/qt/c3-window c3-window
 
 c3: $(OBJECTS) $(COR_ARCHIVES)
-	$(CC) -o $@ $(OBJECTS) $(LIBS)
+	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 $(OBJDIR)/%.o: src/%.c
 	@mkdir -p $(OBJDIR)

@@ -57,7 +57,7 @@
 #include <stdio.h>                               // snprintf
 #include <stdlib.h>                              // getenv, malloc, realloc, free
 #include <string.h>                              // strcmp, strlen, memchr, memmove, strerror
-#include <sys/random.h>                          // getrandom
+#include <sys/random.h>                          // getentropy
 #include <sys/wait.h>                            // waitpid
 #include <time.h>                                // time
 #include <unistd.h>                              // pipe2, read, close, unlink, write
@@ -286,7 +286,7 @@ static bool uuidNew(char* out)
 {
   unsigned char b[16];
 
-  if (getrandom(b, sizeof(b), 0) != (ssize_t) sizeof(b))
+  if (getentropy(b, sizeof(b)) != 0)
     return false;
 
   b[6] = (b[6] & 0x0F) | 0x40;                   // version 4
@@ -303,7 +303,7 @@ static bool hexNew(char* out, int bytes)
 {
   unsigned char b[32];
 
-  if ((bytes > 32) || (getrandom(b, bytes, 0) != (ssize_t) bytes))
+  if ((bytes > 32) || (getentropy(b, bytes) != 0))
     return false;
 
   for (int ix = 0; ix < bytes; ix++)

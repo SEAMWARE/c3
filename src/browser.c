@@ -42,6 +42,8 @@
 #include <sys/wait.h>                            // waitpid
 #include <unistd.h>                              // fork, execv, setsid, access, dup2, close_range, readlink, gethostname, usleep
 
+#include "corBase/corExePath.h"                  // corExePath
+
 #include "c3.h"
 
 
@@ -89,12 +91,9 @@ static const char* chromeFind(char* out, int outLen)
 static const char* windowFind(char* out, int outLen)
 {
   char exe[3072];
-  int  len = (int) readlink("/proc/self/exe", exe, sizeof(exe) - 1);
 
-  if (len > 0)
+  if (corExePath(exe, sizeof(exe)) == true)
   {
-    exe[len] = 0;
-
     char* slash = strrchr(exe, '/');
     if (slash != NULL)
     {
