@@ -12,9 +12,31 @@ only needs to reach the broker's URL; its backend makes the requests, so the bro
 
 ## c³ on macOS
 
-Needs [Homebrew](https://brew.sh) and the Xcode Command Line Tools (`xcode-select --install`). Homebrew
-builds c³ on your Mac from the sources - c³, corMcp and the cor-libs they use, about half a minute - so
-macOS needs no signed download:
+c³ is installed with [Homebrew](https://brew.sh), the package manager most Mac developers use. It is not
+part of macOS: `brew --version` in the Terminal (Applications → Utilities → Terminal) says whether you have it.
+
+**Homebrew, once** - when `brew --version` says *command not found*:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+It asks for your Mac password (it installs into `/opt/homebrew`), installs Apple's Command Line Tools - the
+compiler and git, which c³'s build needs too - and takes a few minutes. At the end it prints, under *Next
+steps*, the commands that put `brew` in your `PATH`; run the ones it prints. For zsh, the Mac's own shell,
+they are:
+
+```sh
+echo >> ~/.zprofile
+echo 'eval "$(/opt/homebrew/bin/brew shellenv zsh)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+```
+
+Then `brew --version` answers. Homebrew also has a `.pkg` installer, for those who prefer one:
+[github.com/Homebrew/brew/releases](https://github.com/Homebrew/brew/releases/latest).
+
+**c³** - Homebrew builds it on your Mac from the sources - c³, corMcp and the cor-libs they use, about half a
+minute - so macOS needs no signed download:
 
 ```sh
 brew tap seamware/c3 https://github.com/SEAMWARE/c3
@@ -51,32 +73,40 @@ install targets, Compile's needs.
 
 ## A broker, in Docker
 
-Needs Docker - [Docker Desktop](https://www.docker.com/products/docker-desktop/) on a Mac. The images are
-coraine's published ones (`quay.io/seamware/coraine`, amd64 and arm64). In a clone of c³ (on a Mac: `git
-clone https://github.com/SEAMWARE/c3`), or with the one file downloaded:
+Needs Docker. On a Mac that is [Docker Desktop](https://www.docker.com/products/docker-desktop/) (not part
+of macOS either): download it for Apple silicon, drag it to Applications, start it once and accept its
+terms - the whale in the menu bar says when it is running. (`brew install --cask docker-desktop` installs the
+same.) The images are coraine's published ones (`quay.io/seamware/coraine`, amd64 and arm64).
+
+The compose file, then the broker:
 
 ```sh
-docker compose -f docker/compose.yml up -d
+mkdir -p ~/coraine && cd ~/coraine
+curl -fsSLO https://raw.githubusercontent.com/SEAMWARE/c3/main/docker/compose.yml
+docker compose -f compose.yml up -d
 ```
 
-That is the broker on **http://localhost:1026**: coraine on corDB, which keeps the entities **and their
+(In a clone of c³ the files are in `docker/`: `docker compose -f docker/compose.yml up -d`.)
+
+That is the broker on **http://localhost:1026** (the first start downloads the image, a minute or two): coraine on corDB, which keeps the entities **and their
 history** (temporal queries, AI Assist's test data with history) on a volume - one container, nothing else.
 In c³'s **Connect**, enter `http://localhost:1026` and press Connect.
 
 The same with MongoDB for the entities and TimescaleDB for their history - three containers:
 
 ```sh
-docker compose -f docker/compose-mongo.yml up -d
+curl -fsSLO https://raw.githubusercontent.com/SEAMWARE/c3/main/docker/compose-mongo.yml
+docker compose -f compose-mongo.yml up -d
 ```
 
-Either way:
+Either way (with `compose-mongo.yml` for the second):
 
 | | |
 |---|---|
-| Stop | `docker compose -f docker/compose.yml down` - the data stays; `down -v` deletes it too |
-| Another port | `CORAINE_PORT=1030 docker compose -f docker/compose.yml up -d` |
+| Stop | `docker compose -f compose.yml down` - the data stays; `down -v` deletes it too |
+| Another port | `CORAINE_PORT=1030 docker compose -f compose.yml up -d` |
 | Another broker version | `CORAINE_TAG=<tag> ...` - the tags at [quay.io/seamware/coraine](https://quay.io/repository/seamware/coraine?tab=tags) |
-| Its log | `docker compose -f docker/compose.yml logs -f coraine` |
+| Its log | `docker compose -f compose.yml logs -f coraine` |
 
 **On another machine**: the same command there, and in c³ that machine's address -
 `http://<host>:1026`. The port has to be reachable from the machine c³ runs on (a firewall, a security group);
