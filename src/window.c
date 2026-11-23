@@ -12,6 +12,10 @@
 // DevTools protocol, a JSON message ended by a 0 byte each way - that nothing else on the machine can reach
 // (no port). browser.c makes the pipes; this file keeps c3's ends.
 //
+// c3-window, c³'s Qt window (qt/c3window.cpp), instead of Chrome: the page asks the window itself, over its own
+// channel - none of the requests below but /api/window ({"control": false}) and /api/window/open, which writes
+// "raise [token]" to its stdin (the pipe is the same pair, its stdin and stdout).
+//
 // Which window: the page sets its title to a word of its own (the nonce) and names it in the request -
 // Target.getTargets gives each page's title. Then:
 //
@@ -69,6 +73,7 @@ static int  fromChrome = -1;
 static int  messageId  = 0;
 static char inBuf[256 * 1024];                   // what Chrome sent that is not a whole message yet
 static int  inLen      = 0;
+static bool qtWindow   = false;                 // the pipes are c3-window's, not Chrome's
 
 
 
@@ -76,7 +81,7 @@ static int  inLen      = 0;
 //
 // windowPipesSet - the ends browser.c kept for c3, of the Chrome it started
 //
-void windowPipesSet(int toFd, int fromFd)
+void windowPipesSet(int toFd, int fromFd, bool qt)
 {
   if (toChrome   != -1) close(toChrome);
   if (fromChrome != -1) close(fromChrome);
@@ -84,6 +89,7 @@ void windowPipesSet(int toFd, int fromFd)
   toChrome   = toFd;
   fromChrome = fromFd;
   inLen      = 0;
+  qtWindow   = qt;
 
   fcntl(toChrome,   F_SETFD, FD_CLOEXEC);        // not a build's, nor a broker's, that c3 starts
   fcntl(fromChrome, F_SETFD, FD_CLOEXEC);
@@ -604,6 +610,22 @@ static void windowOpen(CorHttpConn* connP)
     return;
   }
 
+  if (qtWindow)
+  {
+    char   line[300];
+    int    len = snprintf(line, sizeof(line), "raise%s%s\n", (token != NULL) ? " " : "", (token != NULL) ? token : "");
+    bool   ok  = (write(toChrome, line, len) == len);
+
+    if (ok)
+      serveJson(connP, 200, "{\"window\": \"raised\"}");
+    else
+    {
+      pipesGone();
+      serveError(connP, 502, "The window", "c3-window did not take the request");
+    }
+    return;
+  }
+
   //
   // Chrome still there - not a new one with the pipe: it would hand the window over to this one and exit, and
   // windowPipesSet, closing the pipes of the one there, would end it
@@ -726,7 +748,7 @@ void windowRequest(CorHttpConn* connP, const char* path)
     if (strcmp(method, "GET") != 0)
       serveError(connP, 405, "Method not allowed", path);
     else
-      serveJson(connP, 200, pipesAlive() ? "{\"control\": true}" : "{\"control\": false}");
+      serveJson(connP, 200, (pipesAlive() && (qtWindow == false)) ? "{\"control\": true}" : "{\"control\": false}");
     return;
   }
 
@@ -754,6 +776,12 @@ void windowRequest(CorHttpConn* connP, const char* path)
   if (strcmp(method, "POST") != 0)
   {
     serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+
+  if (qtWindow && pipesAlive())
+  {
+    serveError(connP, 409, "The window", "c3-window: the page asks the window itself, over its channel");
     return;
   }
 

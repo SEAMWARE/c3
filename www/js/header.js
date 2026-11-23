@@ -56,7 +56,7 @@ function fit() {
   const inner = window.innerWidth;
   const scrollbar = inner - document.documentElement.clientWidth;
   const screenOf = (px) => Math.ceil(window.outerWidth * (px + scrollbar) / inner) + 1;
-  if (inner > 0) windowWidths(screenOf(top), screenOf(one));
+  if (inner > 0) windowWidths(screenOf(top), screenOf(one), top + scrollbar, one + scrollbar);
 }
 
 export function headerInit() {

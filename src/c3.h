@@ -330,7 +330,7 @@ extern const char* startToken(void);
 extern void  reposRequest(CorHttpConn* connP, const char* path);
 
 // window.c
-extern void  windowPipesSet(int toFd, int fromFd);
+extern void  windowPipesSet(int toFd, int fromFd, bool qt);
 extern void  windowRequest(CorHttpConn* connP, const char* path);
 
 #endif  // C3_C3_H_

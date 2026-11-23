@@ -10,6 +10,10 @@
 // its own for a moment - the browser lists its pages by their titles. Minimised, it leaves full-screen
 // on the way (Chrome minimises no full-screen window), and goes back to it when it is shown again.
 //
+// In c³'s Qt window (c3-window, qt/c3window.cpp) none of that: the window is the program's own - the page asks it
+// over its channel (window.c3windowReady): minimise, close, full-screen, and the header's widths; the window keeps
+// its minimum width and its width out of full-screen itself.
+//
 const $ = (id) => document.getElementById(id);
 
 function fullScreen() {
@@ -49,8 +53,14 @@ async function act(what, body) {
 let control = null;                              // null: not asked yet
 let widths = { top: 0, one: 0 };
 let widthTimer = null;
+let qtWin = null;                                // the Qt window's channel object, in c3-window
 
-export function windowWidths(top, one) {
+// topCss, oneCss: the same in CSS pixels, for the Qt window - it scales them by its zoom itself
+export function windowWidths(top, one, topCss, oneCss) {
+  if (qtWin) {
+    qtWin.widths(Math.ceil(topCss), Math.ceil(oneCss));
+    return;
+  }
   widths = { top: Math.ceil(top), one: Math.ceil(one) };
   clearTimeout(widthTimer);
   widthTimer = setTimeout(() => {
@@ -59,8 +69,34 @@ export function windowWidths(top, one) {
   }, 400);
 }
 
+//
+// qtInit - in c3-window: the buttons as in Chrome's window, the window doing the work
+//
+function qtInit(win) {
+  const box = $('win-ctl');
+  const show = (full) => {
+    box.hidden = false;
+    $('win-full').hidden = full;
+    $('win-min').hidden = !full;
+    $('win-close').hidden = !full;
+  };
+
+  qtWin = win;
+  show(win.full);
+  win.fullChanged.connect(show);
+  $('win-min').addEventListener('click', () => win.minimize());
+  $('win-close').addEventListener('click', () => win.close());
+  $('win-full').addEventListener('click', () => win.fullScreen());
+  window.dispatchEvent(new Event('resize'));     // the header measures again: its widths to the window
+}
+
 export async function windowInit() {
   const box = $('win-ctl');
+
+  if (window.c3windowReady) {
+    qtInit(await window.c3windowReady);
+    return;
+  }
 
   try {
     const r = await fetch('/api/window');
