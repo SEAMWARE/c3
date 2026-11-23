@@ -6,7 +6,11 @@
 //
 // Open the application
 //
-// - Chrome or Chromium: an application window of its own (--app=<url>, no tabs, no address bar),
+// - c3-window (qt/c3window.cpp), beside the c3 binary or in $PATH: c³'s own window, a Qt WebEngine view - the
+//   window keeps its minimum width and its width out of full-screen itself, the page asks it for minimise,
+//   close and full-screen over a channel of its own. c3 keeps a pipe to it (--stdin, window.c): "raise
+//   [token]" lines from a c3 started again; the pipe closed (c3 gone), the window closes.
+// - Else Chrome or Chromium: an application window of its own (--app=<url>, no tabs, no address bar),
 //   full-screen (--start-fullscreen), the DevTools protocol on a pipe (--remote-debugging-pipe) for the page's
 //   minimise and close buttons (window.c). With a profile of its own (--user-data-dir under
 //   $XDG_STATE_HOME/c3, else ~/.local/state/c3): a Chrome that is already running would take the
@@ -80,6 +84,34 @@ static const char* chromeFind(char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
+// windowFind - c3-window beside the c3 binary (a checkout, an install), else in $PATH
+//
+static const char* windowFind(char* out, int outLen)
+{
+  char exe[3072];
+  int  len = (int) readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+
+  if (len > 0)
+  {
+    exe[len] = 0;
+
+    char* slash = strrchr(exe, '/');
+    if (slash != NULL)
+    {
+      *slash = 0;
+      snprintf(out, outLen, "%s/c3-window", exe);
+      if (access(out, X_OK) == 0)
+        return out;
+    }
+  }
+
+  return inPath("c3-window", out, outLen) ? out : NULL;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // headless - no screen to open a window on
 //
 static bool headless(void)
@@ -101,9 +133,9 @@ static bool headless(void)
 // spawn - start a program, detached, its output gone; true if the fork worked
 //
 // devtools: Chrome's --remote-debugging-pipe - it reads the DevTools protocol on its fd 3 and writes on its
-// fd 4; c3 keeps the other ends (window.c)
+// fd 4; c3 keeps the other ends (window.c). qt: c3-window's instead - its stdin and stdout
 //
-static bool spawn(const char* prog, char* const argV[], bool devtools, const char* token)
+static bool spawn(const char* prog, char* const argV[], bool devtools, bool qt, const char* token)
 {
   int toChrome[2]   = { -1, -1 };
   int fromChrome[2] = { -1, -1 };
@@ -144,14 +176,15 @@ static bool spawn(const char* prog, char* const argV[], bool devtools, const cha
     if (devtools)
     {
       //
-      // Chrome's ends to 3 and 4 - by way of fds above both, as one of them may be 3 or 4 already
+      // Chrome's ends to 3 and 4 (c3-window's to 0 and 1) - by way of fds above both, as one of them may be
+      // one of those already
       //
       int in  = fcntl(toChrome[0],   F_DUPFD, 10);
       int out = fcntl(fromChrome[1], F_DUPFD, 10);
 
-      dup2(in,  3);
-      dup2(out, 4);
-      close_range(5, ~0U, 0);                    // c3's listening socket is not the browser's to keep
+      dup2(in,  qt ? 0 : 3);
+      dup2(out, qt ? 1 : 4);
+      close_range(qt ? 3 : 5, ~0U, 0);           // c3's listening socket is not the browser's to keep
     }
     else
       close_range(3, ~0U, 0);
@@ -172,7 +205,7 @@ static bool spawn(const char* prog, char* const argV[], bool devtools, const cha
   {
     close(toChrome[0]);
     close(fromChrome[1]);
-    windowPipesSet(toChrome[1], fromChrome[0]);
+    windowPipesSet(toChrome[1], fromChrome[0], qt);
   }
 
   return true;
@@ -356,6 +389,18 @@ bool browserOpen(const char* url, bool noBrowser, bool control, const char* toke
     return false;
   }
 
+  if (windowFind(prog, sizeof(prog)) != NULL)
+  {
+    char* argV[] = { prog, (char*) url, control ? (char*) "--stdin" : NULL, NULL };
+
+    if (spawn(prog, argV, control, true, token))
+    {
+      printf("c3: %s - opened in %s\n", url, prog);
+      fflush(stdout);
+      return true;
+    }
+  }
+
   if (chromeFind(prog, sizeof(prog)) != NULL)
   {
     char appArg[4200];
@@ -379,7 +424,7 @@ bool browserOpen(const char* url, bool noBrowser, bool control, const char* toke
     if (token != NULL)
       argV[argC++] = tokenArg;
 
-    if (spawn(prog, argV, control, token))
+    if (spawn(prog, argV, control, false, token))
     {
       printf("c3: %s - opened in %s\n", url, prog);
       fflush(stdout);
@@ -397,7 +442,7 @@ bool browserOpen(const char* url, bool noBrowser, bool control, const char* toke
   {
     char* argV[] = { prog, (char*) url, NULL };
 
-    if (spawn(prog, argV, false, token))
+    if (spawn(prog, argV, false, false, token))
     {
       printf("c3: %s - opened with %s\n", url, opener);
       fflush(stdout);

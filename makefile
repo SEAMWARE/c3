@@ -6,7 +6,10 @@
 #
 # c3 - the coraine Control Center
 #
-#   make                 the c3 binary (in this directory)
+#   make                 the c3 binary (in this directory), and c3-window when Qt 6 WebEngine is there
+#   make window          c3-window - c³'s own window, Qt 6 WebEngine (qt/; Debian/Ubuntu: qt6-base-dev qt6-webengine-dev
+#                        qt6-webchannel-dev cmake), built in build/qt, beside c3 here. c3 opens it when it finds it
+#                        beside itself or in $PATH, else Chrome
 #   make run             build, and start c3 on this checkout's pages (ARGS="--port 7901 --no-browser")
 #   make install         $(PREFIX)/bin/c3 and $(PREFIX)/share/c3/www (PREFIX=/usr/local; DESTDIR for packaging)
 #   make uninstall
@@ -56,7 +59,16 @@ COR_ARCHIVES = $(COR_LIBS)/corHttp/libcorHttp.a   \
 
 LIBS        = $(COR_ARCHIVES) -lssl -lcrypto -lz -lpthread -lm
 
-all: c3
+QT_WEBENGINE := $(shell pkg-config --exists Qt6WebEngineWidgets 2>/dev/null && echo yes)
+
+all: c3 $(if $(QT_WEBENGINE),c3-window)
+
+window: c3-window
+
+c3-window: qt/c3window.cpp qt/CMakeLists.txt
+	cmake -S qt -B build/qt -DCMAKE_BUILD_TYPE=Release
+	cmake --build build/qt -j
+	cp build/qt/c3-window c3-window
 
 c3: $(OBJECTS) $(COR_ARCHIVES)
 	$(CC) -o $@ $(OBJECTS) $(LIBS)
@@ -88,6 +100,7 @@ DESKTOP_EXEC ?= $(PREFIX)/bin/c3
 install: c3
 	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/c3 $(APPS) $(ICONS)/256x256/apps $(ICONS)/512x512/apps
 	install -m 755 c3 $(DESTDIR)$(PREFIX)/bin/c3
+	if [ -x c3-window ]; then install -m 755 c3-window $(DESTDIR)$(PREFIX)/bin/c3-window; fi
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3/www
 	cp -r www $(DESTDIR)$(PREFIX)/share/c3/www
 	sed 's|@EXEC@|$(DESKTOP_EXEC)|' desktop/com.seamware.c3.desktop > $(APPS)/com.seamware.c3.desktop
@@ -106,7 +119,7 @@ install-launcher:
 	install -m 755 desktop/c3-launch $(DESTDIR)$(PREFIX)/bin/c3-launch
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/c3 $(DESTDIR)$(PREFIX)/bin/c3-launch
+	rm -f $(DESTDIR)$(PREFIX)/bin/c3 $(DESTDIR)$(PREFIX)/bin/c3-launch $(DESTDIR)$(PREFIX)/bin/c3-window
 	rm -rf $(DESTDIR)$(PREFIX)/share/c3
 	rm -f $(APPS)/com.seamware.c3.desktop $(ICONS)/256x256/apps/com.seamware.c3.png $(ICONS)/512x512/apps/com.seamware.c3.png
 
@@ -128,8 +141,8 @@ site:
 	printf '{ "version": "%s", "commit": "%s" }\n' '$(VERSION)' "$$(git rev-parse --short HEAD 2>/dev/null)" > $(SITE)/version.json
 
 clean:
-	rm -rf obj c3 build
+	rm -rf obj c3 c3-window build
 
-.PHONY: all run install install-launcher uninstall clean site
+.PHONY: all window run install install-launcher uninstall clean site
 
 -include $(DEPS)
