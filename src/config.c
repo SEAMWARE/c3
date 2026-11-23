@@ -81,6 +81,13 @@ static char   cfgError[1024];
 static bool   cfgWritable   = true;
 static int    cfgBrokerCount = 0;
 
+//
+// cfgSeen - the file as this c3 last read or wrote it: another c3 on the same file (another port) writes it too,
+// and a change made from a copy older than the file would undo that one's (cfgFresh)
+//
+static struct stat cfgSeen;
+static bool        cfgSeenValid = false;
+
 #define CONFIG_VERSION      1
 #define CONFIG_BROKERS_MAX  50
 #define CONFIG_TYPES_MAX    1000
@@ -274,7 +281,7 @@ static bool fileWrite(const char* text, char* errBuf, int errLen)
 {
   char tmp[4200];
 
-  snprintf(tmp, sizeof(tmp), "%s.tmp", c3ConfigPath);
+  snprintf(tmp, sizeof(tmp), "%s.%d.tmp", c3ConfigPath, (int) getpid());   // two c3 writing at once: a file each
   mkdirs(c3ConfigPath);
 
   int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -388,6 +395,17 @@ static char* fileRead(const char* path)
 
 // -----------------------------------------------------------------------------
 //
+// cfgStamp - the file as it is now is the one this c3 knows
+//
+static void cfgStamp(void)
+{
+  cfgSeenValid = (stat(c3ConfigPath, &cfgSeen) == 0);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // configLoad - read the file, or start from the default when there is none
 //
 void configLoad(void)
@@ -436,6 +454,29 @@ void configLoad(void)
 
   docRelease(&doc);
   free(text);
+  cfgStamp();
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// cfgFresh - the configuration, read again first when the file changed since this c3 read or wrote it (another
+// c3 wrote it): every change starts from the file as it is, not from this c3's older copy
+//
+static const char* cfgFresh(void)
+{
+  struct stat st;
+
+  if (stat(c3ConfigPath, &st) != 0)
+    return cfgText;                              // no file (yet): this c3's copy is all there is
+
+  if (cfgSeenValid && (st.st_ino == cfgSeen.st_ino) && (st.st_size == cfgSeen.st_size) &&
+      (st.st_mtim.tv_sec == cfgSeen.st_mtim.tv_sec) && (st.st_mtim.tv_nsec == cfgSeen.st_mtim.tv_nsec))
+    return cfgText;
+
+  configLoad();
+  return cfgText;
 }
 
 
@@ -444,7 +485,7 @@ void configLoad(void)
 //
 // configText / configError / configBrokers -
 //
-const char* configText(void)    { return cfgText; }
+const char* configText(void)    { return cfgFresh(); }
 const char* configError(void)   { return (cfgError[0] != 0) ? cfgError : NULL; }
 int         configBrokers(void) { return cfgBrokerCount; }
 
@@ -478,6 +519,7 @@ static bool commit(Doc* docP, char* errBuf, int errLen)
   free(cfgText);
   cfgText        = text;
   cfgBrokerCount = brokersCount(docP->treeP);
+  cfgStamp();
 
   return true;
 }
@@ -641,7 +683,7 @@ bool configBrokerTouch(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -732,7 +774,7 @@ bool configBrokerForget(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -791,7 +833,7 @@ bool configUiSet(char* body, char* errBuf, int errLen)
   bool        changed = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -848,7 +890,7 @@ bool configDashboardWrites(void)
 {
   Doc doc;
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* dP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "dashboard") : NULL;
   CorNode* wP = ((dP != NULL) && (dP->type == CorObject)) ? corTreeLookup(dP, "widgetsWrite") : NULL;
@@ -870,7 +912,7 @@ bool configDashboardSet(char* body, char* errBuf, int errLen)
   bool ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -921,7 +963,7 @@ bool configBrokerTypes(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -1020,7 +1062,7 @@ bool configBrokerLogin(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -1247,7 +1289,7 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if (bodyP == NULL)
@@ -1497,7 +1539,7 @@ bool configMapsSync(const MapsArea* disk, int n, const MapsArea* added, char* er
   bool ok;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* areasP = mapsAreas(&doc);
 
@@ -1578,7 +1620,7 @@ char* configMapsAreasText(CorAlloc* allocP)
   char* out;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* mapsP  = corTreeLookup(doc.treeP, "maps");
   CorNode* areasP = ((mapsP != NULL) && (mapsP->type == CorObject)) ? corTreeLookup(mapsP, "areas") : NULL;
@@ -1721,7 +1763,7 @@ bool configCompileChoice(char* body, char* errBuf, int errLen)
   bool ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (compileChoiceCheck(bodyP, false, errBuf, errLen) == false))
@@ -1782,7 +1824,7 @@ bool configCompilePreset(char* body, char* errBuf, int errLen)
   bool ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (compileChoiceCheck(bodyP, true, errBuf, errLen) == false))
@@ -1844,7 +1886,7 @@ bool configCompilePresetDelete(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (stringMember(bodyP, "name", true, 64, &name, errBuf, errLen) == false))
@@ -1899,7 +1941,7 @@ bool configCompileSource(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (stringMember(bodyP, "kind", true, 16, &kind, errBuf, errLen) == false) ||
@@ -1985,7 +2027,7 @@ bool configCompileRepoPath(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (stringMember(bodyP, "repo", true, 64, &repo, errBuf, errLen) == false) ||
@@ -2082,7 +2124,7 @@ bool configCompileRepoRef(char* body, char* errBuf, int errLen)
   bool        ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* bodyP = bodyParse(&doc, body, errBuf, errLen);
   if ((bodyP == NULL) || (stringMember(bodyP, "repo", true, 64, &repo, errBuf, errLen) == false) ||
@@ -2147,7 +2189,7 @@ void configSourceRefs(char* out, int outLen)
 
   out[0] = 0;
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* compileP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "compile") : NULL;
   CorNode* srcP     = (compileP != NULL) ? corTreeLookup(compileP, "source") : NULL;
@@ -2188,7 +2230,7 @@ int configSourceGet(char* kind, int kindLen, char* dir, int dirLen, char names[]
   dir[0]  = 0;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* compileP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "compile") : NULL;
   CorNode* srcP     = (compileP != NULL) ? corTreeLookup(compileP, "source") : NULL;
@@ -2272,7 +2314,7 @@ bool configRunBrokerPut(const char* defJson, char* errBuf, int errLen)
   bool ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* defP = bodyParse(&doc, (char*) defJson, errBuf, errLen);
   CorNode* nameP = (defP != NULL) ? corTreeLookup(defP, "name") : NULL;
@@ -2338,7 +2380,7 @@ bool configRunBrokerDelete(const char* name, char* errBuf, int errLen)
   bool ok = false;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* brokersP = runBrokers(&doc);
   CorNode* oldP     = runBrokerFind(brokersP, name);
@@ -2380,7 +2422,7 @@ bool configDemo(const char* name, char* urlOut, int urlLen, char* hintOut, int h
   hintOut[0] = 0;
 
   docInit(&doc);
-  doc.treeP = docParse(&doc, cfgText);
+  doc.treeP = docParse(&doc, cfgFresh());
 
   CorNode* demosP = (doc.treeP != NULL) ? corTreeLookup(doc.treeP, "demos") : NULL;
   if ((demosP != NULL) && (demosP->type == CorObject))

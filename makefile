@@ -10,6 +10,7 @@
 #   make window          c3-window - c³'s own window, Qt 6 WebEngine (qt/; Debian/Ubuntu: qt6-base-dev qt6-webengine-dev
 #                        qt6-webchannel-dev cmake), built in build/qt, beside c3 here. c3 opens it when it finds it
 #                        beside itself or in $PATH, else Chrome
+#   make test            the backend's checks (test/*.sh) against ./c3
 #   make run             build, and start c3 on this checkout's pages (ARGS="--port 7901 --no-browser")
 #   make install         $(PREFIX)/bin/c3 and $(PREFIX)/share/c3/www (PREFIX=/usr/local; DESTDIR for packaging)
 #   make uninstall
@@ -84,6 +85,9 @@ $(COR_ARCHIVES):
 run: c3
 	./c3 $(ARGS)
 
+test: c3
+	@for t in test/*.sh; do $$t ./c3 || exit 1; done
+
 #
 # The menu's and the dock's c³: desktop/com.seamware.c3.desktop, Exec the installed c3 by its full path (a
 # desktop session's PATH may not hold $(PREFIX)/bin, ~/.local/bin), and its icon in the hicolor theme, 256 and
@@ -143,6 +147,6 @@ site:
 clean:
 	rm -rf obj c3 c3-window build
 
-.PHONY: all window run install install-launcher uninstall clean site
+.PHONY: all window run test install install-launcher uninstall clean site
 
 -include $(DEPS)
