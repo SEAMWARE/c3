@@ -1448,5 +1448,12 @@
   "main (origin/main)": "main (origin/main)",
   "{ref} is not in this clone - choose another branch, or Refresh when it is new at origin": "{ref} no está en este clon - elige otra rama, o Actualizar si es nueva en origin",
   "{repo} has no {ref} - choose another branch under Source": "{repo} no tiene {ref} - elige otra rama en Código fuente",
-  "Select a branch for each repository": "Elige una rama para cada repositorio"
+  "Select a branch for each repository": "Elige una rama para cada repositorio",
+  "Asking the broker whether it keeps temporal history ...": "Preguntando al broker si guarda histórico temporal ...",
+  "Checking that none of the {n} ids is taken ...": "Comprobando que ninguno de los {n} ids está ocupado ...",
+  "Creating the entities: {done} of {n} ...": "Creando las entidades: {done} de {n} ...",
+  "Fill the broker with {n} entities?": "¿Llenar el broker con {n} entidades?",
+  "History: {values} values - {instants} instants from {from} to now, every {every}": "Histórico: {values} valores - {instants} instantes desde {from} hasta ahora, cada {every}",
+  "Tenant: {tenant}": "Tenant: {tenant}",
+  "Writing the history: {done} of {n} entities ...": "Escribiendo el histórico: {done} de {n} entidades ..."
 }

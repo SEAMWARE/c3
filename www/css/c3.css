@@ -272,6 +272,7 @@ html { scroll-padding-top: var(--head-h, 0px); }
 .aip-cmd .tname { color: var(--accent-text); }
 .aip-cmd .undo { margin-left: auto; flex: none; min-height: 24px; }
 .aip-cmd .cmdres { margin-top: 4px; color: var(--text-2); }
+.aip-cmd .cmdprog { margin-top: 4px; color: var(--dim); font-style: italic; }
 .aip-cmd .cmdres.err { color: var(--bad); }
 .aip-cmd.undone { opacity: 0.55; }
 .aip-cmd.undone .cmdres { text-decoration: line-through; }

@@ -406,7 +406,19 @@ function panelInit(info, connect, compile, run) {
     showCtx();
   };
 
-  const tools = c3Tools(connect, { compile, run, confirm, onExploreMoved, report, version: info.version || '', engine: `${info.provider} · ${info.model || ''}` });
+  //
+  // progress - a long command says what it is doing, on its own line in the log (the latest text replaces the one before)
+  //
+  let running = null;                            // the line of the c3 command being carried out
+  const progress = (text) => {
+    if (!running) return;
+    let p = running.querySelector('.cmdprog');
+    if (!p) { p = el('div', 'cmdprog'); running.append(p); }
+    p.textContent = text;
+    scroll();
+  };
+
+  const tools = c3Tools(connect, { compile, run, confirm, onExploreMoved, report, progress, version: info.version || '', engine: `${info.provider} · ${info.model || ''}` });
   const changeLines = new Map();                 // a change's n -> its line in the log
   tools.onUndone((ns) => {
     for (const n of ns) {
@@ -431,7 +443,11 @@ function panelInit(info, connect, compile, run) {
     log.append(line);
     scroll();
 
+    running = line;
     const r = await tools.run(data.name, data.args);
+    running = null;
+    const prog = line.querySelector('.cmdprog');
+    if (prog) prog.remove();
     if (!r.ok || r.n) line.append(el('div', r.ok ? 'cmdres' : 'cmdres err', r.text.length > 300 ? r.text.slice(0, 300) + '…' : r.text));
     else line.classList.add('quiet');            // a look (get_view, list_changes): its result is the model's
     if (r.n) {

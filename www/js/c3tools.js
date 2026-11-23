@@ -17,6 +17,7 @@
 
 import * as api from './api.js';
 import { t, plural } from './i18n.js';
+import { populateGenerate, POPULATE_MAX_ENTITIES, POPULATE_MAX_VALUES } from './populate.js';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -62,7 +63,7 @@ function colourHex(c) {
 const TYPES = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Entity types - the short names as get_view lists them (Store, Vehicle) or the full IRIs' };
 
 //
-// ctx: {compile, run, confirm({title, lines}) -> Promise<bool>, onExploreMoved(),
+// ctx: {compile, run, confirm({title, lines}) -> Promise<bool>, onExploreMoved(), progress(text) - what a long command does now,
 //       report({title, body, labels}) -> Promise<'opened' | 'dismissed'>}
 //
 export function c3Tools(connect, ctx = {}) {
@@ -582,6 +583,153 @@ export function c3Tools(connect, ctx = {}) {
           if (r.ok) made.push(e.id); else return { text: `created ${made.length}; ${e.id} refused: ${r.status} ${r.body && (r.body.title || '')} ${r.body && (r.body.detail || '')}`, undo: undoCreate(made) };
         }
         return { text: `created ${made.length}`, undo: undoCreate(made) };
+      },
+    },
+    {
+      name: 'populate_broker',
+      description: 'Fill a TEST broker with a realistic dataset made from a short spec - c³ makes the entities (and their history), you do not write them one by one. '
+        + `Up to ${POPULATE_MAX_ENTITIES} entities and ${POPULATE_MAX_VALUES} history values in one go. Ids: urn:ngsi-ld:<Type>:<idPrefix>-001... (idPrefix default: the type in lower case). `
+        + 'Each attribute has ONE generator: value (the same on all), pick [list] (weights optional), text "Hall {n}" / "SN-{n:5}" / "{type} {n}", range [min, max] (uniform, a new value at every history instant), '
+        + 'walk {start (or [min, max]), step, min, max} (a random walk), point {bbox: [west, south, east, north]} | {polygon: [[lon, lat], ...]} | {line: [[lon, lat], ...]} (a GeoProperty Point - longitude first), '
+        + 'rel "<another type of the spec>" (how: roundRobin | group | random) or rel "urn:..." (a Relationship). Options: unitCode (CEL, P1, KWH), decimals (default 2), observedAt (default on for range and walk). '
+        + 'history {duration: "7d" | from: "<ISO date>", every: "15m"}: the range and walk attributes get a value at every instant up to now, oldest first; only on a broker that keeps temporal history (refused otherwise, saying why). '
+        + 'seed: the same spec and seed give the same data. tenant: where it goes (default: the tenant Explore is on). context: an @context URL when the type and attribute names are not the core context\'s. '
+        + 'Never overwrites: ids already in the tenant are refused. The user sees the counts and samples and says yes or no. Undo deletes the entities and their history. '
+        + 'Take the attribute names from the Smart Data Model (smart_data_model) when one fits; ask the user for the scale and the area when they did not say.',
+      inputSchema: { type: 'object', properties: {
+        types: { type: 'array', minItems: 1, items: { type: 'object', properties: {
+          type: { type: 'string' }, count: { type: 'integer', minimum: 1 }, idPrefix: { type: 'string' },
+          attrs: { type: 'object', description: '{"temperature": {"walk": {"start": 21, "step": 0.3, "min": 15, "max": 35}, "unitCode": "CEL", "decimals": 1}, "refBuilding": {"rel": "Building", "how": "group"}, "location": {"point": {"bbox": [-3.71, 40.41, -3.69, 40.43]}}}' },
+        }, required: ['type', 'count'] } },
+        history: { type: 'object', properties: { duration: { type: 'string' }, from: { type: 'string' }, every: { type: 'string' } } },
+        seed: { type: 'integer' },
+        tenant: { type: 'string' },
+        context: { description: 'An @context: a URL or an array' },
+      }, required: ['types'] },
+      async run(spec) {
+        const data = populateGenerate(spec, new Date());
+        const tenant = spec.tenant;                                            // undefined: the page's own
+        const tenantName = (tenant !== undefined ? tenant : connect.tenant) || t('the default tenant');
+        const ct = data.context !== undefined ? 'application/ld+json' : 'application/json';
+        const get = (path) => api.brokerGet(connect.broker, path, tenant);
+        const send = (method, path, body) => api.brokerWrite(connect.broker, method, path, body, ct, tenant);
+        const say = (text) => { if (ctx.progress) ctx.progress(text); };
+
+        //
+        // Does the broker keep temporal history? coraine says so in /build (the TRoE plugin loaded: "none" =
+        // no history); another broker: its temporal API answers or not
+        //
+        say(t('Asking the broker whether it keeps temporal history ...'));
+        let troe = null;
+        const build = await api.brokerGet(connect.broker, '/build');
+        if (build.ok && build.body && build.body.plugins && build.body.plugins.loaded) {
+          const tp = build.body.plugins.loaded.temporal;
+          troe = tp && tp.alias && tp.alias !== 'none' ? tp.alias : false;
+        } else {
+          const first = data.entities[0];
+          const probe = await get('/ngsi-ld/v1/temporal/entities?type=' + encodeURIComponent(first.type) + '&timerel=before&timeAt=' + encodeURIComponent(data.to) + '&limit=1');
+          troe = probe.ok ? 'its temporal API' : false;
+        }
+        if (spec.history && !troe) {
+          throw new Error('this broker keeps no temporal history' + (build.ok ? ' (--troe none)' : ' (its temporal API does not answer)')
+            + ' - the history cannot be written. Start a broker with --troe corDB (or timescale) for it, or populate without history.');
+        }
+
+        //
+        // Never overwrite: the ids already there, type by type, 50 to a query
+        //
+        say(t('Checking that none of the {n} ids is taken ...', { n: data.entities.length }));
+        const taken = [];
+        for (const type of Object.keys(data.counts)) {
+          const ids = data.entities.filter((e) => e.type === type).map((e) => e.id);
+          for (let k = 0; k < ids.length; k += 50) {
+            const part = ids.slice(k, k + 50);
+            // local=true: the ids alone are too wide a query (§ 10.4.3.4); no type - under an own @context it would not expand
+            const r = await get('/ngsi-ld/v1/entities?local=true&id=' + part.map(encodeURIComponent).join(',') + '&limit=50');
+            if (r.status === 404) continue;                                    // a tenant not there yet: nothing in it
+            if (!r.ok) throw brokerError(r);
+            for (const e of Array.isArray(r.body) ? r.body : []) taken.push(e.id);
+          }
+        }
+        if (taken.length) {
+          throw new Error(`${taken.length} of these ids are already in ${tenantName} (${taken.slice(0, 5).join(', ')}${taken.length > 5 ? ', ...' : ''}) - nothing written. `
+            + 'Take another idPrefix or tenant, or delete those first.');
+        }
+
+        //
+        // The user sees what is coming
+        //
+        const n = data.entities.length;
+        const lines = [
+          t('Tenant: {tenant}', { tenant: tenantName }),
+          Object.entries(data.counts).map(([type, c]) => `${type}: ${c}`).join(' · '),
+        ];
+        if (data.instants) {
+          lines.push(t('History: {values} values - {instants} instants from {from} to now, every {every}', {
+            values: data.values.toLocaleString(), instants: data.instants, from: data.from, every: spec.history.every,
+          }));
+        }
+        const samples = [];
+        for (const type of Object.keys(data.counts)) { const e = data.entities.find((x) => x.type === type); if (samples.length < 3) samples.push(e); }
+        lines.push(JSON.stringify(samples, null, 2));
+        if (!(await ctx.confirm({ title: t('Fill the broker with {n} entities?', { n }), lines }))) return { text: 'the user declined - nothing written', declined: true };
+
+        //
+        // The entities: 100 to a batch create
+        //
+        const made = [];
+        const undo = async () => {
+          for (let k = 0; k < made.length; k += 100) await send('POST', '/ngsi-ld/v1/entityOperations/delete', made.slice(k, k + 100));
+          if (troe) for (const id of made) await send('DELETE', '/ngsi-ld/v1/temporal/entities/' + encodeURIComponent(id));
+          return `${made.length} entities deleted${troe ? ', and their history' : ''}`;
+        };
+        const stopped = (what) => {
+          if (made.length === 0) throw new Error(`${what} - nothing was written`);
+          return { text: `${what} - ${made.length} of ${n} entities were created (undo deletes them)`, undo };
+        };
+
+        for (let k = 0; k < n; k += 100) {
+          say(t('Creating the entities: {done} of {n} ...', { done: k, n }));
+          const part = data.entities.slice(k, k + 100);
+          const r = await send('POST', '/ngsi-ld/v1/entityOperations/create', part);
+          if (r.status === 201) { made.push(...part.map((e) => e.id)); continue; }
+          if (r.status === 207 && r.body) {
+            const ok = new Set(r.body.success || []);
+            made.push(...part.map((e) => e.id).filter((id) => ok.has(id)));
+            const err = (r.body.errors || [])[0];
+            return stopped(`the broker refused ${(r.body.errors || []).length} of a batch${err ? ` - ${err.entityId}: ${err.error && (err.error.title || '')} ${err.error && (err.error.detail || '')}` : ''}`);
+          }
+          return stopped(brokerError(r).message);
+        }
+
+        //
+        // The history: each entity's instances in one request, four at a time
+        //
+        if (data.history.length) {
+          let done = 0;
+          let failure = null;
+          const queue = [...data.history];
+          const worker = async () => {
+            while (queue.length && !failure) {
+              const h = queue.shift();
+              const r = await send('POST', '/ngsi-ld/v1/temporal/entities', h);
+              if (!r.ok) { failure = `${h.id}: ${brokerError(r).message}`; return; }
+              done++;
+              if (done % 10 === 0 || done === data.history.length) say(t('Writing the history: {done} of {n} entities ...', { done, n: data.history.length }));
+            }
+          };
+          say(t('Writing the history: {done} of {n} entities ...', { done: 0, n: data.history.length }));
+          await Promise.all([worker(), worker(), worker(), worker()]);
+          if (failure) return stopped(`the history stopped at ${failure} (${done} of ${data.history.length} entities' history written)`);
+        }
+
+        const per = Object.entries(data.counts).map(([type, c]) => `${type} ${c}`).join(', ');
+        return {
+          text: `created ${n} entities in ${tenantName} (${per})`
+            + (data.instants ? `; history: ${data.values} values, ${data.instants} instants from ${data.from} to ${data.to} - temporal history by ${troe}` : '')
+            + `. Ids ${data.entities[0].id} ... - Explore shows them once reloaded (connect_explore on the same broker${tenant !== undefined ? ' and tenant' : ''}).`,
+          undo,
+        };
       },
     },
     {
