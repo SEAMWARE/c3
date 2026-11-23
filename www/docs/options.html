@@ -44,7 +44,7 @@ and its options are also documented with the plugin. An option of a plugin that 
   <tr><td><a href="#docs/options" data-scroll="mhd">libmicrohttpd HTTP server (the default build)</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="contexts">@contexts</a></td><td>2</td></tr>
   <tr><td><a href="#docs/options" data-scroll="notifications">Subscriptions and notifications</a></td><td>3</td></tr>
-  <tr><td><a href="#docs/options" data-scroll="distributed-ops">Distributed operations</a></td><td>5</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="distributed-ops">Distributed operations</a></td><td>6</td></tr>
   <tr><td><a href="#docs/options" data-scroll="ha">High availability</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="bridge-options">Bridges</a></td><td>5</td></tr>
   <tr><td><a href="#docs/options" data-scroll="stores">The database and the history - choosing the plugins</a></td><td>4</td></tr>
@@ -859,7 +859,7 @@ counting a restart loses - the shutdown does not write them.</p>
 <h2 id="distributed-ops">Distributed operations</h2>
 <p>Forwarding to the Context Sources registered with <code>POST /ngsi-ld/v1/csourceRegistrations</code>: whether it
 happens, how long a source is waited for, how the broker names itself to other brokers, how the parts of an entity
-held by several sources are put together, and how such queries are paged. See <a
+held by several sources are put together, how such queries are paged, and whether they may be ordered. See <a
 href="#docs/administration/response-size">Response size - Distributed queries</a> and <a
 href="#docs/administration/entitymaps">EntityMaps</a>.</p>
 
@@ -942,6 +942,25 @@ local store first. The URL parameter <code>?splitEntities=true|false</code> deci
 <span class="c"># Room:7 with humidity here and temperature at the source:</span>
 <span class="c">#   default:            [{"id":"urn:ngsi-ld:Room:7", "humidity":..., "temperature":...}]</span>
 <span class="c">#   --noSplitEntities:  [{"id":"urn:ngsi-ld:Room:7", "humidity":...}]</span></pre>
+
+<h3 id="orderDistributed"><code>--orderDistributed</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-orderDistributed</code> · <code>CORAINE_ORDERDISTRIBUTED</code> · Bool</td></tr>
+  <tr><th>Default</th><td><code>false</code></td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>Accepts <code>orderBy</code> on a query that is not limited to the local scope. By default, as TS 104-175 § 10.4.3.4
+and § 11.3.3.4 have it, a query with <code>orderBy</code> and without <code>local=true</code> is refused with 400
+BadRequestData, title "Ordering outside the local scope". With <code>--orderDistributed</code> it is accepted: with
+<code>--distributed</code>, the local matches and the Context Sources' are merged and then ordered; without it, the
+query is local anyway. Query Entities (<code>GET /entities</code>, <code>POST /entityOperations/query</code>) and Query
+Temporal Evolution of Entities (<code>GET /temporal/entities</code>, <code>POST /temporal/entityOperations/query</code>).
+A query on a Snapshot (<code>NGSILD-Snapshot</code>) forwards nothing and is ordered either way.</p>
+<pre>coraine --database corDB --distributed --orderDistributed
+curl 'localhost:1026/ngsi-ld/v1/entities?type=Room&amp;orderBy=temperature'
+<span class="c">#   default:             400 {"title":"Ordering outside the local scope", ...}</span>
+<span class="c">#   --orderDistributed:  200, the local and the sources' Rooms, by temperature</span></pre>
 
 <h3 id="autoEntityMaps"><code>--autoEntityMaps</code></h3>
 <table class="g-opts">

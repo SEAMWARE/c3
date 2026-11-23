@@ -88,6 +88,7 @@ installation's directories:</p>
   <tr><th>Option</th><th>Default - what it does</th></tr>
   <tr><td>--distributed / -dist<span class="env">CORAINE_DISTRIBUTED</span></td><td>off - forward operations to registered Context Sources (the Registry API works either way)</td></tr>
   <tr><td>--noSplitEntities<span class="env">CORAINE_NOSPLITENTITIES</span></td><td>off - each entity lives wholly at one source</td></tr>
+  <tr><td>--orderDistributed<span class="env">CORAINE_ORDERDISTRIBUTED</span></td><td>off - accept <code>orderBy</code> without <code>local=true</code> and order the merged local and Context Source matches (by default such a query is 400, TS 104-175 § 10.4.3.4)</td></tr>
   <tr><td>--csourceAlias<span class="env">CORAINE_CSOURCEALIAS</span></td><td>the endpoint's authority - this broker's name in <code>Via</code> headers (loop detection)</td></tr>
 </table>
 
