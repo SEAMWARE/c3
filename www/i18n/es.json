@@ -1434,7 +1434,6 @@
   "- **Branches of this clone**: a local branch - commits not pushed yet are in.": "- **Ramas de este clon**: una rama local - los commits aún no subidos entran.",
   "- **HEAD**: whatever the clone has checked out right now.": "- **HEAD**: lo que el clon tenga en uso ahora mismo.",
   "- **main (origin/main)**, the default: main as last fetched from GitHub - not the clone's own main branch, and not what is checked out.": "- **main (origin/main)**, la opción por defecto: main tal como se obtuvo de GitHub por última vez - no la rama main propia del clon, ni lo que está en uso.",
-  "Branch": "Rama",
   "Branches at origin": "Ramas en origin",
   "Branches of this clone": "Ramas de este clon",
   "Each repository goes into the build at the branch chosen here - its last commit, as this clone has it. The build takes committed work only: uncommitted changes in a clone are not in it.": "Cada repositorio entra en la compilación en la rama elegida aquí - su último commit, tal como lo tiene este clon. La compilación solo toma lo confirmado: los cambios sin confirmar de un clon no entran.",
@@ -1442,8 +1441,6 @@
   "Fetching the {n} clones from origin (git fetch) and listing their branches again ...": "Obteniendo los {n} clones desde origin (git fetch) y listando de nuevo sus ramas ...",
   "HEAD - what is checked out": "HEAD - lo que está en uso",
   "Refresh": "Actualizar",
-  "Repository": "Repositorio",
-  "Role": "Papel",
   "Some clones could not be fetched: {errors}": "Algunos clones no se pudieron obtener: {errors}",
   "The branch of {repo} the build takes": "La rama de {repo} que toma la compilación",
   "The build takes the last commit of this branch, as this clone has it - uncommitted changes are not in it. origin/... as last fetched: Refresh fetches.": "La compilación toma el último commit de esta rama, tal como lo tiene este clon - los cambios sin confirmar no entran. origin/... tal como se obtuvo por última vez: Actualizar hace fetch.",
@@ -1452,5 +1449,5 @@
   "main (origin/main)": "main (origin/main)",
   "{ref} is not in this clone - choose another branch, or Refresh when it is new at origin": "{ref} no está en este clon - elige otra rama, o Actualizar si es nueva en origin",
   "{repo} has no {ref} - choose another branch under Source": "{repo} no tiene {ref} - elige otra rama en Código fuente",
-  "Select a branch for each repository - main (origin/main) unless another is chosen": "Elige una rama para cada repositorio - main (origin/main) salvo que se elija otra"
+  "Select a branch for each repository": "Elige una rama para cada repositorio"
 }

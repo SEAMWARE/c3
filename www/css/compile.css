@@ -272,8 +272,6 @@
 }
 .cp-repo:first-child { border-top: 0; }
 .cp-repo-head { display: contents; }
-.cp-repo-colhead { padding-top: 5px; padding-bottom: 5px; font-size: 0.9rem; color: var(--muted); }
-.cp-repo-colhead .cp-repo-name { font-weight: 600; }
 .cp-repo-dot { text-align: center; font-weight: 700; color: var(--ok); }
 .cp-repo.missing .cp-repo-dot { color: var(--warn); }
 .cp-repo-name { font-weight: 600; }
@@ -289,12 +287,12 @@
 .cp-linkbtn:hover { text-decoration: underline; }
 .cp-linkbtn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
-.cp-src-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cp-src-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cp-src-foot:empty { display: none; }
 .cp-sum .cp-warn { color: var(--warn); }
-.cp-src-acts { display: flex; align-items: center; gap: 10px; }
-.cp-src-corner { display: inline-flex; align-items: center; gap: 10px; }
-.cp-src-toggle { min-width: 11ch; text-align: right; }
-.cp-repo-colhead .cp-repo-branch { justify-content: space-between; }
-.cp-src-refresh { padding-top: 2px; padding-bottom: 2px; font-size: 0.9rem; }
-.cp-repo-branch .cp-q.inline { position: static; flex: 0 0 auto; }
+.cp-src-acts { display: flex; align-items: center; gap: 4px; }
+
+.cp-src-icon { width: 28px; height: 28px; padding: 0; font-size: 1.15rem; line-height: 28px; text-align: center; border-radius: 6px; }
+.cp-src-icon:hover { background: var(--bg-deep); }
+.cp-src-icon:disabled { opacity: 0.4; cursor: default; }
+.cp-src-acts .cp-q.inline { position: static; flex: 0 0 auto; margin-left: 4px; }
