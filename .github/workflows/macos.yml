@@ -25,7 +25,7 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
-          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest corMcp; do
             ref=main
             if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then ref=$BRANCH; fi
             echo "$lib: $ref"
@@ -51,6 +51,14 @@ jobs:
       - name: c3's tests
         run: make -C c3 test
 
+      - name: corMcp - AI Assist's tool server - built, and its tools listed over stdio
+        run: |
+          make -C corMcp
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+                         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | corMcp/corMcp --broker http://127.0.0.1:1 2>/dev/null \
+            | python3 -c 'import json,sys; n=[len(json.loads(l)["result"]["tools"]) for l in sys.stdin if l.strip() and json.loads(l).get("id")==2]; print("corMcp tools:", n); sys.exit(0 if n and n[0] > 0 else 1)'
+
   homebrew:
     runs-on: macos-latest
     steps:
@@ -63,7 +71,7 @@ jobs:
           brew tap-new --no-git seamware/test
           tap="$(brew --repository)/Library/Taps/seamware/homebrew-test/Formula"
           branches=""
-          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest; do
+          for lib in corBase corAlloc corLog corTree corJson corArgs corHttp corRest corMcp; do
             if git ls-remote --exit-code --heads "https://github.com/SEAMWARE-cor/$lib" "$BRANCH" > /dev/null; then
               branches="$branches\"$lib\" => \"$BRANCH\", "
             fi
