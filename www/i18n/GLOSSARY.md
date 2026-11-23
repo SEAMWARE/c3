@@ -40,6 +40,7 @@ for what ends by itself (`ls`, a build).
 | index | índice | index | Index |
 | temporal history | histórico temporal | historique temporel | zeitlicher Verlauf |
 | store (the database) | base de datos | stockage | Speicher |
+| database (Server and databases, Current-state databases) | base de datos | base de données | Datenbank |
 | plugin | plugin | plugin | Plugin |
 | channel (of a bridge) | canal | canal | Kanal |
 | rule (corCep) | regla | règle | Regel |

@@ -93,8 +93,18 @@ const duration = (s) => (s >= 60 ? t('{m} min {s} s', { m: Math.floor(s / 60), s
 //
 const HTTP_SERVERS = [
   ['mhd',     'libmicrohttpd',          tk('An external library (libmicrohttpd 1.0.10). Everything is built.')],
-  ['builtin', tk('corHttp (built in)'), tk('No external library. One listener - what needs a second port is not built.')],
+  ['builtin', 'corHttp',                tk('No external library. One listener - what needs a second port is not built.')],
 ];
+
+//
+// The temporal databases (TRoE) a broker can keep its history in - each a switch of the source (CMakeLists.txt);
+// none ticked: the broker keeps no history (--troe none, its default) - it is kept elsewhere, by subscription
+//
+const TROES = [
+  ['TROE_CORDB',     'corDB'],
+  ['TROE_TIMESCALE', 'TimescaleDB'],
+];
+const TROE_NAMES = new Set(TROES.map(([n]) => n));
 const HTTP_LABEL = Object.fromEntries(HTTP_SERVERS.map(([id, label]) => [id, label]));
 
 //
@@ -150,7 +160,8 @@ function shellQuote(a) {
 //
 const DOC_BASE = 'https://github.com/SEAMWARE/coraine/blob/main/doc/';
 const MODE_DOC = { release: 'Build mode: Release', pgo: 'Build mode: Profile-guided', tune: 'Build mode: Tuned for a workload', debug: 'Build mode: Debug' };
-const HTTP_DOC = { mhd: 'HTTP server: libmicrohttpd', builtin: 'HTTP server: corHttp (built in)' };
+const HTTP_DOC = { mhd: 'HTTP server: libmicrohttpd', builtin: ['HTTP server: corHttp', 'HTTP server: corHttp (built in)'] };
+const TROE_DOC = { TROE_CORDB: 'Temporal: corDB', TROE_TIMESCALE: 'Temporal: TimescaleDB' };
 const STORE_DOC = { false: 'Store: corDB only', true: 'Store: corDB + mongoc' };
 const BRIDGE_DOC = { mqtt: 'MQTT', modbus: 'Modbus', dds: 'DDS', ckan: 'CKAN', opcua: 'OPC UA', aas: 'AAS' };
 
@@ -702,15 +713,15 @@ export class Compile {
   pill(b, section) {
     const size = docSize(section && section.text);
     if (size) b.append(el('span', 'psz', ' ' + sizeText(size)));
-    const q = helpButton(section, true);
-    if (!q) return b;
     const w = el('span', 'cp-segitem');
-    w.append(b, q);
+    w.append(b, helpButton(section, true) || el('span', 'cp-q inline ghost'));    // without a '?', its room: the buttons one width
     return w;
   }
 
+  // title: a heading of the source's doc, or several - the first the doc has (a heading renamed, an older source)
   docAt(title) {
-    return this.doc.has(title) ? { title, text: this.doc.get(title) } : null;
+    const found = [].concat(title).find((h) => this.doc.has(h));
+    return found ? { title: found, text: this.doc.get(found) } : null;
   }
 
   //
@@ -782,10 +793,29 @@ export class Compile {
     sn.className = 'cp-note' + ((!cc.mongoc && mongoc) ? ' warn' : '');
 
     //
+    // Temporal history: corDB and TimescaleDB, any of them - the source's switches; an older source without them
+    // builds both
+    //
+    const troes = TROES.filter(([n]) => this.features.some((f) => f.name === n));
+    const troe = $('cp-troe');
+    const tn = $('cp-troe-note');
+    troe.replaceChildren(...troes.map(([n, label]) => {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(this.isOn(n)));
+      b.addEventListener('click', () => { this.choice.features[n] = !this.isOn(n); this.changed(); });
+      return this.pill(b, this.docAt(TROE_DOC[n]));
+    }));
+    const troeOn = troes.filter(([n]) => this.isOn(n)).map(([, label]) => label);
+    troe.hidden = troes.length === 0;
+    tn.textContent = (troes.length === 0) ? t('corDB and TimescaleDB, always built by this source')
+      : (troeOn.length === 0 ? t('None: no history in the broker - keep it elsewhere, by subscription: QuantumLeap, Cygnus, Kafnus') : '');
+
+    //
     // Features
     //
     const list = $('cp-features');
-    const shown = this.features.filter((f) => f.name !== 'MONGOC');
+    const shown = this.features.filter((f) => f.name !== 'MONGOC' && !TROE_NAMES.has(f.name));
     const groups = this.featureGroups(shown);
     let on = 0;
 
@@ -942,7 +972,10 @@ export class Compile {
     const tv = { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') };
     $('cp-sum-target').textContent = this.imageOn() ? t('{arch} · {distribution} · binary and Docker image', tv) : t('{arch} · {distribution} · binary', tv);
     $('cp-sum-server').textContent = this.choice.httpServer === 'mhd' ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL[this.choice.httpServer]) }) : t(HTTP_LABEL[this.choice.httpServer]);
-    $('cp-sum-stores').textContent = t('{stores}; history none, corDB, timescale', { stores: mongoc ? 'corDB + mongoc' : t('corDB only') });
+    $('cp-sum-stores').textContent = t('{stores}; history: {history}', {
+      stores:  mongoc ? 'corDB + mongoc' : t('corDB only'),
+      history: (troes.length === 0) ? 'corDB, TimescaleDB' : (troeOn.length ? troeOn.join(', ') : t('none')),
+    });
     $('cp-sum-opt').textContent = t(MODE_LABEL[this.choice.mode]) + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');
     $('cp-sum-features').textContent = shown.length ? (off.length ? t('{n} off: {list}', { n: off.length, list: off.join(', ') }) : t('all {n} on', { n: shown.length })) : '-';
     const brOn = this.bridges.filter((br) => this.canTick(br) && this.isBridgeOn(br)).map((br) => br.name);
