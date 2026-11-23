@@ -191,8 +191,15 @@ header.top.two-lines nav.pages { order: 3; flex-basis: 100%; border-top: 1px sol
 .winctl button.close:hover { background: var(--accent); border-color: var(--accent-2); color: #fff; }
 .winctl svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 
+/*
+ * The header stays at the top of the window at every width: narrower than 1100px the page scrolls the window
+ * (wider, each page scrolls on its own), the header does not. --head-h, its height (header.js): what scrolled into
+ * view stops under it
+ */
+header.top { position: sticky; top: 0; z-index: 35; }
+html { scroll-padding-top: var(--head-h, 0px); }
+
 /* AI Assist - the button, and its popup (coming soon) */
-header.top { position: relative; }
 .aibtn {
   min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2);
   color: var(--accent-text); font-size: 0.975rem; font-weight: 600; cursor: pointer; white-space: nowrap;

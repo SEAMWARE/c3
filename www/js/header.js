@@ -46,6 +46,7 @@ function fit() {
 
   document.documentElement.style.minWidth = top + 'px';
   header.classList.toggle('two-lines', header.clientWidth < one);
+  document.documentElement.style.setProperty('--head-h', header.offsetHeight + 'px');
 
   //
   // The window's own width, in the screen's units (Chrome's): the page's width in CSS pixels times the browser's
