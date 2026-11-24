@@ -115,11 +115,29 @@ function featuresOf(version) {
   return out;
 }
 
+//
+// pluginsOf - the "plugins: db=corDB,mongoc troe=... api=... auth=... bridges=... transports=..." line of a
+// --version (coraine#631) as { db: ['corDB', 'mongoc'], ... }; null: no such line (an older coraine)
+//
+function pluginsOf(version) {
+  const m = /(?:^|\n)plugins: ([^\n]*)/.exec(version || '');
+  if (!m) return null;
+  const out = {};
+  for (const kv of m[1].trim().split(/\s+/)) {
+    const [k, v] = kv.split('=');
+    if (k) out[k] = v ? v.split(',').filter(Boolean) : [];
+  }
+  return out;
+}
+
+//
+// The switches: the option, its label, the feature it needs compiled in, the plugin it needs found ([kind, name])
+//
 const PLUGINS = [
-  ['ws',      tk('WebSocket transport'), 'TRANSPORTS', '--transports ws'],
-  ['admin',   tk('admin API'),           'ADMIN_API',  '--apiPlugins admin'],
-  ['distributed', tk('distributed operations'), 'REGISTRATIONS', '--distributed'],
-  ['verbose', tk('verbose log'),         null,         '-v'],
+  ['ws',      tk('WebSocket transport'), 'TRANSPORTS', '--transports ws', ['transports', 'ws']],
+  ['admin',   tk('admin API'),           'ADMIN_API',  '--apiPlugins admin', ['api', 'admin']],
+  ['distributed', tk('distributed operations'), 'REGISTRATIONS', '--distributed', null],
+  ['verbose', tk('verbose log'),         null,         '-v', null],
 ];
 
 export class Run {
@@ -225,7 +243,7 @@ export class Run {
   renderChannels() {
     const box = $('rn-ou-chans');
     const o = this.f.opcua;
-    const cont = this.f.from === 'image';
+    const cont = !this.bridgeOk('opcua');
     box.replaceChildren();
     o.channels.forEach((c, ix) => {
       const card = el('div', 'rn-ouch');
@@ -255,7 +273,7 @@ export class Run {
   //
   browseBroker() {
     const k = this.kept(this.f.name);
-    if (this.f.from === 'image') return { url: null, why: '' };
+    if (!this.bridgeOk('opcua')) return { url: null, why: '' };
     if (!this.f.opcua.url) return { url: null, why: t('Browsing asks a running broker: give the server, start the broker, then browse.') };
     if (!k || k.state !== 'running') return { url: null, why: t('Browsing asks the running broker\'s bridge: start {name}, then browse - and stop and start it again for what you pick.', { name: this.f.name || t('the broker') }) };
     if (!k.def.admin) return { url: null, why: t('Browsing needs the admin API in the broker (Switches).') };
@@ -510,6 +528,7 @@ export class Run {
     if (src.from === 'image') f.tag = src.tag;
     f.where = src.from === 'image' ? 'container' : 'native';
     this.showView('form');
+    if (src.from === 'image') this.loadImageCaps();
   }
 
   hide() {
@@ -1290,7 +1309,70 @@ export class Run {
     const f = this.f;
     if (f.from === 'installed') return this.sources && this.sources.installed;
     if (f.from === 'build') return this.builds().find((b) => b.name === f.build) || null;
-    return { version: null, bridges: ['dds', 'loopback', 'modbus', 'mqtt'] };
+    const known = (this.imageCaps || {})[this.imageRef()];
+    return { version: known ? known.version : null, bridges: ['dds', 'loopback', 'modbus', 'mqtt'] };   // the published image's, until it says
+  }
+
+  imageRef() { return this.f.tag.includes('/') ? this.f.tag : this.repo() + ':' + this.f.tag; }
+
+  //
+  // plugins - what the source's plugin directory has (its --version's plugins line); null: not known
+  //
+  plugins() {
+    const s = this.source();
+    return s ? pluginsOf(s.version) : null;
+  }
+
+  //
+  // can - the source has this plugin ('db', 'mongoc'); not known (no plugins line): yes - the features decide
+  //
+  can(kind, name) {
+    const p = this.plugins();
+    return !p || !p[kind] || p[kind].includes(name);
+  }
+
+  //
+  // bridges - the bridges the form offers: the plugins line's, else the bridge/*.so of the source's plugin
+  // directory - loopback, the reference and test bridge, never
+  //
+  bridges() {
+    const p = this.plugins();
+    const s = this.source();
+    return ((p && p.bridges) || (s && s.bridges) || []).filter((b) => b !== 'loopback');
+  }
+
+  bridgeOk(name) { return this.bridges().includes(name); }
+
+  //
+  // loadImageCaps - what an image's broker has (GET /api/run/image: its --version, read once per image); an
+  // image not here is known only after its start pulls it
+  //
+  async loadImageCaps() {
+    const ref = this.imageRef();
+    this.imageCaps = this.imageCaps || {};
+    if (!this.f.tag || this.imageCaps[ref]) return;
+    this.imageCaps[ref] = { asking: true, version: null };
+    this.renderForm();
+    try {
+      const r = await api.runImage(ref);
+      this.imageCaps[ref] = { here: r.here, version: r.version };
+    } catch (e) {
+      this.imageCaps[ref] = { here: false, version: null, why: e.message };
+    }
+    if (this.f.from === 'image' && this.imageRef() === ref) this.renderForm();
+  }
+
+  //
+  // fit - the form after its source changed: what the broker cannot do is not asked of it - a store, a
+  // history, a bridge, a switch it lacks
+  //
+  fit() {
+    const f = this.f;
+    if (!this.source()) return;                        // not known yet (the sources not read): nothing dropped
+    if (!this.can('db', f.store)) f.store = ['corDB', 'mongoc'].find((x) => this.can('db', x)) || f.store;
+    if (!this.can('troe', f.history)) f.history = 'none';
+    f.bridges = f.bridges.filter((b) => this.bridgeOk(b));
+    if (!this.bridgeOk('ckan')) f.ckan = [];
   }
 
   features() {
@@ -1359,6 +1441,7 @@ export class Run {
 
   renderForm() {
     const f = this.f;
+    this.fit();
     const cont = this.containers();
     const noCont = (this.caps && this.caps.containersWhy) || t('install docker or podman');
     const sets = (this.state && this.state.sets) || [];
@@ -1372,8 +1455,11 @@ export class Run {
       b.setAttribute('aria-pressed', String(f.set === s.id));
       b.append(el('span', 'sl', setText(s, 'label')), el('span', 'sd', setText(s, 'description')));
       if (s.services.length) b.append(el('span', 'sd mono', s.services.map((x) => x.image).join(', ')));
+      const lacks = !this.can('db', s.store) ? ['db', s.store] : !this.can('troe', s.history) ? ['troe', s.history]
+        : s.bridges.filter((x) => !this.bridgeOk(x)).map((x) => ['bridge', x])[0];
       if (s.services.length && !cont) { b.disabled = true; b.append(el('span', 'sw', noCont)); }
       else if (s.store === 'mongoc' && !this.has('MONGOC')) { b.disabled = true; b.append(el('span', 'sw', t('this broker is built without mongoc'))); }
+      else if (lacks) { b.disabled = true; b.append(el('span', 'sw', t('this broker has no {kind} plugin {name}', { kind: lacks[0], name: lacks[1] }))); }
       b.addEventListener('click', () => this.applySet(s.id));
       return b;
     }));
@@ -1388,7 +1474,12 @@ export class Run {
     let fromNote = '';
     if (f.from === 'installed') fromNote = inst ? inst.path + ' · ' + (inst.version || '').split('\n')[0] : t('no coraine in $PATH');
     else if (f.from === 'build') fromNote = src ? (src.version || '').split('\n')[0] + ' · ' + t('built by Compile') : t('this build is no longer there');
-    else if (f.from === 'image') fromNote = t('pulled at the start when it is not here');
+    else if (f.from === 'image') {
+      const k = (this.imageCaps || {})[this.imageRef()];
+      fromNote = !k || k.asking ? t('reading what the image has ...')
+        : k.version ? k.version.split('\n')[0] + ' · ' + t('here')
+        : t('not here: pulled at the start - what it has is known then');
+    }
     $('rn-from-note').textContent = fromNote;
 
     //
@@ -1403,13 +1494,15 @@ export class Run {
     //
     // Store and history
     //
-    const mongoWhy = !this.has('MONGOC') ? t('this broker is built without mongoc') : !cont ? noCont : '';
-    this.seg('rn-store', [['corDB', 'corDB', ''], ['mongoc', 'mongoc', mongoWhy]], f.store, (v) => { f.store = v; if (v === 'corDB' && f.set === 'mongoc-timescale') f.dbDir = true; this.changed(); });
+    const noPlugin = (kind, name) => (this.can(kind, name) ? '' : t('this broker has no {kind} plugin {name}', { kind, name }));
+    const mongoWhy = !this.has('MONGOC') ? t('this broker is built without mongoc') : noPlugin('db', 'mongoc') || (!cont ? noCont : '');
+    this.seg('rn-store', [['corDB', 'corDB', noPlugin('db', 'corDB')], ['mongoc', 'mongoc', mongoWhy]], f.store, (v) => { f.store = v; if (v === 'corDB' && f.set === 'mongoc-timescale') f.dbDir = true; this.changed(); });
     $('rn-dbdir').checked = f.store === 'corDB' && f.dbDir;
     $('rn-dbdir').disabled = f.store !== 'corDB';
     $('rn-dbdir').parentElement.classList.toggle('off', f.store !== 'corDB');
 
-    this.seg('rn-history', [['none', t('none'), ''], ['corDB', 'corDB', ''], ['timescale', 'timescale', cont ? '' : noCont]], f.history, (v) => { f.history = v; this.changed(); });
+    this.seg('rn-history', [['none', t('none'), ''], ['corDB', 'corDB', noPlugin('troe', 'corDB')],
+      ['timescale', 'timescale', noPlugin('troe', 'timescale') || (cont ? '' : noCont)]], f.history, (v) => { f.history = v; this.changed(); });
 
     //
     // Ports
@@ -1424,8 +1517,9 @@ export class Run {
     //
     // Switches: what the broker has compiled in
     //
-    $('rn-plugins').replaceChildren(...PLUGINS.map(([key, label, feature, flag]) => {
-      const off = feature && !this.has(feature);
+    $('rn-plugins').replaceChildren(...PLUGINS.map(([key, label, feature, flag, plugin]) => {
+      const lacks = plugin && !this.can(plugin[0], plugin[1]);
+      const off = (feature && !this.has(feature)) || lacks;
       const l = el('label', 'rn-check' + (off ? ' off' : ''));
       const c = el('input');
       c.type = 'checkbox';
@@ -1433,7 +1527,7 @@ export class Run {
       c.disabled = !!off;
       c.addEventListener('change', () => { f[key] = c.checked; this.changed(false); });
       l.append(c, document.createTextNode(t(label) + ' '), el('span', 'mono cp-note', flag));
-      if (off) { l.title = t('built without {feature}', { feature }); f[key] = false; }
+      if (off) { l.title = lacks ? t('this broker has no {kind} plugin {name}', { kind: plugin[0], name: plugin[1] }) : t('built without {feature}', { feature }); f[key] = false; }
       return l;
     }));
 
@@ -1444,7 +1538,7 @@ export class Run {
     //
     // Bridges: those the source has
     //
-    const have = (src && src.bridges) || [];
+    const have = this.bridges();
     $('rn-bridges').replaceChildren(...(have.length ? have.map((name) => {
       const l = el('label', 'rn-check');
       const c = el('input');
@@ -1460,6 +1554,14 @@ export class Run {
     }) : [el('span', 'cp-note', t('this broker has no bridge plugins'))]));
     if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
     if ($('rn-uctx').value !== f.userContext) $('rn-uctx').value = f.userContext;
+    //
+    // CKAN, OPC UA, AAS and the mappers: shown only for a broker with that bridge
+    //
+    $('rn-ckan-drop').parentElement.hidden = !this.bridgeOk('ckan');
+    $('rn-opcua-drop').parentElement.hidden = !this.bridgeOk('opcua');
+    $('rn-aas-drop').parentElement.hidden = !this.bridgeOk('aas');
+    for (const id of ['rn-dds-map', 'rn-dds-note']) $(id).hidden = !this.bridgeOk('dds');
+    for (const id of ['rn-opcua-map', 'rn-opcua-note']) $(id).hidden = !this.bridgeOk('opcua');
     this.renderCkan(cont);
     this.renderOpcua();
     this.aas.render();
@@ -1482,7 +1584,7 @@ export class Run {
         .catch(() => { this.ckanSets = []; this.renderCkan(cont); });
     }
     const sets = this.ckanSets || [];
-    const why = f.from === 'image' ? t('a native broker only: the image has no ckan bridge')
+    const why = !this.bridgeOk('ckan') ? t('this broker has no {name} bridge', { name: 'ckan' })
       : (f.bridgeConfig ? t('not with a bridge configuration file of one\'s own') : '');
     $('rn-ckan').replaceChildren(...sets.map((ds) => {
       const l = el('label', 'rn-check');
@@ -1508,7 +1610,7 @@ export class Run {
   //
   renderOpcua() {
     const o = this.f.opcua;
-    const cont = this.f.from === 'image';                  // the published image has no opcua bridge (a build's image: its own)
+    const cont = !this.bridgeOk('opcua');                  // a broker without the opcua bridge
     const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
     set('rn-ou-url', o.url); set('rn-ou-roots', o.roots); set('rn-ou-mode', o.mode); set('rn-ou-policy', o.policy);
     set('rn-ou-cert', o.certificate); set('rn-ou-key', o.privateKey); set('rn-ou-appuri', o.applicationUri);
@@ -1534,11 +1636,11 @@ export class Run {
 
   renderOpcuaSum() {
     const o = this.f.opcua;
-    const cont = this.f.from === 'image';
+    const cont = !this.bridgeOk('opcua');
     const secure = o.mode !== 'None';
     const roots = o.roots.split('\n').map((x) => x.trim()).filter(Boolean).length;
     const chans = o.channels.length;
-    $('rn-opcua-sum').textContent = cont ? t('a native broker only: the image has no opcua bridge')
+    $('rn-opcua-sum').textContent = cont ? t('this broker has no {name} bridge', { name: 'opcua' })
       : (!o.url ? t('none') : o.url + ' - ' + (secure ? o.mode + ' ' + (o.policy || 'Basic256Sha256') : t('no security'))
         + ', ' + (o.username ? t('user {name}', { name: o.username }) : t('anonymous')) + ', ' + plural(roots, '{n} model', '{n} models')
         + ', ' + plural(chans, '{n} Channel', '{n} Channels'));

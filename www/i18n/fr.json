@@ -671,8 +671,6 @@
   "a model root": "une racine de modèle",
   "a model: {entities}, {attributes}": "un modèle : {entities}, {attributes}",
   "a name for this choice": "un nom pour ce choix",
-  "a native broker only: the image has no ckan bridge": "broker natif uniquement : l'image n'a pas de bridge ckan",
-  "a native broker only: the image has no opcua bridge": "broker natif uniquement : l'image n'a pas de bridge opcua",
   "a password needs its username": "un mot de passe nécessite son nom d'utilisateur",
   "a sample of its DDS type - the value of the attribute it is mapped to": "un échantillon de son type DDS - la valeur de l'attribut auquel il est mappé",
   "a secret - never shown": "un secret - jamais affiché",
@@ -1285,7 +1283,6 @@
   "a collection: an attribute per element": "une collection : un attribut par élément",
   "a collection: one JSON attribute": "une collection : un attribut JSON",
   "a collection: one attribute, its elements sub-attributes": "une collection : un attribut, ses éléments en sous-attributs",
-  "a native broker only: the image has no aas bridge": "broker natif uniquement : l'image n'a pas de bridge aas",
   "a service - input {vars}": "un service - entrée {vars}",
   "an AssetChannel": "un AssetChannel",
   "an entity rule": "une règle d'entité",
@@ -1493,9 +1490,12 @@
   "image": "image",
   "latest": "la plus récente",
   "this build is no longer there": "cette compilation n'existe plus",
-  "pulled at the start when it is not here": "téléchargée au démarrage si elle n'est pas ici",
   "quay.io: {why}": "quay.io : {why}",
   "what runs": "ce qui s'exécute",
   "not ready": "pas prêt",
-  "{name} does not answer yet": "{name} ne répond pas encore"
+  "{name} does not answer yet": "{name} ne répond pas encore",
+  "not here: pulled at the start - what it has is known then": "pas ici : téléchargée au démarrage - on sait alors ce qu'elle contient",
+  "reading what the image has ...": "lecture de ce que contient l'image ...",
+  "this broker has no {kind} plugin {name}": "ce broker n'a pas le plugin {kind} {name}",
+  "this broker has no {name} bridge": "ce broker n'a pas le bridge {name}"
 }

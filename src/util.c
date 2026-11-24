@@ -142,12 +142,13 @@ void isoTime(time_t t, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
-// runCapture - run argv[0] (a path, or a name found in $PATH), its stdout and stderr into 'out'
+// runCaptureEnv - run argv[0] (a path, or a name found in $PATH), its stdout and stderr into 'out', in the
+// environment 'envp' (NULL: c3's); runCapture (c3.h) is it with c3's
 //
 // The exit status (as waitpid gives it), or -1 when it could not be run; killed after 'timeoutS'. No file
 // descriptor of c3's is passed on - the listening socket least of all.
 //
-int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
+int runCaptureEnv(char* const argv[], char* const envp[], char* out, int outSize, int timeoutS)
 {
   int fds[2];
 
@@ -179,7 +180,7 @@ int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
 #endif
 
   pid_t pid;
-  int   r = posix_spawnp(&pid, argv[0], &fa, &attr, argv, environ);
+  int   r = posix_spawnp(&pid, argv[0], &fa, &attr, argv, (envp != NULL) ? envp : environ);
 
   posix_spawn_file_actions_destroy(&fa);
   posix_spawnattr_destroy(&attr);
@@ -228,6 +229,84 @@ int runCapture(char* const argv[], char* out, int outSize, int timeoutS)
     ;
 
   return status;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// envClean - c3's environment for a broker, without what would change it behind the form's back: CORAINE_*
+// (every option of the broker's has one) and SEAMWARE_PLUGIN_DIR (a build's env sets its own) - and 'extra'
+// ("NAME=value", or NULL) added. The array is malloc'ed (free it, not its strings: they are environ's and
+// the caller's 'extra')
+//
+char** envClean(char* extra)
+{
+  int n = 0;
+  while (environ[n] != NULL)
+    ++n;
+
+  char** env = calloc(n + 2, sizeof(char*));
+  int    o   = 0;
+
+  for (int ix = 0; ix < n; ix++)
+  {
+    if ((strncmp(environ[ix], "CORAINE_", 8) == 0) || (strncmp(environ[ix], "SEAMWARE_PLUGIN_DIR=", 20) == 0))
+      continue;
+    env[o++] = environ[ix];
+  }
+  if (extra != NULL)
+    env[o++] = extra;
+  env[o] = NULL;
+
+  return env;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// brokerVersion - a coraine binary's --version (features, HTTP servers, the plugins it finds) as a start of
+// it would see them: envClean's environment, its plugin directory 'pluginDir' (NULL: the default,
+// /opt/seamware/plugins). 0: answered
+//
+int brokerVersion(const char* binary, const char* pluginDir, char* out, int outSize)
+{
+  char  dirVar[2100];
+  char* argv[] = { (char*) binary, (char*) "--version", NULL };
+
+  if (pluginDir != NULL)
+    snprintf(dirVar, sizeof(dirVar), "SEAMWARE_PLUGIN_DIR=%s", pluginDir);
+
+  char** env = envClean((pluginDir != NULL) ? dirVar : NULL);
+  int    r   = runCaptureEnv(argv, env, out, outSize, 30);
+
+  free(env);
+  return r;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// urlDecodeInPlace - %XX and + of a query parameter's value
+//
+void urlDecodeInPlace(char* s)
+{
+  char* out = s;
+
+  for (char* in = s; *in != 0; in++)
+  {
+    if ((in[0] == '%') && (in[1] != 0) && (in[2] != 0))
+    {
+      char hex[3] = { in[1], in[2], 0 };
+      *out++ = (char) strtol(hex, NULL, 16);
+      in += 2;
+    }
+    else
+      *out++ = (*in == '+') ? ' ' : *in;
+  }
+  *out = 0;
 }
 
 
