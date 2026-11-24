@@ -779,7 +779,7 @@ pulled at the start, its progress in the broker's log. Images are named by their
   then the host's - not published on `127.0.0.1` only: coraine listens on every interface, as a native broker
   does - and it reaches the services on `127.0.0.1:<port>`, as a native broker does. Its files are mounted:
   the `--defaultUserContext` file at `/etc/c3/user-context.jsonld`, c³'s `dds-types/` at its own path.
-- **OPC UA** (native brokers - the image has no opcua bridge) - the server's URL, the model roots (an
+- **OPC UA** (a broker with the opcua bridge) - the server's URL, the model roots (an
   Object's NodeId a line: each one an AssetChannel, its model a graph of entities), the security mode and
   policy, the client's certificate, key and application URI, the server certificates to trust (or "trust
   any", which says what it means), a username and password. Filling in the URL ticks the opcua bridge.
@@ -798,7 +798,7 @@ pulled at the start, its progress in the broker's log. Images are named by their
   **Map an OPC UA server**, under the DDS mapper's button, active with the opcua bridge ticked: the OPC UA
   mapper (below) - the whole address space at once, before a broker runs, written into a bridge
   configuration file of its own.
-- **AAS** (native brokers - the image has no aas bridge; corAasBridge, a prototype: `coraine-build --bridges
+- **AAS** (a broker with the aas bridge; corAasBridge, a prototype: `coraine-build --bridges
   aas`) - an Asset Administration Shell server: its URL (`http[s]://host:port[/base path]`), the
   Authorization header's value, the CAs its certificate is verified against (a PEM file) or not verified.
   Filling in the URL ticks the aas bridge. The Authorization is sent once, on Start: c³ keeps it in
@@ -816,9 +816,22 @@ pulled at the start, its progress in the broker's log. Images are named by their
   submodel or a collection of its model makes it an entity of its own (the rules start as what `natural`
   makes).
 - **More options** - anything else, as typed (quotes keep words together).
-- What the broker is built without is greyed with the reason - mongoc without `MONGOC`, the health port
-  without `HEALTH`, the transport without `TRANSPORTS`, the admin API without `ADMIN_API` - from its
-  `--version` (the installed one's, or the build's record); an image's are not known before it runs.
+- The form offers what the broker has, from its own `--version`, run as a start runs it (c³'s environment
+  less `CORAINE_*`, its own `SEAMWARE_PLUGIN_DIR` - a build's `install/plugins`), cached by binary and mtime:
+  - compiled in or out (`features:`) - mongoc without `MONGOC`, the health port without `HEALTH`, the
+    transport without `TRANSPORTS`, the admin API without `ADMIN_API`: greyed with the reason;
+  - the plugins found (`plugins: db=... troe=... api=... auth=... bridges=... transports=...`, coraine
+    0.7.0+dev from coraine#631): a store, a history, the WebSocket transport, the admin API, a set
+    whose store, history or bridge is missing - greyed with the reason; the bridges ticked from that list,
+    loopback (the reference and test bridge) never; the CKAN, OPC UA and AAS parts and the mappers'
+    buttons shown only with their bridge. A coraine without the line: the bridges are the
+    `bridge/*.so` of its plugin directory;
+  - an image: `GET /api/run/image?ref=<image>` runs `docker run --rm --entrypoint coraine <image>
+    --version` once per image ID (about 1 s; then cached) - an image not here is known after its start
+    pulls it, and until then is taken to have the published image's bridges (dds, modbus, mqtt).
+
+  What the form leaves out the start refuses too (`POST /api/run/brokers`, `/api/run/command`: "this broker
+  has no troe plugin 'timescale'"). A source chosen anew drops from the form what it cannot do.
   Tenants have no switch at start: the form says whether the broker has them compiled in.
 - The command, exactly as it will run, from the backend (`POST /api/run/command`), and the services it
   starts first with their ports.
@@ -1171,6 +1184,7 @@ The backend's API, used by the pages:
 | `GET /api/run` | `{dir, engine, brokers, services, sets}`: each broker kept with its options (`def`), `state` (`stopped`, `starting`, `running`, `stopping`, `exited`, `failed`), `why`, `pid`, `attached`, `container`, `url`, `started`, `ended`, `stop` (`asked`, `grace`, `killIn`, `killed`), `exitStatus`, `ready`, `health` (the report), `services`, `log`, `dataDir`/`volume`; each service with `container`, `set`, `service`, `image`, `state`, `port`, `volume`, `volumeExists`, `usedBy`, `neededBy` |
 | `GET /api/run/sources` | the installed broker and the builds that succeeded: `version` (`--version`), their plugin directory and bridges |
 | `GET /api/run/images` | `{repository, local: [{tag, created, size}], published: [{tag, modified}], publishedError}` |
+| `GET /api/run/image?ref=<image>` | `{image, here, version}` - the image's `coraine --version` (null: not here), once per image ID |
 | `POST /api/run/command` `{broker}` | `{def, argv, command, services, problem}` - nothing run |
 | `POST /api/run/brokers` `{broker}` | kept (replacing one of that name) and started: `202`; `409` while it runs or when a port is taken; `422` when it cannot start from its source (`problem`) |
 | `POST /api/run/brokers/<name>/start` | start one kept |

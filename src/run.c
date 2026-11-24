@@ -9,6 +9,7 @@
 //
 //   GET    /api/run                             the brokers kept, the services, the sets, what each source has
 //   GET    /api/run/images                      the coraine images: local ones and the published tags (quay.io)
+//   GET    /api/run/image?ref=<image>           what an image's broker has: its --version, once per image ID
 //   POST   /api/run/command                     {broker}: the command it would run and the services it needs
 //   POST   /api/run/brokers                     {broker}: kept (c3.json, "run") and started - 202
 //   POST   /api/run/brokers/<name>/start        start one kept
@@ -646,8 +647,9 @@ static void dbNameOf(const char* name, const char* suffix, char* out, int outLen
 //
 // Sources - what a broker can be started from, and what each one has compiled in
 //
-// installed: `coraine` in $PATH (its --version cached by path and mtime); a build: its record (the built
-// broker's --version) in Compile's directory. The features decide what the form offers.
+// installed: `coraine` in $PATH; a build: its install/bin/<executable>, with its install/plugins. Their
+// --version (brokerVersion: as a start sees them) is cached by path and mtime: features, HTTP servers and the
+// plugins found - the "plugins:" line, coraine#631 - decide what the form offers.
 //
 static pthread_mutex_t srcMutex = PTHREAD_MUTEX_INITIALIZER;
 static char            instPath[2048];
@@ -676,10 +678,9 @@ static void installedFind(char* path, int pathLen, char* version, int versionLen
   }
   pthread_mutex_unlock(&srcMutex);
 
-  char  out[4096];
-  char* argv[] = { path, (char*) "--version", NULL };
+  char out[4096];
 
-  if (runCapture(argv, out, sizeof(out), 15) != 0)
+  if (brokerVersion(path, NULL, out, sizeof(out)) != 0)
     out[0] = 0;
 
   pthread_mutex_lock(&srcMutex);
@@ -721,8 +722,56 @@ static void buildDirOf(const char* build, char* out, int outLen)
 }
 
 //
-// buildVersion - the version a build's record holds (the built broker's --version), malloc'ed; NULL: no
-// such build, or one that did not succeed
+// The builds' --version, by binary: asked again when the binary changes. A record made before the plugins line
+// (coraine#631), or with c3's own plugin directory, says less than the binary does
+//
+typedef struct BuildVersion
+{
+  char    binary[2400];
+  time_t  mtime;
+  char*   version;
+} BuildVersion;
+
+static BuildVersion bvCache[32];
+static int          bvNext = 0;
+
+static char* buildBinaryVersion(const char* binary, const char* pluginDir)
+{
+  struct stat st;
+  if (stat(binary, &st) != 0)
+    return NULL;
+
+  pthread_mutex_lock(&srcMutex);
+  for (int ix = 0; ix < 32; ix++)
+  {
+    if ((bvCache[ix].version != NULL) && (bvCache[ix].mtime == st.st_mtime) && (strcmp(bvCache[ix].binary, binary) == 0))
+    {
+      char* v = strdup(bvCache[ix].version);
+      pthread_mutex_unlock(&srcMutex);
+      return v;
+    }
+  }
+  pthread_mutex_unlock(&srcMutex);
+
+  char out[8192];
+  if ((brokerVersion(binary, pluginDir, out, sizeof(out)) != 0) || (out[0] == 0))
+    return NULL;
+
+  pthread_mutex_lock(&srcMutex);
+  BuildVersion* bP = &bvCache[bvNext];
+  bvNext = (bvNext + 1) % 32;
+  if (bP->version != NULL) free(bP->version);
+  snprintf(bP->binary, sizeof(bP->binary), "%s", binary);
+  bP->mtime   = st.st_mtime;
+  bP->version = strdup(out);
+  pthread_mutex_unlock(&srcMutex);
+
+  return strdup(out);
+}
+
+//
+// buildVersion - a build's --version (the built broker's own, with its install/plugins - buildBinaryVersion;
+// the record's when that cannot be run), malloc'ed; NULL: no such build, or one that did not succeed
 //
 static char* buildVersion(const char* build)
 {
@@ -748,7 +797,21 @@ static char* buildVersion(const char* build)
   CorNode* vP   = (recP != NULL) ? corTreeLookup(recP, "version") : NULL;
 
   if ((stP != NULL) && (stP->type == CorString) && (strcmp(stP->value.s, "succeeded") == 0))
-    out = strdup(((vP != NULL) && (vP->type == CorString)) ? vP->value.s : "");
+  {
+    CorNode* eP = corTreeLookup(recP, "executable");
+    char     dir[2300];
+    char     binary[2400];
+    char     plugins[2400];
+
+    buildDirOf(build, dir, sizeof(dir));
+    snprintf(binary,  sizeof(binary),  "%s/install/bin/%s", dir,
+             ((eP != NULL) && (eP->type == CorString) && (eP->value.s[0] != 0) && (strchr(eP->value.s, '/') == NULL)) ? eP->value.s : "coraine");
+    snprintf(plugins, sizeof(plugins), "%s/install/plugins", dir);
+
+    out = buildBinaryVersion(binary, plugins);
+    if (out == NULL)
+      out = strdup(((vP != NULL) && (vP->type == CorString)) ? vP->value.s : "");
+  }
 
   corAllocBufferReset(&alloc, false);
   free(text);
@@ -790,6 +853,92 @@ static void buildMember(const char* build, const char* member, const char* dflt,
 
   corAllocBufferReset(&alloc, false);
   free(text);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// pluginsLacks - a --version's "plugins:" line (coraine#631: db troe api auth bridges transports, each
+// comma-separated) names 'kind' without 'name': the broker cannot be asked for it. No line, or no such kind
+// in it (a coraine before #631): not known, so not lacking
+//
+static bool pluginsLacks(const char* version, const char* kind, const char* name)
+{
+  const char* line = (version != NULL) ? strstr(version, "plugins: ") : NULL;
+  if ((line == NULL) || ((line != version) && (line[-1] != '\n')))
+    return false;
+
+  const char* end = strchr(line, '\n');
+  int         len = (end != NULL) ? (int) (end - line) : (int) strlen(line);
+  char        buf[1024];
+  char        key[32];
+
+  snprintf(buf, sizeof(buf), " %.*s", len - 8, &line[8]);   // " db=... troe=..." - each kind after a blank
+  snprintf(key, sizeof(key), " %s=", kind);
+
+  char* kP = strstr(buf, key);
+  if (kP == NULL)
+    return false;
+
+  char* list = kP + strlen(key);
+  char* stop = strchr(list, ' ');
+  if (stop != NULL)
+    *stop = 0;
+
+  char* save = NULL;
+  for (char* item = strtok_r(list, ",", &save); item != NULL; item = strtok_r(NULL, ",", &save))
+  {
+    if (strcmp(item, name) == 0)
+      return false;
+  }
+  return true;
+}
+
+//
+// pluginsKnown - the --version has the "plugins:" line
+//
+static bool pluginsKnown(const char* version)
+{
+  const char* line = (version != NULL) ? strstr(version, "plugins: ") : NULL;
+  return (line != NULL) && ((line == version) || (line[-1] == '\n'));
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// The images' --version (docker run --rm --entrypoint coraine <image> --version, ~1 s), by image ID - asked
+// again when the tag names another image. An image that is not here is not known before its start pulls it
+//
+typedef struct ImageVersion
+{
+  char    ref[512];
+  char    id[80];
+  char*   version;
+} ImageVersion;
+
+static ImageVersion ivCache[16];
+static int          ivNext = 0;
+
+//
+// imageVersionCached - the last --version read for this image reference (malloc'ed), NULL: none read
+//
+static char* imageVersionCached(const char* ref)
+{
+  char* v = NULL;
+
+  pthread_mutex_lock(&srcMutex);
+  for (int ix = 0; ix < 16; ix++)
+  {
+    if ((ivCache[ix].version != NULL) && (strcmp(ivCache[ix].ref, ref) == 0))
+    {
+      v = strdup(ivCache[ix].version);
+      break;
+    }
+  }
+  pthread_mutex_unlock(&srcMutex);
+  return v;
 }
 
 
@@ -2143,7 +2292,18 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     return false;
   }
 
-  bool published = (strcmp(dP->from, "image") == 0);      // the published image: no ckan, opcua or aas bridge
+  //
+  // The published image: no ckan, opcua or aas bridge - unless its --version, read, says otherwise (sourceCheck
+  // then judges by its plugins line)
+  //
+  bool published = (strcmp(dP->from, "image") == 0);
+  if (published)
+  {
+    char* iv = imageVersionCached(dP->image);
+    if (pluginsKnown(iv))
+      published = false;
+    if (iv != NULL) free(iv);
+  }
 
   if (published && (dP->ckan[0] != 0))
   {
@@ -3360,33 +3520,6 @@ static void svcRelease(Broker* bP)
 
 // -----------------------------------------------------------------------------
 //
-// cleanEnv - c3's environment for a native broker, without what would change it behind the form's back:
-// CORAINE_* (every option of the broker's has one) and SEAMWARE_PLUGIN_DIR (a build's env sets its own)
-//
-static char** cleanEnv(void)
-{
-  int n = 0;
-  while (environ[n] != NULL)
-    ++n;
-
-  char** env = calloc(n + 1, sizeof(char*));
-  int    o   = 0;
-
-  for (int ix = 0; ix < n; ix++)
-  {
-    if ((strncmp(environ[ix], "CORAINE_", 8) == 0) || (strncmp(environ[ix], "SEAMWARE_PLUGIN_DIR=", 20) == 0))
-      continue;
-    env[o++] = environ[ix];
-  }
-  env[o] = NULL;
-
-  return env;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
 // ckanMember - the ckan bridge's member of the bridge configuration: one record Channel per dataset of
 // the broker, its mapping as www/data/ckan.json has it; the datasets of one portal
 //
@@ -3586,13 +3719,13 @@ static void aasMember(const Def* dP, bool authorization, Str* sP)
 
 // -----------------------------------------------------------------------------
 //
-// aasEnv - a native broker's environment: cleanEnv's, and with an AAS server and the Authorization header's value
+// aasEnv - a native broker's environment: envClean's, and with an AAS server and the Authorization header's value
 // c3 keeps for it, C3_AAS_AUTHORIZATION (the bridge's authorizationEnv) - *varP the string to wipe and free after
 // the start (NULL: none)
 //
 static char** aasEnv(const Def* dP, char** varP)
 {
-  char** env = cleanEnv();
+  char** env = envClean(NULL);
   char   path[2400];
 
   *varP = NULL;
@@ -5058,6 +5191,8 @@ static bool sourceCheck(const Def* dP, char* err, int errLen)
       return false;
     }
   }
+  else
+    version = imageVersionCached(dP->image);     // read when the form chose it (GET /api/run/image); else not known
 
   //
   // What the broker does not have compiled in, it cannot be asked for
@@ -5076,6 +5211,41 @@ static bool sourceCheck(const Def* dP, char* err, int errLen)
     if (checks[ix].asked && featureOff(version, checks[ix].feature))
     {
       snprintf(err, errLen, "this broker is built without %s (%s=OFF)", checks[ix].what, checks[ix].feature);
+      free(version);
+      return false;
+    }
+  }
+
+  //
+  // ... nor what its plugin directory does not have (the "plugins:" line)
+  //
+  struct { bool asked; const char* kind; const char* name; const char* what; } plugins[] =
+  {
+    { true,        "db",         dP->store,   "the store"                },
+    { true,        "troe",       dP->history, "the history"              },
+    { dP->ws,      "transports", "ws",        "the WebSocket transport"  },
+    { dP->admin,   "api",        "admin",     "the admin API"            },
+    { dP->ckan[0] != 0, "bridges", "ckan",    "the CKAN datasets' bridge" },
+  };
+
+  for (unsigned int ix = 0; ix < sizeof(plugins) / sizeof(plugins[0]); ix++)
+  {
+    if (plugins[ix].asked && pluginsLacks(version, plugins[ix].kind, plugins[ix].name))
+    {
+      snprintf(err, errLen, "this broker has no %s plugin '%s' (%s)", plugins[ix].kind, plugins[ix].name, plugins[ix].what);
+      free(version);
+      return false;
+    }
+  }
+
+  char  copy[128];
+  char* save = NULL;
+  snprintf(copy, sizeof(copy), "%s", dP->bridges);
+  for (char* b = strtok_r(copy, ",", &save); b != NULL; b = strtok_r(NULL, ",", &save))
+  {
+    if (pluginsLacks(version, "bridges", b))
+    {
+      snprintf(err, errLen, "this broker has no %s bridge", b);
       free(version);
       return false;
     }
@@ -5565,6 +5735,68 @@ static bool jobStart(CorHttpConn* connP, void* (*fn)(void*), const char* arg)
     return false;
   }
   return true;
+}
+
+//
+// imageThread - GET /api/run/image?ref=<image>: what the image's broker has - its --version, read once per image
+// ID; an image that is not here: {"here": false}
+//
+static void* imageThread(void* vP)
+{
+  Job*  jP = (Job*) vP;
+  char  id[256];
+  char* version = NULL;
+  Str   s  = { NULL, 0, 0 };
+
+  if ((engine[0] == 0) || (engineRun(id, sizeof(id), 20, "image", "inspect", "--format", "{{.Id}}", jP->arg, NULL) != 0) || (strncmp(id, "sha256:", 7) != 0))
+  {
+    strAdd(&s, "{\"image\": ");  strAddJson(&s, jP->arg);
+    strAdd(&s, ", \"here\": false, \"version\": null}");
+    jobAnswer(jP, 200, &s);
+    return NULL;
+  }
+
+  pthread_mutex_lock(&srcMutex);
+  for (int ix = 0; ix < 16; ix++)
+  {
+    if ((ivCache[ix].version != NULL) && (strcmp(ivCache[ix].id, id) == 0))
+    {
+      version = strdup(ivCache[ix].version);
+      snprintf(ivCache[ix].ref, sizeof(ivCache[ix].ref), "%s", jP->arg);
+      break;
+    }
+  }
+  pthread_mutex_unlock(&srcMutex);
+
+  if (version == NULL)
+  {
+    static char out[8192];                       // one image job at a time reads into it (ivMutex)
+    static pthread_mutex_t ivMutex = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&ivMutex);
+    if ((engineRun(out, sizeof(out), 60, "run", "--rm", "--entrypoint", "coraine", jP->arg, "--version", NULL) == 0) && (strncmp(out, "coraine", 7) == 0))
+      version = strdup(out);
+    pthread_mutex_unlock(&ivMutex);
+
+    if (version != NULL)
+    {
+      pthread_mutex_lock(&srcMutex);
+      ImageVersion* iP = &ivCache[ivNext];
+      ivNext = (ivNext + 1) % 16;
+      if (iP->version != NULL) free(iP->version);
+      snprintf(iP->ref, sizeof(iP->ref), "%s", jP->arg);
+      snprintf(iP->id,  sizeof(iP->id),  "%s", id);
+      iP->version = strdup(version);
+      pthread_mutex_unlock(&srcMutex);
+    }
+  }
+
+  strAdd(&s, "{\"image\": ");     strAddJson(&s, jP->arg);
+  strAdd(&s, ", \"here\": true, \"version\": ");  strAddJson(&s, version);
+  strAdd(&s, "}");
+  if (version != NULL) free(version);
+  jobAnswer(jP, 200, &s);
+  return NULL;
 }
 
 //
@@ -8169,6 +8401,23 @@ void runRequest(CorHttpConn* connP, const char* path)
   if (strcmp(path, "/api/run/sources") == 0)
   {
     if (get) runSources(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/image") == 0)
+  {
+    const char* q   = (connP->query.s != NULL) ? connP->query.s : "";
+    const char* r   = strstr(q, "ref=");
+    char        ref[128] = "";
+
+    if (r != NULL)
+    {
+      int len = strcspn(r + 4, "&");
+      snprintf(ref, sizeof(ref), "%.*s", (len < 127) ? len : 127, r + 4);
+      urlDecodeInPlace(ref);
+    }
+    if (!get)                                          serveError(connP, 405, "Method not allowed", path);
+    else if ((ref[0] == 0) || (ref[0] == '-') || (strpbrk(ref, " \t\n'\"") != NULL))  serveError(connP, 400, "Bad request", "?ref=<image> - an image's name");
+    else                                               jobStart(connP, imageThread, ref);
     return;
   }
   if (strcmp(path, "/api/run/images") == 0)

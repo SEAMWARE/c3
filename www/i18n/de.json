@@ -671,8 +671,6 @@
   "a model root": "eine Modellwurzel",
   "a model: {entities}, {attributes}": "ein Modell: {entities}, {attributes}",
   "a name for this choice": "ein Name für diese Auswahl",
-  "a native broker only: the image has no ckan bridge": "nur ein nativer Broker: das Image hat keine ckan-Bridge",
-  "a native broker only: the image has no opcua bridge": "nur ein nativer Broker: das Image hat keine opcua-Bridge",
   "a password needs its username": "ein Passwort braucht seinen Benutzernamen",
   "a sample of its DDS type - the value of the attribute it is mapped to": "ein Beispiel seines DDS-Typs - der Wert des Attributs, auf das er abgebildet ist",
   "a secret - never shown": "ein Geheimnis - nie gezeigt",
@@ -1285,7 +1283,6 @@
   "a collection: an attribute per element": "eine Collection: ein Attribut je Element",
   "a collection: one JSON attribute": "eine Collection: ein JSON-Attribut",
   "a collection: one attribute, its elements sub-attributes": "eine Collection: ein Attribut, seine Elemente Unterattribute",
-  "a native broker only: the image has no aas bridge": "nur ein nativer Broker: das Image hat keine aas-Bridge",
   "a service - input {vars}": "ein Dienst - Eingabe {vars}",
   "an AssetChannel": "ein AssetChannel",
   "an entity rule": "eine Entitätsregel",
@@ -1493,9 +1490,12 @@
   "image": "Image",
   "latest": "neueste",
   "this build is no longer there": "dieser Build ist nicht mehr da",
-  "pulled at the start when it is not here": "wird beim Start geladen, wenn es nicht hier ist",
   "quay.io: {why}": "quay.io: {why}",
   "what runs": "was läuft",
   "not ready": "nicht bereit",
-  "{name} does not answer yet": "{name} antwortet noch nicht"
+  "{name} does not answer yet": "{name} antwortet noch nicht",
+  "not here: pulled at the start - what it has is known then": "nicht hier: wird beim Start geladen - dann ist bekannt, was es hat",
+  "reading what the image has ...": "lese, was das Image hat ...",
+  "this broker has no {kind} plugin {name}": "dieser Broker hat kein {kind}-Plugin {name}",
+  "this broker has no {name} bridge": "dieser Broker hat keine {name}-Bridge"
 }

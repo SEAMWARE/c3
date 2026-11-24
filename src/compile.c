@@ -822,10 +822,11 @@ static void buildFinish(Build* bP, int status)
   if (ok)
   {
     char        out[8192];
-    char*       argv[] = { binary, (char*) "--version", NULL };
+    char        plugins[2100];
     struct stat st;
 
-    if (runCapture(argv, out, sizeof(out), 30) == 0)
+    snprintf(plugins, sizeof(plugins), "%s/plugins", install);    // as a start sees it: its own plugins (the "plugins:" line)
+    if (brokerVersion(binary, plugins, out, sizeof(out)) == 0)
       version = strdup(out);
 
     bytes = dirBytes(install);

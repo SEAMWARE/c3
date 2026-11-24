@@ -138,7 +138,7 @@ export class AasForm {
 
   render() {
     const f = this.f;
-    const cont = this.run.f.from === 'image';              // the published image has no aas bridge (a build's image: its own)
+    const cont = !this.run.bridgeOk('aas');                // a broker without the aas bridge
     const native = this.run.f.where !== 'container';       // Discover runs a broker natively: a server on localhost is reached
     const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
     set('rn-aas-url', f.url); set('rn-aas-ca', f.caFile);
@@ -147,7 +147,7 @@ export class AasForm {
     $('rn-aas-auth').placeholder = f.authorizationSet ? t('Authorization header - kept by c3; empty keeps it') : t('Authorization header (Bearer ...) - none: the server asks for none');
     for (const id of ['rn-aas-url', 'rn-aas-ca', 'rn-aas-insecure', 'rn-aas-auth', 'rn-aas-add']) $(id).disabled = cont;
     $('rn-aas-discover').disabled = cont || !native || !f.url || this.busy;
-    $('rn-aas-discover').title = cont ? t('a native broker only: the image has no aas bridge') : !native ? t('Discover runs the broker natively - choose Natively to discover')
+    $('rn-aas-discover').title = cont ? t('this broker has no {name} bridge', { name: 'aas' }) : !native ? t('Discover runs the broker natively - choose Natively to discover')
       : (!f.url ? t('give the server\'s URL first') : '');
     this.renderChannels(cont);
     this.renderFound();
@@ -156,9 +156,9 @@ export class AasForm {
 
   renderSum() {
     const f = this.f;
-    const cont = this.run.f.from === 'image';
+    const cont = !this.run.bridgeOk('aas');
     const auth = f.authorization || f.authorizationSet;
-    $('rn-aas-sum').textContent = cont ? t('a native broker only: the image has no aas bridge')
+    $('rn-aas-sum').textContent = cont ? t('this broker has no {name} bridge', { name: 'aas' })
       : (!f.url ? t('none') : f.url + ' - ' + (auth ? t('with an Authorization header') : t('no Authorization header'))
         + (f.insecure ? ', ' + t('certificate not verified') : '') + ', ' + plural(f.channels.length, '{n} AssetChannel', '{n} AssetChannels'));
   }
@@ -307,7 +307,7 @@ export class AasForm {
     row.append(tog, el('span', 'rn-oukind', kind), el('b', '', item.idShort || item.id), el('span', 'rn-ouid', item.id));
     if (kind === 'shell') row.append(el('span', 'rn-oukind', plural((item.submodels || []).length, '{n} submodel', '{n} submodels')));
     const b = button(ch ? t('an AssetChannel') : t('+ AssetChannel'), '', () => this.channelAdd(item.id));
-    b.disabled = !!ch || this.run.f.from === 'image';
+    b.disabled = !!ch || !this.run.bridgeOk('aas');
     b.title = t('the model as entities in the broker, kept up to date');
     row.append(b);
     box.append(row);

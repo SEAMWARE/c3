@@ -74,27 +74,6 @@ static bool repoNameValid(const char* name)
 
 
 
-// -----------------------------------------------------------------------------
-//
-// urlDecodeInPlace - %XX and + of a query parameter's value
-//
-static void urlDecodeInPlace(char* s)
-{
-  char* out = s;
-
-  for (char* in = s; *in != 0; in++)
-  {
-    if ((in[0] == '%') && (in[1] != 0) && (in[2] != 0))
-    {
-      char hex[3] = { in[1], in[2], 0 };
-      *out++ = (char) strtol(hex, NULL, 16);
-      in += 2;
-    }
-    else
-      *out++ = (*in == '+') ? ' ' : *in;
-  }
-  *out = 0;
-}
 
 
 

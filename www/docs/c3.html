@@ -220,7 +220,7 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   the admin API, distributed operations, <code>-v</code>.</li>
   <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
   configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS domain and mapping, the CKAN
-  datasets ticked, an OPC UA server and its channels, an AAS server and its AssetChannels (native brokers).</li>
+  datasets ticked, an OPC UA server and its channels, an AAS server and its AssetChannels.</li>
   <li><b>DDS</b> - the bridge configuration file and the default user <code>@context</code> file
   (<code>--bridgeConfig</code>, <code>--defaultUserContext</code>), and, under them, <b>Map DDS topics, services and
   actions</b>, the width of the form, active with the dds bridge ticked (<a href="#docs/c3/dds-mapper">the DDS mapper</a>),
@@ -229,8 +229,14 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   container broker with the dds bridge runs on the host's network and IPC namespace (<code>--network host --ipc
   host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its own containers - so its
   port is the host's and, like a native broker's, open on every interface.</li>
-  <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
-  its <code>--version</code>.</li>
+  <li><b>More options</b> - anything else, as typed.</li>
+  <li>The form offers what the broker has, from its own <code>--version</code>, run as a start runs it (its own plugin
+  directory): what is compiled out (<code>features:</code>) and what its plugin directory lacks (<code>plugins:
+  db=... troe=... api=... auth=... bridges=... transports=...</code>) is greyed with the reason - a store, a history,
+  the WebSocket transport, the admin API, a set; the bridges are that list's (loopback, the test bridge, never), and
+  the CKAN, OPC UA and AAS parts and the mappers show only with their bridge. An image's <code>--version</code> is read
+  once per image (<code>docker run --rm --entrypoint coraine &lt;image&gt; --version</code>); one not here is known
+  after its start pulls it. The start refuses what the form leaves out, too.</li>
   <li>Beside the form: the services it starts first, and the command, exactly as it will run.</li>
 </ul>
 <p><b>Services</b> are containers of c³'s own, <code>c3-&lt;set&gt;-&lt;service&gt;</code>, shared by the brokers of

@@ -671,8 +671,6 @@
   "a model root": "una raíz de modelo",
   "a model: {entities}, {attributes}": "un modelo: {entities}, {attributes}",
   "a name for this choice": "un nombre para esta elección",
-  "a native broker only: the image has no ckan bridge": "solo un broker nativo: la imagen no tiene bridge ckan",
-  "a native broker only: the image has no opcua bridge": "solo un broker nativo: la imagen no tiene bridge opcua",
   "a password needs its username": "una contraseña necesita su usuario",
   "a sample of its DDS type - the value of the attribute it is mapped to": "una muestra de su tipo DDS - el valor del atributo al que se mapea",
   "a secret - never shown": "un secreto - nunca se muestra",
@@ -1285,7 +1283,6 @@
   "a collection: an attribute per element": "una colección: un atributo por elemento",
   "a collection: one JSON attribute": "una colección: un atributo JSON",
   "a collection: one attribute, its elements sub-attributes": "una colección: un atributo, sus elementos subatributos",
-  "a native broker only: the image has no aas bridge": "solo un broker nativo: la imagen no tiene bridge aas",
   "a service - input {vars}": "un servicio - entrada {vars}",
   "an AssetChannel": "un AssetChannel",
   "an entity rule": "una regla de entidad",
@@ -1493,9 +1490,12 @@
   "image": "imagen",
   "latest": "la más reciente",
   "this build is no longer there": "esta compilación ya no está",
-  "pulled at the start when it is not here": "se descarga al arrancar si no está aquí",
   "quay.io: {why}": "quay.io: {why}",
   "what runs": "qué se ejecuta",
   "not ready": "no lista",
-  "{name} does not answer yet": "{name} todavía no responde"
+  "{name} does not answer yet": "{name} todavía no responde",
+  "not here: pulled at the start - what it has is known then": "no está aquí: se descarga al arrancar - entonces se sabe qué tiene",
+  "reading what the image has ...": "leyendo qué tiene la imagen ...",
+  "this broker has no {kind} plugin {name}": "este broker no tiene el plugin {kind} {name}",
+  "this broker has no {name} bridge": "este broker no tiene el bridge {name}"
 }

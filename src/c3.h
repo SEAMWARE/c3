@@ -78,8 +78,12 @@ extern bool  dirsMake(const char* dir);           // mkdir -p, mode 700
 extern bool  removeAll(const char* path);         // rm -rf, not following links
 extern bool  dataHome(const char* sub, char* out, int outLen);   // $XDG_DATA_HOME/c3/<sub>, else ~/.local/share/c3/<sub>
 
-extern int   runCapture(char* const argv[], char* out, int outSize, int timeoutS);   // the exit status (waitpid's), -1: not run
+extern int   runCaptureEnv(char* const argv[], char* const envp[], char* out, int outSize, int timeoutS);   // the exit status (waitpid's), -1: not run
+#define      runCapture(argv, out, outSize, timeoutS)  runCaptureEnv(argv, NULL, out, outSize, timeoutS)   // in c3's environment
+extern char** envClean(char* extra);              // c3's environment less CORAINE_* and SEAMWARE_PLUGIN_DIR, plus 'extra'; free the array
+extern int   brokerVersion(const char* binary, const char* pluginDir, char* out, int outSize);   // its --version as a start sees it; 0: answered
 extern bool  inPath(const char* name, char* out, int outLen);
+extern void  urlDecodeInPlace(char* s);           // %XX and + of a query parameter's value
 extern bool  tenantValid(const char* t);          // 1-255 printable ASCII characters, no blank - an NGSILD-Tenant
 extern void  groupStop(pid_t pgid);               // SIGTERM to what is left of a process group, SIGKILL 3 s later
 

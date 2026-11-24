@@ -156,6 +156,7 @@ const runName = (name) => encodeURIComponent(name);
 export const run              = () => call('GET', '/api/run');
 export const runSources       = () => call('GET', '/api/run/sources');
 export const runImages        = () => call('GET', '/api/run/images');
+export const runImage         = (ref) => call('GET', '/api/run/image?ref=' + encodeURIComponent(ref));   // an image's --version: { here, version }
 export const runCommand       = (def) => call('POST', '/api/run/command', def);
 export const runStart         = (def) => call('POST', '/api/run/brokers', def);
 export const runStartKept     = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/start');
