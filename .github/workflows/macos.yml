@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: c3
 
@@ -62,7 +62,7 @@ jobs:
   homebrew:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: The formula in a tap of its own - this branch of c3, and of each lib that has it
         env:
