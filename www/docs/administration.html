@@ -53,6 +53,7 @@ installation's directories:</p>
 <table class="g-opts">
   <tr><th>Option</th><th>Default - what it does</th></tr>
   <tr><td>--connectionPoolSize / -cps<span class="env">CORAINE_CONNECTIONPOOLSIZE</span></td><td>0: the number of cores for a store that never waits, 32 otherwise - the HTTP server's thread pool</td></tr>
+  <tr><td>--httpServer / -hs<span class="env">CORAINE_HTTPSERVER</span></td><td><code>mhd</code> when built, else <code>builtin</code> - the HTTP server a broker built with both runs (<a href="#docs/administration" data-scroll="http-server">The HTTP server</a>)</td></tr>
   <tr><td>--httpLoops / -hl<span class="env">CORAINE_HTTPLOOPS</span></td><td>0: one per core, at most 4 - event loops sharing the port (built-in server only)</td></tr>
   <tr><td>--noInline<span class="env">CORAINE_NOINLINE</span></td><td>off - hand every request to a worker thread. By default, with corDB, a request that waits on nothing runs on the thread that read it - about twice the throughput for retrieves and small queries</td></tr>
   <tr><td>--maxRequestSize / -mrs<span class="env">CORAINE_MAXREQUESTSIZE</span></td><td>2 - the largest request body, MiB; 413 above it (0: no cap)</td></tr>
@@ -153,6 +154,49 @@ kill "$(sed -n 's/^.*--daemon: detached, pid //p' ~/coraine-log/coraine.log)"</p
 <div class="g-callout"><p><code>-fg</code> / <code>--foreground</code> is <b>deprecated</b>: the foreground is the default, so it does nothing.
 Accepted through 0.7.x with one warning line at start, refused from 0.8.0:
 <code>W: ...: main: -fg: the broker runs in the foreground by default now - the option is refused from 0.8.0</code></p></div>
+
+<h2 id="http-server">The HTTP server</h2>
+<p>A broker carries libmicrohttpd (<code>mhd</code>), the built-in HTTP server corHttp (<code>builtin</code>), or both
+- as it was built (<a href="#docs/building/http-server">Choosing the HTTP server</a>). The .deb package and the Docker
+image carry libmicrohttpd; <code>coraine-build --http-server both</code> builds a broker with both - in c³, both ticked
+under Compile's <b>HTTP server</b>. One built with both runs one of them, chosen at its start:</p>
+<table class="gtable">
+  <tr><th>Option</th><th>Environment variable</th><th>Default</th><th>Values</th></tr>
+  <tr><td><code>--httpServer</code> / <code>-hs</code></td><td><code>CORAINE_HTTPSERVER</code></td><td><code>mhd</code> when built, else <code>builtin</code></td><td><code>mhd</code>, <code>builtin</code> - one the broker is built with</td></tr>
+</table>
+<ul>
+  <li><b>libmicrohttpd by default</b> when the broker carries it: it is the server the package, the image and the
+  pull-request tests run, and the one with TLS and a second port.</li>
+  <li><b>What a broker carries and runs:</b> <code>coraine -V</code> prints <code>httpServers:</code> (built) and
+  <code>httpServer:</code> (the one the options and environment given would run); <code>GET /build</code> says the same
+  of a running broker (<code>build.httpServers</code>, <code>build.httpServer</code>).</li>
+  <li><b>The options of one server</b> are accepted with the other, and ignored: <code>--httpLoops</code> (built-in),
+  <code>--httpConnectionMemory</code> (libmicrohttpd).</li>
+</ul>
+<table class="gtable">
+  <tr><th>built with</th><th>no <code>--httpServer</code></th><th><code>--httpServer mhd</code></th><th><code>--httpServer builtin</code></th></tr>
+  <tr><td><code>mhd</code> (the default build)</td><td>libmicrohttpd</td><td>libmicrohttpd</td><td><b>refused</b></td></tr>
+  <tr><td><code>builtin</code></td><td>the built-in server</td><td><b>refused</b></td><td>the built-in server</td></tr>
+  <tr><td><code>both</code></td><td>libmicrohttpd</td><td>libmicrohttpd</td><td>the built-in server - <b>refused</b> with <code>--https</code> or <code>--policyApiPort</code></td></tr>
+</table>
+<p>A refused one stops the broker before anything starts - exit code 1, one line on stderr:</p>
+<pre>X: --httpServer builtin: this broker is built with mhd only (httpServers in --version) - mhd is libmicrohttpd, builtin corHttp
+X: --https: the builtin HTTP server has no TLS - libmicrohttpd has (--httpServer mhd, in a broker built with it: httpServers in --version)
+X: --policyApiPort: the policy API (POLICY_API) is served on a port of its own, which only libmicrohttpd has - start with --httpServer mhd, or without --policyApiPort</pre>
+<p>A broker built with the built-in server alone has no <code>--policyApiPort</code> at all (the switch is not in
+it).</p>
+<pre>$ coraine -V | grep ^httpServer
+httpServer: mhd
+httpServers: mhd builtin
+$ CORAINE_HTTPSERVER=builtin coraine -V | grep ^httpServer:
+httpServer: builtin
+$ coraine --database corDB --httpServer builtin
+$ curl -s localhost:1026/build | jq -c '.build | {httpServer, httpServers}'
+{"httpServer":"builtin","httpServers":["mhd","builtin"]}</pre>
+<p>A systemd unit sets it in its environment:</p>
+<pre>[Service]
+Environment=CORAINE_HTTPSERVER=builtin
+ExecStart=/usr/bin/coraine --database corDB --dbDir /var/lib/coraine/db</pre>
 
 <h2 id="log">The log</h2>
 <p>The broker logs to its <b>standard output</b> by default - under systemd, the journal (<code>journalctl -u coraine</code>); in a

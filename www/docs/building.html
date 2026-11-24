@@ -149,7 +149,7 @@ build (<code>GEOQ</code>: 2026-10-14). A stripped file grows in 4 KiB pages, so 
   <tr><td>AUTH</td><td>no <code>--auth</code>, every request let in; <code>fdsc.so</code> not built; <code>AUTH_OIDC</code> and <code>AUTH_METADATA</code> go with it - <a href="#docs/authorization">Authorization</a></td><td>-113 KiB</td></tr>
   <tr><td>AUTH_OIDC</td><td><code>oidc.so</code> (an OpenID provider's access tokens, their roles reading or writing - <code>--auth oidc</code>) not built; the broker is the same either way. Off by itself when <code>AUTH</code> is</td><td></td></tr>
   <tr><td>AUTH_METADATA</td><td>no resource metadata (RFC 9728): no <code>GET /.well-known/oauth-protected-resource</code>, no <code>resource_metadata</code> in a 401. Off by itself when <code>AUTH</code> is</td><td>about 1 KB</td></tr>
-  <tr><td>POLICY_API</td><td>no <code>--policyApiPort</code>, no <code>/policy</code> API. Off by itself with the built-in HTTP server</td><td>-9 KiB</td></tr>
+  <tr><td>POLICY_API</td><td>no <code>--policyApiPort</code>, no <code>/policy</code> API. Off by itself with the built-in HTTP server alone (a <code>both</code> build has it, and refuses <code>--policyApiPort</code> with <code>--httpServer builtin</code>)</td><td>-9 KiB</td></tr>
   <tr><td colspan="3" class="muted">Beyond NGSI-LD</td></tr>
   <tr><td>SERVICE_EXECUTION</td><td>service registrations, executions and executors (ETSI GR CIM-055): 17 routes answer 501</td><td>-169 KiB</td></tr>
   <tr><td>DATA_CHANNELS</td><td>no DataChannels: a <code>dataChannels</code> section is warned about and ignored, <code>GET /ngsi-ld/v1/dataChannels</code> answers 501, the CKAN bridge is not offered</td><td>-14,720 bytes</td></tr>
@@ -193,7 +193,8 @@ with the switches set and the <code>GET /build</code> output.</p>
 
 <h2 id="http-server">The HTTP server</h2>
 <pre>cmake -DCOR_HTTP_SERVER=mhd        <span class="c"># libmicrohttpd - the default</span>
-cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP library</span></pre>
+cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP library</span>
+cmake -DCOR_HTTP_SERVER=both       <span class="c"># the two, the broker running one: --httpServer mhd|builtin</span></pre>
 <table class="gtable">
   <tr><th></th><th>libmicrohttpd (<code>mhd</code>)</th><th>corHttp (<code>builtin</code>)</th></tr>
   <tr><td>Model</td><td>an internal epoll thread pool (<code>MHD_USE_EPOLL</code>, <code>MHD_OPTION_THREAD_POOL_SIZE</code>)</td><td>edge-triggered epoll loops sharing one port; loop 0 accepts and deals connections out in turn</td></tr>
@@ -202,9 +203,19 @@ cmake -DCOR_HTTP_SERVER=builtin    <span class="c"># corHttp - no external HTTP 
   <tr><td><code>POLICY_API</code></td><td>yes</td><td>no - its port is a second listener, and corHttp has one</td></tr>
   <tr><td>Profile-guided, tuned</td><td>yes</td><td>not yet</td></tr>
 </table>
+<p><b>Both</b> (<code>COR_HTTP_SERVER=both</code>, <code>coraine-build --http-server both</code>): the broker carries
+the two and runs the one <code>--httpServer</code> names (<code>CORAINE_HTTPSERVER</code>), libmicrohttpd by default
+(<a href="#docs/administration" data-scroll="http-server">The HTTP server</a>). It links libmicrohttpd and corHttp. In
+corRest each backend file then defines its functions under its own suffix (<code>corRestBackendStartMhd</code>,
+<code>corRestBackendStartBuiltin</code>) and fills a table of them; corRest and the broker call through the table
+<code>corRestBackendSelect</code> chose at start - one indirect call per request phase. A build with one server calls
+its functions directly. <code>POLICY_API</code> is in a <code>both</code> build, and the broker refuses to start it, or
+<code>--https</code>, on the built-in server. <code>--pgo</code> and <code>--tune</code> take <code>mhd</code>
+alone.</p>
 <p>The value reaches CMake and corRest's own make, and decides whether libmicrohttpd is on the link line at
-all: <code>ldd coraine</code> shows it took, and a running broker reports it as <code>build.httpServer</code> on
-<code>GET /build</code>. The wire format of both is the same, byte for byte.</p>
+all: <code>ldd coraine</code> shows it took, and a running broker reports the one it runs as
+<code>build.httpServer</code> on <code>GET /build</code>, and the ones it is built with as
+<code>build.httpServers</code>. The wire format of both is the same, byte for byte.</p>
 <p>The four-loop cap: on 8 cores, eight loops bought 16&nbsp;% over four and made p99 seven times worse. One per
 core: four loops on a single core compete for it, and measure slower than one.</p>
 <p>corHttp serves no TLS (the broker is put behind a proxy that does) and no HTTP pipelining - a second request
