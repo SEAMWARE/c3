@@ -588,7 +588,7 @@
   "The first {n} MiB of the log are not shown here - the whole file has them.": "Les {n} premiers Mio du journal ne sont pas affichés ici - le fichier complet les contient.",
   "The first {size} of the log are not shown here - the whole log: {path}": "Les premiers {size} du journal ne sont pas affichés ici - le journal complet : {path}",
   "The graph": "Le graphe",
-  "c³, the broker, the guides and every component they are built from. A guide opens here, and so does a component that has one - the others, and every repository, open on GitHub.": "c³, le broker, les guides et chaque composant dont ils sont faits. Un guide s'ouvre ici, de même qu'un composant qui en a un - les autres, et chaque dépôt, s'ouvrent sur GitHub.",
+  "c³, the broker, the guides and every component they are built from. Each opens its guide here; repository ↗ opens its code on GitHub.": "c³, le broker, les guides et chaque composant dont ils sont faits. Chacun ouvre son guide ici ; dépôt ↗ ouvre son code sur GitHub.",
   "The headers are forgotten": "Les en-têtes sont oubliés",
   "The headers go with every request to this broker, as they are; an": "Les en-têtes accompagnent chaque requête vers ce broker, tels quels ; un en-tête",
   "The image's tag": "Le tag de l'image",
