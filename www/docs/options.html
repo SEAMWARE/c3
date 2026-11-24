@@ -117,20 +117,23 @@ plugins named on the same command line add their options.</p>
   <tr><th>Values</th><td>a switch</td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
-<p>Prints four lines and exits with 0: the program and its version, <code>features:</code> with every compile-time
-feature of this binary as <code>NAME=1</code> (in the build) or <code>NAME=0</code> (left out),
-<code>httpServer:</code> with the HTTP server it would run with the options and environment given (<code>mhd</code> -
-libmicrohttpd, or <code>builtin</code> - corHttp; <a href="#docs/options" data-scroll="httpServer">--httpServer</a>),
-and <code>httpServers:</code> with the ones it is built with. It is answered before any plugin is loaded and before any other option is read, so it
-works on an installation with a broken or missing plugin directory, and nothing else on the command line is
+<p>Prints five lines and exits with 0: the program and its version; <code>features:</code> with every compile-time
+feature of this binary as <code>NAME=1</code> (in the build) or <code>NAME=0</code> (left out); <code>httpServer:</code>
+with the HTTP server it would run with the options and environment given (<code>mhd</code> - libmicrohttpd, or
+<code>builtin</code> - corHttp; <a href="#docs/options" data-scroll="httpServer">--httpServer</a>) and
+<code>httpServers:</code> with the ones it is built with; and <code>optimize:</code> with what its defaults spend RAM on
+(<code>speed</code> or <code>size</code>, <code>COR_OPTIMIZE</code>). It is answered before any plugin is loaded and
+before the other options are read - <code>--httpServer</code> and <code>CORAINE_HTTPSERVER</code> alone are looked at -
+so it works on an installation with a broken or missing plugin directory, and nothing else on the command line is
 checked.</p>
 <p>It is read from the command line only: <code>CORAINE_VERSION</code> is listed by <code>-U</code>, and setting it
 does nothing - the broker starts.</p>
 <pre>coraine -V
-<span class="c"># coraine 0.6.0</span>
+<span class="c"># coraine 0.7.0</span>
 <span class="c"># features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 ... ICU_COLLATION=0 ...</span>
 <span class="c"># httpServer: mhd</span>
-<span class="c"># httpServers: mhd</span></pre>
+<span class="c"># httpServers: mhd</span>
+<span class="c"># optimize: speed</span></pre>
 
 <h3 id="verbose"><code>--verbose</code></h3>
 <table class="g-opts">
