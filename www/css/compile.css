@@ -235,17 +235,30 @@
 }
 .cp-q:hover, .cp-q:focus-visible { color: var(--text); border-color: var(--accent-2); }
 .cp-segitem { display: inline-flex; align-items: center; gap: 6px; }
-.cp-seg .cp-q.inline {
+.cp-seg .cp-q.inline, .cp-ticks .cp-q.inline {
   position: static; flex: 0 0 auto; width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%;
   background: var(--bg-deep); color: var(--text-2); border: 1px solid var(--line); font-size: 1.05rem; font-weight: 700;
 }
 .cp-q.ghost { visibility: hidden; }
 
-/* Server and databases: every button of the card one width - two to a column, the columns equal */
-.cp-server .cp-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.cp-server .cp-segitem { display: flex; min-width: 0; }
-.cp-server .cp-segitem > button:first-child { flex: 1 1 0; min-width: 0; padding: 4px 10px; line-height: 1.3; }
-.cp-seg .cp-q.inline:hover, .cp-seg .cp-q.inline:focus-visible { color: var(--text); border-color: var(--accent-2); }
+/* Server and databases: three columns, each a column of tick boxes - ticked or not, the '?' at the right */
+.cp-ticks { display: flex; flex-direction: column; gap: 4px; }
+.cp-server .cp-note { min-height: 1.3125rem; }                 /* its line kept: a note coming or going moves nothing */
+.cp-ticks .cp-segitem { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cp-tick {
+  flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px; line-height: 1.3;
+  background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text-2); font: inherit; text-align: left; cursor: pointer;
+}
+.cp-tick::before {
+  content: ''; flex: none; width: 14px; height: 14px; border: 1.5px solid var(--muted); border-radius: 3px;
+  display: grid; place-items: center; font-size: 0.8rem; line-height: 1; font-weight: 700;
+}
+.cp-tick[aria-checked="true"] { color: var(--text); }
+.cp-tick[aria-checked="true"]::before { content: '✓'; background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.cp-tick:hover:not([aria-disabled="true"]), .cp-tick:focus-visible { border-color: var(--line); }
+.cp-tick[aria-disabled="true"] { cursor: default; }
+.cp-tick[aria-disabled="true"]::before { opacity: 0.55; }
+.cp-seg .cp-q.inline:hover, .cp-seg .cp-q.inline:focus-visible, .cp-ticks .cp-q.inline:hover, .cp-ticks .cp-q.inline:focus-visible { color: var(--text); border-color: var(--accent-2); }
 .cp-feature .fsz { font-size: 0.9rem; line-height: 1.1875rem; font-family: var(--mono); color: var(--accent-text); }
 .cp-seg button .psz { font-family: var(--mono); font-size: 0.9rem; opacity: 0.8; }
 .cp-help-card { max-width: 640px; max-height: 80vh; overflow: auto; }

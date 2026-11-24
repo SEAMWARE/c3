@@ -1689,9 +1689,9 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
 
   if (stringMember(bodyP, "httpServer", false, 16, &s, errBuf, errLen) == false)
     return false;
-  if ((s != NULL) && (strcmp(s, "mhd") != 0) && (strcmp(s, "builtin") != 0))
+  if ((s != NULL) && (strcmp(s, "mhd") != 0) && (strcmp(s, "builtin") != 0) && (strcmp(s, "both") != 0))
   {
-    snprintf(errBuf, errLen, "\"httpServer\" is mhd or builtin");
+    snprintf(errBuf, errLen, "\"httpServer\" is mhd, builtin or both");
     return false;
   }
 

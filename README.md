@@ -630,14 +630,19 @@ is the command shown, run by the backend, the same build as on the command line.
   again every time the page is shown.
 - **Features** - from `coraine-build --list-features --json` (cached per `coraine-build` and tarball):
   each switch with its default and description; one changed from its default is marked; one whose
-  `requires` are off is greyed with what it needs (CMakeLists.txt turns it off). MONGOC is the **Stores**
-  choice (corDB only / corDB + mongoc); without the mongo-c driver the page starts at corDB only.
+  `requires` are off is greyed with what it needs (CMakeLists.txt turns it off). MONGOC is the **mongoc**
+  tick under Server and databases; without the mongo-c driver the page starts with it unticked.
 - **Optimisation** - Release, Profile-guided (`--pgo`), Tuned for a workload (`--tune <file>`, the
   workload by its absolute path on this machine), Debug. The training modes are greyed when the tools
   are missing.
 - **Target** - shown greyed: `coraine-build` builds a binary for the host.
-- **HTTP server** - libmicrohttpd (the default) or coraine's own (`--http-server builtin`; not with the
-  training modes).
+- **Server and databases** - three columns of tick boxes, each with what ticking it adds to the build and its `?`:
+  - **HTTP server** - libmicrohttpd (the default), corHttp (`--http-server builtin`), or both (`--http-server
+    both`: the broker carries both and chooses one at start with `--httpServer`, libmicrohttpd unless told). Both
+    only when `coraine-build --list-http-servers --json` lists `both`; otherwise ticking one unticks the other. One
+    stays ticked; the training modes take libmicrohttpd alone.
+  - **Current-state databases** - corDB, always built, and mongoc (the MONGOC switch).
+  - **Temporal history** - corDB and TimescaleDB: either, both, or none (the history kept elsewhere).
 - **Executable** - the broker's file name in `install/bin` (`--name`, default `coraine`): a broker built
   for one role named after it, a `cor-agent`. It reads the same `CORAINE_*` environment variables, and
   Operate starts it by that name.

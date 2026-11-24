@@ -108,6 +108,13 @@ const TROE_NAMES = new Set(TROES.map(([n]) => n));
 const HTTP_LABEL = Object.fromEntries(HTTP_SERVERS.map(([id, label]) => [id, label]));
 
 //
+// httpHas - a server is in the build: the choice is it, or both (coraine-build --http-server both: the broker
+// carries both and picks one at start, --httpServer, libmicrohttpd unless told)
+//
+const httpHas   = (choice, id) => choice === id || choice === 'both';
+const httpLabel = (choice) => (choice === 'both') ? t('{a} and {b}', { a: HTTP_LABEL.mhd, b: HTTP_LABEL.builtin }) : t(HTTP_LABEL[choice]);
+
+//
 // The build settings a switch may need ("requires": ["HTTP_SERVER=mhd"]): what to call them, why the
 // switch needs them, and the choice that gives them back
 //
@@ -115,7 +122,7 @@ const SETTINGS = {
   'HTTP_SERVER=mhd': {
     label: tk('the libmicrohttpd HTTP server'),
     why:   tk('it listens on a port of its own, and only libmicrohttpd has a second listener - corHttp has one'),
-    give:  tk('choose libmicrohttpd under HTTP server'),
+    give:  tk('tick libmicrohttpd under HTTP server'),
   },
 };
 
@@ -207,6 +214,17 @@ function docSize(text) {
   if (m) return m[1].replace('-', '−').replace(/\s/, ' ');
   if (/Size:\s+under a page/.test(text)) return '< 4 KiB';
   return '';
+}
+
+//
+// tickCost - what ticking a box of Server and databases adds, from the source's doc, whose sections measure a
+// choice against the other: libmicrohttpd's is what corHttp alone saves, corHttp's the code it adds ("for 12 KiB
+// of corHttp"), mongoc's what corDB alone saves
+//
+function tickCost(text, what) {
+  if (!text) return '';
+  if (what === 'part') { const m = text.match(/for\s+([\d.]+\s(?:KiB|MiB))\s+of/); return m ? m[1].replace(/\s/, ' ') : ''; }
+  return docSize(text).replace('−', '');                  // 'saved' - the size the other choice saves, unsigned
 }
 
 const sizeText = (size) => (size === 'no effect yet' ? t('no effect yet') : size);
@@ -399,6 +417,7 @@ export class Compile {
     this.featureError = '';
     this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
     this.bridges = [];            // [{name, default, description, available, why}] - coraine-build --list-bridges
+    this.httpServers = ['mhd', 'builtin'];   // coraine-build's --http-server values ("httpServers"; older: these two)
     this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '', output: 'binary' };
     this.presets = [];
     this.builds = [];
@@ -477,6 +496,8 @@ export class Compile {
         this.features = f.features || [];
         this.doc = docSections(f.doc);
         this.bridges = Array.isArray(f.bridges) ? f.bridges : [];
+        this.httpServers = Array.isArray(f.httpServers) ? f.httpServers : ['mhd', 'builtin'];
+        if (this.choice.httpServer === 'both' && !this.httpServers.includes('both')) this.choice.httpServer = 'mhd';
         this.featureError = '';
       } catch (e) {
         this.featureError = e.message;
@@ -537,8 +558,8 @@ export class Compile {
   reqMet(r) {
     const eq = r.indexOf('=');
     if (eq < 0) return this.isOn(r);
-    const built = { HTTP_SERVER: this.choice.httpServer || 'mhd' };
-    return built[r.slice(0, eq)] === r.slice(eq + 1);
+    if (r.slice(0, eq) === 'HTTP_SERVER') return httpHas(this.choice.httpServer || 'mhd', r.slice(eq + 1));
+    return false;
   }
 
   //
@@ -608,7 +629,7 @@ export class Compile {
       list.append(li);
     }
     const yes = el('button', 'btn primary', t('Switch to {server}', { server: t(HTTP_LABEL[id]) }));
-    const no = el('button', 'btn', t('Keep {server}', { server: t(HTTP_LABEL[this.choice.httpServer]) }));
+    const no = el('button', 'btn', t('Keep {server}', { server: httpLabel(this.choice.httpServer) }));
     yes.type = no.type = 'button';
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -618,7 +639,7 @@ export class Compile {
     document.addEventListener('keydown', onKey);
     const actions = el('div', 'actions');
     actions.append(yes, no);
-    const server = t(HTTP_LABEL[id]), back = t(HTTP_LABEL[this.choice.httpServer]);
+    const server = t(HTTP_LABEL[id]), back = httpLabel(this.choice.httpServer);
     card.append(el('h3', '', t('Switch to {server}?', { server })),
                 el('p', '', plural(lost.length, 'With {server}, this switch is not built:', 'With {server}, these switches are not built:', { server })),
                 list,
@@ -708,10 +729,21 @@ export class Compile {
   }
 
   //
-  // pill - a segmented choice, its size and its '?' beside it
+  // tick - a tick box of Server and databases: the label, ticked or not (aria-checked); the caller adds the click
   //
-  pill(b, section) {
-    const size = docSize(section && section.text);
+  tick(label, on) {
+    const b = el('button', 'cp-tick', label);
+    b.type = 'button';
+    b.setAttribute('role', 'checkbox');
+    b.setAttribute('aria-checked', String(on));
+    return b;
+  }
+
+  //
+  // pill - a choice of the card, its size and its '?' beside it
+  //
+  pill(b, section, cost) {
+    const size = (cost !== undefined) ? cost : docSize(section && section.text);
     if (size) b.append(el('span', 'psz', ' ' + sizeText(size)));
     const w = el('span', 'cp-segitem');
     w.append(b, helpButton(section, true) || el('span', 'cp-q inline ghost'));    // without a '?', its room: the buttons one width
@@ -761,19 +793,30 @@ export class Compile {
     //
     const isTraining = (m) => (m === 'pgo' || m === 'tune');
     const http = $('cp-http');
+    const cur = this.choice.httpServer;
+    const canBoth = this.httpServers.includes('both');
     http.replaceChildren(...HTTP_SERVERS.map(([id, label, desc]) => {
-      const b = el('button', '', t(label));
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(this.choice.httpServer === id));
-      const blocked = (id === 'builtin') && isTraining(this.choice.mode);
-      if (blocked) b.setAttribute('aria-disabled', 'true');
-      b.title = blocked ? t('Not with {mode} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for corHttp.', { mode: t(MODE_LABEL[this.choice.mode]) }) : t(desc);
-      b.addEventListener('click', () => { if (!blocked) this.httpServerSet(id); });
-      return this.pill(b, this.docAt(HTTP_DOC[id]));
+      const on = httpHas(cur, id);
+      const other = (id === 'mhd') ? 'builtin' : 'mhd';
+      const b = this.tick(t(label), on);
+      const training = isTraining(this.choice.mode);
+      let why = '';
+      if (on && cur === id) why = t('One HTTP server at least - tick the other first');
+      else if (!on && training) why = t('Not with {mode} yet: coraine-build trains with libmicrohttpd only. Choose Release or Debug for this.', { mode: t(MODE_LABEL[this.choice.mode]) });
+      if (why) { b.setAttribute('aria-disabled', 'true'); b.title = why; }
+      else b.title = t(desc) + (!on && !canBoth ? '\n' + t('This source builds one HTTP server: ticking it unticks {server}.', { server: t(HTTP_LABEL[other]) }) : '');
+      b.addEventListener('click', () => {
+        if (why) return;
+        if (on) this.httpServerSet(other);                       // unticked: the other one alone
+        else this.httpServerSet(canBoth ? 'both' : id);          // ticked: both, or this one instead
+      });
+      const corHttpDoc = this.docAt(HTTP_DOC.builtin);
+      const cost = tickCost(corHttpDoc && corHttpDoc.text, (id === 'mhd') ? 'saved' : 'part');
+      return this.pill(b, this.docAt(HTTP_DOC[id]), cost);
     }));
     const lostNow = this.features.filter((f) => (f.requires || []).some((r) => SETTINGS[r]) && this.forcedBy(f).length > 0).map((f) => f.name);
-    $('cp-http-note').textContent = (this.choice.httpServer === 'builtin')
-      ? (lostNow.length ? t('No external library. Not built with it: {list}.', { list: lostNow.join(', ') }) : t('No external library.'))
+    $('cp-http-note').textContent = (cur === 'both') ? t('Chosen at start: --httpServer')
+      : (cur === 'builtin') ? (lostNow.length ? t('No external library. Not built with it: {list}.', { list: lostNow.join(', ') }) : t('No external library.'))
       : '';
 
     //
@@ -781,15 +824,15 @@ export class Compile {
     //
     const mongoc = this.isOn('MONGOC');
     const store = $('cp-store');
-    store.replaceChildren(...[[tk('corDB only'), false], ['corDB + mongoc', true]].map(([label, value]) => {
-      const b = el('button', '', t(label));
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(mongoc === value));
-      b.addEventListener('click', () => { this.choice.features.MONGOC = value; this.changed(); });
-      return this.pill(b, this.docAt(STORE_DOC[value]));
-    }));
+    const cordb = this.tick('corDB', true);
+    cordb.setAttribute('aria-disabled', 'true');
+    cordb.title = t('Always built');
+    const mb = this.tick('mongoc', mongoc);
+    mb.addEventListener('click', () => { this.choice.features.MONGOC = !mongoc; this.changed(); });
+    const onlyDoc = this.docAt(STORE_DOC[false]);
+    store.replaceChildren(this.pill(cordb, onlyDoc, ''), this.pill(mb, this.docAt(STORE_DOC[true]), tickCost(onlyDoc && onlyDoc.text, 'saved')));
     const sn = $('cp-store-note');
-    sn.textContent = (!cc.mongoc && mongoc) ? t('The mongo-c driver v2 is not installed here: this build would stop. corDB only, or install it.') : (!cc.mongoc ? t('mongoc needs the mongo-c driver v2 (not installed here).') : '');
+    sn.textContent = (!cc.mongoc && mongoc) ? t('The mongo-c driver v2 is not installed here: this build would stop. Untick mongoc, or install it.') : (!cc.mongoc ? t('mongoc needs the mongo-c driver v2 (not installed here).') : '');
     sn.className = 'cp-note' + ((!cc.mongoc && mongoc) ? ' warn' : '');
 
     //
@@ -800,9 +843,7 @@ export class Compile {
     const troe = $('cp-troe');
     const tn = $('cp-troe-note');
     troe.replaceChildren(...troes.map(([n, label]) => {
-      const b = el('button', '', label);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(this.isOn(n)));
+      const b = this.tick(label, this.isOn(n));
       b.addEventListener('click', () => { this.choice.features[n] = !this.isOn(n); this.changed(); });
       return this.pill(b, this.docAt(TROE_DOC[n]));
     }));
@@ -950,12 +991,12 @@ export class Compile {
       b.setAttribute('aria-pressed', String(this.choice.mode === id));
       const trains = (id === 'pgo' || id === 'tune');
       b.disabled = trains && cc.available && !cc.pgo;
-      const byServer = trains && !b.disabled && (this.choice.httpServer === 'builtin');
+      const byServer = trains && !b.disabled && (this.choice.httpServer !== 'mhd');
       b.append(el('span', 'ol', t(label)), el('span', 'od', t(desc)));
       if (b.disabled) b.append(el('span', 'ow', cc.pgoWhy || t('not available here')));
       if (byServer) {
         b.setAttribute('aria-disabled', 'true');
-        b.title = t('Not with corHttp yet: coraine-build trains with libmicrohttpd only. Choose libmicrohttpd under HTTP server for this.');
+        b.title = t('Not with corHttp yet: coraine-build trains with libmicrohttpd only. Tick libmicrohttpd alone under HTTP server for this.');
         b.append(el('span', 'ow', t('not with corHttp yet')));
       }
       b.addEventListener('click', () => { if (byServer) return; this.choice.mode = id; this.changed(); });
@@ -971,7 +1012,9 @@ export class Compile {
     const arch = (this.caps && this.caps.arch) || '';
     const tv = { arch: arch || t('this machine'), distribution: (this.caps && this.caps.distribution) || t('this distribution') };
     $('cp-sum-target').textContent = this.imageOn() ? t('{arch} · {distribution} · binary and Docker image', tv) : t('{arch} · {distribution} · binary', tv);
-    $('cp-sum-server').textContent = this.choice.httpServer === 'mhd' ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL[this.choice.httpServer]) }) : t(HTTP_LABEL[this.choice.httpServer]);
+    $('cp-sum-server').textContent = (this.choice.httpServer === 'mhd') ? t('{server} (coraine-build\'s default)', { server: t(HTTP_LABEL.mhd) })
+      : (this.choice.httpServer === 'both') ? t('{servers} - chosen at start (--httpServer), libmicrohttpd unless told', { servers: httpLabel('both') })
+      : t(HTTP_LABEL[this.choice.httpServer]);
     $('cp-sum-stores').textContent = t('{stores}; history: {history}', {
       stores:  mongoc ? 'corDB + mongoc' : t('corDB only'),
       history: (troes.length === 0) ? 'corDB, TimescaleDB' : (troeOn.length ? troeOn.join(', ') : t('none')),

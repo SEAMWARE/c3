@@ -8,8 +8,8 @@
 //
 //   GET    /api/capabilities           what this machine can do: Compile needs coraine-build and its source
 //   GET    /api/compile/features       coraine-build --list-features --json: every switch, its default, its
-//                                      description, what it requires (cached per source tarball)
-//   POST   /api/builds/command         {name?, executable?, image?, mode, httpServer?, features, bridges?, workload?}: the command a build would run,
+//                                      description, what it requires; the bridges and HTTP servers it builds (cached per source tarball)
+//   POST   /api/builds/command         {name?, executable?, image?, mode, httpServer? (mhd|builtin|both), features, bridges?, workload?}: the command a build would run,
 //                                      without running it
 //   POST   /api/builds                 the same body: start the build (202; 409 while one runs)
 //   GET    /api/builds                 the builds kept, newest first
@@ -475,7 +475,7 @@ typedef struct Build
   char            image[256];                    // coraine-build --image: the container image asked for; "": none
   int             imageMiB;                      // its size, from coraine-build's "image <name> - <n> MiB" line
   char            mode[16];
-  char            httpServer[16];                // mhd, builtin
+  char            httpServer[16];                // mhd, builtin, both
   char            workload[2048];
   char*           featuresJson;                  // the features asked for, as JSON ({"REGISTRATIONS": false})
   char*           command;                       // as shown: shell-quoted
@@ -1013,7 +1013,7 @@ typedef struct Plan
   char   executable[65];                         // coraine-build --name; coraine: its default, left out
   char   image[256];                             // coraine-build --image; "": a binary only
   char   mode[16];
-  char   httpServer[16];                         // mhd (coraine-build's default), builtin
+  char   httpServer[16];                         // mhd (coraine-build's default), builtin, both
   char   workload[2048];
   Str    features;                               // the JSON object, as asked for
   Str    featuresArg;                            // NAME=ON,NAME=OFF
@@ -1080,21 +1080,21 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   }
 
   //
-  // httpServer: mhd (the default) or builtin - not with pgo / tune (coraine-build refuses: its training
-  // tools are tried with libmicrohttpd only)
+  // httpServer: mhd (the default), builtin, or both (the broker carries both, picks one at start: --httpServer) -
+  // only mhd with pgo / tune (coraine-build's training is tried with libmicrohttpd alone)
   //
   CorNode*    httpP = corTreeLookup(bodyP, "httpServer");
   const char* http  = ((httpP != NULL) && (httpP->type == CorString)) ? httpP->value.s : "mhd";
 
-  if ((strcmp(http, "mhd") != 0) && (strcmp(http, "builtin") != 0))
+  if ((strcmp(http, "mhd") != 0) && (strcmp(http, "builtin") != 0) && (strcmp(http, "both") != 0))
   {
-    snprintf(errBuf, errLen, "\"httpServer\" is mhd or builtin - not '%s'", http);
+    snprintf(errBuf, errLen, "\"httpServer\" is mhd, builtin or both - not '%s'", http);
     return false;
   }
-  if ((strcmp(http, "builtin") == 0) && ((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)))
+  if ((strcmp(http, "mhd") != 0) && ((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)))
   {
     *statusP = 422;
-    snprintf(errBuf, errLen, "the built-in HTTP server is not built with --%s yet", mode);
+    snprintf(errBuf, errLen, "the built-in HTTP server is not built with --%s yet (httpServer '%s')", mode, http);
     return false;
   }
   snprintf(pP->httpServer, sizeof(pP->httpServer), "%s", http);
@@ -1844,7 +1844,7 @@ static void buildLog(CorHttpConn* connP, const char* name)
 // mtime). Run on a thread of its own; the requests that came meanwhile wait (suspended) for the one run.
 //
 static pthread_mutex_t fMutex = PTHREAD_MUTEX_INITIALIZER;
-static char*           fText  = NULL;            // the answer: {"source", "version", "features": [...]}
+static char*           fText  = NULL;            // the answer: {"source", "version", "features": [...], "doc", "bridges", "httpServers"}
 static char            fKey[8400];
 static bool            fRunning = false;
 static CorHttpConn*    fWaitV[64];
@@ -1956,6 +1956,20 @@ static void* featuresThread(void* vP)
 
     strAdd(&s, ", \"bridges\": ");
     strAdd(&s, ((bStatus == 0) && (*bList == '[')) ? bList : "null");
+
+    //
+    // The HTTP servers it can build (--list-http-servers --json: ["mhd", "builtin", "both"]) - null from one that
+    // has no such option: mhd or builtin, one of them
+    //
+    char  hOut[1024];
+    bargv[1] = (char*) "--list-http-servers";             // the same arguments as --list-bridges, the option apart
+    int   hStatus = runCapture(bargv, hOut, sizeof(hOut), 60);
+    char* hList   = hOut;
+    while ((*hList == ' ') || (*hList == '\n'))
+      ++hList;
+
+    strAdd(&s, ", \"httpServers\": ");
+    strAdd(&s, ((hStatus == 0) && (*hList == '[')) ? hList : "null");
     strAdd(&s, "}");
     free(bridges);
   }
