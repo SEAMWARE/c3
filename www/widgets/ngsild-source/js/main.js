@@ -59,7 +59,7 @@
     if (!configured()) {
       box.append(el("div", "what", t("Not configured")));
     } else {
-      box.append(el("div", "what", pref("type") + (pref("q") ? "  ·  q=" + pref("q") : "")));
+      box.append(el("div", "what", pref("type").split(",").join(", ") + (pref("q") ? "  ·  q=" + pref("q") : "")));
       box.append(el("div", "meta", pref("broker") + (pref("tenant") ? "  ·  " + pref("tenant") : "")));
       if (last && !last.error) box.append(el("div", "meta", t("{n} entities", { n: last.count }) + "  ·  " + t("updated {time}", { time: last.at.toLocaleTimeString() })));
       if (last && last.error) box.append(el("div", "err", last.error));
@@ -78,7 +78,7 @@
   }
 
   //
-  // showForm - the broker (c³'s), its tenant, a type of the broker's, q, attrs, the period
+  // showForm - the broker (c³'s), its tenant, the broker's types (one or more: NGSI-LD's type=A,B), q, attrs, the period
   //
   function showForm() {
     formOpen = true;
@@ -86,7 +86,7 @@
     var err = el("div", "err");
     var broker = el("select");
     var tenant = el("select");
-    var type = el("select");
+    var type = el("div", "types");                 // a checkbox per type of the broker's
     var q = el("input");
     var attrs = el("input");
     var every = el("input");
@@ -122,15 +122,28 @@
       sel.append(o);
     }
 
+    function chosen() {
+      return Array.prototype.filter.call(type.querySelectorAll("input"), function (c) { return c.checked; }).map(function (c) { return c.value; });
+    }
+
     function types() {
       type.replaceChildren();
       var b = broker.value;
       if (!b) return;
+      var had = pref("type") ? pref("type").split(",") : [];
       C3.get(b, tenant.value, "/ngsi-ld/v1/types").then(function (r) {
         var list = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.typeList)) ? r.body.typeList : [];
         var names = list.map(function (x) { return typeof x === "string" ? x : (x && (x.typeName || x.id)); }).filter(Boolean).sort();
-        if (pref("type") && names.indexOf(pref("type")) === -1) names.unshift(pref("type"));   // kept, though the broker has none now
-        names.forEach(function (name) { option(type, name, name, name === pref("type")); });
+        had.slice().reverse().forEach(function (n) { if (names.indexOf(n) === -1) names.unshift(n); });   // kept, though the broker has none now
+        names.forEach(function (name) {
+          var l = el("label");
+          var c = el("input");
+          c.type = "checkbox";
+          c.value = name;
+          c.checked = had.indexOf(name) !== -1;
+          l.append(c, document.createTextNode(name));
+          type.append(l);
+        });
       }, function (e) { err.textContent = e.message; });
     }
 
@@ -156,8 +169,9 @@
     broker.addEventListener("change", function () { tenants(); types(); });
     tenant.addEventListener("change", types);
     save.addEventListener("click", function () {
+      if (!chosen().length) { err.textContent = t("Pick a type"); return; }
       formOpen = false;
-      C3.setPrefs({ broker: broker.value, tenant: tenant.value, type: type.value, q: q.value.trim(), attrs: attrs.value.trim(), refresh: Number(every.value) || 0 });
+      C3.setPrefs({ broker: broker.value, tenant: tenant.value, type: chosen().join(","), q: q.value.trim(), attrs: attrs.value.trim(), refresh: Number(every.value) || 0 });
     });
     cancel.addEventListener("click", function () { formOpen = false; showStatus(); });
   }

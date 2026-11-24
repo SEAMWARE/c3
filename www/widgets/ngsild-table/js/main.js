@@ -69,7 +69,13 @@
       var tr = el("tr", e.id === selected ? "sel" : "");
       cols.forEach(function (c) {
         var v = cell(e, c);
-        tr.append(el("td", typeof v === "number" ? "num" : "", C3.show(v, Number(pref("decimals")))));
+        //
+        // A URN (the id, a Relationship's object) as Explore shows it (after its type) - whole on hover
+        //
+        var urn = typeof v === "string" && /^urn:[^:]+:/i.test(v);
+        var td = el("td", typeof v === "number" ? "num" : "", urn ? C3.shortId(v) : C3.show(v, Number(pref("decimals"))));
+        if (urn) td.title = v;
+        tr.append(td);
       });
       tr.addEventListener("click", function () {
         selected = e.id;

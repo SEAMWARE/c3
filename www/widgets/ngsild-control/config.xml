@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-control" version="0.1.1">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-control" version="0.1.9">
   <details>
     <title>NGSI-LD control</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
@@ -25,5 +25,5 @@
     <inputendpoint name="entity" type="text" label="Entity" description="{broker, tenant, entities: [the entity set]} - a table's or a map's selection" friendcode="ngsild-entities"/>
   </wiring>
   <contents src="index.html" cacheable="false" useplatformstyle="true"/>
-  <rendering height="18" width="3"/>
+  <rendering height="24" width="4"/>
 </widget>

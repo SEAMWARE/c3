@@ -43,6 +43,22 @@
   }
 
   //
+  // aboutOf - what the alarm is about: the first entity it names - alertSource (Smart Data Models' Alert), from, source,
+  // then any other attribute holding an entity id (a Relationship, or a Property whose value is a URN) - as
+  // "<type> <the id after the type>", as Explore names it; none: the alarm's own id
+  //
+  function aboutOf(e) {
+    var names = ["alertSource", "from", "source"].concat(C3.attributesOf([e]));
+    for (var i = 0; i < names.length; i++) {
+      var v = C3.value(e, names[i]);
+      var id = v && (typeof v.object === "string" ? v.object : typeof v.value === "string" ? v.value : null);
+      var m = id && /^urn:ngsi-ld:([^:]+):(.+)$/i.exec(id);
+      if (m) return { text: m[1] + " " + m[2], title: id };
+    }
+    return { text: e.id, title: e.id };
+  }
+
+  //
   // level - a severity as high, mid, low or none (the colour)
   //
   function level(s) {
@@ -83,7 +99,7 @@
         var ackAt = C3.value(e, "acknowledgedAt");
         var ackBy = C3.value(e, "acknowledgedBy");
         return {
-          entity: e, id: e.id, text: textOf(e), severity: sev ? String(C3.show(sev.value)) : "", at: timeOf(e),
+          entity: e, id: e.id, text: textOf(e), about: aboutOf(e), severity: sev ? String(C3.show(sev.value)) : "", at: timeOf(e),
           acked: !!(ack && ack.value === true),
           ackAt: ackAt ? Date.parse(ackAt.value && ackAt.value["@value"] ? ackAt.value["@value"] : ackAt.value) : null,
           ackBy: ackBy ? String(ackBy.value) : "",
@@ -138,7 +154,9 @@
       var sev = el("td");
       if (a.severity) sev.append(el("span", "sev " + level(a.severity), a.severity));
       var main = el("td");
-      main.append(el("div", "name", a.text), el("div", "sub", a.id));
+      var about = el("div", "sub", a.about.text);
+      about.title = a.about.title + (a.about.title !== a.id ? "\n" + a.id : "");
+      main.append(el("div", "name", a.text), about);
       if (a.acked) main.append(el("div", "sub", t("acknowledged") + (a.ackBy ? " · " + a.ackBy : "") + (a.ackAt ? " · " + C3.ago(a.ackAt) : "")));
       var when = el("td", "when", a.at ? C3.ago(a.at) : "");
       if (a.at) when.title = new Date(a.at).toLocaleString();

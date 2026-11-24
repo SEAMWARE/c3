@@ -3,7 +3,7 @@ html, body { height: 100%; }
 body { margin: 0; font: 13px/1.4 system-ui, sans-serif; color: #222; }
 #view { height: 100%; overflow: auto; }
 table { border-collapse: collapse; width: 100%; }
-th, td { padding: 4px 8px; border-bottom: 1px solid #e3e3e3; text-align: left; vertical-align: top; max-width: 320px; overflow-wrap: anywhere; }
+th, td { padding: 4px 8px; border-bottom: 1px solid #e3e3e3; text-align: left; vertical-align: top; max-width: 320px; overflow-wrap: break-word; }
 th { position: sticky; top: 0; background: #f5f5f5; font-weight: 600; cursor: pointer; white-space: nowrap; }
 th.sorted::after { content: " ▾"; }
 th.sorted.up::after { content: " ▴"; }
