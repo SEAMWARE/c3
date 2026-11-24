@@ -27,7 +27,10 @@
   //
   // pick - the attribute (and the entity) chosen from what was received
   //
+  var picking = false;                           // the form is shown: the reads do not draw over it
+
   function pick() {
+    picking = true;
     var box = el("div", "pick");
     var ent = el("select");
     var attr = el("select");
@@ -47,12 +50,16 @@
       attr.append(x);
     });
     var save = el("button", "", t("Save"));
-    save.addEventListener("click", function () { C3.setPrefs({ entity: ent.value, attribute: attr.value }); });
+    save.addEventListener("click", function () { picking = false; C3.setPrefs({ entity: ent.value, attribute: attr.value }); });
+    var cancel = el("button", "", t("Cancel"));
+    cancel.addEventListener("click", function () { picking = false; render(); });
     box.append(el("label", "label", t("Entity")), ent, el("label", "label", t("Attribute")), attr, save);
+    if (pref("attribute")) box.append(cancel);   // none chosen yet: nothing to go back to
     view.replaceChildren(box);
   }
 
   function render() {
+    if (picking && entities) return;
     if (!entities) {
       view.replaceChildren(el("div", "wait", t("Waiting for entities - wire an NGSI-LD source to this widget")));
       return;

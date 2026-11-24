@@ -45,7 +45,7 @@
   //
   // aboutOf - what the alarm is about: the first entity it names - alertSource (Smart Data Models' Alert), from, source,
   // then any other attribute holding an entity id (a Relationship, or a Property whose value is a URN) - as
-  // "<type> <its id's last part>"; none: the alarm's own id
+  // "<type> <the id after the type>", as Explore names it; none: the alarm's own id
   //
   function aboutOf(e) {
     var names = ["alertSource", "from", "source"].concat(C3.attributesOf([e]));
@@ -53,7 +53,7 @@
       var v = C3.value(e, names[i]);
       var id = v && (typeof v.object === "string" ? v.object : typeof v.value === "string" ? v.value : null);
       var m = id && /^urn:ngsi-ld:([^:]+):(.+)$/i.exec(id);
-      if (m) return { text: m[1] + " " + m[2].slice(m[2].lastIndexOf(":") + 1), title: id };
+      if (m) return { text: m[1] + " " + m[2], title: id };
     }
     return { text: e.id, title: e.id };
   }

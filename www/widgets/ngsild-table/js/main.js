@@ -70,10 +70,10 @@
       cols.forEach(function (c) {
         var v = cell(e, c);
         //
-        // A URN (the id, a Relationship's object) by its last part, as the map and the graph name entities - whole on hover
+        // A URN (the id, a Relationship's object) as Explore shows it (after its type) - whole on hover
         //
         var urn = typeof v === "string" && /^urn:[^:]+:/i.test(v);
-        var td = el("td", typeof v === "number" ? "num" : "", urn ? (v.slice(v.lastIndexOf(":") + 1) || v) : C3.show(v, Number(pref("decimals"))));
+        var td = el("td", typeof v === "number" ? "num" : "", urn ? C3.shortId(v) : C3.show(v, Number(pref("decimals"))));
         if (urn) td.title = v;
         tr.append(td);
       });

@@ -27,7 +27,7 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "Esperando entidades - conecta una fuente NGSI-LD a este widget",
       "Attribute": "Atributo", "Entity": "Entidad", "the first": "la primera", "No such attribute": "No existe ese atributo",
       "all": "todos", "any type": "cualquier tipo", "no value": "sin valor",
-      "Hours": "Horas", "last {h} h": "últimas {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "El broker no tiene historial - no lo guarda (TRoE), o no para este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}",
+      "Hours": "Horas", "last {h} h": "últimas {h} h", "No values in the last {h} h at the broker - none came, or it keeps no history (TRoE) of this attribute": "El broker no tiene valores de las últimas {h} h - no llegó ninguno, o no guarda historial (TRoE) de este atributo", "No entity has a location": "Ninguna entidad tiene ubicación", "history: {why}": "historial: {why}",
       "Rules tenant": "Tenant de las reglas", "Alarm type": "Tipo de alarma", "{n} rules": "{n} reglas", "{n} alarms": "{n} alarmas", "{n} new": "{n} nuevas", "never": "nunca", "disabled": "desactivada", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Ninguna regla en este tenant - corCep las lee del tenant de las reglas (cep)", "No alarm": "Ninguna alarma", "{n} s ago": "hace {n} s", "{n} min ago": "hace {n} min", "{n} h ago": "hace {n} h", "{n} d ago": "hace {n} d", "fired": "disparada", "last error": "último error",
       "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ no dejó pasar la escritura - ¿está activado \"Los widgets pueden escribir\" en la página Panel de c³?", "Yes": "Sí", "No": "No", "Delete": "Borrar", "New": "Nueva", "Acknowledge": "Reconocer", "acknowledged": "reconocida", "Hide acknowledged": "Ocultar reconocidas", "Delete this alarm?": "¿Borrar esta alarma?", "Delete this rule?": "¿Borrar esta regla?", "Not JSON: {why}": "No es JSON: {why}", "Saved": "Guardado", "Enabled": "Activada", "Rule id": "Id de la regla", "Name": "Nombre", "Entity": "Entidad", "Control": "Control", "Label": "Etiqueta", "switch": "interruptor", "button": "botón", "slider": "deslizador", "number": "número", "Value sent": "Valor enviado", "Set": "Fijar", "Min": "Mín", "Max": "Máx", "Step": "Paso", "now": "ahora", "Rules written here have no author: with --pdp, corCep leaves them out": "Las reglas escritas aquí no tienen autor: con --pdp, corCep las deja fuera", "No entities in what is wired to this widget": "No hay entidades en lo conectado a este widget", "Fit": "Ajustar"
     },
@@ -41,7 +41,7 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "En attente d'entités - reliez une source NGSI-LD à ce widget",
       "Attribute": "Attribut", "Entity": "Entité", "the first": "la première", "No such attribute": "Attribut introuvable",
       "all": "tous", "any type": "tout type", "no value": "pas de valeur",
-      "Hours": "Heures", "last {h} h": "dernières {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Pas d'historique dans le broker - il n'en garde pas (TRoE), ou pas pour cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}",
+      "Hours": "Heures", "last {h} h": "dernières {h} h", "No values in the last {h} h at the broker - none came, or it keeps no history (TRoE) of this attribute": "Aucune valeur des dernières {h} h dans le broker - aucune n'est arrivée, ou il ne garde pas d'historique (TRoE) de cet attribut", "No entity has a location": "Aucune entité n'a de position", "history: {why}": "historique : {why}",
       "Rules tenant": "Tenant des règles", "Alarm type": "Type d'alarme", "{n} rules": "{n} règles", "{n} alarms": "{n} alarmes", "{n} new": "{n} nouvelles", "never": "jamais", "disabled": "désactivée", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Aucune règle dans ce tenant - corCep les lit dans le tenant des règles (cep)", "No alarm": "Aucune alarme", "{n} s ago": "il y a {n} s", "{n} min ago": "il y a {n} min", "{n} h ago": "il y a {n} h", "{n} d ago": "il y a {n} j", "fired": "déclenchée", "last error": "dernière erreur",
       "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ n'a pas laissé passer l'écriture - \"Les widgets peuvent écrire\" est-il activé dans la page Tableau de bord de c³ ?", "Yes": "Oui", "No": "Non", "Delete": "Supprimer", "New": "Nouvelle", "Acknowledge": "Acquitter", "acknowledged": "acquittée", "Hide acknowledged": "Masquer les acquittées", "Delete this alarm?": "Supprimer cette alarme ?", "Delete this rule?": "Supprimer cette règle ?", "Not JSON: {why}": "Pas du JSON : {why}", "Saved": "Enregistré", "Enabled": "Activée", "Rule id": "Id de la règle", "Name": "Nom", "Entity": "Entité", "Control": "Commande", "Label": "Libellé", "switch": "interrupteur", "button": "bouton", "slider": "curseur", "number": "nombre", "Value sent": "Valeur envoyée", "Set": "Appliquer", "Min": "Min", "Max": "Max", "Step": "Pas", "now": "maintenant", "Rules written here have no author: with --pdp, corCep leaves them out": "Les règles écrites ici n'ont pas d'auteur : avec --pdp, corCep les écarte", "No entities in what is wired to this widget": "Aucune entité dans ce qui est relié à ce widget", "Fit": "Ajuster"
     },
@@ -55,7 +55,7 @@ var C3 = (function () {
       "Waiting for entities - wire an NGSI-LD source to this widget": "Warte auf Entitäten - verbinden Sie eine NGSI-LD-Quelle mit diesem Widget",
       "Attribute": "Attribut", "Entity": "Entität", "the first": "die erste", "No such attribute": "Kein solches Attribut",
       "all": "alle", "any type": "jeder Typ", "no value": "kein Wert",
-      "Hours": "Stunden", "last {h} h": "letzte {h} h", "No history at the broker - it keeps none (TRoE), or not for this attribute": "Keine Historie im Broker - er speichert keine (TRoE), oder nicht für dieses Attribut", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}",
+      "Hours": "Stunden", "last {h} h": "letzte {h} h", "No values in the last {h} h at the broker - none came, or it keeps no history (TRoE) of this attribute": "Keine Werte der letzten {h} h im Broker - keine kamen, oder er speichert keine Historie (TRoE) dieses Attributs", "No entity has a location": "Keine Entität hat einen Ort", "history: {why}": "Historie: {why}",
       "Rules tenant": "Tenant der Regeln", "Alarm type": "Alarmtyp", "{n} rules": "{n} Regeln", "{n} alarms": "{n} Alarme", "{n} new": "{n} neu", "never": "nie", "disabled": "deaktiviert", "No rule in this tenant - corCep reads them from the rules tenant (cep)": "Keine Regel in diesem Tenant - corCep liest sie aus dem Tenant der Regeln (cep)", "No alarm": "Kein Alarm", "{n} s ago": "vor {n} s", "{n} min ago": "vor {n} min", "{n} h ago": "vor {n} h", "{n} d ago": "vor {n} T", "fired": "ausgelöst", "last error": "letzter Fehler",
       "c³ did not let the write through - is \"Widgets may write\" on, in c³'s Dashboard page?": "c³ hat den Schreibvorgang nicht durchgelassen - ist \"Widgets dürfen schreiben\" auf der Dashboard-Seite von c³ an?", "Yes": "Ja", "No": "Nein", "Delete": "Löschen", "New": "Neu", "Acknowledge": "Quittieren", "acknowledged": "quittiert", "Hide acknowledged": "Quittierte ausblenden", "Delete this alarm?": "Diesen Alarm löschen?", "Delete this rule?": "Diese Regel löschen?", "Not JSON: {why}": "Kein JSON: {why}", "Saved": "Gespeichert", "Enabled": "Aktiv", "Rule id": "Regel-Id", "Name": "Name", "Entity": "Entität", "Control": "Steuerung", "Label": "Beschriftung", "switch": "Schalter", "button": "Taste", "slider": "Schieberegler", "number": "Zahl", "Value sent": "Gesendeter Wert", "Set": "Setzen", "Min": "Min", "Max": "Max", "Step": "Schritt", "now": "jetzt", "Rules written here have no author: with --pdp, corCep leaves them out": "Hier geschriebene Regeln haben keinen Autor: mit --pdp lässt corCep sie aus", "No entities in what is wired to this widget": "Keine Entitäten in dem, was mit diesem Widget verbunden ist", "Fit": "Einpassen"
     }
@@ -92,7 +92,9 @@ var C3 = (function () {
         try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
         if (!r.ok) {
           var why = (body && (body.detail || body.title)) || ("HTTP " + r.status);
-          throw new Error(why);
+          var err = new Error(why);
+          err.status = r.status;                 // a 404 can be an answer: nothing there (a temporal query's empty range)
+          throw err;
         }
         return { body: body, count: r.headers.get("NGSILD-Results-Count"), location: r.headers.get("Location"), status: r.status };
       });
@@ -245,6 +247,14 @@ var C3 = (function () {
   // WireCloud's callback does not always come (seen with a widget's second Save in a row); when it does, the
   // widget only follows the same values again
   //
+  //
+  // shortId - an entity id as Explore shows it (entity.js): urn:ngsi-ld:<type>:<rest> -> <rest>; another URN without "urn:"
+  //
+  function shortId(id) {
+    var m = /^urn:ngsi-ld:[^:]+:(.+)$/i.exec(id);
+    return m ? m[1] : String(id).replace(/^urn:/i, "");
+  }
+
   function setPrefs(values) {
     //
     // To WireCloud as text: WireCloud 2 answers a number or a boolean 422 and keeps none of the values sent with it
@@ -306,5 +316,5 @@ var C3 = (function () {
     return e;
   }
 
-  return { t: t, pref: pref, onPrefs: onPrefs, setPrefs: setPrefs, base: base, request: request, brokers: brokers, get: get, write: write, property: property, username: username, confirm: confirm, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el };
+  return { t: t, pref: pref, onPrefs: onPrefs, setPrefs: setPrefs, base: base, request: request, brokers: brokers, get: get, write: write, property: property, username: username, confirm: confirm, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el, shortId: shortId };
 })();

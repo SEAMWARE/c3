@@ -82,7 +82,7 @@
     function read(id, by) {
       return C3.get(from.broker, from.tenant, "/ngsi-ld/v1/temporal/entities/" + encodeURIComponent(id) + qs + by).then(function (r) {
         return { id: id, got: instancesOf(r.body && r.body[attr]) };
-      }, function (e) { return { id: id, error: e.message }; });
+      }, function (e) { return e.status === 404 ? { id: id, got: [] } : { id: id, error: e.message }; });   // 404: none in the range
     }
     Promise.all(ids.map(function (id) {
       return read(id, "").then(function (x) {
@@ -97,7 +97,7 @@
         if (series[x.id]) series[x.id] = sorted(x.got.concat(series[x.id]));
       });
       if (why && !any) note = t("history: {why}", { why: why });
-      else if (!any) note = t("No history at the broker - it keeps none (TRoE), or not for this attribute");
+      else if (!any) note = t("No values in the last {h} h at the broker - none came, or it keeps no history (TRoE) of this attribute", { h: hours() });
       draw();
     });
   }
@@ -122,7 +122,10 @@
   //
   // pick - the attribute: the numeric ones the entities have
   //
+  var picking = false;                           // the form is shown: the reads do not draw over it
+
   function pick() {
+    picking = true;
     var box = el("div", "pick");
     var attr = el("select");
     C3.attributesOf(entities).filter(function (a) {
@@ -139,8 +142,11 @@
     hrs.step = "any";
     hrs.value = hours();
     var save = el("button", "", t("Save"));
-    save.addEventListener("click", function () { C3.setPrefs({ attribute: attr.value, hours: Number(hrs.value) || 6 }); });
+    save.addEventListener("click", function () { picking = false; C3.setPrefs({ attribute: attr.value, hours: Number(hrs.value) || 6 }); });
+    var cancel = el("button", "", t("Cancel"));
+    cancel.addEventListener("click", function () { picking = false; draw(); });
     box.append(el("label", "", t("Attribute")), attr, el("label", "", t("Hours")), hrs, save);
+    if (pref("attribute")) box.append(cancel);   // none chosen yet: nothing to go back to
     view.replaceChildren(box);
   }
 
@@ -170,6 +176,7 @@
   }
 
   function draw() {
+    if (picking && entities) return;
     if (!entities) {
       view.replaceChildren(el("div", "wait", t("Waiting for entities - wire an NGSI-LD source to this widget")));
       return;
@@ -190,8 +197,8 @@
       var s = el("span");
       var sw = el("i");
       sw.style.background = COLORS[i % COLORS.length];
-      s.title = id;                                // the id's last part shown, as on the map; the whole id on hover
-      s.append(sw, document.createTextNode(id.slice(id.lastIndexOf(":") + 1) || id));
+      s.title = id;                                // the id as Explore and the map show it; the whole id on hover
+      s.append(sw, document.createTextNode(C3.shortId(id)));
       legend.append(s);
     });
 
