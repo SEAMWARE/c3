@@ -370,6 +370,24 @@ export class Run {
     this.opcuaMap.open('compile');
   }
 
+  //
+  // aasMapFromCompile - Compile's way in to the AAS mapping: the aas bridge ticked, the form's AAS part open and
+  // shown, the cursor in the server's URL (Discover the server is beside it)
+  //
+  aasMapFromCompile() {
+    if (!this.f.bridges.includes('aas')) {
+      this.f.bridges = [...this.f.bridges, 'aas'];
+      this.renderForm();
+      this.changed(false);
+    }
+    const drop = $('rn-aas-drop');
+    drop.open = true;
+    let box = drop.parentElement;                          // the form's own scroller only: the page stays where it is
+    while (box && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight)) box = box.parentElement;
+    if (box) box.scrollTop += drop.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 3;
+    $('rn-aas-url').focus({ preventScroll: true });
+  }
+
   // renderOpcuaMap - the OPC UA mapper's button, live when the opcua bridge is ticked; under it, the configuration made
   renderOpcuaMap() {
     const on = this.f.bridges.includes('opcua');

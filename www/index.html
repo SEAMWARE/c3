@@ -145,6 +145,15 @@
 
         <div class="cp-gate" id="cp-gate">
           <div class="cp-stack">
+            <section class="cp-card" aria-label="Output">
+              <h2 class="section">Output</h2>
+              <div class="cp-outrow">
+                <div class="cp-seg" id="cp-output" aria-label="Output"></div>
+                <label class="cp-name" id="cp-image-row" title="The image's name: [registry[:port]/]repository[:tag]"><span class="cp-label">Image</span><input class="cp-input" id="cp-image" maxlength="200" spellcheck="false" autocomplete="off"></label>
+              </div>
+              <span class="cp-note" id="cp-output-note"></span>
+            </section>
+
             <section class="cp-card cp-server" aria-label="Server and databases">
               <h2 class="section">Server and databases</h2>
               <div class="cp-grid3">
@@ -191,16 +200,14 @@
           </dl>
           <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="cp-name" maxlength="64" spellcheck="false" autocomplete="off" placeholder="mode-date-time"></label>
           <label class="cp-name" title="The broker's file name in install/bin - a broker built for one role named after it (cor-agent). It reads the same CORAINE_* environment variables whatever it is called."><span class="cp-label">Executable</span><input class="cp-input" id="cp-exe" maxlength="64" spellcheck="false" autocomplete="off" placeholder="coraine"></label>
-          <div class="cp-name"><span class="cp-label">Output</span><div class="cp-seg" id="cp-output" aria-label="Output"></div><span class="cp-note" id="cp-output-note"></span></div>
-          <label class="cp-name" id="cp-image-row" title="The image's name: [registry[:port]/]repository[:tag]"><span class="cp-label">Image</span><input class="cp-input" id="cp-image" maxlength="200" spellcheck="false" autocomplete="off"></label>
           <pre class="cp-cmd" id="cp-cmd" aria-label="The command"></pre>
           <span class="cp-note">Exactly what runs: c³ builds nothing itself. The result is <span class="mono">install/</span> in the build's directory - and, with a Docker image, the image.</span>
           <button class="btn primary cp-build" type="button" id="cp-build">Build</button>
           <button class="cp-building" type="button" id="cp-building" hidden title="Show the build - its phases and its output"></button>
         </section>
 
-        <section class="cp-card cp-gate2" aria-label="Presets">
-          <h2 class="section">Presets</h2>
+        <details class="cp-card cp-gate2 cp-fold" aria-label="Presets">
+          <summary><h2 class="section">Presets</h2><span class="sub" id="cp-pcount"></span></summary>
           <div class="cp-presets">
             <select id="cp-preset" aria-label="Preset"></select>
             <button class="btn" type="button" id="cp-preset-load">Load</button>
@@ -211,13 +218,13 @@
             <button class="btn" type="button" id="cp-preset-save">Save</button>
           </div>
           <span class="cp-note">Kept in c3.json: the optimisation, the features, the workload.</span>
-        </section>
+        </details>
 
-        <section class="cp-card" aria-label="Builds kept">
-          <div class="row"><h2 class="section">Builds kept</h2><span class="sub" id="cp-bcount"></span></div>
+        <details class="cp-card cp-fold" aria-label="Builds kept">
+          <summary><h2 class="section">Builds kept</h2><span class="sub" id="cp-bcount"></span></summary>
           <div class="cp-builds" id="cp-builds"></div>
           <span class="cp-note mono" id="cp-bdir"></span>
-        </section>
+        </details>
       </aside>
     </div>
   </main>

@@ -1072,13 +1072,6 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   }
   snprintf(pP->mode, sizeof(pP->mode), "%s", mode);
 
-  if (((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)) && (cP->pgo == false))
-  {
-    *statusP = 422;
-    snprintf(errBuf, errLen, "--%s: %s", mode, cP->pgoWhy);
-    return false;
-  }
-
   //
   // httpServer: mhd (the default), builtin, or both (the broker carries both, picks one at start: --httpServer) -
   // only mhd with pgo / tune (coraine-build's training is tried with libmicrohttpd alone)
@@ -1158,6 +1151,28 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     }
   }
   strAdd(&pP->features, "}");
+
+  //
+  // The current-state stores (coraine-build refuses these too, after a source and a command): one of them at least,
+  // and corDB with pgo / tune - their training runs the broker on corDB. A switch not given is at its default, on
+  //
+  CorNode* cordbP  = (featuresP != NULL) ? corTreeLookup(featuresP, "CORDB")  : NULL;
+  CorNode* mongocP = (featuresP != NULL) ? corTreeLookup(featuresP, "MONGOC") : NULL;
+  bool     cordbOff  = (cordbP  != NULL) && (cordbP->type  == CorBoolean) && (cordbP->value.b  == false);
+  bool     mongocOff = (mongocP != NULL) && (mongocP->type == CorBoolean) && (mongocP->value.b == false);
+
+  if (cordbOff && mongocOff)
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "MONGOC and CORDB off: no current-state store - the broker keeps its entities in mongoc (MongoDB) or corDB; build at least one");
+    return false;
+  }
+  if (cordbOff && ((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "CORDB off: not with --%s (its training runs the broker on corDB)", mode);
+    return false;
+  }
 
   //
   // bridges: ["mqtt", "dds"] - the bridge plugins to build; [] none; absent: coraine-build's default
@@ -1318,6 +1333,17 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     if (ix > 0)
       strAdd(&pP->command, " ");
     shellQuote(&pP->command, pP->argv[ix]);
+  }
+
+  //
+  // What this machine has, last: a choice that is wrong in itself (the HTTP server, the stores) is said as such on
+  // every machine - then whether this one can train (curl, wrk, python3)
+  //
+  if (((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)) && (cP->pgo == false))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "--%s: %s", mode, cP->pgoWhy);
+    return false;
   }
 
   return true;
