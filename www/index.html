@@ -150,7 +150,8 @@
               <h2 class="section">Output</h2>
               <div class="cp-outrow">
                 <div class="cp-seg" id="cp-output" aria-label="Output"></div>
-                <label class="cp-name" id="cp-image-row" title="The image's name: [registry[:port]/]repository[:tag]"><span class="cp-label">Image</span><input class="cp-input" id="cp-image" maxlength="200" spellcheck="false" autocomplete="off"></label>
+                <label class="cp-name" id="cp-image-row" title="Kept in Docker on this machine, not as a file: docker images lists it, docker run &lt;name&gt; starts it. [registry[:port]/]repository[:tag] - a registry in front (quay.io/...) to docker push it"><span class="cp-label">Docker image name</span><input class="cp-input" id="cp-image" maxlength="200" spellcheck="false" autocomplete="off"></label>
+                <span id="cp-imagefile" hidden></span>
               </div>
               <span class="cp-note" id="cp-output-note"></span>
             </section>
