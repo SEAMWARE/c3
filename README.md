@@ -158,9 +158,11 @@ the UI showed last. Without a token (a `c3` typed in a terminal) the running one
 and the desktop may answer with "c³ is ready" instead of showing it. The second `c3` writes which it was.
 
 GNOME gives no token to a launch from the dock. There the desktop entry does it: `StartupWMClass` names the
-window c3 opens - Chrome's application window of `http://127.0.0.1:<port>` on c³'s profile, app id
-`chrome-127.0.0.1__-Default` (Chrome ignores `--class` for application windows) - so GNOME takes the
-window for c³'s, and the icon shows it again, minimised or not, without starting a second `c3`.
+window c3 opens - c3-window, app id `com.seamware.c3` - so GNOME takes the window for c³'s: the dock's icon
+shows c³ running, and a click on it shows the window again, minimised or not, without starting a second `c3`.
+Chrome's application window (c3 without c3-window) has an app id of its own, `chrome-127.0.0.1__-Default`
+(Chrome ignores `--class` for application windows): the icon does not take it, and a click starts a `c3`,
+which shows the running one's window.
 
 ## The configuration file
 

@@ -1515,5 +1515,7 @@
   "known after the start pulls the image": "se sabe cuando el arranque descargue la imagen",
   "reading the broker's options ...": "leyendo las opciones del broker ...",
   "the broker did not say": "el broker no lo dijo",
-  "No broker runs": "Ningún broker en marcha"
+  "No broker runs": "Ningún broker en marcha",
+  "Leave full screen (F11)": "Salir de pantalla completa (F11)",
+  "Leave full screen": "Salir de pantalla completa"
 }
