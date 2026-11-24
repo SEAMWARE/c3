@@ -178,7 +178,22 @@ by the backend - the same build as on the command line (<a href="#docs/building"
 
 <!-- ======================================================================= -->
 <h2 id="operate">Operate - brokers and their services</h2>
-<p>Brokers started and stopped on this machine, from:</p>
+<p><b>The page</b> shows one thing at a time:</p>
+<ul>
+  <li><b>Running</b> - the brokers c³ started that run, start, stop or failed, the one Explore is connected to first,
+  and a service still running that no broker uses; <b>Start a broker</b>. A click opens a card. A broker stopped by
+  hand is not listed: its settings are under Start a broker, <b>Earlier settings</b>.</li>
+  <li><b>A broker's card</b> - its state, what it runs from, where its data is, its health; <b>Stop</b>,
+  <b>Explore</b>, <b>Options</b> (its options in the form, where its OPC UA server is browsed); the services it uses,
+  each one's <b>Log</b> opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
+  ← goes back.</li>
+  <li><b>Start a broker</b>, step 1, what runs: <b>Earlier settings</b> (a broker started before - its options fill
+  the form; <b>Forget</b>), Compile's <b>Builds</b> (the newest first, the latest marked), the <b>Installed</b>
+  <code>coraine</code>, the <b>Docker images</b> (those here, then the newest published; <b>+</b> lists them all;
+  another tag typed). Step 2: the form, and beside it the services the start brings up, the command and
+  <b>Start</b>; <b>Change</b> goes back to step 1. Started, the broker's card opens.</li>
+</ul>
+<p>What a broker is started from:</p>
 <table class="gtable">
   <tr><th>From</th><th>Runs</th></tr>
   <tr><td>the installed <code>coraine</code> (<code>$PATH</code>)</td><td>natively</td></tr>
@@ -214,14 +229,14 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   port is the host's and, like a native broker's, open on every interface.</li>
   <li><b>More options</b> - anything else, as typed. What the broker is built without is greyed with the reason, from
   its <code>--version</code>.</li>
-  <li>The command, exactly as it will run, and the services it starts first.</li>
+  <li>Beside the form: the services it starts first, and the command, exactly as it will run.</li>
 </ul>
 <p><b>Services</b> are containers of c³'s own, <code>c3-&lt;set&gt;-&lt;service&gt;</code>, shared by the brokers of
 the set, each with a volume, on the network <code>c3</code>, published on <code>127.0.0.1</code> on the service's port
 + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is taken). Each broker has its
 own database in them (<code>--dbName c3_&lt;name&gt;</code>, <code>--troeName c3_&lt;name&gt;_h</code>). They start
 before the broker that needs them, waited for until they answer, and stop when nothing c³ started uses them; their
-volume stays until <b>Delete data</b>. c³ creates only <code>c3-*</code> containers and volumes and the network
+volume stays until <b>Delete data</b> - beside the service in Start a broker's step 2, while it does not run. c³ creates only <code>c3-*</code> containers and volumes and the network
 <code>c3</code>, all labelled <code>c3=run</code>, and touches nothing else.</p>
 <p><b>Starting and stopping.</b> A started broker joins Explore's list (<code>http://localhost:&lt;port&gt;</code>). A
 native broker runs in a session of its own, its output appended to its log; it does not need c³ - when c³ stops, the
@@ -244,7 +259,7 @@ brokers keep running, and the next c³ attaches to them (by pid and the process'
 
 <!-- ======================================================================= -->
 <h3 id="dds-mapper">The DDS mapper</h3>
-<p>Operate's left side, given to the mapping of a DDS domain to NGSI-LD: each topic, service or action mapped is one
+<p>Operate's page, given to the mapping of a DDS domain to NGSI-LD: each topic, service or action mapped is one
 attribute of an entity. Mapping once is the usual case: what was written is read back when c³ opens, and the mapper
 opens on it.</p>
 <ul>
@@ -290,7 +305,7 @@ opens on it.</p>
   <code>@context</code> (<code>--defaultUserContext</code>); with them <code>dds-mapping.json</code>, the mapping as
   the mapper reads it back, and <code>dds-types/</code>, the bridge's type files.</li>
   <li><b>The files screen</b> - the two files' full paths, each with <b>Copy</b>; <b>Start a broker with it</b>:
-  the broker of the form on the right with the dds bridge and the two files, the command shown, <b>More options</b>
+  the broker of Start a broker's form with the dds bridge and the two files, the command shown, <b>More options</b>
   added as typed. <b>Start the broker</b> starts it and closes the mapper; <b>Put it in the broker form</b> fills the
   form only, to change more before Start. <b>Edit the mapping</b> goes back to it.</li>
   <li>Escape, <b>×</b> or <b>Close</b> closes the mapper, the brokers in view again.</li>
@@ -298,7 +313,7 @@ opens on it.</p>
 
 <!-- ======================================================================= -->
 <h3 id="opcua-mapper">The OPC UA mapper</h3>
-<p>Operate's left side, given to the mapping of an OPC UA server to NGSI-LD - the DDS mapper's layout and ways, a tree
+<p>Operate's page, given to the mapping of an OPC UA server to NGSI-LD - the DDS mapper's layout and ways, a tree
 of the server's nodes in place of three lists. A Variable mapped is one attribute of an entity (a Channel); an Object
 mapped is a model (an AssetChannel): the Object and every Object in it entities. What was written is read back when c³
 opens, and the mapper opens on it.</p>

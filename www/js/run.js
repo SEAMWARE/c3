@@ -1,6 +1,10 @@
 //
-// run.js - the Run page: brokers started and stopped on this machine, natively or in a container, and the
+// run.js - the Operate page: brokers started and stopped on this machine, natively or in a container, and the
 // services they use
+//
+// Four views, one shown at a time: the list of what runs (and Start a broker); a broker's card (or a service's)
+// with its log; Start a broker step 1, what runs (a build, the installed coraine, an image, or the settings of
+// a broker started earlier); step 2, how it runs - the form, the command and the services it brings up
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -127,10 +131,23 @@ export class Run {
     this.shown = false;
     this.metrics = new Metrics();
 
+    this.mode = 'list';               // the view shown: 'list', 'item' (a broker's or a service's card), 'pick', 'form'
+    this.back = null;                 // the card a service's card goes back to: {kind, name}
+
     $('rn-start').addEventListener('click', () => this.start());
+    $('rn-new').addEventListener('click', () => this.startNew());
+    $('rn-card-back').addEventListener('click', () => (this.back ? this.select(this.back.kind, this.back.name) : this.showView('list')));
+    $('rn-pick-back').addEventListener('click', () => this.showView('list'));
+    $('rn-form-back').addEventListener('click', () => {
+      if (this.editing && this.editingFrom === 'card' && this.editBack) this.select(this.editBack.kind, this.editBack.name);
+      else this.showView('pick');
+    });
+    $('rn-change').addEventListener('click', () => this.showView('pick'));
+    $('rn-tag').addEventListener('input', () => { $('rn-tag-use').disabled = !$('rn-tag').value.trim(); });
+    $('rn-tag').addEventListener('keydown', (e) => { if (e.key === 'Enter' && $('rn-tag').value.trim()) this.pick({ from: 'image', tag: $('rn-tag').value.trim() }); });
+    $('rn-img-all').addEventListener('click', () => { this.imagesAll = !this.imagesAll; this.renderImages(); });
+    $('rn-tag-use').addEventListener('click', () => this.pick({ from: 'image', tag: $('rn-tag').value.trim() }));
     $('rn-name').addEventListener('input', () => { this.nameTouched = $('rn-name').value.trim() !== ''; this.f.name = $('rn-name').value.trim(); this.commandSoon(); });
-    $('rn-build').addEventListener('change', () => { this.f.build = $('rn-build').value; this.changed(); });
-    $('rn-tag').addEventListener('input', () => { this.f.tag = $('rn-tag').value.trim(); this.changed(false); });
     $('rn-dbdir').addEventListener('change', () => { this.f.dbDir = $('rn-dbdir').checked; this.changed(); });
     $('rn-port').addEventListener('input', () => { this.f.port = parseInt($('rn-port').value, 10) || 0; this.changed(false); });
     $('rn-hport').addEventListener('input', () => { this.f.healthPort = parseInt($('rn-hport').value, 10) || 0; this.changed(false); });
@@ -340,6 +357,7 @@ export class Run {
   // ddsMapFromCompile - Compile's way in to the mapper: the dds bridge ticked, the mapper open with its way back
   //
   ddsMapFromCompile() {
+    if (this.mode !== 'form') this.showView('form');
     if (!this.f.bridges.includes('dds')) {
       this.f.bridges = [...this.f.bridges, 'dds'];
       this.renderForm();
@@ -361,6 +379,7 @@ export class Run {
   // its way back
   //
   opcuaMapFromCompile() {
+    if (this.mode !== 'form') this.showView('form');
     if (!this.f.bridges.includes('opcua')) {
       this.f.bridges = [...this.f.bridges, 'opcua'];
       this.renderForm();
@@ -375,6 +394,7 @@ export class Run {
   // shown, the cursor in the server's URL (Discover the server is beside it)
   //
   aasMapFromCompile() {
+    if (this.mode !== 'form') this.showView('form');
     if (!this.f.bridges.includes('aas')) {
       this.f.bridges = [...this.f.bridges, 'aas'];
       this.renderForm();
@@ -422,8 +442,53 @@ export class Run {
     this.renderForm();
     clearInterval(this.poll);
     this.poll = setInterval(() => this.load(), 1500);
-    if (!this.sel && this.state && this.state.brokers.length) this.select('broker', this.state.brokers[0].name);
-    this.metricsShow();
+    if (this.mode === 'item' && this.sel) this.select(this.sel.kind, this.sel.name, this.back);   // its log followed again
+    else this.showView(this.mode);
+  }
+
+  //
+  // showView - one of the four views; a mapper open (ddsmap.js, opcuamap.js) keeps them hidden and restores, on
+  // close, what is set here meanwhile
+  //
+  showView(mode) {
+    this.mode = mode;
+    const views = { list: 'rn-view-list', item: 'rn-view-item', pick: 'rn-view-pick', form: 'rn-view-form' };
+    for (const [m, id] of Object.entries(views)) {
+      const v = $(id);
+      if ('dmHidden' in v.dataset) v.dataset.dmHidden = m === mode ? '' : '1';
+      else v.hidden = m !== mode;
+    }
+    if (mode !== 'item') { this.follow(null); this.sel = null; this.back = null; this.configShow(); this.levelsShow(); this.metricsShow(); }
+    if (mode === 'pick') { this.renderPicks(); if (this.containers()) this.loadImages(); }
+    if (mode === 'form') this.renderForm();
+    if (mode === 'list' && this.state) this.renderLists();
+    const page = $('page-run');
+    if (page) page.scrollTop = 0;
+  }
+
+  //
+  // startNew - Start a broker: a fresh form, its ports the first free ones, and step 1 - what runs
+  //
+  startNew() {
+    this.f = this.defaults();
+    this.editing = null;
+    this.nameTouched = false;
+    this.choosePorts();
+    this.showView('pick');
+  }
+
+  //
+  // pick - step 1's choice: what runs; then step 2, the form. An image runs in a container, the rest natively
+  // (step 2 can put a build with an image in a container)
+  //
+  pick(src) {
+    const f = this.f;
+    f.picked = true;                                   // step 1 marks the choice once there is one
+    f.from = src.from;
+    if (src.from === 'build') f.build = src.build;
+    if (src.from === 'image') f.tag = src.tag;
+    f.where = src.from === 'image' ? 'container' : 'native';
+    this.showView('form');
   }
 
   hide() {
@@ -438,13 +503,12 @@ export class Run {
   // preselectBuild - Compile's "Run it": the form for that build
   //
   preselectBuild(name) {
+    this.f = this.defaults();
     this.editing = null;
-    this.f.from = 'build';
-    this.f.build = name;
-    this.f.where = 'native';
     this.nameTouched = false;
-    this.renderForm();
-    setTimeout(() => { $('rn-form').scrollIntoView({ block: 'start' }); $('rn-start').focus(); }, 50);
+    this.choosePorts();
+    this.pick({ from: 'build', build: name });
+    setTimeout(() => $('rn-start').focus(), 50);
   }
 
   async load() {
@@ -455,6 +519,9 @@ export class Run {
       if (text !== this.stateText) {
         this.stateText = text;
         this.renderLists();
+        this.renderCard();
+        if (this.mode === 'pick') this.renderEarlier();
+        if (this.mode === 'form') this.renderNeed();
         this.renderEngine();
         this.renderStartButton();
         this.renderBrowse();
@@ -472,9 +539,9 @@ export class Run {
   renderEngine() {
     const e = (this.state && this.state.engine) || {};
     $('rn-engine').textContent = e.name ? e.name + ' ' + (e.version || '') : t('no containers');
-    $('rn-nocont').hidden = !!e.name;
-    $('rn-nocont-why').textContent = e.why ? e.why.charAt(0).toUpperCase() + e.why.slice(1) + '.' : '';
-    $('page-run').classList.toggle('rn-nocontainers', !e.name);
+    $('rn-nocont-why').hidden = !!e.name;
+    $('rn-nocont-why').textContent = (e.why ? e.why.charAt(0).toUpperCase() + e.why.slice(1) + '. ' : '')
+      + t('Images, and MongoDB, PostgreSQL/TimescaleDB and Mosquitto, need a container engine; brokers still run natively with corDB.');
   }
 
   // ------------------------------------------------------------------ the lists
@@ -497,23 +564,135 @@ export class Run {
     return key(url) === key(this.explored.url);
   }
 
+  //
+  // listed - a broker in the list: one that runs, or is on its way up or down, or failed (its card says why);
+  // one stopped by hand is not - its settings are under Start a broker, Earlier settings
+  //
+  listed(b) { return ['running', 'starting', 'stopping', 'failed'].includes(b.state); }
+
   renderLists() {
     const s = this.state;
     const box = $('rn-brokers');
     //
     // The broker Explore is connected to is in the list - highlighted, first - also when c³ did not start it
     //
-    const ours = s.brokers.find((b) => this.active(b.url));
-    const items = s.brokers.map((b) => this.brokerItem(b));
-    if (ours) items.unshift(items.splice(s.brokers.indexOf(ours), 1)[0]);
-    else if (this.explored) items.unshift(this.exploredItem());
+    const shown = s.brokers.filter((b) => this.listed(b));
+    const ours = shown.find((b) => this.active(b.url));
+    const items = shown.map((b) => this.brokerRow(b));
+    if (ours) items.unshift(items.splice(shown.indexOf(ours), 1)[0]);
+    else if (this.explored && !s.brokers.some((b) => this.active(b.url))) items.unshift(this.exploredItem());   // one of c³'s that stopped: not a stranger
+    //
+    // A service that runs with no broker of c³'s using it (one left running): listed too, to be stopped
+    //
+    for (const x of s.services) if (x.state === 'running' && !x.usedBy.length) items.push(this.serviceRow(x));
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
-    if (!items.length) box.replaceChildren(el('span', 'rn-empty', t('None yet - choose a set and Start, on the right.')));
+    if (!items.length) box.replaceChildren(el('span', 'rn-empty', t('Nothing runs.')));
     else box.replaceChildren(...items);
+  }
 
-    const sv = $('rn-services');
-    if (!s.services.length) sv.replaceChildren(el('span', 'rn-empty', t('None - the sets with mongoc, timescale or MQTT start them.')));
-    else sv.replaceChildren(...s.services.map((x) => this.serviceItem(x)));
+  //
+  // brokerRow - a broker in the list: a click opens its card
+  //
+  brokerRow(b) {
+    const d = b.def;
+    const on = this.active(b.url);
+    const item = el('div', 'rn-item rn-row-link' + (on ? ' active' : ''));
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    item.title = t('Open {name}', { name: b.name });
+    const open = () => this.select('broker', b.name);
+    item.addEventListener('click', (e) => { if (!e.target.closest('a, button')) open(); });
+    item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); open(); } });
+    item.append(el('span', 'rdot ' + this.dotOf(b)));
+
+    const main = el('div', 'rmain');
+    main.append(this.titleOf(b, on));
+    main.append(el('div', 'rmeta', [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'), t('port {port}', { port: d.port })].join(' · ')));
+    if (b.state === 'running' && b.health) main.append(this.healthPills(b));
+    else if (b.state === 'failed' && b.why) main.append(el('div', 'rwhy bad', b.why));
+    item.append(main);
+
+    const acts = el('div', 'racts');
+    if (b.state === 'running') acts.append(button(t('Explore'), '', () => this.onConnect(b.url)));
+    item.append(acts);
+    return item;
+  }
+
+  //
+  // serviceRow - a service in the list (one no broker uses): a click opens its card
+  //
+  serviceRow(x) {
+    const item = el('div', 'rn-item rn-row-link');
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    const open = () => this.select('service', x.container);
+    item.addEventListener('click', (e) => { if (!e.target.closest('a, button')) open(); });
+    item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); open(); } });
+    item.append(el('span', 'rdot ok'));
+    const main = el('div', 'rmain');
+    const title = el('div', 'rtitle');
+    title.append(el('span', 'rname', x.container), el('span', 'badge running', stateName(x.state)));
+    if (x.port) title.append(el('span', 'rurl', '127.0.0.1:' + x.port));
+    main.append(title, el('div', 'rmeta', [x.label, t('used by no broker that runs')].join(' · ')));
+    item.append(main, el('div', 'racts'));
+    return item;
+  }
+
+  dotOf(b) {
+    const runs = b.state === 'running';
+    if (runs && (b.ready === 'ready' || b.ready === 'answers')) return 'ok';
+    if (runs || b.state === 'starting' || b.state === 'stopping') return 'busy';
+    return b.state === 'failed' ? 'bad' : '';
+  }
+
+  //
+  // titleOf - a broker's name, its state, its URL (a link to Explore while it runs)
+  //
+  titleOf(b, on) {
+    const runs = b.state === 'running';
+    const title = el('div', 'rtitle');
+    title.append(el('span', 'rname', b.name));
+    if (on) title.append(el('span', 'badge active', this.explored.tenant ? t('in Explore - tenant {tenant}', { tenant: this.explored.tenant }) : t('in Explore')));
+    title.append(el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state)));
+    if (runs || b.state === 'stopping') {
+      const a = el('a', 'rurl', b.url);
+      a.href = '#connect';
+      a.title = t('Open it in Explore');
+      a.addEventListener('click', (e) => { e.preventDefault(); this.onConnect(b.url); });
+      title.append(a);
+    } else title.append(el('span', 'rurl', b.url));
+    return title;
+  }
+
+  //
+  // renderCard - the card of the broker or service selected: what it is, its actions, the services a broker
+  // uses; one forgotten meanwhile (shown on the card before): back to the list. One just started is not in the
+  // state yet: its card waits for it
+  //
+  renderCard() {
+    if (this.mode !== 'item' || !this.sel || !this.state) return;
+    const s = this.sel;
+    const box = $('rn-card-item');
+    if (s.kind === 'broker') {
+      const b = this.kept(s.name);
+      if (!b) {
+        if (this.cardSeen) this.showView('list');
+        else box.replaceChildren(el('span', 'rn-empty', s.name));
+        return;
+      }
+      this.cardSeen = true;
+      box.replaceChildren(this.brokerItem(b));
+      const used = this.state.services.filter((x) => x.usedBy.includes(b.name) || b.services.includes(x.container) || x.neededBy.includes(b.name));
+      $('rn-uses-box').hidden = !used.length;
+      $('rn-services').replaceChildren(...used.map((x) => this.serviceItem(x, b.name)));
+    } else {
+      const x = this.state.services.find((v) => v.container === s.name);
+      if (!x) { if (this.cardSeen) this.showView('list'); return; }
+      this.cardSeen = true;
+      box.replaceChildren(this.serviceItem(x));
+      $('rn-uses-box').hidden = true;
+      $('rn-services').replaceChildren();
+    }
   }
 
   //
@@ -536,31 +715,18 @@ export class Run {
     return item;
   }
 
+  //
+  // brokerItem - the broker on its card: what it runs, where its data is, its health; Stop, Explore, its options
+  //
   brokerItem(b) {
     const d = b.def;
     const on = this.active(b.url);
-    const item = el('div', 'rn-item' + (on ? ' active' : '') + (this.sel && this.sel.kind === 'broker' && this.sel.name === b.name ? ' sel' : ''));
+    const item = el('div', 'rn-item' + (on ? ' active' : ''));
     const runs = b.state === 'running';
-    let dot = '';
-    if (runs && (b.ready === 'ready' || b.ready === 'answers')) dot = 'ok';
-    else if (runs || b.state === 'starting' || b.state === 'stopping') dot = 'busy';
-    else if (b.state === 'failed') dot = 'bad';
-    item.append(el('span', 'rdot ' + dot));
+    item.append(el('span', 'rdot ' + this.dotOf(b)));
 
     const main = el('div', 'rmain');
-    const title = el('div', 'rtitle');
-    title.append(el('span', 'rname', b.name));
-    if (on) title.append(el('span', 'badge active', this.explored.tenant ? t('in Explore - tenant {tenant}', { tenant: this.explored.tenant }) : t('in Explore')));
-    const badge = el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state));
-    title.append(badge);
-    if (runs || b.state === 'stopping') {
-      const a = el('a', 'rurl', b.url);
-      a.href = '#connect';
-      a.title = t('Open it in Explore');
-      a.addEventListener('click', (e) => { e.preventDefault(); this.onConnect(b.url); });
-      title.append(a);
-    } else title.append(el('span', 'rurl', b.url));
-    main.append(title);
+    main.append(this.titleOf(b, on));
 
     const meta = [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'),
       d.store === 'corDB' ? (d.dbDir ? t('{store} on disk', { store: d.store }) : t('{store} in RAM', { store: d.store })) : d.store,
@@ -582,7 +748,6 @@ export class Run {
     } else if (b.why) {
       main.append(el('div', 'rwhy' + (b.state === 'failed' ? ' bad' : ''), b.why));
     }
-    if (b.services.length) main.append(el('div', 'rmeta', t('uses {list}', { list: b.services.join(', ') })));
     const where = b.dataDir ? t('data in {dir}', { dir: b.dataDir }) : b.volume ? t('data in the volume {volume}', { volume: b.volume }) : t('data in RAM only');
     main.append(el('div', 'rmeta mono', where));
     item.append(main);
@@ -591,14 +756,13 @@ export class Run {
     if (runs) {
       acts.append(button(t('Stop'), '', () => this.stop(b)));
       acts.append(button(t('Explore'), '', () => this.onConnect(b.url)));
-      acts.append(button(t('Options'), '', () => this.edit(b)));          // to see them - and browse its OPC UA server
+      acts.append(button(t('Options'), '', () => this.edit(b, 'card')));  // to see them - and browse its OPC UA server
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
       const st = button(t('Start'), 'primary', () => this.startKept(b));
       st.disabled = b.busy;
       acts.append(st);
-      acts.append(button(t('Options'), '', () => this.edit(b)));
+      acts.append(button(t('Options'), '', () => this.edit(b, 'card')));
     }
-    acts.append(button(t('Log'), '', () => this.select('broker', b.name)));
     if (!runs && b.state !== 'starting' && b.state !== 'stopping') {
       if (this.armed === 'forget:' + b.name) {
         acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
@@ -627,8 +791,11 @@ export class Run {
     return box;
   }
 
-  serviceItem(s) {
-    const item = el('div', 'rn-item' + (this.sel && this.sel.kind === 'service' && this.sel.name === s.container ? ' sel' : ''));
+  //
+  // serviceItem - a service on a card: on a broker's (from), its Log opens the service's own card
+  //
+  serviceItem(s, from) {
+    const item = el('div', 'rn-item');
     const runs = s.state === 'running';
     item.append(el('span', 'rdot ' + (runs ? 'ok' : (s.state === 'starting' || s.state === 'stopping') ? 'busy' : s.state === 'exited' ? 'bad' : '')));
 
@@ -645,7 +812,7 @@ export class Run {
 
     const acts = el('div', 'racts');
     if (runs && !s.usedBy.length) acts.append(button(t('Stop'), '', () => this.stopService(s)));
-    acts.append(button(t('Log'), '', () => this.select('service', s.container)));
+    if (from) acts.append(button(t('Log'), '', () => this.select('service', s.container, { kind: 'broker', name: from })));
     if (s.volumeExists && !runs && s.state !== 'starting' && s.state !== 'stopping') {
       const armed = this.armed === 'vol:' + s.volume;
       acts.append(button(armed ? t('Delete {volume}? Sure', { volume: s.volume }) : t('Delete data'), armed ? 'armed' : '', () => this.deleteVolume(s.volume)));
@@ -658,13 +825,21 @@ export class Run {
     this.armed = key;
     clearTimeout(this.armTimer);
     this.armTimer = setTimeout(() => this.disarm(), 6000);
-    this.renderLists();
+    this.rerender();
   }
 
   disarm() {
     this.armed = null;
     clearTimeout(this.armTimer);
-    if (this.state) this.renderLists();
+    this.rerender();
+  }
+
+  rerender() {
+    if (!this.state) return;
+    this.renderLists();
+    this.renderCard();
+    if (this.mode === 'pick') this.renderEarlier();
+    if (this.mode === 'form') this.renderNeed();
   }
 
   // ------------------------------------------------------------------ actions
@@ -683,7 +858,7 @@ export class Run {
 
   forget(b, data) {
     this.disarm();
-    if (this.sel && this.sel.name === b.name) this.follow(null);
+    if (this.mode === 'item' && this.sel && this.sel.name === b.name) this.showView('list');
     return this.act(() => api.runForget(b.name, data));
   }
 
@@ -694,9 +869,12 @@ export class Run {
   }
 
   //
-  // edit - a kept broker's options into the form (Start then replaces them)
+  // edit - a kept broker's options into the form, step 2 (Start then replaces them); from: 'card' (its card's
+  // Options - back goes there) or 'pick' (Earlier settings)
   //
-  edit(b) {
+  edit(b, from) {
+    this.editingFrom = from;
+    if (from === 'card') this.editBack = { ...this.sel };
     const d = b.def;
     const tag = d.image && d.image.startsWith(this.repo() + ':') ? d.image.slice(this.repo().length + 1) : (d.image || '');
     this.f = {
@@ -725,11 +903,11 @@ export class Run {
       });
     }
     this.f.aas = this.aas.fromDef(d.aas);
+    this.f.picked = true;
     this.nameTouched = true;
     this.editing = d.name;
     this.portsChosen = true;
-    this.renderForm();
-    $('rn-form').scrollIntoView({ block: 'start' });
+    this.showView('form');
   }
 
   // ------------------------------------------------------------------ log and trace levels
@@ -969,9 +1147,18 @@ export class Run {
 
   // ------------------------------------------------------------------ the log
 
-  select(kind, name) {
+  //
+  // select - the card of a broker (or a service) and its log; back: the card the arrow returns to (a service's
+  // card opened from its broker's)
+  //
+  select(kind, name, back = null) {
+    if (this.mode !== 'item') this.showView('item');
     this.sel = { kind, name };
-    if (this.state) this.renderLists();
+    this.back = back;
+    this.cardSeen = false;
+    $('rn-card-back').title = back ? t('Back to {name}', { name: back.name }) : t('Back to the running brokers');
+    $('rn-card-back').setAttribute('aria-label', $('rn-card-back').title);
+    this.renderCard();
     this.configShow();
     this.levelsShow();
     this.metricsShow();
@@ -1101,6 +1288,8 @@ export class Run {
       this.f.name = (base + '-' + (this.f.port || '')).slice(0, 64);
       $('rn-name').value = '';
       $('rn-name').placeholder = this.f.name;
+    } else if (document.activeElement !== $('rn-name') && $('rn-name').value !== this.f.name) {
+      $('rn-name').value = this.f.name;                // a kept broker's options (edit): its name
     }
     const k = this.kept(this.f.name);
     $('rn-form-sub').textContent = k ? t('replaces the options of {name}', { name: k.name }) : '';
@@ -1140,36 +1329,16 @@ export class Run {
     }));
 
     //
-    // From: the installed broker, a build, an image
+    // From: what step 1 chose - Change goes back to it
     //
     const inst = this.sources && this.sources.installed;
-    const builds = this.builds();
-    this.seg('rn-from', [
-      ['installed', t('Installed coraine'), inst ? '' : t('no coraine in $PATH')],
-      ['build', t('A build'), builds.length ? '' : t('no build yet - Compile makes one')],
-      ['image', t('An image'), cont ? '' : noCont],
-    ], f.from, (v) => {
-      f.from = v;
-      f.where = v === 'image' ? 'container' : 'native';
-      if (v === 'build' && !f.build && builds.length) f.build = builds[0].name;
-      if (v === 'image') this.loadImages();
-      this.changed();
-    });
-
-    $('rn-build').hidden = f.from !== 'build';
-    if (f.from === 'build') {
-      $('rn-build').replaceChildren(...builds.map((b) => { const o = el('option', '', b.name); o.value = b.name; return o; }));
-      if (f.build) $('rn-build').value = f.build;
-    }
-    $('rn-image').hidden = f.from !== 'image';
-    $('rn-repo').textContent = this.repo() + ':';
-    if ($('rn-tag').value !== f.tag) $('rn-tag').value = f.tag;
-
     const src = this.source();
+    $('rn-chosen').textContent = f.from === 'build' ? t('build {build}', { build: f.build })
+      : f.from === 'image' ? (f.tag.includes('/') ? f.tag : this.repo() + ':' + f.tag) : t('installed coraine');
     let fromNote = '';
-    if (f.from === 'installed' && inst) fromNote = inst.path + ' · ' + (inst.version || '').split('\n')[0];
-    else if (f.from === 'build' && src) fromNote = (src.version || '').split('\n')[0] + ' · ' + t('built by Compile');
-    else if (f.from === 'image') fromNote = this.imagesNote || t('the tags published on quay.io, and those already here');
+    if (f.from === 'installed') fromNote = inst ? inst.path + ' · ' + (inst.version || '').split('\n')[0] : t('no coraine in $PATH');
+    else if (f.from === 'build') fromNote = src ? (src.version || '').split('\n')[0] + ' · ' + t('built by Compile') : t('this build is no longer there');
+    else if (f.from === 'image') fromNote = t('pulled at the start when it is not here');
     $('rn-from-note').textContent = fromNote;
 
     //
@@ -1386,11 +1555,7 @@ export class Run {
     try {
       const c = await api.runCommand(this.def());
       this.plan = c;
-      need.replaceChildren(...c.services.map((s) => {
-        const row = el('div');
-        row.append(document.createTextNode(t('first:') + ' '), el('span', 'mono', s.container), document.createTextNode(' - ' + t('{label}, {image}, on {address}', { label: s.label, image: s.image, address: '127.0.0.1:' + s.port })));
-        return row;
-      }));
+      this.renderNeed();
       if (c.argv.length) {
         const lines = [];
         let cur = '';
@@ -1417,6 +1582,33 @@ export class Run {
     this.renderStartButton();
   }
 
+  //
+  // renderNeed - the services the start brings up (POST /api/run/command); one whose volume is there and that
+  // does not run: its data, and Delete data (press twice)
+  //
+  renderNeed() {
+    const need = $('rn-need');
+    const svcs = (this.plan && this.plan.services) || [];
+    if (!svcs.length) { need.replaceChildren(el('div', '', t('none'))); return; }
+    need.replaceChildren(...svcs.map((s) => {
+      const row = el('div', 'rn-needrow');
+      const line = el('div');
+      line.append(document.createTextNode(t('first:') + ' '), el('span', 'mono', s.container), document.createTextNode(' - ' + t('{label}, {image}, on {address}', { label: s.label, image: s.image, address: '127.0.0.1:' + s.port })));
+      row.append(line);
+      const st = ((this.state && this.state.services) || []).find((x) => x.container === s.container);
+      if (st && st.volumeExists) {
+        const data = el('div', 'rn-needdata');
+        data.append(el('span', 'mono', t('data in the volume {volume}', { volume: st.volume })));
+        if (!['running', 'starting', 'stopping'].includes(st.state)) {
+          const armed = this.armed === 'vol:' + st.volume;
+          data.append(button(armed ? t('Delete {volume}? Sure', { volume: st.volume }) : t('Delete data'), armed ? 'armed' : '', () => this.deleteVolume(st.volume)));
+        }
+        row.append(data);
+      }
+      return row;
+    }));
+  }
+
   renderStartButton() {
     const k = this.kept(this.f.name);
     const runs = k && ['running', 'starting', 'stopping'].includes(k.state);
@@ -1434,6 +1626,8 @@ export class Run {
     try {
       const b = await api.runStart(d);
       this.editing = null;
+      if (this.ddsMap.box && !this.ddsMap.box.hidden) this.ddsMap.close();
+      if (this.opcuaMap.box && !this.opcuaMap.box.hidden) this.opcuaMap.close();
       this.select('broker', b.name);
       this.nameTouched = false;
       this.portsChosen = false;
@@ -1450,29 +1644,124 @@ export class Run {
   }
 
   //
-  // loadImages - the coraine images here and on quay.io, for the tag's list
+  // loadImages - the coraine images here and those published on quay.io, for step 1 (asked once a page load)
   //
   async loadImages() {
-    if (this.images) return;
+    if (this.images || this.imagesAsking) return;
+    this.imagesAsking = true;
     this.imagesNote = t('asking quay.io for the published tags ...');
+    this.renderImages();
     try {
-      const r = await api.runImages();
-      this.images = r;
-      const local = new Set(r.local.map((x) => x.tag));
-      const opts = [];
-      for (const x of r.local) { const o = el('option', '', t('here · {created}', { created: x.created.slice(0, 16) })); o.value = x.tag; opts.push(o); }
-      for (const x of r.published) {
-        if (local.has(x.tag)) continue;
-        const o = el('option', '', 'quay.io · ' + (x.modified || '').slice(5, 22));
-        o.value = x.tag;
-        opts.push(o);
-      }
-      $('rn-tags').replaceChildren(...opts);
-      this.imagesNote = t('{here} here, {published} published', { here: r.local.length, published: r.published.length }) + (r.publishedError ? ' (' + r.publishedError + ')' : '') + ' - ' + t('a tag not here is pulled at the start');
-      if (!this.f.tag && r.published.length) { this.f.tag = r.published[0].tag; }
+      this.images = await api.runImages();
+      const r = this.images;
+      this.imagesNote = r.publishedError ? t('quay.io: {why}', { why: r.publishedError }) : '';
     } catch (e) {
       this.imagesNote = t('the tags could not be read: {why}', { why: e.message });
     }
-    this.renderForm();
+    this.imagesAsking = false;
+    this.renderImages();
+  }
+
+  // ------------------------------------------------------------------ Start a broker, step 1: what runs
+
+  //
+  // pickRow - a choice of step 1: a button the size of a line - its name, a line about it, marks beside the name
+  //
+  pickRow(name, sub, marks, pressed, onPick) {
+    const b = el('button', 'rn-pick');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(!!pressed));
+    const head = el('span', 'pk-head');
+    head.append(el('span', 'pk-name', name));
+    for (const [text, cls, title] of marks) { const m = el('span', 'badge ' + (cls || ''), text); if (title) m.title = title; head.append(m); }
+    b.append(head);
+    if (sub) b.append(el('span', 'pk-sub', sub));
+    b.addEventListener('click', onPick);
+    return b;
+  }
+
+  renderPicks() {
+    const f = this.f;
+    //
+    // Builds: Compile's, the newest first
+    //
+    const builds = [...this.builds()].sort((x, y) => String(y.ended || '').localeCompare(String(x.ended || '')));
+    $('rn-p-builds').replaceChildren(...(builds.length ? builds.map((b, ix) => {
+      const marks = [];
+      if (ix === 0) marks.push([t('latest'), 'active']);
+      if (b.image) marks.push([t('image'), '', t('a Docker image too: {image}', { image: b.image })]);
+      const sub = [b.mode, b.ended ? b.ended.replace('T', ' ').slice(0, 16) : '', (b.version || '').split('\n')[0]].filter(Boolean).join(' · ');
+      return this.pickRow(b.name, sub, marks, f.picked && f.from === 'build' && f.build === b.name, () => this.pick({ from: 'build', build: b.name }));
+    }) : [el('span', 'cp-note', t('None yet - Compile makes them.'))]));
+
+    //
+    // Installed: the coraine in $PATH
+    //
+    const inst = this.sources && this.sources.installed;
+    $('rn-p-installed').replaceChildren(inst
+      ? this.pickRow(inst.path, (inst.version || '').split('\n')[0], [], f.picked && f.from === 'installed', () => this.pick({ from: 'installed' }))
+      : el('span', 'cp-note', t('No coraine in $PATH.')));
+
+    this.renderImages();
+    this.renderEarlier();
+  }
+
+  //
+  // renderImages - the coraine images here, then the published ones not here (the newest few - another tag by name)
+  //
+  renderImages() {
+    const f = this.f;
+    const cont = this.containers();
+    $('rn-repo').textContent = this.repo() + ':';
+    $('rn-tag').disabled = !cont;
+    $('rn-tag-use').disabled = !cont || !$('rn-tag').value.trim();
+    const box = $('rn-p-images');
+    if (!cont) { box.replaceChildren(); return; }
+    const rows = [];
+    const r = this.images;
+    if (r) {
+      const local = new Set(r.local.map((x) => x.tag));
+      const many = this.imagesAll ? Infinity : 4;
+      for (const x of r.local.slice(0, many)) {
+        rows.push(this.pickRow(x.tag, [t('here'), (x.created || '').slice(0, 16), x.size].filter(Boolean).join(' · '), [],
+          f.picked && f.from === 'image' && f.tag === x.tag, () => this.pick({ from: 'image', tag: x.tag })));
+      }
+      const pub = r.published.filter((p) => !local.has(p.tag));
+      for (const x of pub.slice(0, this.imagesAll ? 12 : 2)) {
+        rows.push(this.pickRow(x.tag, ['quay.io', (x.modified || '').slice(5, 22)].filter(Boolean).join(' · '), [],
+          f.picked && f.from === 'image' && f.tag === x.tag, () => this.pick({ from: 'image', tag: x.tag })));
+      }
+    }
+    rows.push(el('span', 'cp-note rn-imgnote', this.imagesNote || ''));
+    box.replaceChildren(...rows);
+    const more = r ? r.local.length + Math.min(12, r.published.filter((p) => !r.local.some((x) => x.tag === p.tag)).length) : 0;
+    const tog = $('rn-img-all');
+    tog.hidden = more <= 6;
+    tog.textContent = this.imagesAll ? '−' : '+';
+    tog.title = this.imagesAll ? t('Fewer images') : t('All {n} images', { n: more });
+    tog.setAttribute('aria-label', tog.title);
+  }
+
+  //
+  // renderEarlier - the brokers c³ started before and that do not run: their settings fill step 2 (Start then
+  // starts that broker with them); Forget drops one
+  //
+  renderEarlier() {
+    const kept = ((this.state && this.state.brokers) || []).filter((b) => !this.listed(b) && b.state !== 'starting' && b.state !== 'stopping');
+    $('rn-g-earlier').hidden = !kept.length;
+    $('rn-p-earlier').replaceChildren(...kept.map((b) => {
+      const d = b.def;
+      const row = el('div', 'rn-pickrow');
+      row.append(this.pickRow(b.name, [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'), t('port {port}', { port: d.port })].join(' · '),
+        [], this.editing === b.name, () => this.edit(b, 'pick')));
+      const acts = el('div', 'racts');
+      if (this.armed === 'forget:' + b.name) {
+        acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
+        if (b.dataDir || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
+        acts.append(button(t('Cancel'), '', () => this.disarm()));
+      } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
+      row.append(acts);
+      return row;
+    }));
   }
 }

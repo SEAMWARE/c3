@@ -7,7 +7,48 @@
 
 #page-run { padding: 0; overflow: auto; }
 
+.rn-view { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.rn-view[hidden] { display: none; }
+.cp-card .row.rn-bar { align-items: center; }
+.rn-bar .grow { flex: 1 1 auto; }
+.rn-back { min-width: 36px; min-height: 36px; padding: 0 10px; font-size: 1.125rem; }
+.rn-h3 { margin: 0 0 8px; font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.rn-uses .rn-list { gap: 8px; }
+
 .rn-list { display: flex; flex-direction: column; gap: 10px; }
+.rn-item.rn-row-link { cursor: pointer; }
+.rn-item.rn-row-link:hover, .rn-item.rn-row-link:focus-visible { border-color: var(--accent-2); outline: none; }
+
+/* Start a broker, step 1: what runs */
+.rn-group { display: flex; flex-direction: column; gap: 0; }
+.rn-group[hidden] { display: none; }
+.rn-picks { display: flex; flex-direction: column; gap: 6px; }
+.rn-pick {
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; padding: 6px 12px; border-radius: 10px; text-align: left; min-width: 0; flex: 1 1 auto;
+  color: var(--text); cursor: pointer; background: var(--panel-2); border: 1px solid var(--line-soft); font: inherit;
+}
+.rn-pick:hover, .rn-pick:focus-visible { border-color: var(--accent-2); outline: none; }
+.rn-pick[aria-pressed="true"] { background: #2A1420; border-color: var(--accent-2); }
+.rn-pick .pk-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.rn-pick .pk-name { font-family: var(--mono); font-size: 1.05rem; overflow-wrap: anywhere; }
+.rn-pick .pk-sub { font-size: 0.9rem; color: var(--muted); overflow-wrap: anywhere; }
+.rn-pickrow { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.rn-pickrow .racts { display: flex; flex-wrap: wrap; gap: 6px; }
+.rn-pickrow .racts .btn { min-height: 32px; padding: 0 10px; font-size: 0.975rem; }
+.rn-pickrow .racts .btn.armed { border-color: var(--bad); color: var(--bad); }
+.rn-imgnote { min-height: 1.3rem; }
+.rn-h3row { display: flex; align-items: center; gap: 10px; }
+.rn-tog { min-width: 28px; min-height: 26px; padding: 0 6px; font-size: 1rem; line-height: 1; }
+#rn-g-images .rn-image { margin-top: 6px; max-width: 560px; }
+#rn-g-images .rn-image .btn { margin-left: 6px; min-height: 36px; }
+
+/* step 2: what step 1 chose */
+.rn-chosen { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rn-chosen .mono { font-size: 1.05rem; overflow-wrap: anywhere; }
+.rn-view.rn-formview { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+#rn-form { flex: 1 1 520px; max-width: 760px; }
+.rn-launch { flex: 1 1 420px; max-width: 900px; position: sticky; top: 16px; gap: 10px; }
+.rn-launch .rn-h3 { margin: 0; }
 .rn-empty { color: var(--muted); font-size: 1.05rem; }
 
 /* a broker or a service */
@@ -85,6 +126,10 @@
 
 .rn-svcneed { display: flex; flex-direction: column; gap: 4px; font-size: 0.975rem; color: var(--muted); }
 .rn-svcneed .mono { color: var(--text-2); }
+.rn-needrow { display: flex; flex-direction: column; gap: 4px; }
+.rn-needdata { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding-left: 12px; }
+.rn-needdata .btn { min-height: 28px; padding: 0 10px; font-size: 0.9rem; }
+.rn-needdata .btn.armed { border-color: var(--bad); color: var(--bad); }
 #rn-problem { color: var(--warn); }
 #rn-problem:empty { display: none; }
 
