@@ -253,11 +253,8 @@
 
         <!-- A broker (or a service): its card and its log -->
         <div class="rn-view" id="rn-view-item" hidden>
+          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-card-back">← Running</button></div>
           <section class="cp-card" aria-label="The broker" id="rn-card">
-            <div class="row rn-bar">
-              <button type="button" class="btn rn-back" id="rn-card-back" title="Back to the running brokers" aria-label="Back to the running brokers">←</button>
-              <span class="grow"></span>
-            </div>
             <div class="rn-list" id="rn-card-item"></div>
             <div class="rn-uses" id="rn-uses-box" hidden>
               <h3 class="rn-h3">Services</h3>
@@ -291,10 +288,10 @@
 
         <!-- Start a broker, step 1: what runs -->
         <div class="rn-view" id="rn-view-pick" hidden>
+          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-pick-back">← Running</button></div>
           <section class="cp-card" aria-label="Start a broker - what runs">
             <div class="row rn-bar">
-              <button type="button" class="btn rn-back" id="rn-pick-back" title="Back to the running brokers" aria-label="Back to the running brokers">←</button>
-              <h2 class="section">Start a broker</h2><span class="sub">what runs</span>
+              <h2 class="section">What runs</h2><span class="sub">Start a broker, 1 of 2</span>
             </div>
 
             <div class="rn-group" id="rn-g-earlier">
@@ -324,66 +321,63 @@
 
         <!-- Start a broker, step 2: how it runs -->
         <div class="rn-view rn-formview" id="rn-view-form" hidden>
+          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-form-back">← What runs</button></div>
           <section class="cp-card" aria-label="Start a broker" id="rn-form">
             <div class="row rn-bar">
-              <button type="button" class="btn rn-back" id="rn-form-back" title="Back to what runs" aria-label="Back to what runs">←</button>
-              <h2 class="section" id="rn-form-title">Start a broker</h2><span class="sub" id="rn-form-sub"></span>
-              </div>
+              <h2 class="section" id="rn-form-title">Select options</h2><span class="sub" id="rn-form-sub"></span>
+            </div>
 
             <div class="cp-field">
-              <span class="cp-label">From</span>
+              <span class="cp-label" data-help="from">From</span>
               <div class="rn-chosen"><span class="mono" id="rn-chosen"></span><button type="button" class="btn" id="rn-change" title="Choose another broker to run">Change</button></div>
               <span class="cp-note" id="rn-from-note"></span>
             </div>
 
-            <div class="cp-field">
-              <span class="cp-label">Set</span>
-              <div class="rn-sets" id="rn-sets"></div>
-            </div>
-
-            <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="rn-name" maxlength="64" spellcheck="false" autocomplete="off"></label>
+            <label class="cp-name"><span class="cp-label" data-help="name">Name</span><input class="cp-input" id="rn-name" maxlength="64" spellcheck="false" autocomplete="off"></label>
 
             <div class="cp-field">
-              <span class="cp-label">Runs</span>
+              <span class="cp-label" data-help="runs">Runs</span>
               <div class="cp-seg" id="rn-where"></div>
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">Store</span>
+              <span class="cp-label" data-help="store">Current state DB</span>
               <div class="cp-seg" id="rn-store"></div>
-              <label class="rn-check"><input type="checkbox" id="rn-dbdir"> keep it on disk <span class="mono">--dbDir</span></label>
+              <div class="rn-dbpath" id="rn-dbpath-row">
+                <input class="cp-input" id="rn-dbpath" spellcheck="false" autocomplete="off" aria-label="corDB's directory">
+                <button class="iconbtn cp-src-icon" type="button" id="rn-dbpath-pick" title="Choose the directory" aria-label="Choose the directory"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4V12.5H14.5V5.5H7.5L6 3.5H2Z"/></svg></button>
+              </div>
+              <span class="cp-note" id="rn-dbpath-note"></span>
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">History</span>
+              <span class="cp-label" data-help="history">History DB</span>
               <div class="cp-seg" id="rn-history"></div>
             </div>
 
             <div class="rn-ports">
-              <label class="cp-field"><span class="cp-label">Port</span><input class="cp-input" id="rn-port" inputmode="numeric" maxlength="5"></label>
-              <label class="cp-field"><span class="cp-label">Health port</span><input class="cp-input" id="rn-hport" inputmode="numeric" maxlength="5" placeholder="none"></label>
-              <label class="cp-field"><span class="cp-label">Grace (s)</span><input class="cp-input" id="rn-grace" inputmode="numeric" maxlength="3"></label>
+              <label class="cp-field"><span class="cp-label" data-help="port">Port</span><input class="cp-input" id="rn-port" inputmode="numeric" maxlength="5"></label>
+              <label class="cp-field"><span class="cp-label" data-help="healthPort">Health port</span><input class="cp-input" id="rn-hport" inputmode="numeric" maxlength="5" placeholder="none"></label>
+              <label class="cp-field"><span class="cp-label" data-help="grace">Grace (s)</span><input class="cp-input" id="rn-grace" inputmode="numeric" maxlength="3"></label>
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">Switches</span>
+              <span class="cp-label" data-help="switches">Switches</span>
               <div class="rn-checks" id="rn-plugins"></div>
-              <span class="cp-note" id="rn-tenants"></span>
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">Bridges</span>
+              <span class="cp-label" data-help="bridges">Bridges</span>
               <div class="rn-checks" id="rn-bridges"></div>
-              <input class="cp-input" id="rn-bconf" placeholder="bridge configuration file (none: c3 writes the MQTT one)" spellcheck="false" autocomplete="off" aria-label="Bridge configuration file">
-              <input class="cp-input" id="rn-uctx" placeholder="default user @context file (--defaultUserContext)" spellcheck="false" autocomplete="off" aria-label="Default user @context file">
               <button type="button" class="btn primary rn-ddsmapbtn" id="rn-dds-map" disabled>Map DDS topics, services and actions</button>
               <span class="cp-note" id="rn-dds-note"></span>
               <button type="button" class="btn primary rn-ddsmapbtn" id="rn-opcua-map" disabled>Map an OPC UA server</button>
               <span class="cp-note" id="rn-opcua-note"></span>
+              <button type="button" class="btn primary rn-ddsmapbtn" id="rn-aas-map">Map an AAS server</button>
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">CKAN data</span>
+              <span class="cp-label" data-help="ckan">CKAN data</span>
               <details class="rn-drop" id="rn-ckan-drop">
                 <summary id="rn-ckan-sum">none</summary>
                 <div class="rn-checks rn-col" id="rn-ckan"></div>
@@ -392,7 +386,7 @@
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">OPC UA</span>
+              <span class="cp-label" data-help="opcua">OPC UA</span>
               <details class="rn-drop" id="rn-opcua-drop">
                 <summary id="rn-opcua-sum">none</summary>
                 <div class="rn-stack">
@@ -434,7 +428,7 @@
             </div>
 
             <div class="cp-field">
-              <span class="cp-label">AAS</span>
+              <span class="cp-label" data-help="aas">AAS</span>
               <details class="rn-drop" id="rn-aas-drop">
                 <summary id="rn-aas-sum">none</summary>
                 <div class="rn-stack">
@@ -454,7 +448,12 @@
               <span class="cp-note">the aas bridge (native brokers; a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header in the broker's directory (0600), never in c3.json</span>
             </div>
 
-            <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
+            <div class="cp-field">
+              <span class="cp-label" data-help="options">Options</span>
+              <div class="rn-opts" id="rn-opts"></div>
+            </div>
+
+            <label class="cp-field"><span class="cp-label" data-help="args">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
 
           </section>
 
@@ -738,6 +737,13 @@
     </div>
   </main>
 </div>
+
+<!-- Compile: a build followed on the page has ended (outside every page: a page hidden would hide it) -->
+<dialog class="db-progress" id="cp-done" aria-labelledby="cp-done-title">
+  <h2 id="cp-done-title">The compilation is done</h2>
+  <p class="mono" id="cp-done-what"></p>
+  <div class="db-pacts"><button type="button" class="btn" id="cp-done-close">Close</button><button type="button" class="btn primary" id="cp-done-start">Start it</button></div>
+</dialog>
 
 <script type="module" src="js/main.js"></script>
 </body>

@@ -19,6 +19,8 @@ import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
 import { AasForm } from './aasform.js';
 import { t, tk, plural } from './i18n.js';
+import { helpShow } from './compile.js';
+import { pickDir } from './source.js';
 
 //
 // The states of a broker or a service as the backend and Docker/Podman name them (also CSS classes), shown translated
@@ -46,15 +48,6 @@ function exploreButton(b, onConnect) {
 }
 const stateName = (v) => (STATE_NAMES[v] ? t(STATE_NAMES[v]) : v);
 
-//
-// The sets of src/run.c, by id: their label and description translated (a set added later shows as the backend names it)
-//
-const SET_TEXTS = {
-  cordb: { label: tk('corDB alone'), description: tk('No services: corDB holds the entities and their history, on disk in c3\'s data directory.') },
-  'mongoc-timescale': { label: tk('mongoc + timescale'), description: tk('MongoDB for the entities, PostgreSQL with TimescaleDB for the history - each in a container.') },
-  mqtt: { label: tk('with MQTT'), description: tk('corDB, and the MQTT bridge connected to a Mosquitto in a container.') },
-};
-const setText = (s, what) => (SET_TEXTS[s.id] && SET_TEXTS[s.id][what] === s[what] ? t(SET_TEXTS[s.id][what]) : s[what]);
 
 const $ = (id) => document.getElementById(id);
 
@@ -114,6 +107,67 @@ function featuresOf(version) {
   }
   return out;
 }
+
+//
+// BRIDGES - every bridge c³ knows (a broker's own may add others): the form lists them all, those it lacks greyed
+//
+const BRIDGES = ['aas', 'cep', 'ckan', 'dds', 'modbus', 'mqtt', 'opcua'];
+
+//
+// OPTS_FORM - the broker's options the form has a field of its own for, and those c³ keeps (the process and its log
+// are c³'s); OPTS_BOUND - options of the list that are fields of the broker's definition
+//
+const OPTS_FORM = new Set(['--port', '--healthPort', '--database', '--troe', '--dbDir', '--apiPlugins', '--bridges', '--transports',
+  '--distributed', '--verbose', '--usage', '--Usage', '--version', '--daemon', '--logTo', '--logDir']);
+const OPTS_BOUND = { '--bridgeConfig': 'bridgeConfig', '--defaultUserContext': 'userContext' };
+
+//
+// usageOf - a broker's -u and -U as its options: [{ name, short, bool, help, values, dflt, section }] - the sections are
+// the plugins' ("Database (corDB) plugin options"), '' for the broker's own
+//
+function usageOf(u, U) {
+  const ext = {};
+  for (const line of (U || '').split('\n')) {
+    const m = /^\s*(--\S+)\s+\((-[^)]*)\)\s+(?:\S+\s+)?(?:Optional|Required)\s+(\S+)\s+(.*?)\s*$/.exec(line);
+    if (m) ext[m[1]] = { type: m[3], dflt: m[4] === '-' ? '' : m[4] };
+  }
+  const out = [];
+  let section = '';
+  for (const line of (u || '').split('\n')) {
+    const h = /^\s*(.+ plugin options):\s*$/.exec(line);
+    if (h) { section = h[1]; continue; }
+    const m = /^\s*(?:Usage: \S+\s+)?\[(--[^/\s]+)\/(-\S+) ([(<])(.*)[)>]\]\s*$/.exec(line);
+    if (!m) continue;
+    const e = ext[m[1]] || {};
+    const bool = m[3] === '(' || e.type === 'Bool';
+    const v = /^([\w.]+(?:\|[\w.]+)+)(?:\s|$)/.exec(m[4]);
+    out.push({ name: m[1], short: m[2], bool, help: m[4], values: v ? v[1].split('|') : null, dflt: e.dflt || '', type: e.type || '', section });
+  }
+  return out;
+}
+
+const optQuote = (v) => (/^[^\s'"]+$/.test(v) ? v : v.includes('"') ? "'" + v + "'" : '"' + v + '"');
+
+//
+// FORM_HELP - the '?' of each field of the form (data-help on its label): what it is, for one who does not know yet
+//
+const FORM_HELP = {
+  from: [tk('From'), tk('The broker that runs: the coraine installed on this machine, a build made in Compile, or a Docker image. **Change** goes back to the choice. What the broker has - its databases, bridges, switches - decides what the form offers; what it lacks is greyed, with the reason.')],
+  name: [tk('Name'), tk('c³\'s name for this broker: its directory, its log, its row in the list. Empty: the build\'s name and the port. Starting again with a name c³ keeps replaces that broker\'s options.')],
+  runs: [tk('Runs'), tk('**Native**: the broker is a process on this machine. **Container**: it runs in Docker or Podman - an image always runs in a container.')],
+  store: [tk('Current state DB'), tk('Where the broker keeps the entities as they are now - the answer to a query or a GET of an entity.\n\n- **corDB**: coraine\'s own database, files in a directory (`--dbDir`) - they survive a restart.\n- **ramDB**: in memory only - fast, and gone when the broker stops. For tests and demos.\n- **mongoc**: MongoDB, in a container c³ starts beside the broker.')],
+  history: [tk('History DB'), tk('Where the broker keeps every value an attribute has had - the temporal API (TRoE, `/temporal/entities`). **none**: no history.\n\n- **corDB**: coraine\'s own, beside the current state.\n- **timescale**: PostgreSQL with TimescaleDB, in a container c³ starts beside the broker.')],
+  port: [tk('Port'), tk('The broker\'s HTTP port: where the NGSI-LD API answers (`--port`). 1026 is NGSI-LD\'s usual one.')],
+  healthPort: [tk('Health port'), tk('A second port with only the health report (`--healthPort`): c³ reads it every few seconds for the broker\'s state, memory and requests. Empty: none - c³ then knows less about the broker.')],
+  grace: [tk('Grace (s)'), tk('On **Stop**, the seconds the broker has to finish what it is doing after SIGTERM, before c³ kills it (SIGKILL).')],
+  switches: [tk('Switches'), tk('- **WebSocket transport**: subscriptions and notifications over WebSocket too (`--transports ws`).\n- **admin API**: the broker\'s configuration, metrics and trace levels - the broker\'s card shows them (`--apiPlugins admin`).\n- **distributed operations**: queries and updates forwarded to the Context Sources registered (`--distributed`).\n- **verbose log**: more in the broker\'s log (`-v`).')],
+  bridges: [tk('Bridges'), tk('A bridge connects the broker to another world: MQTT topics, DDS (ROS 2), Modbus devices, OPC UA servers, CKAN open data, AAS servers - their data become entities, and changes go back. Only the bridges this broker has are offered. Without a configuration file of your own, c³ writes one from what this form says.')],
+  ckan: [tk('CKAN data'), tk('Open-data datasets from CKAN portals, read through the ckan bridge when the broker starts: one entity per row.')],
+  opcua: [tk('OPC UA'), tk('An OPC UA server (machines, PLCs): its model roots become entities, and each channel ties one of its nodes to an entity\'s attribute. **Map an OPC UA server** picks them on the server\'s tree.')],
+  aas: [tk('AAS'), tk('An Asset Administration Shell server: its shells and submodels become entities, and each AssetChannel ties a value to an attribute.')],
+  options: [tk('Options'), tk('Every option of this broker that the form above does not set - its own usage (`coraine -u`), with the options of the databases chosen. Empty: the broker\'s default, greyed in the field. **?** says what each one does, in coraine\'s words. Those c³ sets itself show what it sets.')],
+  args: [tk('More options'), tk('Any other coraine option, as typed - added at the end of the command (quotes keep words together). `coraine --help` lists them.')],
+};
 
 //
 // pluginsOf - the "plugins: db=corDB,mongoc troe=... api=... auth=... bridges=... transports=..." line of a
@@ -187,11 +241,23 @@ export class Run {
     $('rn-img-all').addEventListener('click', () => { this.imagesAll = !this.imagesAll; this.renderImages(); });
     $('rn-tag-use').addEventListener('click', () => this.pick({ from: 'image', tag: $('rn-tag').value.trim() }));
     $('rn-name').addEventListener('input', () => { this.nameTouched = $('rn-name').value.trim() !== ''; this.f.name = $('rn-name').value.trim(); this.commandSoon(); });
-    $('rn-dbdir').addEventListener('change', () => { this.f.dbDir = $('rn-dbdir').checked; this.changed(); });
+    $('rn-dbpath').addEventListener('input', () => { this.f.dbPath = $('rn-dbpath').value.trim(); this.changed(); });   // the note under it too
+    $('rn-dbpath-pick').addEventListener('click', () => pickDir(this.f.dbPath || (this.state && this.state.dir) || '',
+      (d) => { this.f.dbPath = d; $('rn-dbpath').value = d; this.changed(); }, { title: t('corDB\'s directory'), clones: false }));
+    for (const label of document.querySelectorAll('#rn-form .cp-label[data-help]')) {
+      const [title, text] = FORM_HELP[label.dataset.help];
+      const q = el('button', 'cp-q inline rn-q', '?');
+      q.type = 'button';
+      q.title = t('What is {what}?', { what: t(title) });
+      q.setAttribute('aria-label', q.title);
+      q.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); helpShow(t(title), t(text)); });
+      const row = el('span', 'rn-lab');                // the label and its '?' on one line
+      label.before(row);
+      row.append(label, q);
+    }
     $('rn-port').addEventListener('input', () => { this.f.port = parseInt($('rn-port').value, 10) || 0; this.changed(false); });
     $('rn-hport').addEventListener('input', () => { this.f.healthPort = parseInt($('rn-hport').value, 10) || 0; this.changed(false); });
     $('rn-grace').addEventListener('input', () => { this.f.grace = parseInt($('rn-grace').value, 10) || 0; this.changed(false); });
-    $('rn-bconf').addEventListener('input', () => { this.f.bridgeConfig = $('rn-bconf').value.trim(); this.changed(false); });
     $('rn-args').addEventListener('input', () => { this.f.args = $('rn-args').value; this.changed(false); });
 
     //
@@ -216,13 +282,13 @@ export class Run {
     // DDS - the mapper (ddsmap.js) makes the DDS configuration, a broker starts with it: its bridge configuration
     // and its default user @context, the two files
     //
-    $('rn-uctx').addEventListener('input', () => { this.f.userContext = $('rn-uctx').value.trim(); this.changed(false); });
     this.ddsMap = new DdsMapper(this);
     $('rn-dds-map').addEventListener('click', () => this.ddsMap.open());
     this.ddsMap.load().then(() => this.renderDds());
     this.aas = new AasForm(this);                       // AAS - the aas bridge's server and its AssetChannels (aasform.js)
     this.opcuaMap = new OpcuaMapper(this);
     $('rn-opcua-map').addEventListener('click', () => this.opcuaMap.open());
+    $('rn-aas-map').addEventListener('click', () => this.aasMapFromCompile());
     this.opcuaMap.load().then(() => this.renderOpcuaMap());
   }
 
@@ -458,7 +524,7 @@ export class Run {
   defaults() {
     return {
       name: '', set: 'cordb', from: 'installed', build: '', tag: '', where: 'native',
-      store: 'corDB', dbDir: true, history: 'corDB', port: 1026, healthPort: 1027, grace: 30,
+      store: 'corDB', dbDir: true, dbPath: '', history: 'corDB', opts: {}, port: 1026, healthPort: 1027, grace: 30,
       ws: true, admin: true, distributed: true, verbose: true, bridges: [], bridgeConfig: '', userContext: '', ckan: [], args: '',
       opcua: this.opcuaDefaults(), dds: this.ddsDefaults(), aas: this.aasDefaults(),
     };
@@ -548,6 +614,18 @@ export class Run {
     this.nameTouched = false;
     this.choosePorts();
     this.pick({ from: 'build', build: name });
+    setTimeout(() => $('rn-start').focus(), 50);
+  }
+
+  //
+  // preselectImage - Compile's "Start it" for a build that made an image: the form for that image, in a container
+  //
+  preselectImage(ref) {
+    this.f = this.defaults();
+    this.editing = null;
+    this.nameTouched = false;
+    this.choosePorts();
+    this.pick({ from: 'image', tag: ref });
     setTimeout(() => $('rn-start').focus(), 50);
   }
 
@@ -835,7 +913,7 @@ export class Run {
     if (!runs && b.state !== 'starting' && b.state !== 'stopping') {
       if (this.armed === 'forget:' + b.name) {
         acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
-        if (b.dataDir || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
+        if ((b.dataDir && b.dataOwn !== false) || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
         acts.append(button(t('Cancel'), '', () => this.disarm()));
       } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
     }
@@ -948,7 +1026,7 @@ export class Run {
     const tag = d.image && d.image.startsWith(this.repo() + ':') ? d.image.slice(this.repo().length + 1) : (d.image || '');
     this.f = {
       name: d.name, set: d.set, from: d.from, build: d.build || '', tag, where: d.where,
-      store: d.store, dbDir: d.dbDir, history: d.history, port: d.port, healthPort: d.healthPort, grace: d.grace,
+      store: d.store, dbDir: d.dbDir, dbPath: d.dbPath || '', history: d.history, opts: {}, optsRaw: d.options || '', port: d.port, healthPort: d.healthPort, grace: d.grace,
       ws: (d.transports || []).includes('ws'), admin: d.admin, distributed: d.distributed !== false, verbose: d.verbose, bridges: [...(d.bridges || [])],
       bridgeConfig: d.bridgeConfig || '', userContext: d.userContext || '', ckan: [...(d.ckan || [])], args: d.args || '',
       opcua: this.opcuaDefaults(), dds: this.ddsDefaults(), aas: this.aasDefaults(),
@@ -1225,8 +1303,7 @@ export class Run {
     this.sel = { kind, name };
     this.back = back;
     this.cardSeen = false;
-    $('rn-card-back').title = back ? t('Back to {name}', { name: back.name }) : t('Back to the running brokers');
-    $('rn-card-back').setAttribute('aria-label', $('rn-card-back').title);
+    $('rn-card-back').textContent = '← ' + (back ? back.name : t('Running'));
     this.renderCard();
     this.configShow();
     this.levelsShow();
@@ -1363,13 +1440,156 @@ export class Run {
   }
 
   //
+  // The broker's options (GET /api/run/options: its -u and -U with the store and history chosen), read once per
+  // source, store and history
+  //
+  optsKey() {
+    const f = this.f;
+    const src = f.from === 'build' ? f.build : f.from === 'image' ? this.imageRef() : '';
+    return [f.from, src, f.store, f.history].join('|');
+  }
+
+  async loadOptions(key) {
+    this.usageCache = this.usageCache || {};
+    if (this.usageCache[key]) return;
+    this.usageCache[key] = { asking: true };
+    const [from, src, database, troe] = key.split('|');
+    try {
+      const r = await api.runOptions(from, src, database, troe);
+      this.usageCache[key] = r.usage ? { list: usageOf(r.usage, r.extended) } : { why: r.why || t('the broker did not say') };
+    } catch (e) {
+      this.usageCache[key] = { why: e.message };
+    }
+    if (this.mode === 'form' && this.optsKey() === key) { this.renderOptions(); this.commandSoon(); }
+  }
+
+  usage() {
+    const u = (this.usageCache || {})[this.optsKey()];
+    return u && u.list ? u.list : null;
+  }
+
+  //
+  // optionsArg - the options set in the list, as def.options (quoted as More options); before the list is read, those
+  // of the definition edited
+  //
+  optionsArg() {
+    const f = this.f;
+    const list = this.usage();
+    if (!list) return f.optsRaw || '';
+    const out = [];
+    for (const o of list) {
+      const v = f.opts[o.name];
+      if (OPTS_FORM.has(o.name) || OPTS_BOUND[o.name] || v === undefined || v === '' || v === false) continue;
+      out.push(o.bool ? o.name : o.name + ' ' + optQuote(String(v)));
+    }
+    return out.join(' ');
+  }
+
+  //
+  // renderOptions - every option of the broker's usage the form has no field for: a tick, a choice or a value, the
+  // default greyed; those c³ sets itself (the command's) shown with what it sets; '?' - coraine's own words
+  //
+  renderOptions() {
+    const f = this.f;
+    const box = $('rn-opts');
+    if (box.contains(document.activeElement)) return;                   // typing in one: not rebuilt under the cursor
+    const key = this.optsKey();
+    const k = f.from === 'image' ? (this.imageCaps || {})[this.imageRef()] : null;
+    if (k && !k.asking && !k.version) { box.replaceChildren(el('span', 'cp-note', t('known after the start pulls the image'))); return; }
+    const u = (this.usageCache || {})[key];
+    if (!u || u.asking) { box.replaceChildren(el('span', 'cp-note', t('reading the broker\'s options ...'))); this.loadOptions(key); return; }
+    if (u.why) { box.replaceChildren(el('span', 'cp-note', u.why)); return; }
+
+    if (f.optsRaw) {                                   // a kept broker's options: by the usage, its ticks and values
+      const toks = f.optsRaw.match(/"[^"]*"|'[^']*'|\S+/g) || [];
+      for (let i = 0; i < toks.length; i++) {
+        const o = u.list.find((x) => x.name === toks[i]);
+        if (!o) continue;
+        if (o.bool) f.opts[o.name] = true;
+        else if (i + 1 < toks.length) f.opts[o.name] = toks[++i].replace(/^(["'])(.*)\1$/, '$2');
+      }
+      f.optsRaw = '';
+    }
+
+    //
+    // What c³ sets itself: the command's options that are not the user's
+    //
+    const argv = (this.plan && this.plan.argv) || [];
+    const c3 = {};
+    for (let i = 0; i < argv.length; i++) {
+      const o = u.list.find((x) => x.name === argv[i] || x.short === argv[i]);
+      if (!o || OPTS_FORM.has(o.name) || f.opts[o.name] !== undefined || (f.args || '').includes(o.name)) continue;
+      c3[o.name] = o.bool ? true : argv[i + 1];
+    }
+
+    const groups = [];
+    for (const o of u.list) {
+      if (OPTS_FORM.has(o.name)) continue;
+      let g = groups.find((x) => x.section === o.section);
+      if (!g) groups.push(g = { section: o.section, rows: [] });
+      g.rows.push(this.optRow(o, c3[o.name]));
+    }
+    box.replaceChildren(...groups.flatMap((g) => {
+      const grid = el('div', 'rn-optgrid');
+      grid.append(...g.rows);
+      return [el('div', 'rn-optsec', g.section || t('The broker')), grid];
+    }));
+  }
+
+  optRow(o, c3) {
+    const f = this.f;
+    const bound = OPTS_BOUND[o.name];
+    const get = () => (bound ? f[bound] : f.opts[o.name]);
+    const put = (v) => { if (bound) f[bound] = v; else if (v === '' || v === false) delete f.opts[o.name]; else f.opts[o.name] = v; this.commandSoon(); };
+    const row = el('div', 'rn-opt');
+    const name = el('span', 'mono rn-optname', o.name);
+    let input;
+    if (o.bool) {
+      input = el('input');
+      input.type = 'checkbox';
+      input.checked = c3 !== undefined ? true : !!get();
+      input.addEventListener('change', () => put(input.checked));
+      const l = el('label', 'rn-optbool');
+      l.append(input, name);
+      row.append(l);
+    } else {
+      if (o.values) {
+        input = el('select', 'rn-select');
+        const d = el('option', '', o.dflt ? t('default ({value})', { value: o.dflt }) : t('default'));
+        d.value = '';
+        input.append(d, ...o.values.map((v) => { const x = el('option', '', v); x.value = v; return x; }));
+        input.value = c3 !== undefined ? c3 : get() || '';
+        input.addEventListener('change', () => put(input.value));
+      } else {
+        input = el('input', 'cp-input');
+        input.spellcheck = false;
+        input.autocomplete = 'off';
+        input.placeholder = o.dflt;
+        input.value = c3 !== undefined ? c3 : get() || '';
+        input.addEventListener('input', () => put(input.value.trim()));
+      }
+      input.setAttribute('aria-label', o.name);
+      row.append(name, input);
+    }
+    if (c3 !== undefined) { input.disabled = true; row.title = t('c³ sets it'); row.classList.add('c3'); }
+    const q = el('button', 'cp-q inline rn-q', '?');
+    q.type = 'button';
+    q.title = t('What is {what}?', { what: o.name });
+    q.setAttribute('aria-label', q.title);
+    const dflt = o.dflt ? '\n\n' + t('Default: {value}', { value: '`' + o.dflt + '`' }) : '';
+    q.addEventListener('click', (e) => { e.preventDefault(); helpShow(o.name + ' (' + o.short + ')', o.help.charAt(0).toUpperCase() + o.help.slice(1) + dflt + (c3 !== undefined ? '\n\n' + t('c³ sets it') : '')); });
+    row.append(q);
+    return row;
+  }
+
+  //
   // fit - the form after its source changed: what the broker cannot do is not asked of it - a store, a
   // history, a bridge, a switch it lacks
   //
   fit() {
     const f = this.f;
     if (!this.source()) return;                        // not known yet (the sources not read): nothing dropped
-    if (!this.can('db', f.store)) f.store = ['corDB', 'mongoc'].find((x) => this.can('db', x)) || f.store;
+    if (!this.can('db', f.store)) f.store = ['corDB', 'ramDB', 'mongoc'].find((x) => this.can('db', x)) || f.store;
     if (!this.can('troe', f.history)) f.history = 'none';
     f.bridges = f.bridges.filter((b) => this.bridgeOk(b));
     if (!this.bridgeOk('ckan')) f.ckan = [];
@@ -1403,17 +1623,6 @@ export class Run {
     else { this.renderName(); this.commandSoon(); }
   }
 
-  applySet(id) {
-    const s = ((this.state && this.state.sets) || []).find((x) => x.id === id);
-    if (!s) return;
-    this.f.set = id;
-    this.f.store = s.store;
-    this.f.dbDir = s.dbDir;
-    this.f.history = s.history;
-    this.f.bridges = [...s.bridges];
-    this.changed();
-  }
-
   renderName() {
     if (!this.nameTouched) {
       const base = this.f.from === 'build' && this.f.build ? this.f.build : 'coraine';
@@ -1444,25 +1653,6 @@ export class Run {
     this.fit();
     const cont = this.containers();
     const noCont = (this.caps && this.caps.containersWhy) || t('install docker or podman');
-    const sets = (this.state && this.state.sets) || [];
-
-    //
-    // The sets
-    //
-    $('rn-sets').replaceChildren(...sets.map((s) => {
-      const b = el('button', 'rn-set');
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(f.set === s.id));
-      b.append(el('span', 'sl', setText(s, 'label')), el('span', 'sd', setText(s, 'description')));
-      if (s.services.length) b.append(el('span', 'sd mono', s.services.map((x) => x.image).join(', ')));
-      const lacks = !this.can('db', s.store) ? ['db', s.store] : !this.can('troe', s.history) ? ['troe', s.history]
-        : s.bridges.filter((x) => !this.bridgeOk(x)).map((x) => ['bridge', x])[0];
-      if (s.services.length && !cont) { b.disabled = true; b.append(el('span', 'sw', noCont)); }
-      else if (s.store === 'mongoc' && !this.has('MONGOC')) { b.disabled = true; b.append(el('span', 'sw', t('this broker is built without mongoc'))); }
-      else if (lacks) { b.disabled = true; b.append(el('span', 'sw', t('this broker has no {kind} plugin {name}', { kind: lacks[0], name: lacks[1] }))); }
-      b.addEventListener('click', () => this.applySet(s.id));
-      return b;
-    }));
 
     //
     // From: what step 1 chose - Change goes back to it
@@ -1496,10 +1686,21 @@ export class Run {
     //
     const noPlugin = (kind, name) => (this.can(kind, name) ? '' : t('this broker has no {kind} plugin {name}', { kind, name }));
     const mongoWhy = !this.has('MONGOC') ? t('this broker is built without mongoc') : noPlugin('db', 'mongoc') || (!cont ? noCont : '');
-    this.seg('rn-store', [['corDB', 'corDB', noPlugin('db', 'corDB')], ['mongoc', 'mongoc', mongoWhy]], f.store, (v) => { f.store = v; if (v === 'corDB' && f.set === 'mongoc-timescale') f.dbDir = true; this.changed(); });
-    $('rn-dbdir').checked = f.store === 'corDB' && f.dbDir;
-    $('rn-dbdir').disabled = f.store !== 'corDB';
-    $('rn-dbdir').parentElement.classList.toggle('off', f.store !== 'corDB');
+    const ramWhy = !this.plugins() ? t('this broker does not list its plugins (an older coraine): ramDB not known') : noPlugin('db', 'ramDB');
+    this.seg('rn-store', [['corDB', 'corDB', noPlugin('db', 'corDB')], ['ramDB', 'ramDB', ramWhy], ['mongoc', 'mongoc', mongoWhy]], f.store,
+      (v) => { f.store = v; f.dbDir = v === 'corDB'; this.changed(); });
+
+    //
+    // corDB's directory: native - the one chosen, else c³'s own <run>/<name>/data; a container - its volume
+    //
+    const cordb = f.store === 'corDB';
+    const native = f.where !== 'container';
+    $('rn-dbpath-row').hidden = !cordb || !native;
+    $('rn-dbpath').placeholder = ((this.state && this.state.dir) || '~/.local/share/c3/run') + '/' + (f.name || 'coraine') + '/data';
+    if (document.activeElement !== $('rn-dbpath')) $('rn-dbpath').value = f.dbPath || '';
+    $('rn-dbpath-note').textContent = !cordb ? (f.store === 'ramDB' ? t('in memory only: gone when the broker stops') : '')
+      : !native ? t('in the volume {volume}', { volume: 'c3-broker-' + (f.name || 'coraine') })
+      : f.dbPath ? t('a directory of your own: Forget never deletes it') : t('empty: c³\'s own directory, the one greyed in the field');
 
     this.seg('rn-history', [['none', t('none'), ''], ['corDB', 'corDB', noPlugin('troe', 'corDB')],
       ['timescale', 'timescale', noPlugin('troe', 'timescale') || (cont ? '' : noCont)]], f.history, (v) => { f.history = v; this.changed(); });
@@ -1531,19 +1732,17 @@ export class Run {
       return l;
     }));
 
-    const fs = this.features();
-    $('rn-tenants').textContent = !fs ? t('Tenants: as the image is built (NGSILD-Tenant); no switch at start.')
-      : (fs.TENANTS === false ? t('Tenants: built without them (TENANTS=OFF) - one store, NGSILD-Tenant refused.') : t('Tenants: compiled in - a request names one with NGSILD-Tenant; no switch at start.'));
-
     //
-    // Bridges: those the source has
+    // Bridges: every bridge c³ knows - those the source lacks greyed, with the reason
     //
     const have = this.bridges();
-    $('rn-bridges').replaceChildren(...(have.length ? have.map((name) => {
+    const all = [...new Set([...BRIDGES, ...have])].sort();
+    $('rn-bridges').replaceChildren(...all.map((name) => {
       const l = el('label', 'rn-check');
       const c = el('input');
       c.type = 'checkbox';
       c.checked = f.bridges.includes(name);
+      if (!have.includes(name)) { c.disabled = true; l.classList.add('off'); l.title = t('this broker has no {name} bridge', { name }); }
       c.addEventListener('change', () => {
         f.bridges = c.checked ? [...f.bridges, name] : f.bridges.filter((x) => x !== name);
         this.changed();
@@ -1551,17 +1750,19 @@ export class Run {
       l.append(c, document.createTextNode(name));
       if (name === 'mqtt' && !cont && !f.bridgeConfig) { l.append(el('span', 'why', ' ' + t('its Mosquitto needs containers'))); }
       return l;
-    }) : [el('span', 'cp-note', t('this broker has no bridge plugins'))]));
-    if ($('rn-bconf').value !== f.bridgeConfig) $('rn-bconf').value = f.bridgeConfig;
-    if ($('rn-uctx').value !== f.userContext) $('rn-uctx').value = f.userContext;
+    }));
+
     //
-    // CKAN, OPC UA, AAS and the mappers: shown only for a broker with that bridge
+    // CKAN, OPC UA, AAS and the mappers: shown only with their bridge ticked
     //
-    $('rn-ckan-drop').parentElement.hidden = !this.bridgeOk('ckan');
-    $('rn-opcua-drop').parentElement.hidden = !this.bridgeOk('opcua');
-    $('rn-aas-drop').parentElement.hidden = !this.bridgeOk('aas');
-    for (const id of ['rn-dds-map', 'rn-dds-note']) $(id).hidden = !this.bridgeOk('dds');
-    for (const id of ['rn-opcua-map', 'rn-opcua-note']) $(id).hidden = !this.bridgeOk('opcua');
+    const ticked = (b) => f.bridges.includes(b);
+    $('rn-ckan-drop').parentElement.hidden = !ticked('ckan');
+    $('rn-opcua-drop').parentElement.hidden = !ticked('opcua');
+    $('rn-aas-drop').parentElement.hidden = !ticked('aas');
+    for (const id of ['rn-dds-map', 'rn-dds-note']) $(id).hidden = !ticked('dds');
+    for (const id of ['rn-opcua-map', 'rn-opcua-note']) $(id).hidden = !ticked('opcua');
+    $('rn-aas-map').hidden = !ticked('aas');
+    this.renderOptions();
     this.renderCkan(cont);
     this.renderOpcua();
     this.aas.render();
@@ -1649,10 +1850,11 @@ export class Run {
   def(withSecret = false) {
     const f = this.f;
     const d = {
-      name: f.name, set: f.set, from: f.from, where: f.where, store: f.store, dbDir: f.store === 'corDB' && f.dbDir,
+      name: f.name, set: f.set, from: f.from, where: f.where, store: f.store, dbDir: f.store === 'corDB',
+      dbPath: f.store === 'corDB' && f.where !== 'container' ? f.dbPath : '',
       history: f.history, port: f.port, healthPort: f.healthPort || 0, grace: f.grace || 30,
       transports: f.ws ? ['ws'] : [], admin: !!f.admin, distributed: !!f.distributed, verbose: !!f.verbose, bridges: f.bridges,
-      args: f.args,
+      args: f.args, options: this.optionsArg(),
     };
     if (f.bridgeConfig) d.bridgeConfig = f.bridgeConfig;
     if (f.userContext) d.userContext = f.userContext;
@@ -1708,6 +1910,7 @@ export class Run {
       const c = await api.runCommand(this.def());
       this.plan = c;
       this.renderNeed();
+      this.renderOptions();
       if (c.argv.length) {
         const lines = [];
         let cur = '';
@@ -1909,7 +2112,7 @@ export class Run {
       const acts = el('div', 'racts');
       if (this.armed === 'forget:' + b.name) {
         acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
-        if (b.dataDir || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
+        if ((b.dataDir && b.dataOwn !== false) || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
         acts.append(button(t('Cancel'), '', () => this.disarm()));
       } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
       row.append(acts);

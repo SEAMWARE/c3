@@ -10,6 +10,7 @@
 //   GET    /api/run                             the brokers kept, the services, the sets, what each source has
 //   GET    /api/run/images                      the coraine images: local ones and the published tags (quay.io)
 //   GET    /api/run/image?ref=<image>           what an image's broker has: its --version, once per image ID
+//   GET    /api/run/options?from=&src=&database=&troe=   a broker's options: its -u and -U
 //   POST   /api/run/command                     {broker}: the command it would run and the services it needs
 //   POST   /api/run/brokers                     {broker}: kept (c3.json, "run") and started - 202
 //   POST   /api/run/brokers/<name>/start        start one kept
@@ -205,8 +206,9 @@ typedef struct Def
   char  image[512];                              // from an image: repository:tag
   char  where[16];                               // native, container
   char  set[32];
-  char  store[16];                               // corDB, mongoc
+  char  store[16];                               // corDB, ramDB, mongoc
   bool  dbDir;                                   // corDB: kept on disk
+  char  dbPath[1024];                            // corDB on disk, native: the directory chosen; "": <run>/<name>/data
   char  history[16];                             // none, corDB, timescale
   int   port;
   int   healthPort;                              // 0: none
@@ -253,6 +255,7 @@ typedef struct Def
     char  actions[8192];                         // a line each: action, entityId, entityType, attribute, type (the ROS 2 action type)
   } dds;
   bool  verbose;                                 // -v
+  char  options[4096];                           // the form's options of the broker's usage (-u), quoted as args
   char  args[2048];                              // more options, as typed
   int   grace;
   char  lastStarted[32];
@@ -419,7 +422,7 @@ static int lineSplit(const char* text, char** out, int max)
 //
 typedef struct Argv
 {
-  char*  v[160];
+  char*  v[320];
   int    n;
 } Argv;
 
@@ -1718,7 +1721,9 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberString(oP, "history",      dP->history,      sizeof(dP->history),      err, errLen) ||
       !memberString(oP, "bridgeConfig", dP->bridgeConfig, sizeof(dP->bridgeConfig), err, errLen) ||
       !memberString(oP, "userContext",  dP->userContext,  sizeof(dP->userContext),  err, errLen) ||
+      !memberString(oP, "dbPath",       dP->dbPath,       sizeof(dP->dbPath),       err, errLen) ||
       !memberString(oP, "args",         dP->args,         sizeof(dP->args),         err, errLen) ||
+      !memberString(oP, "options",      dP->options,      sizeof(dP->options),      err, errLen) ||
       !memberString(oP, "lastStarted",  dP->lastStarted,  sizeof(dP->lastStarted),  err, errLen) ||
       !memberBool(oP,   "dbDir",        &dP->dbDir,       err, errLen) ||
       !memberBool(oP,   "admin",        &dP->admin,       err, errLen) ||
@@ -1835,9 +1840,14 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
     snprintf(err, errLen, "\"where\" is native or container");
     return false;
   }
-  if ((strcmp(dP->store, "corDB") != 0) && (strcmp(dP->store, "mongoc") != 0))
+  if ((strcmp(dP->store, "corDB") != 0) && (strcmp(dP->store, "ramDB") != 0) && (strcmp(dP->store, "mongoc") != 0))
   {
-    snprintf(err, errLen, "\"store\" is corDB or mongoc");
+    snprintf(err, errLen, "\"store\" is corDB, ramDB or mongoc");
+    return false;
+  }
+  if ((dP->dbPath[0] != 0) && (dP->dbPath[0] != '/'))
+  {
+    snprintf(err, errLen, "the database directory is an absolute path - not '%s'", dP->dbPath);
     return false;
   }
   if ((strcmp(dP->history, "none") != 0) && (strcmp(dP->history, "corDB") != 0) && (strcmp(dP->history, "timescale") != 0))
@@ -1888,6 +1898,8 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
 
   if (strcmp(dP->store, "corDB") != 0)
     dP->dbDir = false;
+  if (!dP->dbDir || (strcmp(dP->where, "container") == 0))
+    dP->dbPath[0] = 0;                           // a container's is its volume
 
   return true;
 }
@@ -2097,6 +2109,7 @@ static void defRender(const Def* dP, Str* sP)
   strAdd(sP, "]");
   strAdd(sP, ", \"bridgeConfig\": "); strAddJson(sP, (dP->bridgeConfig[0] != 0) ? dP->bridgeConfig : NULL);
   strAdd(sP, ", \"userContext\": ");  strAddJson(sP, (dP->userContext[0] != 0) ? dP->userContext : NULL);
+  strAdd(sP, ", \"dbPath\": ");       strAddJson(sP, (dP->dbPath[0] != 0) ? dP->dbPath : NULL);
   strAdd(sP, ", \"ckan\": [");
   {
     char  copy[512];
@@ -2158,6 +2171,7 @@ static void defRender(const Def* dP, Str* sP)
     strAdd(sP, "}");
   }
   strAddf(sP, ", \"admin\": %s, \"distributed\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->distributed ? "true" : "false", dP->verbose ? "true" : "false");
+  strAdd(sP, ", \"options\": ");      strAddJson(sP, dP->options);
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
   strAddf(sP, ", \"grace\": %d", dP->grace);
   strAdd(sP, ", \"lastStarted\": ");  strAddJson(sP, (dP->lastStarted[0] != 0) ? dP->lastStarted : NULL);
@@ -2222,9 +2236,24 @@ static int needs(const Def* dP)
   return mask;
 }
 
+//
+// svcSet - the set a broker's service belongs to: by its kind alone - every broker c3 starts shares one MongoDB
+// and one TimescaleDB (each with its own database) and one Mosquitto, under the names they always had
+// (c3-mongoc-timescale-mongo, c3-mongoc-timescale-timescale, c3-mqtt-mosquitto), their volumes with them. A
+// broker's own "set" (the form's presets, gone) does not name them; the Dashboard's set names its own
+//
+static const char* svcSet(const char* set, int kind)
+{
+  if ((kind == KIND_MONGO) || (kind == KIND_TIMESCALE))
+    return (strcmp(set, DASHBOARD_SET) == 0) ? set : "mongoc-timescale";
+  if (kind == KIND_MOSQUITTO)
+    return "mqtt";
+  return set;
+}
+
 static void svcName(const char* set, int kind, char* out, int outLen)
 {
-  snprintf(out, outLen, "c3-%s-%s", set, kinds[kind].id);
+  snprintf(out, outLen, "c3-%s-%s", svcSet(set, kind), kinds[kind].id);
 }
 
 
@@ -2235,6 +2264,18 @@ static void svcName(const char* set, int kind, char* out, int outLen)
 //
 static void brokerDir(const char* name, char* out, int outLen)      { snprintf(out, outLen, "%s/%s", runDir, name); }
 static void brokerDataDir(const char* name, char* out, int outLen)  { snprintf(out, outLen, "%s/%s/data", runDir, name); }
+
+//
+// brokerDataPath - where a native broker's corDB is: the directory chosen, else c3's <run>/<name>/data (only that
+// one goes with "Delete data": a directory of one's own is never deleted)
+//
+static void brokerDataPath(const Def* dP, char* out, int outLen)
+{
+  if (dP->dbPath[0] != 0)
+    snprintf(out, outLen, "%s", dP->dbPath);
+  else
+    brokerDataDir(dP->name, out, outLen);
+}
 static void brokerVolume(const char* name, char* out, int outLen)   { snprintf(out, outLen, "c3-broker-%s", name); }
 static void brokerContainer(const char* name, char* out, int outLen) { snprintf(out, outLen, "c3-broker-%s", name); }
 static void ddsContextPath(const char* name, char* out, int outLen)  { snprintf(out, outLen, "%s/%s/dds-context.jsonld", runDir, name); }   // the DDS mapping's @context
@@ -2490,7 +2531,7 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   if (dP->dbDir)
   {
     char data[2400];
-    brokerDataDir(dP->name, data, sizeof(data));
+    brokerDataPath(dP, data, sizeof(data));
     argAdd(aP, "--dbDir");     argAdd(aP, container ? "/data" : data);
   }
 
@@ -2546,8 +2587,14 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   if (dP->verbose)
     argAdd(aP, "-v");
 
-  char* extra[64];
-  int   n = lineSplit(dP->args, extra, 64);
+  char* extra[128];
+  int   n = lineSplit(dP->options, extra, 128);
+  for (int ix = 0; ix < n; ix++)
+  {
+    argAdd(aP, extra[ix]);
+    free(extra[ix]);
+  }
+  n = lineSplit(dP->args, extra, 64);
   for (int ix = 0; ix < n; ix++)
   {
     argAdd(aP, extra[ix]);
@@ -2599,7 +2646,7 @@ static Service* svcGet(const char* set, int kind)
   sP = &svcs[nSvcs++];
   memset(sP, 0, sizeof(*sP));
   snprintf(sP->container, sizeof(sP->container), "%s", name);
-  snprintf(sP->set, sizeof(sP->set), "%s", set);
+  snprintf(sP->set, sizeof(sP->set), "%s", svcSet(set, kind));
   snprintf(sP->volume, sizeof(sP->volume), "%s", name);
   snprintf(sP->state, sizeof(sP->state), "absent");
   snprintf(sP->logPath, sizeof(sP->logPath), "%s/%s.log", svcDir, name);
@@ -3309,7 +3356,7 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
     }
 
     char label[128];
-    snprintf(label, sizeof(label), "c3.set=%s", set);
+    snprintf(label, sizeof(label), "c3.set=%s", svcSet(set, kind));
     engineRun(out, sizeof(out), 30, "volume", "create", "--label", "c3=run", "--label", label, name, NULL);
 
     Argv a = { { NULL }, 0 };
@@ -4128,7 +4175,7 @@ static void* startThread(void* vP)
     if (d.dbDir)
     {
       char data[2400];
-      brokerDataDir(d.name, data, sizeof(data));
+      brokerDataPath(&d, data, sizeof(data));
       dirsMake(data);
     }
 
@@ -4834,9 +4881,10 @@ static void brokerRender(Broker* bP, Str* sP)
   }
   else
   {
-    brokerDataDir(dP->name, path, sizeof(path));
+    brokerDataPath(dP, path, sizeof(path));
     strAdd(sP, ", \"dataDir\": ");
     strAddJson(sP, dP->dbDir ? path : NULL);
+    strAddf(sP, ", \"dataOwn\": %s", (dP->dbPath[0] == 0) ? "true" : "false");
     strAdd(sP, ", \"volume\": null");
     strAddf(sP, ", \"dataExists\": %s", (stat(path, &st) == 0) ? "true" : "false");
   }
@@ -5704,7 +5752,7 @@ static void logFollow(CorHttpConn* connP, const char* path, int64_t* endP, SseSu
 typedef struct Job
 {
   CorHttpConn*  connP;
-  char          arg[128];
+  char          arg[512];
 } Job;
 
 static void jobAnswer(Job* jP, int status, Str* sP)
@@ -5795,6 +5843,135 @@ static void* imageThread(void* vP)
   strAdd(&s, ", \"here\": true, \"version\": ");  strAddJson(&s, version);
   strAdd(&s, "}");
   if (version != NULL) free(version);
+  jobAnswer(jP, 200, &s);
+  return NULL;
+}
+
+//
+// optionsThread - GET /api/run/options?from=installed|build|image&src=<build or image>&database=<store>&troe=<history>:
+// the broker's options - its -u (each with what it does, the plugins' options in sections of their own: those of the
+// store and history asked) and its -U (each one's type and default), run as a start runs it; cached per source,
+// store and history (an installed coraine also by its mtime)
+//
+typedef struct UsageCache
+{
+  char   key[600];
+  char*  usage;
+  char*  extended;
+} UsageCache;
+
+static UsageCache ucCache[16];
+static int        ucNext = 0;
+
+static void* optionsThread(void* vP)
+{
+  Job*  jP = (Job*) vP;
+  char* f[4] = { jP->arg, NULL, NULL, NULL };      // from, src, database, troe - tab-separated
+
+  for (int ix = 1; ix < 4; ix++)
+  {
+    char* tab = (f[ix - 1] != NULL) ? strchr(f[ix - 1], '\t') : NULL;
+    if (tab == NULL) { jobError(jP, 400, "Bad request", "from, src, database and troe"); return NULL; }
+    *tab  = 0;
+    f[ix] = tab + 1;
+  }
+
+  char        binary[2400] = "";
+  char        plugins[2400] = "";
+  char        key[600];
+  struct stat st;
+
+  if (strcmp(f[0], "installed") == 0)
+  {
+    char version[64];
+    installedFind(binary, sizeof(binary), version, sizeof(version));
+    if (binary[0] == 0) { jobError(jP, 404, "Not found", "no coraine installed"); return NULL; }
+    snprintf(key, sizeof(key), "installed:%ld:%s:%s", (stat(binary, &st) == 0) ? (long) st.st_mtime : 0L, f[2], f[3]);
+  }
+  else if (strcmp(f[0], "build") == 0)
+  {
+    char dir[2300];
+    char exe[256];
+    buildDirOf(f[1], dir, sizeof(dir));
+    buildMember(f[1], "executable", "coraine", exe, sizeof(exe));
+    snprintf(binary,  sizeof(binary),  "%s/install/bin/%s", dir, exe);
+    snprintf(plugins, sizeof(plugins), "%s/install/plugins", dir);
+    if (access(binary, X_OK) != 0) { jobError(jP, 404, "Not found", "no such build"); return NULL; }
+    snprintf(key, sizeof(key), "build:%s:%ld:%s:%s", f[1], (stat(binary, &st) == 0) ? (long) st.st_mtime : 0L, f[2], f[3]);
+  }
+  else if (strcmp(f[0], "image") == 0)
+  {
+    if (engine[0] == 0) { jobError(jP, 409, "No container engine", "install docker or podman"); return NULL; }
+    snprintf(key, sizeof(key), "image:%s:%s:%s", f[1], f[2], f[3]);
+  }
+  else
+  {
+    jobError(jP, 400, "Bad request", "from is installed, build or image");
+    return NULL;
+  }
+
+  char* usage    = NULL;
+  char* extended = NULL;
+
+  pthread_mutex_lock(&srcMutex);
+  for (int ix = 0; ix < 16; ix++)
+  {
+    if ((ucCache[ix].usage != NULL) && (strcmp(ucCache[ix].key, key) == 0))
+    {
+      usage    = strdup(ucCache[ix].usage);
+      extended = strdup(ucCache[ix].extended);
+      break;
+    }
+  }
+  pthread_mutex_unlock(&srcMutex);
+
+  if (usage == NULL)
+  {
+    static char out[64 * 1024];                  // one options job at a time reads into it (ucMutex)
+    static pthread_mutex_t ucMutex = PTHREAD_MUTEX_INITIALIZER;
+    const char* flags[] = { "-u", "-U" };
+    char*       got[2]  = { NULL, NULL };
+
+    pthread_mutex_lock(&ucMutex);
+    for (int ix = 0; ix < 2; ix++)
+    {
+      out[0] = 0;
+      if (strcmp(f[0], "image") == 0)
+        engineRun(out, sizeof(out), 60, "run", "--rm", "--entrypoint", "coraine", f[1], "--database", f[2], "--troe", f[3], flags[ix], NULL);
+      else
+      {
+        const char* args[] = { "--database", f[2], "--troe", f[3], flags[ix], NULL };
+        brokerRun(binary, (plugins[0] != 0) ? plugins : NULL, args, out, sizeof(out));
+      }
+      got[ix] = strdup(out);
+    }
+    pthread_mutex_unlock(&ucMutex);
+
+    usage    = got[0];
+    extended = got[1];
+
+    if (strstr(usage, "Usage:") != NULL)
+    {
+      pthread_mutex_lock(&srcMutex);
+      UsageCache* uP = &ucCache[ucNext];
+      ucNext = (ucNext + 1) % 16;
+      if (uP->usage    != NULL) free(uP->usage);
+      if (uP->extended != NULL) free(uP->extended);
+      snprintf(uP->key, sizeof(uP->key), "%s", key);
+      uP->usage    = strdup(usage);
+      uP->extended = strdup(extended);
+      pthread_mutex_unlock(&srcMutex);
+    }
+  }
+
+  Str s = { NULL, 0, 0 };
+  bool ok = (strstr(usage, "Usage:") != NULL);
+  strAdd(&s, "{\"usage\": ");      strAddJson(&s, ok ? usage : NULL);
+  strAdd(&s, ", \"extended\": ");  strAddJson(&s, ok ? extended : NULL);
+  strAdd(&s, ", \"why\": ");       strAddJson(&s, ok ? NULL : usage);
+  strAdd(&s, "}");
+  free(usage);
+  free(extended);
   jobAnswer(jP, 200, &s);
   return NULL;
 }
@@ -6232,6 +6409,7 @@ static void discoverPrepare(Def* dP, const char* bridge)
   dP->userContext[0]    = 0;
   dP->ckan[0]           = 0;
   dP->args[0]           = 0;
+  dP->options[0]        = 0;
   dP->dds.vocabulary[0] = 0;
   dP->dds.topics[0]     = 0;
   dP->dds.services[0]   = 0;
@@ -8418,6 +8596,29 @@ void runRequest(CorHttpConn* connP, const char* path)
     if (!get)                                          serveError(connP, 405, "Method not allowed", path);
     else if ((ref[0] == 0) || (ref[0] == '-') || (strpbrk(ref, " \t\n'\"") != NULL))  serveError(connP, 400, "Bad request", "?ref=<image> - an image's name");
     else                                               jobStart(connP, imageThread, ref);
+    return;
+  }
+  if (strcmp(path, "/api/run/options") == 0)
+  {
+    const char* p[4] = { corHttpUriParam(connP, "from"), corHttpUriParam(connP, "src"), corHttpUriParam(connP, "database"), corHttpUriParam(connP, "troe") };
+    char        v[4][128];
+    bool        bad = !get;
+
+    for (int ix = 0; ix < 4; ix++)
+    {
+      snprintf(v[ix], sizeof(v[ix]), "%s", (p[ix] != NULL) ? p[ix] : "");
+      urlDecodeInPlace(v[ix]);
+      if ((v[ix][0] == '-') || (strpbrk(v[ix], " \t\n'\"") != NULL)) bad = true;
+    }
+    if ((v[2][0] == 0) || (v[3][0] == 0)) bad = true;
+
+    if (bad) serveError(connP, get ? 400 : 405, get ? "Bad request" : "Method not allowed", "GET ?from=installed|build|image&src=<build or image>&database=<store>&troe=<history>");
+    else
+    {
+      char arg[520];
+      snprintf(arg, sizeof(arg), "%s\t%s\t%s\t%s", v[0], v[1], v[2], v[3]);
+      jobStart(connP, optionsThread, arg);
+    }
     return;
   }
   if (strcmp(path, "/api/run/images") == 0)

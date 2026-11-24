@@ -68,4 +68,4 @@
 .db-plog summary { cursor: pointer; color: var(--muted); }
 .db-plog pre { max-height: 30vh; overflow: auto; margin: 6px 0 0; padding: 8px; background: var(--bg-deep); border-radius: 6px;
   font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-.db-pacts { display: flex; justify-content: flex-end; margin-top: 14px; }
+.db-pacts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

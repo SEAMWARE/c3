@@ -660,6 +660,8 @@ is the command shown, run by the backend, the same build as on the command line.
 - **The result** - the size of `install/` and of the broker, the mode and time, the features as the
   built broker reports them (`install/bin/<executable> --version`, the switches off struck through), its
   `--version`, the directory, the whole log. **Run it** opens Operate with that build in the form.
+  A build followed on the page ends with a popup - done (the build, its image, the time) or failed (why) -
+  whose **Start it** opens Operate with it chosen: its image when it made one, else the build, natively.
 - **Builds kept** - newest first, with their mode, date, size and the features turned off; a click
   opens one (its log and result); **Delete** (press twice) removes its directory, log and record.
 - **Presets** - the choice (mode, the features changed, the workload) saved under a name in `c3.json`,
@@ -753,27 +755,33 @@ API: the multi-architecture tags, not the `-amd64`/`-arm64` ones), or typed; a t
 pulled at the start, its progress in the broker's log. Images are named by their tags - none is
 `latest`.
 
-**The form** - one of three sets, then each option as wanted:
+**The form** (*Select options*) - each option on its own, each field with a **?** that says what it is; what it
+needs runs in a container beside the broker:
 
-| Set | Store | History | Bridges | Services (containers) |
-|---|---|---|---|---|
-| corDB alone | corDB, on disk | corDB | - | - |
-| mongoc + timescale | mongoc | timescale | - | MongoDB (`mongo:8.2`), PostgreSQL + TimescaleDB (`timescale/timescaledb-ha:pg16`) |
-| with MQTT | corDB, on disk | corDB | mqtt | Mosquitto (`eclipse-mosquitto:2`, `/mosquitto-no-auth.conf`) |
+| Choice | Service (container) |
+|---|---|
+| store mongoc | MongoDB (`mongo:8.2`) |
+| history timescale | PostgreSQL + TimescaleDB (`timescale/timescaledb-ha:pg16`) |
+| the mqtt bridge, no bridge configuration file | Mosquitto (`eclipse-mosquitto:2`, `/mosquitto-no-auth.conf`) |
 
-- **Store** corDB or mongoc; corDB's **keep it on disk** is `--dbDir`: natively `<run>/<name>/data`, in a
-  container the volume `c3-broker-<name>` at `/data`.
-- **History** `--troe` none, corDB or timescale.
+- **Current state DB** (`--database`) corDB, ramDB or mongoc. corDB is on disk (`--dbDir`): natively the
+  directory chosen (the folder picker of Compile's directory of clones) or, empty, c³'s `<run>/<name>/data`;
+  in a container the volume `c3-broker-<name>` at `/data`. **Forget and delete data** deletes c³'s directory
+  and volume only, never a directory chosen. ramDB is in memory only (greyed for a coraine whose `--version`
+  has no plugins line: whether it has ramDB is not known).
+- **History DB** (`--troe`) none, corDB or timescale.
 - **Port** and **health port** (`--healthPort`; empty: none), **grace** - the seconds from SIGTERM to SIGKILL.
 - **Switches** - the WebSocket transport (`--transports ws`), the admin API (`--apiPlugins admin`),
   distributed operations (`--distributed`: queries and updates forwarded to the Context Sources registered -
   on by default; off and greyed for a broker built without REGISTRATIONS), `-v`.
-- **Bridges** - those the broker has (the `bridge/*.so` of its plugin directory), and a bridge
-  configuration file; without one, c³ writes `<run>/<name>/bridges.json`: the set's Mosquitto for mqtt,
+- **Bridges** - every bridge c³ knows (aas, cep, ckan, dds, modbus, mqtt, opcua, and any other the broker
+  has); those the broker lacks greyed, with the reason. The CKAN, OPC UA and AAS parts, and the buttons **Map
+  DDS topics, services and actions**, **Map an OPC UA server** and **Map an AAS server**, show only with their
+  bridge ticked. Without a bridge configuration file of one's own (`--bridgeConfig` among the options),
+  c³ writes `<run>/<name>/bridges.json`: c³'s Mosquitto for mqtt,
   the DDS domain and mapping for dds, the CKAN datasets ticked, the OPC UA server, the AAS server.
-- **DDS** - the bridge configuration file (`--bridgeConfig`) and the default user `@context` file
-  (`--defaultUserContext`), and **Map DDS topics, services and actions**, the width of the form, active with
-  the dds bridge ticked: the DDS mapper (below). A container broker with the dds bridge runs with
+- **DDS** - **Map DDS topics, services and actions**, the width of the form: the DDS mapper (below); the
+  bridge configuration file and the default user `@context` file are options of the list. A container broker with the dds bridge runs with
   `--network host --ipc host`: DDS discovery is UDP multicast, which a bridge network such as `c3` keeps to
   its own containers, and Fast DDS reaches a participant on the same machine over shared memory. Its port is
   then the host's - not published on `127.0.0.1` only: coraine listens on every interface, as a native broker
@@ -815,14 +823,23 @@ pulled at the start, its progress in the broker's log. Images are named by their
   entities' types and ids, as the broker makes them. **+ AssetChannel** adds a shell; **+ entity rule** on a
   submodel or a collection of its model makes it an entity of its own (the rules start as what `natural`
   makes).
+- **Options** - every other option of the broker: its usage (`GET /api/run/options?from=&src=&database=&troe=`
+  runs its `-u` and `-U`, as a start runs it, with the store and history chosen - so the plugins' options are
+  those of the databases chosen; once per source, store and history). Each with a tick (a switch), a choice
+  (its values listed), or a value (the default greyed in the field), and a **?** with coraine's own words
+  and the default. The options the form has a field for are not repeated, nor those c³ keeps (`-u`, `-U`,
+  `-V`, `--daemon`, `--logTo`, `--logDir`: the process and its log are c³'s); those c³ sets itself
+  (`--dbHost`, `--dbName`, ... of a service) are shown greyed with what it sets. They are the broker's
+  `options` (quoted as More options), added before More options. An image not here: known after its start
+  pulls it.
 - **More options** - anything else, as typed (quotes keep words together).
 - The form offers what the broker has, from its own `--version`, run as a start runs it (c³'s environment
   less `CORAINE_*`, its own `SEAMWARE_PLUGIN_DIR` - a build's `install/plugins`), cached by binary and mtime:
   - compiled in or out (`features:`) - mongoc without `MONGOC`, the health port without `HEALTH`, the
     transport without `TRANSPORTS`, the admin API without `ADMIN_API`: greyed with the reason;
   - the plugins found (`plugins: db=... troe=... api=... auth=... bridges=... transports=...`, coraine
-    0.7.0+dev from coraine#631): a store, a history, the WebSocket transport, the admin API, a set
-    whose store, history or bridge is missing - greyed with the reason; the bridges ticked from that list,
+    0.7.0+dev from coraine#631): a store, a history, the WebSocket transport, the admin API - greyed with
+    the reason; the bridges ticked from that list,
     loopback (the reference and test bridge) never; the CKAN, OPC UA and AAS parts and the mappers'
     buttons shown only with their bridge. A coraine without the line: the bridges are the
     `bridge/*.so` of its plugin directory;
@@ -832,12 +849,12 @@ pulled at the start, its progress in the broker's log. Images are named by their
 
   What the form leaves out the start refuses too (`POST /api/run/brokers`, `/api/run/command`: "this broker
   has no troe plugin 'timescale'"). A source chosen anew drops from the form what it cannot do.
-  Tenants have no switch at start: the form says whether the broker has them compiled in.
 - The command, exactly as it will run, from the backend (`POST /api/run/command`), and the services it
   starts first with their ports.
 
-**Services.** A set's services are containers of its own, `c3-<set>-<service>`, shared by the brokers of the
-set, each with a volume of the same name and on the network `c3`; published on `127.0.0.1` only, on the
+**Services.** The services are containers of c³'s own, one of each kind shared by every broker c³ starts -
+`c3-mongoc-timescale-mongo`, `c3-mongoc-timescale-timescale`, `c3-mqtt-mosquitto` (the names of the form's former
+presets, kept so the volumes stay) - each with a volume of the same name and on the network `c3`; published on `127.0.0.1` only, on the
 service's port + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is
 taken), so they do not collide with a MongoDB or PostgreSQL of one's own. Each broker has its own
 database in them: mongoc `--dbName c3_<name>`, timescale `--troeName c3_<name>_h` (`.` and `-` as `_`).
@@ -1185,6 +1202,7 @@ The backend's API, used by the pages:
 | `GET /api/run/sources` | the installed broker and the builds that succeeded: `version` (`--version`), their plugin directory and bridges |
 | `GET /api/run/images` | `{repository, local: [{tag, created, size}], published: [{tag, modified}], publishedError}` |
 | `GET /api/run/image?ref=<image>` | `{image, here, version}` - the image's `coraine --version` (null: not here), once per image ID |
+| `GET /api/run/options?from=&src=&database=&troe=` | `{usage, extended, why}` - the broker's `-u` and `-U` with that store and history (null and `why`: it did not answer) |
 | `POST /api/run/command` `{broker}` | `{def, argv, command, services, problem}` - nothing run |
 | `POST /api/run/brokers` `{broker}` | kept (replacing one of that name) and started: `202`; `409` while it runs or when a port is taken; `422` when it cannot start from its source (`problem`) |
 | `POST /api/run/brokers/<name>/start` | start one kept |

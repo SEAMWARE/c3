@@ -211,11 +211,12 @@ async function main() {
   assistInit({ connect, compile, run });
 
   //
-  // Compile's "Run it": Run, with that build in the form
+  // Compile's "Run it" and "Start it": Operate, with that build (or its image) in the form
   //
   window.addEventListener('c3:run', (e) => {
     location.hash = '#run';
-    run.preselectBuild(e.detail.build);
+    if (e.detail.image) run.preselectImage(e.detail.image);
+    else run.preselectBuild(e.detail.build);
   });
 
   //

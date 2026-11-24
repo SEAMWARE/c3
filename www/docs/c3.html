@@ -171,7 +171,8 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   group, SIGKILL 5 s later. One build at a time; no make, gcc or training broker outlives a build, nor c³.</li>
   <li><b>The result</b> - the size of <code>install/</code> and of the broker, its <code>--version</code> with the
   features as the built broker reports them, the directory, the whole log. <b>Run it</b> opens Operate with that
-  build.</li>
+  build. A build followed on the page ends with a popup, done or failed; its <b>Start it</b> opens Operate with the
+  build chosen - its image when it made one.</li>
   <li><b>Builds kept</b> (newest first, a click opens one, <b>Delete</b> removes it) and <b>presets</b> - a choice
   saved under a name. Both cards are closed when c³ starts, their number on the header; a click on it opens one.</li>
 </ul>
@@ -205,42 +206,47 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <tr><td>an image, <code>quay.io/seamware/coraine:&lt;tag&gt;</code></td><td>in a container - the tag picked from the
   images here and the tags published on quay.io, or typed; pulled at the start when it is not here</td></tr>
 </table>
-<p><b>The form</b> - one of three sets, then each option as wanted:</p>
+<p><b>The form</b> (<i>Select options</i>) - each option on its own; what it needs runs in a container beside the
+broker:</p>
 <table class="gtable">
-  <tr><th>Set</th><th>Store</th><th>History</th><th>Services (containers)</th></tr>
-  <tr><td>corDB alone</td><td>corDB, on disk</td><td>corDB</td><td>-</td></tr>
-  <tr><td>mongoc + timescale</td><td>mongoc</td><td>timescale</td><td>MongoDB (<code>mongo:8.2</code>), PostgreSQL +
-  TimescaleDB (<code>timescale/timescaledb-ha:pg16</code>)</td></tr>
-  <tr><td>with MQTT</td><td>corDB, on disk</td><td>corDB</td><td>Mosquitto (<code>eclipse-mosquitto:2</code>), and the
-  mqtt bridge</td></tr>
+  <tr><th>Choice</th><th>Service (container)</th></tr>
+  <tr><td>store mongoc</td><td>MongoDB (<code>mongo:8.2</code>)</td></tr>
+  <tr><td>history timescale</td><td>PostgreSQL + TimescaleDB (<code>timescale/timescaledb-ha:pg16</code>)</td></tr>
+  <tr><td>the mqtt bridge, no bridge configuration file</td><td>Mosquitto (<code>eclipse-mosquitto:2</code>)</td></tr>
 </table>
 <ul>
-  <li>The store and its <b>keep it on disk</b> (<code>--dbDir</code>), the history (<code>--troe</code> none, corDB or
+  <li>Each field has a <b>?</b> that says what it is. The <b>current state DB</b> - corDB (on disk: a directory chosen
+  with a folder picker, or c³'s own; a container's volume), ramDB (in memory only) or mongoc; <b>Forget and delete
+  data</b> never deletes a directory chosen - the <b>history DB</b> (<code>--troe</code> none, corDB or
   timescale), the port and health port, the grace period (seconds from SIGTERM to SIGKILL), the WebSocket transport,
   the admin API, distributed operations, <code>-v</code>.</li>
-  <li><b>Bridges</b> - those the broker has (the <code>bridge/*.so</code> of its plugin directory) and a bridge
-  configuration file; without one, c³ writes it: the set's Mosquitto for mqtt, the DDS domain and mapping, the CKAN
+  <li><b>Bridges</b> - every bridge c³ knows, those the broker lacks greyed with the reason; CKAN, OPC UA, AAS and
+  the mappers' buttons show only with their bridge ticked. Without a bridge configuration file of one's own, c³
+  writes it: c³'s Mosquitto for mqtt, the DDS domain and mapping, the CKAN
   datasets ticked, an OPC UA server and its channels, an AAS server and its AssetChannels.</li>
-  <li><b>DDS</b> - the bridge configuration file and the default user <code>@context</code> file
-  (<code>--bridgeConfig</code>, <code>--defaultUserContext</code>), and, under them, <b>Map DDS topics, services and
-  actions</b>, the width of the form, active with the dds bridge ticked (<a href="#docs/c3/dds-mapper">the DDS mapper</a>),
-  and <b>Map an OPC UA server</b>, active with the opcua bridge ticked (<a href="#docs/c3/opcua-mapper">the OPC UA
-  mapper</a>). A
+  <li><b>Map DDS topics, services and actions</b> (<a href="#docs/c3/dds-mapper">the DDS mapper</a>), <b>Map an OPC
+  UA server</b> (<a href="#docs/c3/opcua-mapper">the OPC UA mapper</a>) and <b>Map an AAS server</b>, each with its
+  bridge ticked. A
   container broker with the dds bridge runs on the host's network and IPC namespace (<code>--network host --ipc
   host</code>) - DDS discovery is UDP multicast, which the network <code>c3</code> keeps to its own containers - so its
   port is the host's and, like a native broker's, open on every interface.</li>
+  <li><b>Options</b> - every other option of the broker, read from its own usage (<code>-u</code>, <code>-U</code>)
+  with the databases chosen: a tick, a choice or a value (the default greyed), and a <b>?</b> in coraine's words.
+  Those c³ sets itself show what it sets; those that are c³'s (<code>--daemon</code>, <code>--logTo</code>,
+  <code>--logDir</code>) are not offered.</li>
   <li><b>More options</b> - anything else, as typed.</li>
   <li>The form offers what the broker has, from its own <code>--version</code>, run as a start runs it (its own plugin
   directory): what is compiled out (<code>features:</code>) and what its plugin directory lacks (<code>plugins:
   db=... troe=... api=... auth=... bridges=... transports=...</code>) is greyed with the reason - a store, a history,
-  the WebSocket transport, the admin API, a set; the bridges are that list's (loopback, the test bridge, never), and
+  the WebSocket transport, the admin API; the bridges are that list's (loopback, the test bridge, never), and
   the CKAN, OPC UA and AAS parts and the mappers show only with their bridge. An image's <code>--version</code> is read
   once per image (<code>docker run --rm --entrypoint coraine &lt;image&gt; --version</code>); one not here is known
   after its start pulls it. The start refuses what the form leaves out, too.</li>
   <li>Beside the form: the services it starts first, and the command, exactly as it will run.</li>
 </ul>
-<p><b>Services</b> are containers of c³'s own, <code>c3-&lt;set&gt;-&lt;service&gt;</code>, shared by the brokers of
-the set, each with a volume, on the network <code>c3</code>, published on <code>127.0.0.1</code> on the service's port
+<p><b>Services</b> are containers of c³'s own, one of each kind shared by every broker c³ starts
+(<code>c3-mongoc-timescale-mongo</code>, <code>c3-mongoc-timescale-timescale</code>, <code>c3-mqtt-mosquitto</code>), each
+with a volume, on the network <code>c3</code>, published on <code>127.0.0.1</code> on the service's port
 + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is taken). Each broker has its
 own database in them (<code>--dbName c3_&lt;name&gt;</code>, <code>--troeName c3_&lt;name&gt;_h</code>). They start
 before the broker that needs them, waited for until they answer, and stop when nothing c³ started uses them; their
