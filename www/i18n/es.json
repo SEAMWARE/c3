@@ -1470,5 +1470,12 @@
   "corDB's history needs corDB: tick it under Current-state databases": "El historial de corDB necesita corDB: márcalo en Bases de datos de estado actual",
   "mongoc only": "solo mongoc",
   "Not without corDB: coraine-build trains the broker on corDB. Tick corDB under Current-state databases for this.": "Sin corDB no: coraine-build entrena el broker sobre corDB. Para esto, marca corDB en Bases de datos de estado actual.",
-  "not without corDB": "no sin corDB"
+  "not without corDB": "no sin corDB",
+  "Choose the directory": "Elegir el directorio",
+  "The folder above": "La carpeta de arriba",
+  "Your home folder": "Tu carpeta personal",
+  "Use this directory": "Usar este directorio",
+  "No folders here": "No hay carpetas aquí",
+  "coraine is here: the other repositories a build needs go beside it.": "coraine está aquí: los demás repositorios que necesita una compilación van a su lado.",
+  "No coraine clone here: c³ clones it, and the others a build needs, into this folder.": "No hay ningún clon de coraine aquí: c³ lo clona, junto con los demás que necesita una compilación, en esta carpeta."
 }

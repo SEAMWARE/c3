@@ -108,16 +108,17 @@ by the backend - the same build as on the command line (<a href="#docs/building"
 <ul>
   <li><b>Source</b> - what <code>coraine-build</code> builds from: the <b>coraine-dev package</b> (the source of
   the release it installs) or <b>Git clones</b>, a directory holding coraine, c3 and the libraries side by side
-  (<code>~/git</code>). For the clones, the repositories a build needs are listed - coraine's
+  (<code>~/git</code>) - typed, or chosen with the folder button beside it: a browser of this machine's folders,
+  the git clones marked, saying whether coraine is in the one open. For the clones, the repositories a build needs are listed - coraine's
   <code>docker/vendor-libs.sh --list</code> names them; of the bridges' repositories only those of the bridges switched
   on. Each has a <b>Branch</b> pull-down - what of it goes in: <b>main (origin/main)</b>, the default, as last
   fetched; a branch of the clone; a branch at origin; or HEAD, what is checked out - its last commit, committed work
   only (the column's <b>?</b> says so). The build passes them to <code>coraine-build</code> as
-  <code>--ref &lt;repo&gt;=&lt;ref&gt;</code>, and the feature list is read at the same refs. <b>Refresh</b>, top right,
+  <code>--ref &lt;repo&gt;=&lt;ref&gt;</code>, and the feature list is read at the same refs. <b>Refresh</b>, on the line above the list,
   fetches every clone from origin (<code>git fetch --prune</code>, in parallel) and lists the branches again - branches
   made since c³ started. Listed are the ones to look at - missing, another branch than main, a branch the clone does not
-  have (<b>Build</b> waits), uncommitted changes on the branch taken, a clone elsewhere; <b>Show all</b> lists every
-  one, <b>Hide</b> in the same place goes back. A missing repository has <b>Clone</b> (into the
+  have (<b>Build</b> waits), uncommitted changes on the branch taken, a clone elsewhere; <b>Show all</b> (<b>+</b>,
+  the last icon) lists every one, <b>Hide</b> (<b>−</b>) in the same place goes back. A missing repository has <b>Clone</b> (into the
   directory - <b>Clone the N missing</b> for all), the <code>git clone</code> command to copy, and <b>It is elsewhere</b>
   for a clone at another path (it must hold <code>.git</code>; <b>Forget this path</b> undoes it). <b>Build</b> waits
   while one is missing, and says so. A bridge whose repository is not cloned can be switched on - Source then lists it.

@@ -274,6 +274,7 @@ export class Source {
     if (document.activeElement !== dir) dir.value = cc.clonesDir || '';
     dir.disabled = !!cc.sourceFlag || !!this.busy;
     $('cp-src-use').disabled = dir.disabled;
+    $('cp-src-pick').disabled = dir.disabled;
     dirRow.title = clonesWhat;
 
     //
@@ -337,17 +338,8 @@ export class Source {
       acts.append(all);
     }
     //
-    // Show all / Hide and Refresh: icons, after the line - above the table, so they stay where they are
+    // Refresh, the help and Show all / Hide: icons, after the line - above the table, so they stay where they are
     //
-    if (shown.length < this.repos.repos.length || this.showAll) {
-      const tg = el('button', 'iconbtn cp-src-icon', this.showAll ? '−' : '+');
-      tg.type = 'button';
-      tg.title = this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length });
-      tg.setAttribute('aria-label', tg.title);
-      tg.setAttribute('aria-expanded', String(this.showAll));
-      tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
-      acts.append(tg);
-    }
     const refresh = el('button', 'iconbtn cp-src-icon', '↻');
     refresh.type = 'button';
     refresh.title = t('Fetch every clone from origin and list the branches again - for branches made after c³ started');
@@ -359,7 +351,17 @@ export class Source {
     q.title = t('What goes into the build?');
     q.setAttribute('aria-label', q.title);
     q.addEventListener('click', () => helpShow(t('What goes into the build'), BRANCH_HELP()));
-    acts.append(refresh, q);
+    //
+    // Show all / Hide: the last icon, its place kept when there is nothing to show or hide, so the others stay put
+    //
+    const tg = el('button', 'iconbtn cp-src-icon big', this.showAll ? '−' : '+');
+    tg.type = 'button';
+    tg.title = this.showAll ? t('Hide') : t('Show all {n}', { n: this.repos.repos.length });
+    tg.setAttribute('aria-label', tg.title);
+    tg.setAttribute('aria-expanded', String(this.showAll));
+    tg.addEventListener('click', () => { this.showAll = !this.showAll; this.render(); });
+    if (!(shown.length < this.repos.repos.length || this.showAll)) { tg.classList.add('gone'); tg.tabIndex = -1; tg.setAttribute('aria-hidden', 'true'); }
+    acts.append(refresh, q, tg);
     parts.push(acts);
     foot.replaceChildren(...parts);
   }
@@ -489,7 +491,87 @@ export class Source {
       if (d) this.use({ kind: 'clones', dir: d });
     };
     $('cp-src-use').addEventListener('click', use);
+    $('cp-src-pick').addEventListener('click', () => pickDir($('cp-src-dir').value.trim() || '~/git', (d) => { $('cp-src-dir').value = d; this.use({ kind: 'clones', dir: d }); }));
 
     $('cp-src-dir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
   }
+}
+
+//
+// pickDir - the folder picker of the directory of clones: c³'s backend lists a directory's subdirectories (a page
+// cannot open the system's dialog and get a path back). A click enters a folder, ↑ its parent; the git clones are
+// marked, and whether coraine is among them said. "Use this directory" hands the path to onPick
+//
+const FOLDER = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4V12.5H14.5V5.5H7.5L6 3.5H2Z"/></svg>';
+
+function pickDir(start, onPick) {
+  const ov = el('div', 'overlay cp-modal');
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.setAttribute('aria-label', t('Directory of clones'));
+  const card = el('div', 'card cp-help-card cp-pick-card');
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+
+  const up = el('button', 'iconbtn cp-src-icon', '↑');
+  up.type = 'button';
+  up.title = t('The folder above');
+  up.setAttribute('aria-label', up.title);
+  const home = el('button', 'iconbtn cp-src-icon', '⌂');
+  home.type = 'button';
+  home.title = t('Your home folder');
+  home.setAttribute('aria-label', home.title);
+  const where = el('code');
+  const path = el('div', 'cp-pick-path');
+  path.append(up, home, where);
+  const list = el('div', 'cp-pick-list');
+  list.setAttribute('role', 'list');
+  const note = el('p', 'cp-note cp-pick-note');
+
+  const cancel = el('button', 'btn', t('Cancel'));
+  cancel.type = 'button';
+  cancel.addEventListener('click', close);
+  const ok = el('button', 'btn primary', t('Use this directory'));
+  ok.type = 'button';
+  const actions = el('div', 'actions');
+  actions.append(cancel, ok);
+
+  let cur = null;
+  const go = async (p) => {
+    let d;
+    try { d = await api.compileDirs(p); } catch (e) {
+      if (cur === null && p) return go('');                      // where it started is not there: the home folder
+      note.textContent = (e && e.message) || String(e);
+      return;
+    }
+    cur = d;
+    where.textContent = d.path;
+    where.title = d.path;
+    up.disabled = !d.parent;
+    list.replaceChildren(...d.dirs.map((x) => {
+      const row = el('button', 'cp-pick-row');
+      row.type = 'button';
+      row.setAttribute('role', 'listitem');
+      row.innerHTML = FOLDER;
+      row.append(el('span', '', x.name));
+      if (x.git) row.append(el('span', 'git', 'git'));
+      row.addEventListener('click', () => go(d.path.replace(/\/$/, '') + '/' + x.name));
+      return row;
+    }));
+    if (!d.dirs.length) list.append(el('div', 'cp-note cp-pick-row', t('No folders here')));
+    list.scrollTop = 0;
+    note.textContent = d.coraine ? t('coraine is here: the other repositories a build needs go beside it.')
+      : t('No coraine clone here: c³ clones it, and the others a build needs, into this folder.');
+  };
+  up.addEventListener('click', () => { if (cur && cur.parent) go(cur.parent); });
+  home.addEventListener('click', () => go(''));
+  ok.addEventListener('click', () => { if (cur) { close(); onPick(cur.path); } });
+
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  card.append(el('h3', '', t('Directory of clones')), path, list, note, actions);
+  ov.append(card);
+  document.body.append(ov);
+  ok.focus();
+  go(start);
 }

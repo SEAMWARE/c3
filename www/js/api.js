@@ -105,6 +105,7 @@ export const compileRepoRef      = (repo, ref) => call('PUT', '/api/compile/repo
 export const compileRepoPath     = (repo, path) => call('PUT', '/api/compile/repos/path', { repo, path });
 export const cloneStart          = (repo) => call('POST', '/api/compile/clone', { repo });
 export const clones              = () => call('GET', '/api/compile/clone');
+export const compileDirs         = (path) => call('GET', '/api/compile/dirs' + (path ? '?path=' + encodeURIComponent(path) : ''));
 
 //
 // brokerGet - a GET to the broker, through the backend's proxy

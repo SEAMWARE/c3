@@ -566,7 +566,7 @@ void serveRequest(CorHttpConn* connP)
     serveConfigChange(connP, configCompilePreset);
   else if ((strcmp(path, "/api/compile/presets") == 0) && (strcmp(method, "DELETE") == 0))
     serveConfigChange(connP, configCompilePresetDelete);
-  else if ((strcmp(path, "/api/compile/repos") == 0) || (strcmp(path, "/api/compile/clone") == 0))
+  else if ((strcmp(path, "/api/compile/repos") == 0) || (strcmp(path, "/api/compile/clone") == 0) || (strcmp(path, "/api/compile/dirs") == 0))
     sourcesRequest(connP, path);
   else if ((strcmp(path, "/api/compile/source") == 0) && (strcmp(method, "PUT") == 0))
     serveConfigChange(connP, configCompileSource);

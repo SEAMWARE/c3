@@ -796,7 +796,95 @@ static void cloneList(CorHttpConn* connP)
 
 // -----------------------------------------------------------------------------
 //
-// sourcesRequest - /api/compile/repos, /api/compile/clone
+// dirCmp - qsort: names, alphabetically
+//
+static int dirCmp(const void* a, const void* b)
+{
+  return strcmp(*(char* const*) a, *(char* const*) b);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// dirsList - GET /api/compile/dirs?path=<dir>: the folder picker of the directory of clones - a directory's
+// subdirectories (hidden ones left out), each a git clone or not, and whether coraine is one of them. No path: $HOME;
+// a leading ~ is $HOME. c3 listens on this machine only, and a listing is what ls would show its user
+//
+//   {"path": "/home/u/git", "parent": "/home/u", "home": "/home/u", "coraine": true,
+//    "dirs": [{"name": "c3", "git": true}, ...]}
+//
+static void dirsList(CorHttpConn* connP)
+{
+  const char* home  = getenv("HOME");
+  const char* query = (connP->query.s != NULL) ? connP->query.s : "";
+  char        asked[1024];
+  char        full[1100];
+  char        real[PATH_MAX];
+
+  if ((queryParam(query, "path", asked, sizeof(asked)) == false) || (asked[0] == 0))
+    snprintf(asked, sizeof(asked), "%s", (home != NULL) ? home : "/");
+
+  if ((asked[0] == '~') && ((asked[1] == 0) || (asked[1] == '/')))
+    snprintf(full, sizeof(full), "%s%s", (home != NULL) ? home : "", &asked[1]);
+  else
+    snprintf(full, sizeof(full), "%s", asked);
+
+  DIR* dP = (full[0] == '/') && (realpath(full, real) != NULL) ? opendir(real) : NULL;
+  if (dP == NULL)
+  {
+    serveError(connP, 404, "Not a directory", (full[0] == '/') ? full : "an absolute path, or one starting with ~");
+    return;
+  }
+
+  char*  names[2000];
+  int    n     = 0;
+  struct dirent* deP;
+  while (((deP = readdir(dP)) != NULL) && (n < 2000))
+  {
+    if (deP->d_name[0] == '.')
+      continue;
+
+    char        sub[PATH_MAX + 300];
+    struct stat st;
+    snprintf(sub, sizeof(sub), "%s/%s", real, deP->d_name);
+    if ((stat(sub, &st) == 0) && S_ISDIR(st.st_mode) && ((names[n] = strdup(deP->d_name)) != NULL))
+      ++n;
+  }
+  closedir(dP);
+  qsort(names, n, sizeof(char*), dirCmp);
+
+  char parent[PATH_MAX];
+  snprintf(parent, sizeof(parent), "%s", real);
+  char* slash = strrchr(parent, '/');
+  if (slash == parent) parent[1] = 0;                 // a directory under / - its parent is /
+  else if (slash != NULL) *slash = 0;
+
+  char probe[PATH_MAX + 300];
+  snprintf(probe, sizeof(probe), "%s/coraine/.git", real);
+
+  Str s = { 0 };
+  strAdd(&s, "{\"path\": ");      strAddJson(&s, real);
+  strAdd(&s, ", \"parent\": ");   strAddJson(&s, (strcmp(real, "/") == 0) ? NULL : parent);
+  strAdd(&s, ", \"home\": ");     strAddJson(&s, home);
+  strAddf(&s, ", \"coraine\": %s, \"dirs\": [", (access(probe, F_OK) == 0) ? "true" : "false");
+  for (int ix = 0; ix < n; ix++)
+  {
+    snprintf(probe, sizeof(probe), "%s/%s/.git", real, names[ix]);
+    strAdd(&s, (ix == 0) ? "{\"name\": " : ", {\"name\": ");
+    strAddJson(&s, names[ix]);
+    strAddf(&s, ", \"git\": %s}", (access(probe, F_OK) == 0) ? "true" : "false");
+    if (names[ix] != NULL) free(names[ix]);
+  }
+  strAdd(&s, "]}");
+  respondStr(connP, 200, &s);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// sourcesRequest - /api/compile/repos, /api/compile/clone, /api/compile/dirs
 //
 void sourcesRequest(CorHttpConn* connP, const char* path)
 {
@@ -808,6 +896,8 @@ void sourcesRequest(CorHttpConn* connP, const char* path)
     cloneStart(connP);
   else if ((strcmp(path, "/api/compile/clone") == 0) && (strcmp(method, "GET") == 0))
     cloneList(connP);
+  else if ((strcmp(path, "/api/compile/dirs") == 0) && (strcmp(method, "GET") == 0))
+    dirsList(connP);
   else
     serveError(connP, 405, "Method not allowed", path);
 }

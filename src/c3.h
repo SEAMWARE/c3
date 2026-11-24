@@ -187,6 +187,7 @@ extern bool   credsDashboardAssist(char* secret, int secretLen, char* err, int e
 extern void   oidcInit(void);                                             // after proxyInit: the refresh thread
 extern char*  oidcToken(const char* broker, char* userOut, int userLen);  // malloc'ed, or NULL - never waits
 extern void   oidcRequest(CorHttpConn* connP, const char* path);          // /api/oidc/...
+extern bool   queryParam(const char* query, const char* name, char* out, int outLen);  // decoded; false: not there
 
 
 
