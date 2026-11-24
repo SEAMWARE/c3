@@ -1109,7 +1109,7 @@ it is part of c³.
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
   and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
   `config.xml` (a change in `common/` too: each widget packs it). A widget's settings go to WireCloud as text -
-  WireCloud 2 answers a number or a boolean 422 and keeps none of the values sent with it. The source, rules, alarms and control widgets read a broker themselves (their own form: one of
+  WireCloud 2 answers a number or a boolean 422 and keeps none of the values sent with it ([Ficodes/WireCloud#13](https://github.com/Ficodes/WireCloud/issues/13)). The source, rules, alarms and control widgets read a broker themselves (their own form: one of
   c³'s brokers, a tenant); the others take the entities wired to them. The graph and the map colour a type as
   Explore does - its place in the broker's sorted types (`GET /ngsi-ld/v1/types`, through c³), unless it was given
   a colour of its own in Explore (the broker's `connect.typeColours`, which `/api/run/dashboard/brokers` lists). A widget's file `c3-include` names files of `www/` packed into its `.wgt`
