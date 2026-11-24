@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-value" version="0.1.9">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-value" version="0.1.10">
   <details>
     <title>NGSI-LD value</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
