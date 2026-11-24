@@ -69,7 +69,13 @@
       var tr = el("tr", e.id === selected ? "sel" : "");
       cols.forEach(function (c) {
         var v = cell(e, c);
-        tr.append(el("td", typeof v === "number" ? "num" : "", C3.show(v, Number(pref("decimals")))));
+        //
+        // A URN (the id, a Relationship's object) by its last part, as the map and the graph name entities - whole on hover
+        //
+        var urn = typeof v === "string" && /^urn:[^:]+:/i.test(v);
+        var td = el("td", typeof v === "number" ? "num" : "", urn ? (v.slice(v.lastIndexOf(":") + 1) || v) : C3.show(v, Number(pref("decimals"))));
+        if (urn) td.title = v;
+        tr.append(td);
       });
       tr.addEventListener("click", function () {
         selected = e.id;

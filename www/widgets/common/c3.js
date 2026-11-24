@@ -246,8 +246,16 @@ var C3 = (function () {
   // widget only follows the same values again
   //
   function setPrefs(values) {
-    Object.keys(values).forEach(function (k) { changed[k] = values[k]; });
-    MashupPlatform.prefs.set(values);
+    //
+    // To WireCloud as text: WireCloud 2 answers a number or a boolean 422 and keeps none of the values sent with it
+    // (it stores "2" as the number preference 2) - the widget keeps the values themselves
+    //
+    var sent = {};
+    Object.keys(values).forEach(function (k) {
+      changed[k] = values[k];
+      sent[k] = (typeof values[k] === "number" || typeof values[k] === "boolean") ? String(values[k]) : values[k];
+    });
+    MashupPlatform.prefs.set(sent);
     if (prefsFn) prefsFn(values);
   }
 

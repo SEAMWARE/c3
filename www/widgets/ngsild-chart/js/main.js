@@ -74,11 +74,20 @@
     //
     var qs = "?attrs=" + encodeURIComponent(attr) + "&timerel=after&timeAt=" + encodeURIComponent(new Date(since()).toISOString()) +
              "&options=temporalValues&lastN=1000";
+    //
+    // By observedAt (the query's default timeproperty); values written without one have no time there - none match,
+    // or come with a null time - so for an entity with nothing timed, again by modifiedAt: when the broker got them
+    //
     var key0 = key;
-    Promise.all(ids.map(function (id) {
-      return C3.get(from.broker, from.tenant, "/ngsi-ld/v1/temporal/entities/" + encodeURIComponent(id) + qs).then(function (r) {
+    function read(id, by) {
+      return C3.get(from.broker, from.tenant, "/ngsi-ld/v1/temporal/entities/" + encodeURIComponent(id) + qs + by).then(function (r) {
         return { id: id, got: instancesOf(r.body && r.body[attr]) };
       }, function (e) { return { id: id, error: e.message }; });
+    }
+    Promise.all(ids.map(function (id) {
+      return read(id, "").then(function (x) {
+        return (x.got && x.got.length) ? x : read(id, "&timeproperty=modifiedAt").then(function (y) { return (y.got && y.got.length) ? y : x; });
+      });
     })).then(function (all) {
       if (key0 !== loadedFor) return;            // other entities, or another attribute, since
       var any = false, why = null;
@@ -181,7 +190,8 @@
       var s = el("span");
       var sw = el("i");
       sw.style.background = COLORS[i % COLORS.length];
-      s.append(sw, document.createTextNode(id));
+      s.title = id;                                // the id's last part shown, as on the map; the whole id on hover
+      s.append(sw, document.createTextNode(id.slice(id.lastIndexOf(":") + 1) || id));
       legend.append(s);
     });
 
