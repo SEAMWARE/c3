@@ -1160,6 +1160,28 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   strAdd(&pP->features, "}");
 
   //
+  // The current-state stores (coraine-build refuses these too, after a source and a command): one of them at least,
+  // and corDB with pgo / tune - their training runs the broker on corDB. A switch not given is at its default, on
+  //
+  CorNode* cordbP  = (featuresP != NULL) ? corTreeLookup(featuresP, "CORDB")  : NULL;
+  CorNode* mongocP = (featuresP != NULL) ? corTreeLookup(featuresP, "MONGOC") : NULL;
+  bool     cordbOff  = (cordbP  != NULL) && (cordbP->type  == CorBoolean) && (cordbP->value.b  == false);
+  bool     mongocOff = (mongocP != NULL) && (mongocP->type == CorBoolean) && (mongocP->value.b == false);
+
+  if (cordbOff && mongocOff)
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "MONGOC and CORDB off: no current-state store - the broker keeps its entities in mongoc (MongoDB) or corDB; build at least one");
+    return false;
+  }
+  if (cordbOff && ((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "CORDB off: not with --%s (its training runs the broker on corDB)", mode);
+    return false;
+  }
+
+  //
   // bridges: ["mqtt", "dds"] - the bridge plugins to build; [] none; absent: coraine-build's default
   //
   CorNode* bridgesP = corTreeLookup(bodyP, "bridges");
