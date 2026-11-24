@@ -1107,7 +1107,7 @@ static bool memberList(CorNode* oP, const char* name, const char** allowed, char
   return true;
 }
 
-static const char* bridgeNames[] = { "aas", "ckan", "dds", "loopback", "modbus", "mqtt", "opcua", NULL };
+static const char* bridgeNames[] = { "aas", "cep", "ckan", "dds", "loopback", "modbus", "mqtt", "opcua", NULL };
 
 
 
@@ -2571,6 +2571,14 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
   if (dP->bridges[0] != 0)
   {
     argAdd(aP, "--bridges");   argAdd(aP, dP->bridges);
+
+    //
+    // cep: corCep's requests go to the broker over HTTP - to this broker's own port (the plugin's default is 1026)
+    //
+    if (hasBridge(dP, "cep"))
+    {
+      argAdd(aP, "--cep-broker"); argAddf(aP, "http://127.0.0.1:%d", byName ? 1026 : dP->port);
+    }
   }
   if (bridgeFile[0] != 0)
   {
