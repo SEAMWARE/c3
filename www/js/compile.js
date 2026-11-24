@@ -825,7 +825,8 @@ export class Compile {
     else mb.addEventListener('click', () => { this.choice.features.MONGOC = !mongoc; this.changed(); });
     const cordbDoc = this.docAt(['CORDB', STORE_DOC[false]]);
     const onlyDoc = this.docAt(STORE_DOC[false]);
-    store.replaceChildren(this.pill(cordb, cordbDoc, hasCordbSwitch ? tickCost(this.docAt('CORDB') && this.docAt('CORDB').text, 'saved') : ''),
+    const cordbCostDoc = this.docAt(['Store: mongoc only', 'CORDB']);     // what mongoc alone saves, as mongoc's is what corDB alone does
+    store.replaceChildren(this.pill(cordb, cordbDoc, hasCordbSwitch ? tickCost(cordbCostDoc && cordbCostDoc.text, 'saved') : ''),
                           this.pill(mb, this.docAt(STORE_DOC[true]), tickCost(onlyDoc && onlyDoc.text, 'saved')));
     const sn = $('cp-store-note');
     sn.textContent = (!cc.mongoc && mongoc) ? t('The mongo-c driver v2 is not installed here: this build would stop. Untick mongoc, or install it.') : (!cc.mongoc ? t('mongoc needs the mongo-c driver v2 (not installed here).') : '');
