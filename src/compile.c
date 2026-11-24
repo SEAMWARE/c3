@@ -474,6 +474,8 @@ typedef struct Build
   char            executable[65];                // the broker's: install/bin/<executable> (coraine-build --name)
   char            image[256];                    // coraine-build --image: the container image asked for; "": none
   int             imageMiB;                      // its size, from coraine-build's "image <name> - <n> MiB" line
+  bool            imageFile;                     // coraine-build --image-file: <dir>/image.tar.gz asked for
+  int             imageFileMiB;                  // its size, from "image file <path> - <n> MiB"
   char            mode[16];
   char            httpServer[16];                // mhd, builtin, both
   char            workload[2048];
@@ -572,6 +574,14 @@ static void buildRender(Build* bP, Str* sP)
   strAdd(sP, ", \"image\": ");        strAddJson(sP, ((bP->image[0] != 0) && (strcmp(bP->state, "succeeded") == 0)) ? bP->image : NULL);
   if (bP->imageMiB > 0) strAddf(sP, ", \"imageMiB\": %d", bP->imageMiB);
   else                  strAdd(sP, ", \"imageMiB\": null");
+  strAddf(sP, ", \"imageFileAsked\": %s", bP->imageFile ? "true" : "false");
+  {
+    char file[2400];
+    snprintf(file, sizeof(file), "%s/image.tar.gz", bP->dir);
+    strAdd(sP, ", \"imageFile\": ");  strAddJson(sP, (bP->imageFile && (strcmp(bP->state, "succeeded") == 0)) ? file : NULL);
+  }
+  if (bP->imageFileMiB > 0) strAddf(sP, ", \"imageFileMiB\": %d", bP->imageFileMiB);
+  else                      strAdd(sP, ", \"imageFileMiB\": null");
   strAdd(sP, ", \"state\": ");        strAddJson(sP, bP->state);
   strAdd(sP, ", \"mode\": ");         strAddJson(sP, bP->mode);
   strAdd(sP, ", \"httpServer\": ");   strAddJson(sP, bP->httpServer);
@@ -708,6 +718,7 @@ static void outputAdd(Build* bP, const char* data, int len)
     const char* marker = "coraine-build: phase ";
     int         mLen    = strlen(marker);
     const char* iMark   = "coraine-build: image ";   // "coraine-build: image <name> - <n> MiB, docker, on ubuntu:26.04"
+    const char* fMark   = "coraine-build: image file ";   // "coraine-build: image file <dir>/image.tar.gz - <n> MiB"
 
     bP->lines += 1;
 
@@ -717,7 +728,12 @@ static void outputAdd(Build* bP, const char* data, int len)
       int         mib  = 0;
 
       if ((dash != NULL) && (sscanf(dash + 3, "%d MiB", &mib) == 1))
-        bP->imageMiB = mib;
+      {
+        if ((lineLen > (int) sizeof("coraine-build: image file ") - 1) && (strncmp(line, fMark, sizeof("coraine-build: image file ") - 1) == 0))
+          bP->imageFileMiB = mib;
+        else
+          bP->imageMiB = mib;
+      }
     }
 
     if ((lineLen > mLen) && (strncmp(line, marker, mLen) == 0) && (bP->nPhases < PHASES_MAX))
@@ -1012,6 +1028,7 @@ typedef struct Plan
   char   name[65];
   char   executable[65];                         // coraine-build --name; coraine: its default, left out
   char   image[256];                             // coraine-build --image; "": a binary only
+  bool   imageFile;                              // coraine-build --image-file: the image saved as <dir>/image.tar.gz too
   char   mode[16];
   char   httpServer[16];                         // mhd (coraine-build's default), builtin, both
   char   workload[2048];
@@ -1278,6 +1295,19 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   }
 
   //
+  // imageFile - the image saved as <dir>/image.tar.gz too (coraine-build --image-file), for a machine without a
+  // registry: docker load -i. Only with an image
+  //
+  CorNode* imageFileP = corTreeLookup(bodyP, "imageFile");
+  pP->imageFile = (imageFileP != NULL) && (imageFileP->type == CorBoolean) && imageFileP->value.b;
+  if (pP->imageFile && (pP->image[0] == 0))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "\"imageFile\" needs \"image\": the image is saved under its name");
+    return false;
+  }
+
+  //
   // The command
   //
   char modeArg[24];
@@ -1311,6 +1341,8 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   {
     pP->argv[pP->argc++] = strdup("--image");
     pP->argv[pP->argc++] = strdup(pP->image);
+    if (pP->imageFile)
+      pP->argv[pP->argc++] = strdup("--image-file");
   }
   if (cP->sourceGiven)
   {
@@ -1354,6 +1386,7 @@ static void planRender(Plan* pP, Str* sP)
   strAdd(sP, "{\"name\": ");     strAddJson(sP, pP->name);
   strAdd(sP, ", \"executable\": "); strAddJson(sP, pP->executable);
   strAdd(sP, ", \"image\": ");  strAddJson(sP, (pP->image[0] != 0) ? pP->image : NULL);
+  strAddf(sP, ", \"imageFile\": %s", pP->imageFile ? "true" : "false");
   strAdd(sP, ", \"mode\": ");    strAddJson(sP, pP->mode);
   strAdd(sP, ", \"httpServer\": "); strAddJson(sP, pP->httpServer);
   strAdd(sP, ", \"features\": "); strAdd(sP, pP->features.s);
@@ -1438,6 +1471,7 @@ static void buildStart(CorHttpConn* connP)
   snprintf(bP->name, sizeof(bP->name), "%s", plan.name);
   snprintf(bP->executable, sizeof(bP->executable), "%s", plan.executable);
   snprintf(bP->image, sizeof(bP->image), "%s", plan.image);
+  bP->imageFile = plan.imageFile;
   snprintf(bP->mode, sizeof(bP->mode), "%s", plan.mode);
   snprintf(bP->httpServer, sizeof(bP->httpServer), "%s", plan.httpServer);
   snprintf(bP->workload, sizeof(bP->workload), "%s", plan.workload);
@@ -1870,7 +1904,7 @@ static void buildLog(CorHttpConn* connP, const char* name)
 // mtime). Run on a thread of its own; the requests that came meanwhile wait (suspended) for the one run.
 //
 static pthread_mutex_t fMutex = PTHREAD_MUTEX_INITIALIZER;
-static char*           fText  = NULL;            // the answer: {"source", "version", "features": [...], "doc", "bridges", "httpServers"}
+static char*           fText  = NULL;            // the answer: {"source", "version", "features": [...], "doc", "bridges", "httpServers", "imageFile"}
 static char            fKey[8400];
 static bool            fRunning = false;
 static CorHttpConn*    fWaitV[64];
@@ -1996,6 +2030,15 @@ static void* featuresThread(void* vP)
 
     strAdd(&s, ", \"httpServers\": ");
     strAdd(&s, ((hStatus == 0) && (*hList == '[')) ? hList : "null");
+
+    //
+    // Whether it can save the image as a file (--image-file, from coraine#630): its usage names the option
+    //
+    char* usage = (char*) malloc(64 * 1024);
+    char* uargv[] = { bargv[0], (char*) "--help", NULL };
+    bool  imageFile = (usage != NULL) && (runCapture(uargv, usage, 64 * 1024, 30) >= 0) && (strstr(usage, "--image-file") != NULL);
+    if (usage != NULL) free(usage);
+    strAddf(&s, ", \"imageFile\": %s", imageFile ? "true" : "false");
     strAdd(&s, "}");
     free(bridges);
   }

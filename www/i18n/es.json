@@ -1418,7 +1418,6 @@
   "Docker image": "Imagen Docker",
   "Image": "Imagen",
   "Making the Docker image: the base image of this distribution, the libraries the broker links, the build.": "Creando la imagen Docker: la imagen base de esta distribución, las bibliotecas que enlaza el broker, la compilación.",
-  "The image's name: [registry[:port]/]repository[:tag]": "El nombre de la imagen: [registry[:port]/]repository[:tag]",
   "by hand: {command}": "a mano: {command}",
   "in the build's directory - and, with a Docker image, the image.": "en el directorio de la compilación - y, con imagen Docker, la imagen.",
   "not made: {why}": "no creada: {why}",
@@ -1477,5 +1476,12 @@
   "Use this directory": "Usar este directorio",
   "No folders here": "No hay carpetas aquí",
   "coraine is here: the other repositories a build needs go beside it.": "coraine está aquí: los demás repositorios que necesita una compilación van a su lado.",
-  "No coraine clone here: c³ clones it, and the others a build needs, into this folder.": "No hay ningún clon de coraine aquí: c³ lo clona, junto con los demás que necesita una compilación, en esta carpeta."
+  "No coraine clone here: c³ clones it, and the others a build needs, into this folder.": "No hay ningún clon de coraine aquí: c³ lo clona, junto con los demás que necesita una compilación, en esta carpeta.",
+  "Docker image name": "Nombre de la imagen Docker",
+  "Kept in Docker on this machine, not as a file: docker images lists it, docker run <name> starts it. [registry[:port]/]repository[:tag] - a registry in front (quay.io/...) to docker push it": "Se guarda en Docker en esta máquina, no como fichero: docker images la lista, docker run <name> la arranca. [registry[:port]/]repository[:tag] - con un registro delante (quay.io/...) para hacer docker push",
+  "Saving the image as a file: image.tar.gz in the build's directory (docker save, gzip).": "Guardando la imagen como fichero: image.tar.gz en el directorio de la compilación (docker save, gzip).",
+  "Save as a file": "Guardar como fichero",
+  "The image as a file too - image.tar.gz in the build's directory, about 70 MiB - to take it to a machine without a registry: docker load -i image.tar.gz there, then docker run <name>": "La imagen también como fichero - image.tar.gz en el directorio de la compilación, unos 70 MiB - para llevarla a una máquina sin registro: allí docker load -i image.tar.gz, y luego docker run <name>",
+  "on another machine: {command}": "en otra máquina: {command}",
+  "Image file": "Fichero de la imagen"
 }

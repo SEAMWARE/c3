@@ -36,9 +36,9 @@ const PHASES = {
 // phasesOf - a build's phases: its mode's, and 'image' before 'done' when it makes a Docker image too
 const phasesOf = (b) => {
   const names = PHASES[b.mode] || PHASES.release;
-  return b.imageAsked ? [...names.slice(0, -1), 'image', 'done'] : names;
+  return b.imageAsked ? [...names.slice(0, -1), 'image', ...(b.imageFileAsked ? ['image-file'] : []), 'done'] : names;
 };
-const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, image: 40, done: 0 };
+const WEIGHTS = { unpack: 3, build: 80, tools: 12, train: 70, install: 2, bridges: 10, check: 2, image: 40, 'image-file': 10, done: 0 };
 // pgo and tune: 'train' holds the instrumented build, the training and the rebuild with the profile - the
 // most of such a build (12 min and more on a laptop), 'build' only the libraries
 const MODE_WEIGHTS = { pgo: { build: 20, train: 900 }, tune: { build: 20, train: 900 } };
@@ -55,6 +55,7 @@ const PHASE_WHAT = {
   bridges: tk('Building the bridges ticked.'),
   check:   tk('Checking the result: --version, the features compiled in.'),
   image:   tk('Making the Docker image: the base image of this distribution, the libraries the broker links, the build.'),
+  'image-file': tk('Saving the image as a file: image.tar.gz in the build\'s directory (docker save, gzip).'),
 };
 
 const MODES = [
@@ -403,7 +404,8 @@ export class Compile {
     this.doc = new Map();         // the source's doc/building-details.md, by "#### " heading
     this.bridges = [];            // [{name, default, description, available, why}] - coraine-build --list-bridges
     this.httpServers = ['mhd', 'builtin'];   // coraine-build's --http-server values ("httpServers"; older: these two)
-    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '', output: 'binary' };
+    this.choice = { mode: 'release', httpServer: 'mhd', features: {}, bridges: {}, workload: '', output: 'binary', imageFile: false };
+    this.imageFileCap = false;              // coraine-build --image-file (its usage names it; "imageFile" of the features)
     this.presets = [];
     this.builds = [];
     this.plan = null;             // the last POST /api/builds/command answer
@@ -445,6 +447,7 @@ export class Compile {
         bridges: { ...(c.choice.bridges || {}) },
         workload: c.choice.workload || '',
         output: c.choice.output === 'image' ? 'image' : 'binary',
+        imageFile: c.choice.imageFile === true,
       };
     }
     this.presets = Array.isArray(c.presets) ? c.presets : [];
@@ -482,6 +485,7 @@ export class Compile {
         this.doc = docSections(f.doc);
         this.bridges = Array.isArray(f.bridges) ? f.bridges : [];
         this.httpServers = Array.isArray(f.httpServers) ? f.httpServers : ['mhd', 'builtin'];
+        this.imageFileCap = f.imageFile === true;
         if (this.choice.httpServer === 'both' && !this.httpServers.includes('both')) this.choice.httpServer = 'mhd';
         this.featureError = '';
       } catch (e) {
@@ -767,6 +771,19 @@ export class Compile {
     $('cp-output-note').textContent = !cont ? (run.containersWhy || t('install docker or podman')) : '';
     $('cp-image').disabled = !this.imageOn();
     $('cp-image-row').classList.toggle('off', !this.imageOn());
+    //
+    // Save as a file: the image as <build>/image.tar.gz too (docker save), for a machine without a registry - from a
+    // source whose coraine-build can; greyed for a binary
+    //
+    const fileBox = $('cp-imagefile');
+    fileBox.hidden = !this.imageFileCap;
+    if (this.imageFileCap) {
+      const f = this.tick(t('Save as a file'), this.imageOn() && this.choice.imageFile);
+      f.title = t('The image as a file too - image.tar.gz in the build\'s directory, about 70 MiB - to take it to a machine without a registry: docker load -i image.tar.gz there, then docker run <name>');
+      if (!this.imageOn()) f.setAttribute('aria-disabled', 'true');
+      else f.addEventListener('click', () => { this.choice.imageFile = !this.choice.imageFile; this.changed(); });
+      fileBox.replaceChildren(f);
+    }
   }
 
   render() {
@@ -1038,7 +1055,7 @@ export class Compile {
     this.source.update();
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload, output: this.choice.output }).catch(() => {});
+      api.compileChoice({ mode: this.choice.mode, httpServer: this.choice.httpServer, features: this.choice.features, bridges: this.choice.bridges, workload: this.choice.workload, output: this.choice.output, imageFile: this.choice.imageFile }).catch(() => {});
     }, 400);
   }
 
@@ -1053,6 +1070,7 @@ export class Compile {
     if (exe && exe !== 'coraine') b.executable = exe;
     if (this.choice.mode === 'tune') b.workload = this.choice.workload;
     if (this.imageOn()) b.image = $('cp-image').value.trim() || true;
+    if (this.imageOn() && this.imageFileCap && this.choice.imageFile) b.imageFile = true;
     return b;
   }
 
@@ -1438,6 +1456,16 @@ export class Compile {
       if (b.imageMiB) img.append(el('span', 'cp-note', t('{n} MiB', { n: b.imageMiB })));
       img.append(el('span', 'cp-note', t('by hand: {command}', { command: 'docker run --rm -p 1026:1026 ' + b.image + ' --database corDB' })));
       row(t('Image'), img);
+      if (b.imageFile) {
+        const fb = el('span', 'cp-chips');
+        const fc = el('button', 'btn', t('Copy'));
+        fc.type = 'button';
+        fc.addEventListener('click', () => navigator.clipboard && navigator.clipboard.writeText(b.imageFile));
+        fb.append(el('span', 'mono', b.imageFile), fc);
+        if (b.imageFileMiB) fb.append(el('span', 'cp-note', t('{n} MiB', { n: b.imageFileMiB })));
+        fb.append(el('span', 'cp-note', t('on another machine: {command}', { command: 'docker load -i image.tar.gz' })));
+        row(t('Image file'), fb);
+      }
     } else if (b.imageAsked && b.state !== 'running') row(t('Image'), t('not made: {why}', { why: b.error || stateText(b.state) }));
 
     const dir = el('span', 'cp-chips');
@@ -1547,6 +1575,8 @@ export class Compile {
     const p = { name, mode: this.choice.mode, features: this.changedFeatures(), bridges: { ...this.choice.bridges } };
     if (this.choice.httpServer !== 'mhd') p.httpServer = this.choice.httpServer;
     if (this.choice.mode === 'tune' && this.choice.workload) p.workload = this.choice.workload;
+    if (this.choice.output === 'image') p.output = 'image';
+    if (this.choice.imageFile) p.imageFile = true;
     api.compilePresetSave(p).then((config) => {
       this.presets = (config.compile && config.compile.presets) || [];
       $('cp-preset-name').value = '';
@@ -1558,7 +1588,7 @@ export class Compile {
   presetLoad() {
     const p = this.presets.find((x) => x.name === $('cp-preset').value);
     if (!p) return;
-    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, bridges: { ...(p.bridges || {}) }, workload: p.workload || '', output: p.output === 'image' ? 'image' : 'binary' };
+    this.choice = { mode: p.mode || 'release', httpServer: p.httpServer || 'mhd', features: { ...(p.features || {}) }, bridges: { ...(p.bridges || {}) }, workload: p.workload || '', output: p.output === 'image' ? 'image' : 'binary', imageFile: p.imageFile === true };
     this.changed();
   }
 

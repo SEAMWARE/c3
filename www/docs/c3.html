@@ -149,9 +149,15 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <li><b>Output</b> - the card under Source: <b>Binary</b>, or <b>Binary and Docker image</b> (<code>--image</code>; with docker or podman):
   the build on this distribution's base image (<code>ubuntu:26.04</code> on Ubuntu 26.04), the packages of the
   libraries it links (the ones built from source copied), laid out as the published image - <code>/usr/local/bin</code>,
-  <code>/opt/seamware</code>, its entry point and healthcheck. <b>Image</b> names it, default
-  <code>localhost/&lt;executable&gt;:&lt;build&gt;</code>. 67 MiB with the default bridges (22 Nov 2026); a phase
-  <code>image</code> after <code>check</code>. The result shows the image, its size and a <code>docker run</code> line.</li>
+  <code>/opt/seamware</code>, its entry point and healthcheck. <b>Docker image name</b> names it, default
+  <code>localhost/&lt;executable&gt;:&lt;build&gt;</code>. The image is kept in Docker on this machine, not as a file:
+  <code>docker images</code> lists it, <code>docker run &lt;name&gt;</code> starts it, and a registry in front of the
+  name (<code>quay.io/...</code>) is for <code>docker push</code>. 67 MiB with the default bridges (22 Nov 2026); a
+  phase <code>image</code> after <code>check</code>. The result shows the image, its size and a <code>docker run</code>
+  line. <b>Save as a file</b> (<code>--image-file</code>; from a source whose <code>coraine-build</code> has it) writes
+  the image as <code>image.tar.gz</code> in the build's directory too (<code>docker save</code>, gzip; 66 MiB with the
+  default bridges, 24 Nov 2026), a phase <code>image-file</code> - for a machine without a registry:
+  <code>docker load -i image.tar.gz</code> there. The result shows the file, its size and that line.</li>
   <li><b>The command</b> - the exact <code>argv</code> for the choice, one option a line; only the switches that differ
   from their defaults are passed. <b>Build</b> starts it.</li>
   <li><b>Following a build</b> - its output line by line, and a bar over the phases <code>coraine-build</code>

@@ -1418,7 +1418,6 @@
   "Docker image": "Docker-Image",
   "Image": "Image",
   "Making the Docker image: the base image of this distribution, the libraries the broker links, the build.": "Das Docker-Image wird erstellt: das Basis-Image dieser Distribution, die Bibliotheken des Brokers, der Build.",
-  "The image's name: [registry[:port]/]repository[:tag]": "Der Name des Images: [registry[:port]/]repository[:tag]",
   "by hand: {command}": "von Hand: {command}",
   "in the build's directory - and, with a Docker image, the image.": "im Verzeichnis des Builds - und, mit Docker-Image, das Image.",
   "not made: {why}": "nicht erstellt: {why}",
@@ -1477,5 +1476,12 @@
   "Use this directory": "Dieses Verzeichnis verwenden",
   "No folders here": "Keine Ordner hier",
   "coraine is here: the other repositories a build needs go beside it.": "coraine ist hier: die anderen Repositories, die ein Build braucht, kommen daneben.",
-  "No coraine clone here: c³ clones it, and the others a build needs, into this folder.": "Kein coraine-Klon hier: c³ klont ihn, und die anderen, die ein Build braucht, in diesen Ordner."
+  "No coraine clone here: c³ clones it, and the others a build needs, into this folder.": "Kein coraine-Klon hier: c³ klont ihn, und die anderen, die ein Build braucht, in diesen Ordner.",
+  "Docker image name": "Name des Docker-Images",
+  "Kept in Docker on this machine, not as a file: docker images lists it, docker run <name> starts it. [registry[:port]/]repository[:tag] - a registry in front (quay.io/...) to docker push it": "In Docker auf dieser Maschine gehalten, nicht als Datei: docker images listet es, docker run <name> startet es. [registry[:port]/]repository[:tag] - eine Registry davor (quay.io/...), um es mit docker push hochzuladen",
+  "Saving the image as a file: image.tar.gz in the build's directory (docker save, gzip).": "Das Image wird als Datei gespeichert: image.tar.gz im Verzeichnis des Builds (docker save, gzip).",
+  "Save as a file": "Als Datei speichern",
+  "The image as a file too - image.tar.gz in the build's directory, about 70 MiB - to take it to a machine without a registry: docker load -i image.tar.gz there, then docker run <name>": "Das Image auch als Datei - image.tar.gz im Verzeichnis des Builds, etwa 70 MiB - um es auf eine Maschine ohne Registry zu bringen: dort docker load -i image.tar.gz, dann docker run <name>",
+  "on another machine: {command}": "auf einer anderen Maschine: {command}",
+  "Image file": "Image-Datei"
 }

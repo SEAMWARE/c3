@@ -1662,7 +1662,8 @@ static CorNode* compileObject(Doc* docP)
 
 // -----------------------------------------------------------------------------
 //
-// compileChoiceCheck - {"name"?, "mode", "httpServer"?, "features": {"NAME": bool}, "workload"?}: only these, of these types
+// compileChoiceCheck - {"name"?, "mode", "httpServer"?, "features": {"NAME": bool}, "bridges"?, "workload"?, "output"?,
+// "imageFile"?}: only these, of these types
 //
 static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int errLen)
 {
@@ -1700,6 +1701,13 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
   if ((s != NULL) && (strcmp(s, "binary") != 0) && (strcmp(s, "image") != 0))
   {
     snprintf(errBuf, errLen, "\"output\" is binary or image (a Docker image too)");
+    return false;
+  }
+
+  CorNode* imageFileP = corTreeLookup(bodyP, "imageFile");
+  if ((imageFileP != NULL) && (imageFileP->type != CorBoolean))
+  {
+    snprintf(errBuf, errLen, "\"imageFile\" is true or false (the image saved as a file too)");
     return false;
   }
 
@@ -1741,9 +1749,10 @@ static bool compileChoiceCheck(CorNode* bodyP, bool needName, char* errBuf, int 
 
   for (CorNode* mP = bodyP->value.head; mP != NULL; mP = mP->next)
   {
-    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0) && (strcmp(mP->name, "httpServer") != 0) && (strcmp(mP->name, "bridges") != 0))
+    if ((strcmp(mP->name, "name") != 0) && (strcmp(mP->name, "mode") != 0) && (strcmp(mP->name, "features") != 0) && (strcmp(mP->name, "workload") != 0) && (strcmp(mP->name, "httpServer") != 0) && (strcmp(mP->name, "bridges") != 0) &&
+        (strcmp(mP->name, "output") != 0) && (strcmp(mP->name, "imageFile") != 0))
     {
-      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, httpServer, features, bridges, workload)", mP->name);
+      snprintf(errBuf, errLen, "\"%s\" is not a member of a build's choice (name, mode, httpServer, features, bridges, workload, output, imageFile)", mP->name);
       return false;
     }
   }
