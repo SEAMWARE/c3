@@ -1,5 +1,5 @@
 //
-// window.js - minimise and close, for the full-screen window c³ opens, and back to full-screen; its width kept at least the header's
+// window.js - out of full-screen, minimise and close, for the full-screen window c³ opens, and back to full-screen; its width kept at least the header's
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -77,6 +77,7 @@ function qtInit(win) {
   const show = (full) => {
     box.hidden = false;
     $('win-full').hidden = full;
+    $('win-normal').hidden = !full;
     $('win-min').hidden = !full;
     $('win-close').hidden = !full;
   };
@@ -87,6 +88,7 @@ function qtInit(win) {
   $('win-min').addEventListener('click', () => win.minimize());
   $('win-close').addEventListener('click', () => win.close());
   $('win-full').addEventListener('click', () => win.fullScreen());
+  $('win-normal').addEventListener('click', () => win.normal());
   window.dispatchEvent(new Event('resize'));     // the header measures again: its widths to the window
 }
 
@@ -119,6 +121,7 @@ export async function windowInit() {
     if (full) screenW = window.outerWidth;
     box.hidden = false;
     $('win-full').hidden = full;
+    $('win-normal').hidden = !full;
     $('win-min').hidden = !full;
     $('win-close').hidden = !full;
     if (wasFull && !full) {
@@ -172,4 +175,5 @@ export async function windowInit() {
   });
   $('win-close').addEventListener('click', () => act('close'));
   $('win-full').addEventListener('click', () => act('fullscreen'));
+  $('win-normal').addEventListener('click', () => act('normal'));
 }

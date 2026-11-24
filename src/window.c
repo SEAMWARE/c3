@@ -23,6 +23,7 @@
 //   POST /api/window/minimize/<nonce>   Browser.setWindowBounds, windowState "normal" then "minimized" (Chrome
 //                                       minimises no full-screen window)
 //   POST /api/window/fullscreen/<nonce> "normal" then "fullscreen" - the page's, when it is shown again
+//   POST /api/window/normal/<nonce>     out of full-screen ("normal"), as F11 - the page's button beside minimise
 //   POST /api/window/width/<nonce>      {"width": <px>}: the window made at least that wide - Browser.setWindowBounds,
 //                                       its width only, when it is a "normal" window narrower than that (the page's
 //                                       header needs it, header.js); full-screen, maximised, minimised: nothing.
@@ -765,7 +766,8 @@ void windowRequest(CorHttpConn* connP, const char* path)
   bool        closing  = (strncmp(path, "/api/window/close/", 18) == 0);
   bool        full     = (strncmp(path, "/api/window/fullscreen/", 23) == 0);
   bool        widthSet = (strncmp(path, "/api/window/width/", 18) == 0);
-  const char* nonce    = minimize ? &path[21] : closing ? &path[18] : full ? &path[23] : widthSet ? &path[18] : NULL;
+  bool        normal   = (strncmp(path, "/api/window/normal/", 19) == 0);
+  const char* nonce    = minimize ? &path[21] : closing ? &path[18] : full ? &path[23] : widthSet ? &path[18] : normal ? &path[19] : NULL;
 
   if (nonce == NULL)
   {
@@ -846,7 +848,7 @@ void windowRequest(CorHttpConn* connP, const char* path)
     else if (widthSet)
       ok = windowWidthSet(&alloc, targetId, width, exact, err, sizeof(err));
     else
-      ok = windowStateSet(&alloc, targetId, full ? "fullscreen" : "minimized", err, sizeof(err));
+      ok = windowStateSet(&alloc, targetId, full ? "fullscreen" : normal ? "normal" : "minimized", err, sizeof(err));
   }
 
   corAllocBufferReset(&alloc, false);

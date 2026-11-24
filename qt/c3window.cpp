@@ -11,11 +11,13 @@
 // The window is the program's, not a browser's, so it has what a page cannot ask a browser for:
 // - a minimum width: the header's top line (header.js), the page tells it - the window is never made narrower
 // - leaving full-screen, the width the header's tabs fit beside its top line, the screen's at most
-// - F11 full-screen, minimise and close from the page's own buttons (window.js), in full-screen
+// - F11 full-screen; out of full-screen, minimise and close from the page's own buttons (window.js), in full-screen
+// - its Wayland app id com.seamware.c3 (the desktop entry's name and StartupWMClass): the dock's c³ icon is this
+//   window's - shown running, a click on it shows the window again (minimised: not a c³ started again)
 //
 // The page talks to the window over a QWebChannel: the object c3window, ready in window.c3windowReady (a
 // Promise, made by a script put into every page of c3's origin) - widths(topCss, oneCss), minimize(),
-// close(), fullScreen(), the property full and its signal fullChanged.
+// close(), fullScreen(), normal() (out of full-screen, as F11), the property full and its signal fullChanged.
 //
 // --stdin: started by a c3 that keeps the other end of the pipe (browser.c, window.c). A line "raise [token]"
 // brings the window to the front - the token, Wayland's xdg-activation, the one of the click that asked (a c3
@@ -242,6 +244,7 @@ public:
   Q_INVOKABLE void minimize()               { winP->showMinimized(); }
   Q_INVOKABLE void close()                  { winP->close(); }
   Q_INVOKABLE void fullScreen()             { winP->showFullScreen(); }
+  Q_INVOKABLE void normal()                 { winP->showNormal(); }
 
 signals:
   void fullChanged(bool full);
