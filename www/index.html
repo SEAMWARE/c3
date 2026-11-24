@@ -233,197 +233,241 @@
 
   <main class="page" id="page-run" hidden>
     <div class="cp-wrap">
-      <div class="cp-main">
+      <div class="cp-main rn-page">
         <div class="cp-head">
           <div>
-            <h1>Run brokers</h1>
-            <p>Start and stop brokers on this machine - the installed one, a build of Compile's, or a published image - natively or in a container, with the services they use.</p>
+            <h1>Operate</h1>
+            <p>The brokers that run on this machine. Start one - the installed coraine, a build of Compile's, or an image - natively or in a container, with the services it uses.</p>
           </div>
           <span class="chip host" id="rn-engine">containers</span>
         </div>
 
-        <section class="cp-card cp-unavail" id="rn-nocont" hidden>
-          <h2 class="section">Containers are not available here</h2>
-          <p class="cp-note" id="rn-nocont-why"></p>
-          <p class="cp-note">Brokers still run natively with corDB alone; MongoDB, PostgreSQL/TimescaleDB and Mosquitto, and the published images, need a container engine.</p>
-        </section>
-
-        <section class="cp-card" aria-label="Brokers">
-          <div class="row"><h2 class="section">Brokers</h2><span class="sub" id="rn-bcount"></span></div>
+        <!-- The list: what runs, and Start a broker -->
+        <section class="cp-card" aria-label="Brokers" id="rn-view-list">
+          <div class="row rn-bar">
+            <h2 class="section">Running</h2><span class="sub" id="rn-bcount"></span>
+          </div>
           <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
+          <button type="button" class="rn-newtile" id="rn-new"><span class="nt-plus" aria-hidden="true">+</span><span class="nt-label">Start a broker</span></button>
         </section>
 
-        <section class="cp-card" aria-label="Services" id="rn-svccard">
-          <div class="row"><h2 class="section">Services</h2><span class="sub">containers, started before the brokers that use them and stopped when nothing started here uses them</span></div>
-          <div class="rn-list" id="rn-services"></div>
-        </section>
-
-        <section class="cp-card" aria-label="Log" id="rn-logcard">
-          <div class="cp-runhead">
-            <h2 class="section">Log</h2>
-            <span class="nm" id="rn-log-name">-</span>
-            <span class="grow"></span>
-            <a id="rn-log-file" target="_blank" hidden>the whole file</a>
-          </div>
-          <details class="rn-levels" id="rn-config" hidden>
-            <summary id="rn-config-sum">Configuration and build</summary>
-            <div id="rn-config-body"></div>
-          </details>
-          <details class="rn-levels" id="rn-metrics" hidden>
-            <summary id="rn-metrics-sum">Metrics</summary>
-            <div id="rn-metrics-body"></div>
-          </details>
-          <details class="rn-levels" id="rn-levels" hidden>
-            <summary id="rn-levels-sum">Log and trace levels</summary>
-            <div id="rn-levels-body"></div>
-          </details>
-          <pre class="cp-log" id="rn-log" tabindex="0" aria-label="The log"></pre>
-          <div class="cp-note mono" id="rn-log-note"></div>
-        </section>
-      </div>
-
-      <aside class="cp-aside">
-        <section class="cp-card" aria-label="Start a broker" id="rn-form">
-          <div class="row"><h2 class="section" id="rn-form-title">Start a broker</h2><span class="sub" id="rn-form-sub"></span></div>
-
-          <div class="cp-field">
-            <span class="cp-label">Set</span>
-            <div class="rn-sets" id="rn-sets"></div>
-          </div>
-
-          <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="rn-name" maxlength="64" spellcheck="false" autocomplete="off"></label>
-
-          <div class="cp-field">
-            <span class="cp-label">From</span>
-            <div class="cp-seg" id="rn-from"></div>
-            <select class="rn-select" id="rn-build" aria-label="The build" hidden></select>
-            <div class="rn-image" id="rn-image" hidden>
-              <span class="mono rn-repo" id="rn-repo">quay.io/seamware/coraine:</span>
-              <input class="cp-input" id="rn-tag" list="rn-tags" placeholder="a tag" spellcheck="false" autocomplete="off" aria-label="The image's tag">
-              <datalist id="rn-tags"></datalist>
+        <!-- A broker (or a service): its card and its log -->
+        <div class="rn-view" id="rn-view-item" hidden>
+          <section class="cp-card" aria-label="The broker" id="rn-card">
+            <div class="row rn-bar">
+              <button type="button" class="btn rn-back" id="rn-card-back" title="Back to the running brokers" aria-label="Back to the running brokers">←</button>
+              <span class="grow"></span>
             </div>
-            <span class="cp-note" id="rn-from-note"></span>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">Runs</span>
-            <div class="cp-seg" id="rn-where"></div>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">Store</span>
-            <div class="cp-seg" id="rn-store"></div>
-            <label class="rn-check"><input type="checkbox" id="rn-dbdir"> keep it on disk <span class="mono">--dbDir</span></label>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">History</span>
-            <div class="cp-seg" id="rn-history"></div>
-          </div>
-
-          <div class="rn-ports">
-            <label class="cp-field"><span class="cp-label">Port</span><input class="cp-input" id="rn-port" inputmode="numeric" maxlength="5"></label>
-            <label class="cp-field"><span class="cp-label">Health port</span><input class="cp-input" id="rn-hport" inputmode="numeric" maxlength="5" placeholder="none"></label>
-            <label class="cp-field"><span class="cp-label">Grace (s)</span><input class="cp-input" id="rn-grace" inputmode="numeric" maxlength="3"></label>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">Switches</span>
-            <div class="rn-checks" id="rn-plugins"></div>
-            <span class="cp-note" id="rn-tenants"></span>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">Bridges</span>
-            <div class="rn-checks" id="rn-bridges"></div>
-            <input class="cp-input" id="rn-bconf" placeholder="bridge configuration file (none: c3 writes the MQTT one)" spellcheck="false" autocomplete="off" aria-label="Bridge configuration file">
-            <input class="cp-input" id="rn-uctx" placeholder="default user @context file (--defaultUserContext)" spellcheck="false" autocomplete="off" aria-label="Default user @context file">
-            <button type="button" class="btn primary rn-ddsmapbtn" id="rn-dds-map" disabled>Map DDS topics, services and actions</button>
-            <span class="cp-note" id="rn-dds-note"></span>
-            <button type="button" class="btn primary rn-ddsmapbtn" id="rn-opcua-map" disabled>Map an OPC UA server</button>
-            <span class="cp-note" id="rn-opcua-note"></span>
-          </div>
-
-          <div class="cp-field">
-            <span class="cp-label">CKAN data</span>
-            <details class="rn-drop" id="rn-ckan-drop">
-              <summary id="rn-ckan-sum">none</summary>
-              <div class="rn-checks rn-col" id="rn-ckan"></div>
+            <div class="rn-list" id="rn-card-item"></div>
+            <div class="rn-uses" id="rn-uses-box" hidden>
+              <h3 class="rn-h3">Services</h3>
+              <div class="rn-list" id="rn-services"></div>
+            </div>
+            <details class="rn-levels" id="rn-config" hidden>
+              <summary id="rn-config-sum">Configuration and build</summary>
+              <div id="rn-config-body"></div>
             </details>
-            <span class="cp-note">open-data datasets read through the ckan bridge when the broker starts - one entity per row (www/data/ckan.json)</span>
-          </div>
+            <details class="rn-levels" id="rn-metrics" hidden>
+              <summary id="rn-metrics-sum">Metrics</summary>
+              <div id="rn-metrics-body"></div>
+            </details>
+            <details class="rn-levels" id="rn-levels" hidden>
+              <summary id="rn-levels-sum">Log and trace levels</summary>
+              <div id="rn-levels-body"></div>
+            </details>
+          </section>
 
-          <div class="cp-field">
-            <span class="cp-label">OPC UA</span>
-            <details class="rn-drop" id="rn-opcua-drop">
-              <summary id="rn-opcua-sum">none</summary>
-              <div class="rn-stack">
-                <input class="cp-input" id="rn-ou-url" placeholder="opc.tcp://host:4840 - the server (empty: no OPC UA)" spellcheck="false" autocomplete="off" aria-label="OPC UA server URL">
-                <textarea class="cp-input rn-lines" id="rn-ou-roots" rows="2" placeholder="model roots - an Object's NodeId a line (ns=2;s=Press17): each one's model becomes entities" spellcheck="false" aria-label="Model roots"></textarea>
-                <div class="rn-ouchans" id="rn-ou-chans" aria-label="Channels"></div>
-                <div class="rn-row rn-oubtns">
-                  <button type="button" class="btn" id="rn-ou-addch">+ Channel</button>
-                  <button type="button" class="btn" id="rn-ou-browse">Browse the server</button>
-                </div>
-                <span class="cp-note" id="rn-ou-browsewhy"></span>
-                <div class="rn-outree" id="rn-ou-tree" hidden aria-label="The OPC UA server's nodes"></div>
-                <div class="rn-row">
-                  <select class="rn-select" id="rn-ou-mode" aria-label="Security mode">
-                    <option value="None">no security (None)</option>
-                    <option value="Sign">Sign</option>
-                    <option value="SignAndEncrypt">SignAndEncrypt</option>
-                  </select>
-                  <select class="rn-select" id="rn-ou-policy" aria-label="Security policy">
-                    <option value="">Basic256Sha256</option>
-                    <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
-                    <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
-                  </select>
-                </div>
-                <div class="rn-stack" id="rn-ou-secure">
-                  <input class="cp-input" id="rn-ou-cert" placeholder="the client's certificate - a file (DER or PEM)" spellcheck="false" autocomplete="off" aria-label="Client certificate">
-                  <input class="cp-input" id="rn-ou-key" placeholder="its private key - a file" spellcheck="false" autocomplete="off" aria-label="Private key">
-                  <input class="cp-input" id="rn-ou-appuri" placeholder="the application URI the certificate names (urn:...)" spellcheck="false" autocomplete="off" aria-label="Application URI">
-                  <textarea class="cp-input rn-lines" id="rn-ou-trust" rows="2" placeholder="the server certificates to trust - a file a line" spellcheck="false" aria-label="Trusted server certificates"></textarea>
-                  <label class="rn-check"><input type="checkbox" id="rn-ou-trustany"> trust any server certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
-                </div>
-                <div class="rn-row">
-                  <input class="cp-input" id="rn-ou-user" placeholder="username (empty: anonymous)" spellcheck="false" autocomplete="off" aria-label="OPC UA username">
-                  <input class="cp-input" id="rn-ou-pw" type="password" placeholder="password" autocomplete="new-password" aria-label="OPC UA password">
-                </div>
+          <section class="cp-card" aria-label="Log" id="rn-logcard">
+            <div class="cp-runhead">
+              <h2 class="section">Log</h2>
+              <span class="nm" id="rn-log-name">-</span>
+              <span class="grow"></span>
+              <a id="rn-log-file" target="_blank" hidden>the whole file</a>
+            </div>
+            <pre class="cp-log" id="rn-log" tabindex="0" aria-label="The log"></pre>
+            <div class="cp-note mono" id="rn-log-note"></div>
+          </section>
+        </div>
+
+        <!-- Start a broker, step 1: what runs -->
+        <div class="rn-view" id="rn-view-pick" hidden>
+          <section class="cp-card" aria-label="Start a broker - what runs">
+            <div class="row rn-bar">
+              <button type="button" class="btn rn-back" id="rn-pick-back" title="Back to the running brokers" aria-label="Back to the running brokers">←</button>
+              <h2 class="section">Start a broker</h2><span class="sub">what runs</span>
+            </div>
+
+            <div class="rn-group" id="rn-g-earlier">
+              <h3 class="rn-h3">Earlier settings</h3>
+              <div class="rn-picks" id="rn-p-earlier"></div>
+            </div>
+            <div class="rn-group" id="rn-g-builds">
+              <h3 class="rn-h3">Builds</h3>
+              <div class="rn-picks" id="rn-p-builds"></div>
+            </div>
+            <div class="rn-group" id="rn-g-installed">
+              <h3 class="rn-h3">Installed</h3>
+              <div class="rn-picks" id="rn-p-installed"></div>
+            </div>
+            <div class="rn-group" id="rn-g-images">
+              <h3 class="rn-h3 rn-h3row">Docker images <button type="button" class="btn rn-tog" id="rn-img-all" hidden>+</button></h3>
+              <p class="cp-note" id="rn-nocont-why" hidden></p>
+              <div class="rn-picks" id="rn-p-images"></div>
+              <div class="rn-image" id="rn-image">
+                <span class="mono rn-repo" id="rn-repo">quay.io/seamware/coraine:</span>
+                <input class="cp-input" id="rn-tag" placeholder="another tag" spellcheck="false" autocomplete="off" aria-label="Another tag">
+                <button type="button" class="btn" id="rn-tag-use" disabled>Use</button>
               </div>
-            </details>
-            <span class="cp-note">the opcua bridge (native brokers): a Variable a value (a Channel), an Object a model of entities (a model root). Browse a running broker's server to pick them. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
-          </div>
+            </div>
+          </section>
+        </div>
 
-          <div class="cp-field">
-            <span class="cp-label">AAS</span>
-            <details class="rn-drop" id="rn-aas-drop">
-              <summary id="rn-aas-sum">none</summary>
-              <div class="rn-stack">
-                <input class="cp-input" id="rn-aas-url" placeholder="http://aas-server:8081/api/v3.0 - the AAS server (empty: no AAS)" spellcheck="false" autocomplete="off" aria-label="AAS server URL">
-                <input class="cp-input" id="rn-aas-auth" type="password" placeholder="Authorization header (Bearer ...)" autocomplete="new-password" aria-label="AAS Authorization header">
-                <input class="cp-input" id="rn-aas-ca" placeholder="the CAs its certificate is verified against - a PEM file (none: the system's)" spellcheck="false" autocomplete="off" aria-label="AAS server CA file">
-                <label class="rn-check"><input type="checkbox" id="rn-aas-insecure"> do not verify the server's certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
-                <div class="rn-ouchans" id="rn-aas-chans" aria-label="AssetChannels"></div>
-                <div class="rn-row rn-oubtns">
-                  <button type="button" class="btn" id="rn-aas-add">+ AssetChannel</button>
-                  <button type="button" class="btn" id="rn-aas-discover">Discover the server</button>
-                </div>
-                <span class="cp-note" id="rn-aas-status"></span>
-                <div class="rn-outree" id="rn-aas-tree" hidden aria-label="The AAS server's shells and submodels"></div>
+        <!-- Start a broker, step 2: how it runs -->
+        <div class="rn-view rn-formview" id="rn-view-form" hidden>
+          <section class="cp-card" aria-label="Start a broker" id="rn-form">
+            <div class="row rn-bar">
+              <button type="button" class="btn rn-back" id="rn-form-back" title="Back to what runs" aria-label="Back to what runs">←</button>
+              <h2 class="section" id="rn-form-title">Start a broker</h2><span class="sub" id="rn-form-sub"></span>
               </div>
-            </details>
-            <span class="cp-note">the aas bridge (native brokers; a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header in the broker's directory (0600), never in c3.json</span>
-          </div>
 
-          <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
+            <div class="cp-field">
+              <span class="cp-label">From</span>
+              <div class="rn-chosen"><span class="mono" id="rn-chosen"></span><button type="button" class="btn" id="rn-change" title="Choose another broker to run">Change</button></div>
+              <span class="cp-note" id="rn-from-note"></span>
+            </div>
 
-          <div class="rn-svcneed" id="rn-need"></div>
-          <pre class="cp-cmd" id="rn-cmd" aria-label="The command"></pre>
-          <span class="cp-note" id="rn-problem"></span>
-          <button class="btn primary cp-build" type="button" id="rn-start">Start</button>
-        </section>
-      </aside>
+            <div class="cp-field">
+              <span class="cp-label">Set</span>
+              <div class="rn-sets" id="rn-sets"></div>
+            </div>
+
+            <label class="cp-name"><span class="cp-label">Name</span><input class="cp-input" id="rn-name" maxlength="64" spellcheck="false" autocomplete="off"></label>
+
+            <div class="cp-field">
+              <span class="cp-label">Runs</span>
+              <div class="cp-seg" id="rn-where"></div>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">Store</span>
+              <div class="cp-seg" id="rn-store"></div>
+              <label class="rn-check"><input type="checkbox" id="rn-dbdir"> keep it on disk <span class="mono">--dbDir</span></label>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">History</span>
+              <div class="cp-seg" id="rn-history"></div>
+            </div>
+
+            <div class="rn-ports">
+              <label class="cp-field"><span class="cp-label">Port</span><input class="cp-input" id="rn-port" inputmode="numeric" maxlength="5"></label>
+              <label class="cp-field"><span class="cp-label">Health port</span><input class="cp-input" id="rn-hport" inputmode="numeric" maxlength="5" placeholder="none"></label>
+              <label class="cp-field"><span class="cp-label">Grace (s)</span><input class="cp-input" id="rn-grace" inputmode="numeric" maxlength="3"></label>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">Switches</span>
+              <div class="rn-checks" id="rn-plugins"></div>
+              <span class="cp-note" id="rn-tenants"></span>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">Bridges</span>
+              <div class="rn-checks" id="rn-bridges"></div>
+              <input class="cp-input" id="rn-bconf" placeholder="bridge configuration file (none: c3 writes the MQTT one)" spellcheck="false" autocomplete="off" aria-label="Bridge configuration file">
+              <input class="cp-input" id="rn-uctx" placeholder="default user @context file (--defaultUserContext)" spellcheck="false" autocomplete="off" aria-label="Default user @context file">
+              <button type="button" class="btn primary rn-ddsmapbtn" id="rn-dds-map" disabled>Map DDS topics, services and actions</button>
+              <span class="cp-note" id="rn-dds-note"></span>
+              <button type="button" class="btn primary rn-ddsmapbtn" id="rn-opcua-map" disabled>Map an OPC UA server</button>
+              <span class="cp-note" id="rn-opcua-note"></span>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">CKAN data</span>
+              <details class="rn-drop" id="rn-ckan-drop">
+                <summary id="rn-ckan-sum">none</summary>
+                <div class="rn-checks rn-col" id="rn-ckan"></div>
+              </details>
+              <span class="cp-note">open-data datasets read through the ckan bridge when the broker starts - one entity per row (www/data/ckan.json)</span>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">OPC UA</span>
+              <details class="rn-drop" id="rn-opcua-drop">
+                <summary id="rn-opcua-sum">none</summary>
+                <div class="rn-stack">
+                  <input class="cp-input" id="rn-ou-url" placeholder="opc.tcp://host:4840 - the server (empty: no OPC UA)" spellcheck="false" autocomplete="off" aria-label="OPC UA server URL">
+                  <textarea class="cp-input rn-lines" id="rn-ou-roots" rows="2" placeholder="model roots - an Object's NodeId a line (ns=2;s=Press17): each one's model becomes entities" spellcheck="false" aria-label="Model roots"></textarea>
+                  <div class="rn-ouchans" id="rn-ou-chans" aria-label="Channels"></div>
+                  <div class="rn-row rn-oubtns">
+                    <button type="button" class="btn" id="rn-ou-addch">+ Channel</button>
+                    <button type="button" class="btn" id="rn-ou-browse">Browse the server</button>
+                  </div>
+                  <span class="cp-note" id="rn-ou-browsewhy"></span>
+                  <div class="rn-outree" id="rn-ou-tree" hidden aria-label="The OPC UA server's nodes"></div>
+                  <div class="rn-row">
+                    <select class="rn-select" id="rn-ou-mode" aria-label="Security mode">
+                      <option value="None">no security (None)</option>
+                      <option value="Sign">Sign</option>
+                      <option value="SignAndEncrypt">SignAndEncrypt</option>
+                    </select>
+                    <select class="rn-select" id="rn-ou-policy" aria-label="Security policy">
+                      <option value="">Basic256Sha256</option>
+                      <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+                      <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+                    </select>
+                  </div>
+                  <div class="rn-stack" id="rn-ou-secure">
+                    <input class="cp-input" id="rn-ou-cert" placeholder="the client's certificate - a file (DER or PEM)" spellcheck="false" autocomplete="off" aria-label="Client certificate">
+                    <input class="cp-input" id="rn-ou-key" placeholder="its private key - a file" spellcheck="false" autocomplete="off" aria-label="Private key">
+                    <input class="cp-input" id="rn-ou-appuri" placeholder="the application URI the certificate names (urn:...)" spellcheck="false" autocomplete="off" aria-label="Application URI">
+                    <textarea class="cp-input rn-lines" id="rn-ou-trust" rows="2" placeholder="the server certificates to trust - a file a line" spellcheck="false" aria-label="Trusted server certificates"></textarea>
+                    <label class="rn-check"><input type="checkbox" id="rn-ou-trustany"> trust any server certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
+                  </div>
+                  <div class="rn-row">
+                    <input class="cp-input" id="rn-ou-user" placeholder="username (empty: anonymous)" spellcheck="false" autocomplete="off" aria-label="OPC UA username">
+                    <input class="cp-input" id="rn-ou-pw" type="password" placeholder="password" autocomplete="new-password" aria-label="OPC UA password">
+                  </div>
+                </div>
+              </details>
+              <span class="cp-note">the opcua bridge (native brokers): a Variable a value (a Channel), an Object a model of entities (a model root). Browse a running broker's server to pick them. c3 keeps the password in the broker's directory (0600), never in c3.json</span>
+            </div>
+
+            <div class="cp-field">
+              <span class="cp-label">AAS</span>
+              <details class="rn-drop" id="rn-aas-drop">
+                <summary id="rn-aas-sum">none</summary>
+                <div class="rn-stack">
+                  <input class="cp-input" id="rn-aas-url" placeholder="http://aas-server:8081/api/v3.0 - the AAS server (empty: no AAS)" spellcheck="false" autocomplete="off" aria-label="AAS server URL">
+                  <input class="cp-input" id="rn-aas-auth" type="password" placeholder="Authorization header (Bearer ...)" autocomplete="new-password" aria-label="AAS Authorization header">
+                  <input class="cp-input" id="rn-aas-ca" placeholder="the CAs its certificate is verified against - a PEM file (none: the system's)" spellcheck="false" autocomplete="off" aria-label="AAS server CA file">
+                  <label class="rn-check"><input type="checkbox" id="rn-aas-insecure"> do not verify the server's certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
+                  <div class="rn-ouchans" id="rn-aas-chans" aria-label="AssetChannels"></div>
+                  <div class="rn-row rn-oubtns">
+                    <button type="button" class="btn" id="rn-aas-add">+ AssetChannel</button>
+                    <button type="button" class="btn" id="rn-aas-discover">Discover the server</button>
+                  </div>
+                  <span class="cp-note" id="rn-aas-status"></span>
+                  <div class="rn-outree" id="rn-aas-tree" hidden aria-label="The AAS server's shells and submodels"></div>
+                </div>
+              </details>
+              <span class="cp-note">the aas bridge (native brokers; a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header in the broker's directory (0600), never in c3.json</span>
+            </div>
+
+            <label class="cp-field"><span class="cp-label">More options</span><input class="cp-input" id="rn-args" placeholder="--memoryLimit 512 --distributed" spellcheck="false" autocomplete="off"></label>
+
+          </section>
+
+          <section class="cp-card rn-launch" aria-label="What Start runs" id="rn-launch">
+            <h3 class="rn-h3">Services it brings up</h3>
+            <div class="rn-svcneed" id="rn-need"></div>
+            <h3 class="rn-h3">The command</h3>
+            <pre class="cp-cmd" id="rn-cmd" aria-label="The command"></pre>
+            <span class="cp-note" id="rn-problem"></span>
+            <button class="btn primary cp-build" type="button" id="rn-start">Start</button>
+          </section>
+        </div>
+      </div>
     </div>
   </main>
 

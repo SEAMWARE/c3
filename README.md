@@ -721,6 +721,24 @@ disconnected) - so a slow page cannot hold up the thread that reads the build's 
 
 Brokers started and stopped on this machine, and the services they use ([doc/design.md](doc/design.md), Run).
 
+**The page** shows one thing at a time:
+
+- **Running** - the brokers c³ started that run, start, stop or failed (the one Explore is connected to
+  first - also one c³ did not start, while it answers `GET /version`, asked every 5 s), and a service still
+  running that no broker uses; then **Start a broker**, a tile the size of a broker's row. A click opens a
+  card. **Explore** and a broker's URL open it in Explore once it answers its probe (`ready` or `answers`). A
+  broker stopped by hand is not listed: its settings are under Start a broker, **Earlier settings**.
+- **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
+  **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each
+  one's **Log** opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
+  ← goes back.
+- **Start a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
+  the form; **Forget**), Compile's **Builds** (the newest first by `ended`, the latest marked -
+  `GET /api/run/sources` gives each build's `mode` and `ended`), the **Installed** `coraine`, the **Docker
+  images** (those here, then the newest published; **+** lists them all; another tag typed). Step 2: the
+  form, and beside it the services the start brings up, the command and **Start**; **Change** goes back to
+  step 1. Started, the broker's card opens.
+
 **What a broker is started from**
 
 | From | Runs | How |
@@ -729,7 +747,7 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 | a build of Compile's | natively | `/bin/sh -c '<script>' <build>/install/env <build>/install/bin/coraine <options>` - the script sources `install/env` (its own `PATH`, `SEAMWARE_PLUGIN_DIR` and `etc`, as `. install/env` by hand) and, for a tuned build, `install/etc/tune.env` as the image's entry point does: `TUNE_DBLOCKPREFER` as `CORAINE_DBLOCKPREFER` (an option on the command line still wins), `TUNE_ALLOCATOR` preloaded (`LD_PRELOAD`, found with `ldconfig -p`; not installed: glibc's, and the broker's log says so). It writes one line to the broker's log, `c3: <tune.env> applied - ...` |
 | an image (`quay.io/seamware/coraine:<tag>`) | in a container | `docker run -d --name c3-broker-<name> ... <image> <options>` - the image's entry point is `coraine` (in the foreground, the log on stdout) |
 
-An image of Compile's is greyed (Compile makes no image yet), and so is a build in a container. The tag is
+A build runs in a container only when Compile made its image (Output: Binary and Docker image). The tag is
 chosen from the images here and the tags published on quay.io (`GET /api/run/images`, which reads quay.io's
 API: the multi-architecture tags, not the `-amd64`/`-arm64` ones), or typed; a tag that is not here is
 pulled at the start, its progress in the broker's log. Images are named by their tags - none is
@@ -819,8 +837,9 @@ A native broker reaches them on `127.0.0.1:<port>`, a container broker by name o
   single node, not a replica set: coraine needs one only for `--high-availability mongo`.
 - `mongo:8.2`, not 8.0: mongo 8.0 does not start on Linux 6.19 and newer (SERVER-121912).
 - Stopped (`docker stop`, then `docker rm`) when the broker using them stops and nothing else started from
-  c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice) removes
-  it, and only a volume c³ made (label `c3=run`) whose container does not run.
+  c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice;
+  beside the service in Start a broker's step 2) removes it, and only a volume c³ made (label `c3=run`)
+  whose container does not run.
 
 **Starting.** The broker joins Explore's list (`http://localhost:<port>`, named as in Operate) and is kept in
 `c3.json`. A native broker is started in a session of its own (`setsid`), its stdout and stderr appended
@@ -879,7 +898,7 @@ debug builds only: on coraine's `"traces": false` (a release build) the tick box
 
 ### The DDS mapper
 
-Operate's left side, given to the mapping of a DDS domain to NGSI-LD - from Operate's **Map DDS topics,
+Operate's page, given to the mapping of a DDS domain to NGSI-LD - from Operate's **Map DDS topics,
 services and actions**, or from Compile's, under its Bridges with dds on: that one asks first, then shows
 Operate with the dds bridge ticked in its form and the mapper open, with **← Back to Compile**. Each
 topic, service or action mapped is one attribute of an entity. What was written is read back when c³
@@ -946,7 +965,7 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
 
 ### The OPC UA mapper
 
-Operate's left side, given to the mapping of an OPC UA server to NGSI-LD - from Operate's **Map an OPC UA
+Operate's page, given to the mapping of an OPC UA server to NGSI-LD - from Operate's **Map an OPC UA
 server**, or from Compile's, under its Bridges with opcua on: that one asks first, then shows Operate with
 the opcua bridge ticked in its form and the mapper open, with **← Back to Compile**. The DDS mapper's
 layout and ways; what differs is the server's: a tree of nodes, not three lists of endpoints. A Variable

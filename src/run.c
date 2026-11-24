@@ -760,7 +760,7 @@ static char* buildVersion(const char* build)
 // -----------------------------------------------------------------------------
 //
 // buildMember - a string of a build's record: "executable" (the broker's file name in install/bin, coraine-build
-// --name), "image" (its container image, coraine-build --image); 'dflt' for a record without it (made before it
+// --name), "image" (its container image, coraine-build --image), "mode", "ended"; 'dflt' for a record without it (made before it
 // was there) or no record. No '/' in an executable; an image's name has them
 //
 static void buildMember(const char* build, const char* member, const char* dflt, char* out, int outLen)
@@ -4863,7 +4863,8 @@ static void runState(CorHttpConn* connP)
 // -----------------------------------------------------------------------------
 //
 // runSources - GET /api/run/sources: the installed broker and the builds that succeeded, with what each has
-// compiled in (their --version), the bridge plugins each one has - and a build its image, when Compile made one
+// compiled in (their --version), the bridge plugins each one has - and a build its image, when Compile made one,
+// its mode and when it ended (Operate lists the newest first)
 //
 static void bridgesOf(const char* pluginDir, Str* sP)
 {
@@ -4956,6 +4957,13 @@ static void runSources(CorHttpConn* connP)
         char image[512];
         buildMember(name, "image", "", image, sizeof(image));
         strAdd(&s, ", \"image\": ");    strAddJson(&s, (image[0] != 0) ? image : NULL);
+
+        char mode[32];
+        char ended[40];
+        buildMember(name, "mode",  "", mode,  sizeof(mode));
+        buildMember(name, "ended", "", ended, sizeof(ended));
+        strAdd(&s, ", \"mode\": ");     strAddJson(&s, (mode[0]  != 0) ? mode  : NULL);
+        strAdd(&s, ", \"ended\": ");    strAddJson(&s, (ended[0] != 0) ? ended : NULL);
         strAdd(&s, "}");
         first = false;
         free(v);
