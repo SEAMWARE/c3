@@ -324,45 +324,33 @@ export function helpShow(title, text) {
 }
 
 //
-// ddsMapAsk - before Operate is shown for the DDS mapping: what is left here stays as it is, the way back is the
-// Compile tab
+// MAPS - the bridges whose mapping is in Operate: the button here, the question before going, the event main.js turns
+// into Operate with the bridge ticked in its broker form and its mapping open
 //
-function ddsMapAsk() {
-  const ov = el('div', 'overlay cp-modal');
-  ov.setAttribute('role', 'dialog');
-  ov.setAttribute('aria-modal', 'true');
-  ov.setAttribute('aria-label', t('Map DDS topics, services and actions'));
-  const card = el('div', 'card cp-help-card');
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const cancel = el('button', 'btn', t('Stay here'));
-  cancel.type = 'button';
-  cancel.addEventListener('click', close);
-  const go = el('button', 'btn primary', t('Go to Operate'));
-  go.type = 'button';
-  go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:ddsmap')); });
-  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
-  document.addEventListener('keydown', onKey);
-  const actions = el('div', 'actions');
-  actions.append(cancel, go);
-  card.append(el('h3', '', t('The DDS mapping is in Operate')),
-    el('p', '', t('The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.')),
-    el('p', '', t('Discover asks your DDS system what it announces: c³ joins its DDS domain from this machine, so it must reach it - DDS discovery is multicast, on this host or its network. Where c³ does not reach it, import an inventory.json written where it runs. Discover uses a broker with the dds bridge: an installed coraine, a build, or an image with it.')),
-    actions);
-  ov.append(card);
-  document.body.append(ov);
-  go.focus();
-}
+const MAPS = [
+  { bridge: 'dds', label: tk('Map DDS topics, services and actions'), event: 'c3:ddsmap',
+    heading: tk('The DDS mapping is in Operate'),
+    where:   tk('The mapper opens in the Operate tab, with the dds bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.'),
+    how:     tk('Discover asks your DDS system what it announces: c³ joins its DDS domain from this machine, so it must reach it - DDS discovery is multicast, on this host or its network. Where c³ does not reach it, import an inventory.json written where it runs. Discover uses a broker with the dds bridge: an installed coraine, a build, or an image with it.') },
+  { bridge: 'opcua', label: tk('Map an OPC UA server'), event: 'c3:opcuamap',
+    heading: tk('The OPC UA mapping is in Operate'),
+    where:   tk('The mapper opens in the Operate tab, with the opcua bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.'),
+    how:     tk('Discover reads your OPC UA server\'s address space: c³ connects to it from this machine, so it must reach its opc.tcp:// URL. Where c³ does not reach it, import an inventory.json read where it runs. Discover uses a native broker with the opcua bridge: an installed coraine or a build.') },
+  { bridge: 'aas', label: tk('Map an AAS server'), event: 'c3:aasmap',
+    heading: tk('The AAS mapping is in Operate'),
+    where:   tk('Its AAS part opens in the Operate tab, with the aas bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.'),
+    how:     tk('Discover the server reads its shells and submodels: c³ connects to it from this machine, so it must reach its URL. Each shell or submodel picked becomes an AssetChannel, its model a graph of entities. Discover uses a native broker with the aas bridge: an installed coraine or a build.') },
+];
 
 //
-// opcuaMapAsk - before Operate is shown for the OPC UA mapping: what is left here stays as it is, the way back is
-// the Compile tab
+// mapAsk - before Operate is shown for a bridge's mapping: what is left here stays as it is, the way back is the
+// Compile tab
 //
-function opcuaMapAsk() {
+function mapAsk(m) {
   const ov = el('div', 'overlay cp-modal');
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');
-  ov.setAttribute('aria-label', t('Map an OPC UA server'));
+  ov.setAttribute('aria-label', t(m.label));
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -371,15 +359,12 @@ function opcuaMapAsk() {
   cancel.addEventListener('click', close);
   const go = el('button', 'btn primary', t('Go to Operate'));
   go.type = 'button';
-  go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent('c3:opcuamap')); });
+  go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent(m.event)); });
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const actions = el('div', 'actions');
   actions.append(cancel, go);
-  card.append(el('h3', '', t('The OPC UA mapping is in Operate')),
-    el('p', '', t('The mapper opens in the Operate tab, with the opcua bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.')),
-    el('p', '', t('Discover reads your OPC UA server\'s address space: c³ connects to it from this machine, so it must reach its opc.tcp:// URL. Where c³ does not reach it, import an inventory.json read where it runs. Discover uses a native broker with the opcua bridge: an installed coraine or a build.')),
-    actions);
+  card.append(el('h3', '', t(m.heading)), el('p', '', t(m.where)), el('p', '', t(m.how)), actions);
   ov.append(card);
   document.body.append(ov);
   go.focus();
@@ -946,22 +931,14 @@ export class Compile {
       const items = this.bridges.map(bridgeButton);
       sections.push(groupSection('Bridges', items, this.bridges.filter((br) => this.isBridgeOn(br) !== !!br.default).length));
       groups.push({ name: 'Bridges', features: [] });
-      const dds = this.bridges.find((br) => br.name === 'dds');
-      if (dds) {
-        const map = el('button', 'btn primary cp-ddsmap', t('Map DDS topics, services and actions'));
+      for (const m of MAPS) {
+        const br = this.bridges.find((x) => x.name === m.bridge);
+        if (!br) continue;                                   // a source without that bridge: no button
+        const map = el('button', 'btn primary cp-ddsmap', t(m.label));
         map.type = 'button';
-        map.disabled = !(dds.available && this.isBridgeOn(dds));
-        map.title = map.disabled ? t('switch the dds bridge on first') : t('in Operate - the Compile tab brings you back');
-        map.addEventListener('click', ddsMapAsk);
-        sections.push(map);
-      }
-      const opcua = this.bridges.find((br) => br.name === 'opcua');
-      if (opcua) {
-        const map = el('button', 'btn primary cp-ddsmap', t('Map an OPC UA server'));
-        map.type = 'button';
-        map.disabled = !(opcua.available && this.isBridgeOn(opcua));
-        map.title = map.disabled ? t('switch the opcua bridge on first') : t('in Operate - the Compile tab brings you back');
-        map.addEventListener('click', opcuaMapAsk);
+        map.disabled = !(br.available && this.isBridgeOn(br));
+        map.title = map.disabled ? t('switch the {bridge} bridge on first', { bridge: m.bridge }) : t('in Operate - the Compile tab brings you back');
+        map.addEventListener('click', () => mapAsk(m));
         sections.push(map);
       }
     }
@@ -1536,6 +1513,7 @@ export class Compile {
     }) : [el('option', '', t('no presets yet'))]));
     if (cur && this.presets.find((p) => p.name === cur)) sel.value = cur;
     $('cp-preset-load').disabled = $('cp-preset-del').disabled = !this.presets.length;
+    $('cp-pcount').textContent = this.presets.length ? String(this.presets.length) : '';
   }
 
   presetSave() {

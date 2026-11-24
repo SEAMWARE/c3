@@ -234,6 +234,14 @@ async function main() {
     location.hash = '#run';
   });
 
+  //
+  // Compile's "Map an AAS server": Operate, its form with the aas bridge, its AAS part open at the server's URL
+  //
+  window.addEventListener('c3:aasmap', () => {
+    window.addEventListener('hashchange', () => run.aasMapFromCompile(), { once: true });
+    location.hash = '#run';
+  });
+
   await new Promise((r) => setTimeout(r, 250));
   $('app').hidden = false;
   $('splash').classList.add('leaving');

@@ -1011,8 +1011,6 @@
   "stopping {what}": "{what} wird gestoppt",
   "store {plugin}": "Speicher {plugin}",
   "succeeded": "erfolgreich",
-  "switch the dds bridge on first": "zuerst die dds-Bridge einschalten",
-  "switch the opcua bridge on first": "zuerst die opcua-Bridge einschalten",
   "tenant {tenant}": "Tenant {tenant}",
   "text": "Text",
   "the -v lines: what the broker does, request by request": "die -v-Zeilen: was der Broker tut, Request für Request",
@@ -1460,5 +1458,10 @@
   "This source builds one HTTP server: ticking it unticks {server}.": "Diese Quelle baut einen einzigen HTTP-Server: ihn anzuhaken entfernt den Haken bei {server}.",
   "Chosen at start: --httpServer": "Beim Start gewählt: --httpServer",
   "Always built": "Immer gebaut",
-  "{servers} - chosen at start (--httpServer), libmicrohttpd unless told": "{servers}: beim Start gewählt (--httpServer), ohne Angabe libmicrohttpd"
+  "{servers} - chosen at start (--httpServer), libmicrohttpd unless told": "{servers}: beim Start gewählt (--httpServer), ohne Angabe libmicrohttpd",
+  "Map an AAS server": "Einen AAS-Server abbilden",
+  "The AAS mapping is in Operate": "Die AAS-Abbildung ist in Betreiben",
+  "Its AAS part opens in the Operate tab, with the aas bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.": "Sein AAS-Teil öffnet sich im Tab Betreiben, mit dem aas-Bridge angehakt in seinem Broker-Formular. Was hier gewählt ist, bleibt wie es ist: der Tab Kompilieren bringt dich zurück, zum Bauen.",
+  "Discover the server reads its shells and submodels: c³ connects to it from this machine, so it must reach its URL. Each shell or submodel picked becomes an AssetChannel, its model a graph of entities. Discover uses a native broker with the aas bridge: an installed coraine or a build.": "Server ermitteln liest seine Shells und Submodelle: c³ verbindet sich von diesem Rechner aus, muss also seine URL erreichen. Jede gewählte Shell oder jedes Submodell wird ein AssetChannel, sein Modell ein Graph von Entitäten. Ermitteln nutzt einen nativen Broker mit dem aas-Bridge: ein installiertes coraine oder einen Build.",
+  "switch the {bridge} bridge on first": "aktiviere zuerst den Bridge {bridge}"
 }

@@ -118,6 +118,16 @@
 .cp-name { display: flex; align-items: center; gap: 10px; }
 .cp-name .cp-input { flex: 1; }
 .cp-name.off { opacity: 0.5; }
+/* Output: the choice and the image's name on one row */
+.cp-outrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.cp-outrow .cp-name { flex: 1 1 320px; min-width: 0; }
+/* Presets, Builds kept: a card that opens and closes on its header - closed when c3 starts */
+.cp-fold > summary { display: flex; align-items: baseline; gap: 10px; cursor: pointer; list-style: none; }
+.cp-fold > summary::-webkit-details-marker { display: none; }
+.cp-fold > summary::before { content: '▸'; color: var(--muted); width: 1em; transition: transform 0.15s; }
+.cp-fold[open] > summary::before { transform: rotate(90deg); }
+.cp-fold > summary h2 { margin: 0; }
+.cp-fold[open] > summary { margin-bottom: 4px; }
 .cp-build { min-height: 48px; font-size: 1.1875rem; }
 
 /* presets */
@@ -306,8 +316,10 @@
 .cp-linkbtn:hover { text-decoration: underline; }
 .cp-linkbtn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
-.cp-src-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* the repositories: a sub-section of Source - a rule above it, its heading, its icons at the end of the line */
+.cp-src-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .cp-src-foot:empty { display: none; }
+.cp-src-foot > .cp-src-acts { margin-left: auto; }
 .cp-sum .cp-warn { color: var(--warn); }
 .cp-src-acts { display: flex; align-items: center; gap: 4px; }
 

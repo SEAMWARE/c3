@@ -253,10 +253,14 @@ export class Source {
       b.setAttribute('aria-pressed', String(cc.sourceKind === k));
       b.disabled = !!cc.sourceFlag || !!this.busy;
     }
-    if (!cc.packageInstalled) {
-      pkg.disabled = true;
-      pkg.title = t('not installed - sudo apt install coraine-dev');
-    }
+    //
+    // What each kind is: a tooltip, not a line of the card
+    //
+    const clonesWhat = t('The directory holding coraine, c3 and the libraries as git clones, side by side - a missing one is cloned into it.');
+    git.title = clonesWhat;
+    pkg.title = !cc.packageInstalled ? t('not installed - sudo apt install coraine-dev')
+      : (cc.version ? t('The source of the release coraine-dev installed - coraine {version}.', { version: cc.version }) : t('The source of the release coraine-dev installed.'));
+    if (!cc.packageInstalled) pkg.disabled = true;
     pkg.addEventListener('click', () => { if (cc.sourceKind !== 'package') this.use({ kind: 'package' }); });
     git.addEventListener('click', () => { if (cc.sourceKind !== 'clones') this.use({ kind: 'clones', dir: $('cp-src-dir').value.trim() || '~/git' }); });
     kind.replaceChildren(pkg, git);
@@ -270,22 +274,19 @@ export class Source {
     if (document.activeElement !== dir) dir.value = cc.clonesDir || '';
     dir.disabled = !!cc.sourceFlag || !!this.busy;
     $('cp-src-use').disabled = dir.disabled;
+    dirRow.title = clonesWhat;
 
     //
-    // The note under the kind: what this source is
-    //
-    //
-    // The note under the kind: what this source is - the same while the card works (it would change the card's
-    // height): what it does is said in the table's foot, or here only while there is no table (a kind switched)
+    // The note under the kind: only what asks for something - what a source is, is its button's tooltip. What the
+    // card does is said in the table's foot, or here only while there is no table (a kind switched)
     //
     const tableShown = cc.sourceKind === 'clones' && !!this.repos && !this.reposError;
-    let note;
+    let note = '';
     if (this.busy && !tableShown) note = this.busy;
     else if (cc.sourceFlag) note = t('c³ was started with --source {source}: that decides, not this card.', { source: cc.source });
-    else if (cc.sourceKind === 'package') note = cc.packageInstalled ? (cc.version ? t('The source of the release coraine-dev installed - coraine {version}.', { version: cc.version }) : t('The source of the release coraine-dev installed.'))
-                                                                       : t('coraine-dev is not installed: sudo apt install coraine-dev - or build from git clones.');
-    else note = t('The directory holding coraine, c3 and the libraries as git clones, side by side - a missing one is cloned into it.');
+    else if (cc.sourceKind === 'package' && !cc.packageInstalled) note = t('coraine-dev is not installed: sudo apt install coraine-dev - or build from git clones.');
     $('cp-src-note').textContent = note;
+    $('cp-src-note').hidden = !note;
     $('cp-src-msg').textContent = this.message || '';
 
 
@@ -327,7 +328,7 @@ export class Source {
     if (this.busy) parts.push(el('span', 'cp-note', this.busy));
     else if (this.repos.complete === false) parts.push(el('span', 'cp-note', t('Not the whole list: {why}.', { why: this.repos.why || t('coraine is not here') })));
     else if (missing.length) parts.push(el('span', 'cp-note', t('{present} of the {n} repositories a build with these bridges needs are here', { present, n: this.repos.repos.length })));
-    else parts.push(el('span', 'cp-note', t('Select a branch for each repository')));
+    else parts.push(el('span', 'cp-label', t('Select a branch for each repository')));       // the sub-section's heading
     const acts = el('span', 'cp-src-acts');
     if (notRunning.length > 1) {
       const all = el('button', 'btn primary', t('Clone the {n} missing', { n: notRunning.length }));

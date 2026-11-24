@@ -1011,8 +1011,6 @@
   "stopping {what}": "arrêt de {what}",
   "store {plugin}": "stockage {plugin}",
   "succeeded": "réussie",
-  "switch the dds bridge on first": "activez d'abord le bridge dds",
-  "switch the opcua bridge on first": "activez d'abord le bridge opcua",
   "tenant {tenant}": "tenant {tenant}",
   "text": "texte",
   "the -v lines: what the broker does, request by request": "les lignes -v : ce que fait le broker, requête par requête",
@@ -1460,5 +1458,10 @@
   "This source builds one HTTP server: ticking it unticks {server}.": "Cette source compile un seul serveur HTTP : le cocher décoche {server}.",
   "Chosen at start: --httpServer": "Choisi au démarrage : --httpServer",
   "Always built": "Toujours compilé",
-  "{servers} - chosen at start (--httpServer), libmicrohttpd unless told": "{servers} : choisi au démarrage (--httpServer), libmicrohttpd par défaut"
+  "{servers} - chosen at start (--httpServer), libmicrohttpd unless told": "{servers} : choisi au démarrage (--httpServer), libmicrohttpd par défaut",
+  "Map an AAS server": "Mapper un serveur AAS",
+  "The AAS mapping is in Operate": "Le mappage AAS est dans Exploiter",
+  "Its AAS part opens in the Operate tab, with the aas bridge ticked in its broker form. What is chosen here stays as it is: the Compile tab brings you back, to build.": "Sa partie AAS s'ouvre dans l'onglet Exploiter, avec le bridge aas coché dans son formulaire de broker. Ce qui est choisi ici reste tel quel : l'onglet Compiler vous ramène, pour compiler.",
+  "Discover the server reads its shells and submodels: c³ connects to it from this machine, so it must reach its URL. Each shell or submodel picked becomes an AssetChannel, its model a graph of entities. Discover uses a native broker with the aas bridge: an installed coraine or a build.": "Découvrir le serveur lit ses shells et ses sous-modèles : c³ s'y connecte depuis cette machine, il doit donc atteindre son URL. Chaque shell ou sous-modèle choisi devient un AssetChannel, son modèle un graphe d'entités. Découvrir utilise un broker natif avec le bridge aas : un coraine installé ou une compilation.",
+  "switch the {bridge} bridge on first": "activez d'abord le bridge {bridge}"
 }
