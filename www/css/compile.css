@@ -326,4 +326,16 @@
 .cp-src-icon { width: 28px; height: 28px; padding: 0; font-size: 1.15rem; line-height: 28px; text-align: center; border-radius: 6px; }
 .cp-src-icon:hover { background: var(--bg-deep); }
 .cp-src-icon:disabled { opacity: 0.4; cursor: default; }
+.cp-src-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; vertical-align: middle; }
+.cp-src-icon.big { font-size: 1.725rem; }
+.cp-src-icon.gone { visibility: hidden; }
+.cp-pick-card { width: min(560px, calc(100vw - 32px)); }
+.cp-pick-path { display: flex; align-items: center; gap: 4px; margin: 4px 0 8px; }
+.cp-pick-path code { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-pick-list { height: 300px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: 6px; padding: 4px 0; }
+.cp-pick-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cp-pick-row:hover, .cp-pick-row:focus-visible { background: var(--bg-deep); }
+.cp-pick-row svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linejoin: round; }
+.cp-pick-row .git { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+.cp-pick-note { min-height: 1.4em; margin: 8px 0 0; }
 .cp-src-acts .cp-q.inline { position: static; flex: 0 0 auto; margin-left: 4px; }

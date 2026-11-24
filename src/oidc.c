@@ -171,7 +171,7 @@ static void urlEncode(Str* sP, const char* s)
 //
 // queryParam - a parameter of a query string, decoded, into out; false: not there
 //
-static bool queryParam(const char* query, const char* name, char* out, int outLen)
+bool queryParam(const char* query, const char* name, char* out, int outLen)
 {
   int nlen = strlen(name);
 
