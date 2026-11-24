@@ -140,7 +140,9 @@
       box.append(row);
     }
 
-    box.append(el("div", "meta", where().entity));
+    var who = el("div", "meta", C3.shortId(where().entity));   // as Explore names it - the whole id on hover
+    who.title = where().entity;
+    box.append(who);
     if (error) box.append(el("div", "err", error));
     view.replaceChildren(box);
   }
@@ -169,6 +171,46 @@
     });
     var err = el("div", "err");
 
+    // Suggestions, typing still free: the broker's entities (all its types, one query - NGSI-LD's type=A,B), and the attributes
+    // of the entity chosen
+    var ids = el("datalist");
+    var attrs = el("datalist");
+    ids.id = "c3-entities";
+    attrs.id = "c3-attributes";
+    entity.setAttribute("list", ids.id);
+    attribute.setAttribute("list", attrs.id);
+    var known = [];
+
+    function suggestAttributes() {
+      var e = known.filter(function (x) { return x.id === entity.value.trim(); })[0];
+      attrs.replaceChildren();
+      if (e) Object.keys(e).filter(function (k) { return k !== "id" && k !== "type" && k !== "@context"; }).sort().forEach(function (k) {
+        var o = el("option");
+        o.value = k;
+        attrs.append(o);
+      });
+    }
+
+    function suggestEntities() {
+      ids.replaceChildren();
+      known = [];
+      if (!broker.value) return;
+      C3.get(broker.value, tenant.value, "/ngsi-ld/v1/types").then(function (r) {
+        var list = Array.isArray(r.body) ? r.body : (r.body && Array.isArray(r.body.typeList)) ? r.body.typeList : [];
+        var names = list.map(function (x) { return typeof x === "string" ? x : (x && (x.typeName || x.id)); }).filter(Boolean);
+        if (!names.length) return null;
+        return C3.get(broker.value, tenant.value, "/ngsi-ld/v1/entities?type=" + encodeURIComponent(names.join(",")) + "&limit=1000&options=keyValues");
+      }).then(function (r) {
+        known = (r && Array.isArray(r.body)) ? r.body : [];
+        known.map(function (e) { return e.id; }).sort().forEach(function (id) {
+          var o = el("option");
+          o.value = id;
+          ids.append(o);
+        });
+        suggestAttributes();
+      }, function () {});                          // only suggestions: typing still works
+    }
+
     form.append(el("label", "", t("Broker")), broker, el("label", "", t("Tenant")), tenant, el("label", "", t("Entity")), entity,
                 el("label", "", t("Attribute")), attribute, el("label", "", t("Control")), kind, el("label", "", t("Label")), label,
                 el("label", "", t("Value sent")), value, el("label", "", t("Min")), min, el("label", "", t("Max")), max,
@@ -178,11 +220,15 @@
     var cancel = el("button", "", t("Cancel"));
     acts.append(save, cancel);
     form.append(acts);
-    view.replaceChildren(form, err);
+    view.replaceChildren(form, err, ids, attrs);
 
     C3.brokerPicker(broker, tenant, { broker: pref("broker"), tenant: pref("tenant") }).then(function (list) {
       if (!list.length) err.textContent = t("No broker in c³ yet - connect to one in Explore");
+      suggestEntities();
     }, function (e) { err.textContent = e.message; });
+    broker.addEventListener("change", suggestEntities);
+    tenant.addEventListener("change", suggestEntities);
+    entity.addEventListener("change", suggestAttributes);
 
     save.addEventListener("click", function () {
       formOpen = false;
