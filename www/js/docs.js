@@ -48,6 +48,13 @@ async function contentsRead() {
     contents = { groups: [] };
   }
 
+  // In c³ the control center comes first, the broker second; the website keeps guides.json's order (coraine first)
+  if (!site) {
+    const first = ['The control center', 'The broker'];
+    const head = first.map((title) => contents.groups.find((g) => g.title === title)).filter(Boolean);
+    contents.groups = head.concat(contents.groups.filter((g) => !head.includes(g)));
+  }
+
   guides = [];
   for (const g of contents.groups)
     for (const it of g.items)
