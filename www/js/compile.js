@@ -344,6 +344,16 @@ const MAPS = [
 ];
 
 //
+// stampNow - the default build name's time, as the backend makes it: YYYYMMDD-HHMMSS, local time. The page fixes it
+// when Compile is shown and after a build starts - the name does not move with every change of the choice
+//
+function stampNow() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+//
 // mapAsk - before Operate is shown for a bridge's mapping: what is left here stays as it is, the way back is the
 // Compile tab
 //
@@ -463,6 +473,7 @@ export class Compile {
   // there changes nothing it shows), the builds
   //
   async refresh(force, keepSource) {
+    this.stamp = stampNow();                 // the default name's time: when the page was shown, not each change
     try {
       this.caps = await api.capabilities();
     } catch (e) {
@@ -1065,7 +1076,7 @@ export class Compile {
     if (bridges) b.bridges = bridges;
     if (this.choice.httpServer !== 'mhd') b.httpServer = this.choice.httpServer;
     const name = $('cp-name').value.trim();
-    if (name) b.name = name;
+    b.name = name || this.choice.mode + '-' + (this.stamp || (this.stamp = stampNow()));
     const exe = $('cp-exe').value.trim();
     if (exe && exe !== 'coraine') b.executable = exe;
     if (this.choice.mode === 'tune') b.workload = this.choice.workload;
@@ -1123,6 +1134,7 @@ export class Compile {
     try {
       const build = await api.buildStart(b);
       $('cp-name').value = '';
+      this.stamp = stampNow();                // the next build, a name of its own
       this.open(build);
       this.loadBuilds();
       this.showRun();
