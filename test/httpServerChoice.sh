@@ -26,15 +26,25 @@ pid=$!
 for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$P/" && break; sleep 0.1; done
 
 rc=0
-post() { curl -s -o "$DIR/body" -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$1" "http://127.0.0.1:$P/api/builds/command"; }
 
-# expect <body> <status> <python check on the answer, or ''> <what>
+# expect <body> <status> <check> <what> [trains]
+#   200: <check> a python expression on the command's argv (a; f the --features value), or ''
+#   4xx: <check> text the refusal's detail holds - the reason, not only the status
+#   trains: the case needs a machine that can train (curl, wrk, python3); on one that cannot, the 422 saying so is
+#           noted and the case passes - its reason is the machine's
 expect() {
-  local got; got=$(post "$1")
+  local got; got=$(curl -s -o "$DIR/body" -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$1" "http://127.0.0.1:$P/api/builds/command")
+  if [ "${5:-}" = trains ] && [ "$got" = 422 ] && grep -q 'training needs' "$DIR/body"; then
+    echo "httpServerChoice: $4: this machine cannot train ($(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['detail'])" "$DIR/body")) - noted"; return
+  fi
   if [ "$got" != "$2" ]; then echo "httpServerChoice: $4: HTTP $got, not $2: $(head -c 300 "$DIR/body")"; rc=1; return; fi
   [ -z "$3" ] && return
-  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); a=d['argv']; sys.exit(0 if ($3) else 1)" "$DIR/body" \
-    || { echo "httpServerChoice: $4: $(head -c 400 "$DIR/body")"; rc=1; }
+  if [ "$got" = 200 ]; then
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1])); a=d['argv']; sys.exit(0 if ($3) else 1)" "$DIR/body" \
+      || { echo "httpServerChoice: $4: $(head -c 400 "$DIR/body")"; rc=1; }
+  elif ! grep -q -F -- "$3" "$DIR/body"; then
+    echo "httpServerChoice: $4: HTTP $got, but not for '$3': $(head -c 300 "$DIR/body")"; rc=1
+  fi
 }
 
 expect '{"mode":"release","features":{}}'                         200 "'--http-server' not in a"                                       'mhd by default, left out'
@@ -42,8 +52,8 @@ expect '{"mode":"release","features":{},"httpServer":"mhd"}'      200 "'--http-s
 expect '{"mode":"release","features":{},"httpServer":"builtin"}'  200 "a[a.index('--http-server')+1] == 'builtin'"                    'builtin'
 expect '{"mode":"release","features":{},"httpServer":"both"}'     200 "a[a.index('--http-server')+1] == 'both'"                       'both'
 expect '{"mode":"release","features":{},"httpServer":"apache"}'   400 ''                                                              'an unknown server'
-expect '{"mode":"pgo","features":{},"httpServer":"both"}'         422 ''                                                              'both with pgo'
-expect '{"mode":"tune","workload":"/tmp/w.json","features":{},"httpServer":"builtin"}' 422 ''                                         'builtin with tune'
+expect '{"mode":"pgo","features":{},"httpServer":"both"}'         422 'not built with --pgo'                                                              'both with pgo'
+expect '{"mode":"tune","workload":"/tmp/w.json","features":{},"httpServer":"builtin"}' 422 'not built with --tune'                                         'builtin with tune'
 
 #
 # The choice kept: PUT /api/compile/choice takes both, and the configuration file holds it

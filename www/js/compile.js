@@ -805,17 +805,29 @@ export class Compile {
       : '';
 
     //
-    // Stores: corDB is always built; mongoc is the MONGOC switch
+    // Stores: mongoc is the MONGOC switch, corDB the CORDB switch (an older source has none: always built); one at
+    // least - the broker keeps its entities in one - and corDB with pgo / tune (their training runs on corDB)
     //
     const mongoc = this.isOn('MONGOC');
+    const hasCordbSwitch = this.features.some((f) => f.name === 'CORDB');
+    const cordbOn = !hasCordbSwitch || this.isOn('CORDB');
     const store = $('cp-store');
-    const cordb = this.tick('corDB', true);
-    cordb.setAttribute('aria-disabled', 'true');
-    cordb.title = t('Always built');
+    const cordb = this.tick('corDB', cordbOn);
     const mb = this.tick('mongoc', mongoc);
-    mb.addEventListener('click', () => { this.choice.features.MONGOC = !mongoc; this.changed(); });
+    const lastStore = (on, other) => on && !other;
+    let cordbWhy = '';
+    if (!hasCordbSwitch) cordbWhy = t('Always built by this source');
+    else if (lastStore(cordbOn, mongoc)) cordbWhy = t('One current-state database at least - tick mongoc first');
+    else if (cordbOn && isTraining(this.choice.mode)) cordbWhy = t('Not without corDB with {mode}: its training runs the broker on corDB. Choose Release or Debug for this.', { mode: t(MODE_LABEL[this.choice.mode]) });
+    if (cordbWhy) { cordb.setAttribute('aria-disabled', 'true'); cordb.title = cordbWhy; }
+    else cordb.addEventListener('click', () => { this.choice.features.CORDB = !cordbOn; this.changed(); });
+    if (lastStore(mongoc, cordbOn)) { mb.setAttribute('aria-disabled', 'true'); mb.title = t('One current-state database at least - tick corDB first'); }
+    else mb.addEventListener('click', () => { this.choice.features.MONGOC = !mongoc; this.changed(); });
+    const cordbDoc = this.docAt(['CORDB', STORE_DOC[false]]);
     const onlyDoc = this.docAt(STORE_DOC[false]);
-    store.replaceChildren(this.pill(cordb, onlyDoc, ''), this.pill(mb, this.docAt(STORE_DOC[true]), tickCost(onlyDoc && onlyDoc.text, 'saved')));
+    const cordbCostDoc = this.docAt(['Store: mongoc only', 'CORDB']);     // what mongoc alone saves, as mongoc's is what corDB alone does
+    store.replaceChildren(this.pill(cordb, cordbDoc, hasCordbSwitch ? tickCost(cordbCostDoc && cordbCostDoc.text, 'saved') : ''),
+                          this.pill(mb, this.docAt(STORE_DOC[true]), tickCost(onlyDoc && onlyDoc.text, 'saved')));
     const sn = $('cp-store-note');
     sn.textContent = (!cc.mongoc && mongoc) ? t('The mongo-c driver v2 is not installed here: this build would stop. Untick mongoc, or install it.') : (!cc.mongoc ? t('mongoc needs the mongo-c driver v2 (not installed here).') : '');
     sn.className = 'cp-note' + ((!cc.mongoc && mongoc) ? ' warn' : '');
@@ -828,11 +840,18 @@ export class Compile {
     const troe = $('cp-troe');
     const tn = $('cp-troe-note');
     troe.replaceChildren(...troes.map(([n, label]) => {
-      const b = this.tick(label, this.isOn(n));
+      const f = this.features.find((x) => x.name === n);
+      const forced = this.forcedBy(f);
+      const b = this.tick(label, this.isOn(n) && forced.length === 0);
+      if (forced.length) {
+        b.setAttribute('aria-disabled', 'true');
+        b.title = forced.includes('CORDB') ? t('corDB\'s history needs corDB: tick it under Current-state databases') : this.forcedWhy(f, forced);
+        return this.pill(b, this.docAt(TROE_DOC[n]));
+      }
       b.addEventListener('click', () => { this.choice.features[n] = !this.isOn(n); this.changed(); });
       return this.pill(b, this.docAt(TROE_DOC[n]));
     }));
-    const troeOn = troes.filter(([n]) => this.isOn(n)).map(([, label]) => label);
+    const troeOn = troes.filter(([n]) => this.isOn(n) && this.forcedBy(this.features.find((x) => x.name === n)).length === 0).map(([, label]) => label);
     troe.hidden = troes.length === 0;
     tn.textContent = (troes.length === 0) ? t('corDB and TimescaleDB, always built by this source')
       : (troeOn.length === 0 ? t('None: no history in the broker - keep it elsewhere, by subscription: QuantumLeap, Cygnus, Kafnus') : '');
@@ -841,7 +860,7 @@ export class Compile {
     // Features
     //
     const list = $('cp-features');
-    const shown = this.features.filter((f) => f.name !== 'MONGOC' && !TROE_NAMES.has(f.name));
+    const shown = this.features.filter((f) => f.name !== 'MONGOC' && f.name !== 'CORDB' && !TROE_NAMES.has(f.name));
     const groups = this.featureGroups(shown);
     let on = 0;
 
@@ -969,6 +988,7 @@ export class Compile {
       const trains = (id === 'pgo' || id === 'tune');
       b.disabled = trains && cc.available && !cc.pgo;
       const byServer = trains && !b.disabled && (this.choice.httpServer !== 'mhd');
+      const byStore = trains && !b.disabled && !byServer && !cordbOn;
       b.append(el('span', 'ol', t(label)), el('span', 'od', t(desc)));
       if (b.disabled) b.append(el('span', 'ow', cc.pgoWhy || t('not available here')));
       if (byServer) {
@@ -976,7 +996,12 @@ export class Compile {
         b.title = t('Not with corHttp yet: coraine-build trains with libmicrohttpd only. Tick libmicrohttpd alone under HTTP server for this.');
         b.append(el('span', 'ow', t('not with corHttp yet')));
       }
-      b.addEventListener('click', () => { if (byServer) return; this.choice.mode = id; this.changed(); });
+      if (byStore) {
+        b.setAttribute('aria-disabled', 'true');
+        b.title = t('Not without corDB: coraine-build trains the broker on corDB. Tick corDB under Current-state databases for this.');
+        b.append(el('span', 'ow', t('not without corDB')));
+      }
+      b.addEventListener('click', () => { if (byServer || byStore) return; this.choice.mode = id; this.changed(); });
       return withHelp(b, this.docAt(MODE_DOC[id]), 'cp-owrap');
     }));
     $('cp-workload').hidden = this.choice.mode !== 'tune';
@@ -993,7 +1018,7 @@ export class Compile {
       : (this.choice.httpServer === 'both') ? t('{servers} - chosen at start (--httpServer), libmicrohttpd unless told', { servers: httpLabel('both') })
       : t(HTTP_LABEL[this.choice.httpServer]);
     $('cp-sum-stores').textContent = t('{stores}; history: {history}', {
-      stores:  mongoc ? 'corDB + mongoc' : t('corDB only'),
+      stores:  (cordbOn && mongoc) ? 'corDB + mongoc' : (cordbOn ? t('corDB only') : t('mongoc only')),
       history: (troes.length === 0) ? 'corDB, TimescaleDB' : (troeOn.length ? troeOn.join(', ') : t('none')),
     });
     $('cp-sum-opt').textContent = t(MODE_LABEL[this.choice.mode]) + (this.choice.mode === 'tune' && this.choice.workload ? ' - ' + this.choice.workload : '');

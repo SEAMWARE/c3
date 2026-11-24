@@ -124,7 +124,7 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   This card works when the rest of Compile is greyed: with no coraine clone, coraine is what it offers to clone first.</li>
   <li><b>Features</b> - from <code>coraine-build --list-features --json</code>, never a copy: each switch with its
   default and description; one changed from its default is marked, one whose requirements are off is greyed with what
-  it needs. MONGOC is the <b>mongoc</b> tick under Server and databases.</li>
+  it needs. MONGOC and CORDB are the <b>mongoc</b> and <b>corDB</b> ticks under Server and databases.</li>
   <li><b>Bridges</b> - from <code>coraine-build --list-bridges</code>, each its own repository, its size beside it;
   dds is off by default (about 13 MiB, eProsima's Fast DDS and DDS Enabler). With dds on, <b>Map DDS topics, services
   and actions</b> asks, then opens Operate with the dds bridge ticked in its broker form and the DDS mapper open
@@ -140,7 +140,8 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   (<code>--http-server both</code>: the broker carries both and chooses one at start with <code>--httpServer</code>,
   libmicrohttpd unless told) - both when <code>coraine-build --list-http-servers --json</code> lists it, otherwise
   ticking one unticks the other; one stays ticked; the training modes take libmicrohttpd alone. <b>Current-state
-  databases</b>: corDB, always built, and mongoc (the MONGOC switch). <b>Temporal history</b>: corDB and TimescaleDB -
+  databases</b>: corDB (the CORDB switch; always built by a source without it) and mongoc (the MONGOC switch), one of
+  them at least - corDB's own history and the training modes need corDB. <b>Temporal history</b>: corDB and TimescaleDB -
   either, both, or none.</li>
   <li><b>Executable</b> - the broker's file name (<code>--name</code>, default <code>coraine</code>); Operate starts it
   by that name.</li>

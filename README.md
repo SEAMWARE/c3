@@ -630,8 +630,9 @@ is the command shown, run by the backend, the same build as on the command line.
   again every time the page is shown.
 - **Features** - from `coraine-build --list-features --json` (cached per `coraine-build` and tarball):
   each switch with its default and description; one changed from its default is marked; one whose
-  `requires` are off is greyed with what it needs (CMakeLists.txt turns it off). MONGOC is the **mongoc**
-  tick under Server and databases; without the mongo-c driver the page starts with it unticked.
+  `requires` are off is greyed with what it needs (CMakeLists.txt turns it off). MONGOC and CORDB are the
+  **mongoc** and **corDB** ticks under Server and databases; without the mongo-c driver the page starts with mongoc
+  unticked.
 - **Optimisation** - Release, Profile-guided (`--pgo`), Tuned for a workload (`--tune <file>`, the
   workload by its absolute path on this machine), Debug. The training modes are greyed when the tools
   are missing.
@@ -641,7 +642,9 @@ is the command shown, run by the backend, the same build as on the command line.
     both`: the broker carries both and chooses one at start with `--httpServer`, libmicrohttpd unless told). Both
     only when `coraine-build --list-http-servers --json` lists `both`; otherwise ticking one unticks the other. One
     stays ticked; the training modes take libmicrohttpd alone.
-  - **Current-state databases** - corDB, always built, and mongoc (the MONGOC switch).
+  - **Current-state databases** - corDB (the CORDB switch; always built by a source without it) and mongoc (the
+    MONGOC switch), one of them at least. corDB's own history needs corDB, and the training modes need corDB:
+    without it they are greyed with why.
   - **Temporal history** - corDB and TimescaleDB: either, both, or none (the history kept elsewhere).
 - **Executable** - the broker's file name in `install/bin` (`--name`, default `coraine`): a broker built
   for one role named after it, a `cor-agent`. It reads the same `CORAINE_*` environment variables, and
