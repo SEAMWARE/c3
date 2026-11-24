@@ -20,7 +20,7 @@ var C3 = (function () {
     es: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "predeterminado", "Type": "Tipo", "Query (q)": "Consulta (q)",
       "Attributes (attrs)": "Atributos (attrs)", "every": "cada", "seconds": "segundos", "Save": "Guardar", "Edit": "Editar",
-      "Refresh": "Actualizar", "Cancel": "Cancelar",
+      "Refresh": "Actualizar", "Cancel": "Cancelar", "Pick a type": "Elige un tipo",
       "c³ is not reachable - open this dashboard from c³'s Dashboard page": "c³ no responde - abre este panel desde la página Panel de c³",
       "No broker in c³ yet - connect to one in Explore": "Aún no hay ningún broker en c³ - conéctate a uno en Explorar",
       "{n} entities": "{n} entidades", "updated {time}": "actualizado {time}", "Not configured": "Sin configurar",
@@ -34,7 +34,7 @@ var C3 = (function () {
     fr: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "par défaut", "Type": "Type", "Query (q)": "Requête (q)",
       "Attributes (attrs)": "Attributs (attrs)", "every": "toutes les", "seconds": "secondes", "Save": "Enregistrer", "Edit": "Modifier",
-      "Refresh": "Actualiser", "Cancel": "Annuler",
+      "Refresh": "Actualiser", "Cancel": "Annuler", "Pick a type": "Choisissez un type",
       "c³ is not reachable - open this dashboard from c³'s Dashboard page": "c³ ne répond pas - ouvrez ce tableau de bord depuis la page Tableau de bord de c³",
       "No broker in c³ yet - connect to one in Explore": "Pas encore de broker dans c³ - connectez-vous à un broker dans Explorer",
       "{n} entities": "{n} entités", "updated {time}": "mis à jour {time}", "Not configured": "Non configuré",
@@ -48,7 +48,7 @@ var C3 = (function () {
     de: {
       "Broker": "Broker", "Tenant": "Tenant", "default": "Standard", "Type": "Typ", "Query (q)": "Abfrage (q)",
       "Attributes (attrs)": "Attribute (attrs)", "every": "alle", "seconds": "Sekunden", "Save": "Speichern", "Edit": "Bearbeiten",
-      "Refresh": "Aktualisieren", "Cancel": "Abbrechen",
+      "Refresh": "Aktualisieren", "Cancel": "Abbrechen", "Pick a type": "Wählen Sie einen Typ",
       "c³ is not reachable - open this dashboard from c³'s Dashboard page": "c³ antwortet nicht - öffnen Sie dieses Dashboard über die Dashboard-Seite von c³",
       "No broker in c³ yet - connect to one in Explore": "Noch kein Broker in c³ - verbinden Sie sich in Erkunden mit einem",
       "{n} entities": "{n} Entitäten", "updated {time}": "aktualisiert {time}", "Not configured": "Nicht konfiguriert",
@@ -182,7 +182,7 @@ var C3 = (function () {
   //
   function show(v, decimals) {
     if (v === null || v === undefined) return "-";
-    if (typeof v === "number") return (decimals >= 0 && !Number.isInteger(v)) ? v.toFixed(decimals) : String(v);
+    if (typeof v === "number") return (decimals >= 0 && !Number.isInteger(v)) ? String(Number(v.toFixed(decimals))) : String(v);   // 2.50 -> 2.5
     if (typeof v === "object") return JSON.stringify(v);
     return String(v);
   }

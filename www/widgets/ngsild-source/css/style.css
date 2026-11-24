@@ -3,6 +3,9 @@ body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; color: #2
 .form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; }
 .form label { color: #555; }
 .form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
+.form .types { display: flex; flex-wrap: wrap; gap: 2px 12px; max-height: 8em; overflow-y: auto; }
+.form .types label { color: inherit; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.form .types input { width: auto; padding: 0; }
 .form .every { display: flex; gap: 6px; align-items: center; }
 .form .every input { width: 6em; }
 .acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }

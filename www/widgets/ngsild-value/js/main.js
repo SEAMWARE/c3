@@ -80,7 +80,8 @@
     var unit = pref("unit") || (v && v.unitCode) || "";
     if (v && unit) value.append(el("span", "unit", unit));
 
-    var meta = el("div", "meta", e ? e.id : "");
+    var meta = el("div", "meta", e ? C3.shortId(e.id) : "");
+    if (e) meta.title = e.id;
     view.replaceChildren(label, value, meta);
     if (v && v.observedAt) view.append(el("div", "meta", new Date(v.observedAt).toLocaleString()));
   }

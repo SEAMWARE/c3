@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-value" version="0.1.6">
+<widget xmlns="http://wirecloud.conwet.fi.upm.es/ns/macdescription/1" vendor="Seamware" name="ngsild-value" version="0.1.9">
   <details>
     <title>NGSI-LD value</title>
     <homepage>https://github.com/SEAMWARE/c3</homepage>
@@ -13,11 +13,11 @@
     <preference name="attribute" type="text" label="Attribute" description="The attribute shown (picked in the widget)" default=""/>
     <preference name="label" type="text" label="Label" description="Shown above the value - empty: the attribute's name" default=""/>
     <preference name="unit" type="text" label="Unit" description="Shown after the value - empty: its unitCode, if any" default=""/>
-    <preference name="decimals" type="number" label="Decimals" description="At most so many decimals for a number (-1: as it is)" default="1"/>
+    <preference name="decimals" type="number" label="Decimals" description="At most so many decimals for a number (-1: as it is)" default="2"/>
   </preferences>
   <wiring>
     <inputendpoint name="entities" type="text" label="Entities" description="{entities}, from an NGSI-LD source or a table" friendcode="ngsild-entities"/>
   </wiring>
   <contents src="index.html" cacheable="false" useplatformstyle="true"/>
-  <rendering height="16" width="3"/>
+  <rendering height="20" width="3"/>
 </widget>
