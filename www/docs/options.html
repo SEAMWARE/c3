@@ -40,6 +40,7 @@ and its options are also documented with the plugin. An option of a plugin that 
   <tr><td><a href="#docs/options" data-scroll="program">The program</a></td><td>11</td></tr>
   <tr><td><a href="#docs/options" data-scroll="listening">Listening</a></td><td>15</td></tr>
   <tr><td><a href="#docs/options" data-scroll="limits">Limits and memory</a></td><td>7</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="http-server">The HTTP server</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="corhttp">Built-in HTTP server (corHttp)</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="mhd">libmicrohttpd HTTP server (the default build)</a></td><td>1</td></tr>
   <tr><td><a href="#docs/options" data-scroll="contexts">@contexts</a></td><td>2</td></tr>
@@ -57,7 +58,7 @@ and its options are also documented with the plugin. An option of a plugin that 
   <tr><td><a href="#docs/options" data-scroll="fdsc">fdsc</a> - <code>--auth fdsc</code></td><td>13</td></tr>
   <tr><td colspan="2"><b>The programs beside the broker</b></td></tr>
   <tr><td><a href="#docs/options" data-scroll="coraine-import">coraine-import</a></td><td>17 (9 of them mongoc's)</td></tr>
-  <tr><td><a href="#docs/options" data-scroll="coraine-build">coraine-build</a></td><td>13</td></tr>
+  <tr><td><a href="#docs/options" data-scroll="coraine-build">coraine-build</a></td><td>14</td></tr>
 </table>
 <p>Each plugin's entries are also in the plugin's own doc, copied from coraine's <code>doc/options.md</code> by
 <code>tools/pluginOptions.sh</code> - an entry is changed there, and CI fails while a copy differs: mongoc's <a
@@ -116,10 +117,11 @@ plugins named on the same command line add their options.</p>
   <tr><th>Values</th><td>a switch</td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
-<p>Prints three lines and exits with 0: the program and its version, <code>features:</code> with every compile-time
-feature of this binary as <code>NAME=1</code> (in the build) or <code>NAME=0</code> (left out), and
-<code>httpServer:</code> with the HTTP server it was built with (<code>mhd</code> - libmicrohttpd, or
-<code>builtin</code> - corHttp). It is answered before any plugin is loaded and before any other option is read, so it
+<p>Prints four lines and exits with 0: the program and its version, <code>features:</code> with every compile-time
+feature of this binary as <code>NAME=1</code> (in the build) or <code>NAME=0</code> (left out),
+<code>httpServer:</code> with the HTTP server it would run with the options and environment given (<code>mhd</code> -
+libmicrohttpd, or <code>builtin</code> - corHttp; <a href="#docs/options" data-scroll="httpServer">--httpServer</a>),
+and <code>httpServers:</code> with the ones it is built with. It is answered before any plugin is loaded and before any other option is read, so it
 works on an installation with a broken or missing plugin directory, and nothing else on the command line is
 checked.</p>
 <p>It is read from the command line only: <code>CORAINE_VERSION</code> is listed by <code>-U</code>, and setting it
@@ -127,7 +129,8 @@ does nothing - the broker starts.</p>
 <pre>coraine -V
 <span class="c"># coraine 0.6.0</span>
 <span class="c"># features: SUBSCRIPTIONS=1 REGISTRATIONS=1 GEOQ=1 ... ICU_COLLATION=0 ...</span>
-<span class="c"># httpServer: mhd</span></pre>
+<span class="c"># httpServer: mhd</span>
+<span class="c"># httpServers: mhd</span></pre>
 
 <h3 id="verbose"><code>--verbose</code></h3>
 <table class="g-opts">
@@ -695,10 +698,36 @@ href="#docs/administration/entitymaps">EntityMaps</a>.</p>
 <span class="c"># V: ... main: EntityMap memory: 0 MiB (no cap, no automatic EntityMaps)</span></pre>
 
 <!-- ======================================================================= -->
+<h2 id="http-server">The HTTP server</h2>
+
+<h3 id="httpServer"><code>--httpServer</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td><code>-hs</code> · <code>CORAINE_HTTPSERVER</code> · String</td></tr>
+  <tr><th>Default</th><td><code>mhd</code> when the broker is built with libmicrohttpd, else <code>builtin</code></td></tr>
+  <tr><th>Values</th><td><code>mhd</code>, <code>builtin</code> - one the broker is built with</td></tr>
+  <tr><th>Plugin</th><td>core</td></tr>
+</table>
+<p>The HTTP server the broker runs: <code>mhd</code> (libmicrohttpd) or <code>builtin</code> (corHttp). A broker
+carries one of them or both, as it was built (<code>cmake -DCOR_HTTP_SERVER=mhd|builtin|both</code>, <a
+href="#docs/building/http-server">Choosing the HTTP server</a>); <code>coraine -V</code> says <code>httpServers: mhd
+builtin</code> for both, and <code>httpServer:</code> the one it would run with the options and environment given. A
+running broker says the same on <code>GET /build</code> (<code>build.httpServer</code>,
+<code>build.httpServers</code>).</p>
+<p>A server the broker is not built with stops the start with exit code 1. So do the options that need libmicrohttpd
+with <code>--httpServer builtin</code> in a broker built with both: <code>--https</code> (TLS) and
+<code>--policyApiPort</code> (a second port). A broker with one server needs no <code>--httpServer</code>; naming
+that server is accepted (<a href="#docs/administration" data-scroll="http-server">The HTTP server</a>).</p>
+<pre>coraine -db corDB --httpServer builtin
+CORAINE_HTTPSERVER=builtin coraine -db corDB
+coraine -V | grep ^httpServer
+<span class="c"># httpServer: mhd</span>
+<span class="c"># httpServers: mhd builtin</span></pre>
+
+<!-- ======================================================================= -->
 <h2 id="corhttp">Built-in HTTP server (corHttp)</h2>
-<p>Options that act on a broker built with the built-in HTTP server (<code>cmake -DCOR_HTTP_SERVER=builtin</code>;
-<code>coraine -V</code> says <code>httpServer: builtin</code>). A build with libmicrohttpd (the default,
-<code>httpServer: mhd</code>) accepts them, so a deployment does not have to know which server its binary carries (<a
+<p>Options that act on a broker running the built-in HTTP server (<code>--httpServer builtin</code>, or a build with
+it alone; <code>coraine -V</code> says <code>httpServer: builtin</code>). A broker running libmicrohttpd
+(<code>httpServer: mhd</code>) accepts them, so a deployment does not have to know which server its binary carries (<a
 href="#docs/building/http-server">Choosing the HTTP server</a>).</p>
 
 <h3 id="httpLoops"><code>--httpLoops</code></h3>
@@ -719,9 +748,9 @@ force.</p>
 
 <!-- ======================================================================= -->
 <h2 id="mhd">libmicrohttpd HTTP server (the default build)</h2>
-<p>Options that act on a broker built with libmicrohttpd (<code>cmake -DCOR_HTTP_SERVER=mhd</code>, the default;
-<code>coraine -V</code> says <code>httpServer: mhd</code>). A build with the built-in HTTP server accepts them and
-ignores them.</p>
+<p>Options that act on a broker running libmicrohttpd (a build with it - <code>cmake -DCOR_HTTP_SERVER=mhd</code>,
+the default, or <code>both</code> - and <code>--httpServer mhd</code>, its default; <code>coraine -V</code> says
+<code>httpServer: mhd</code>). A broker running the built-in HTTP server accepts them and ignores them.</p>
 
 <h3 id="httpConnectionMemory"><code>--httpConnectionMemory</code></h3>
 <table class="g-opts">
@@ -2504,15 +2533,19 @@ href="#docs/building/features">Compiling out what you don't need</a>).</p>
 <table class="g-opts">
   <tr><th>Short · variable · type</th><td>no short form · no environment variable · String</td></tr>
   <tr><th>Default</th><td><code>mhd</code></td></tr>
-  <tr><th>Values</th><td><code>mhd</code> (libmicrohttpd), <code>builtin</code> (corHttp, no external library); <code>--http-server=&lt;s&gt;</code> too</td></tr>
+  <tr><th>Values</th><td><code>mhd</code> (libmicrohttpd), <code>builtin</code> (corHttp, no external library), <code>both</code> (the two, the broker running one: <code>--httpServer</code>); <code>--http-server=&lt;s&gt;</code> too</td></tr>
   <tr><th>Program</th><td>coraine-build</td></tr>
 </table>
-<p>The broker's HTTP server. With <code>builtin</code> the switches that need libmicrohttpd are off -
-<code>POLICY_API</code>, so the broker built has no <code>--policyApiPort</code>. Not with <code>--pgo</code> or
-<code>--tune</code> (<code>coraine-build: --http-server builtin: not with --pgo yet (its training tools are built and
-tried with libmicrohttpd only)</code>). Another value: <code>coraine-build: --http-server: '&lt;s&gt;' - mhd or
-builtin</code> (<a href="#docs/building/http-server">Choosing the HTTP server</a>).</p>
-<pre>coraine-build --http-server builtin --source ~/git /tmp/cb</pre>
+<p>The broker's HTTP server, or both. With <code>builtin</code> the switches that need libmicrohttpd are off -
+<code>POLICY_API</code>, so the broker built has no <code>--policyApiPort</code>. With <code>both</code> they are in,
+and the broker refuses to start one of them on the built-in server (<a href="#docs/options"
+data-scroll="httpServer">--httpServer</a>). <code>--pgo</code> and <code>--tune</code> take <code>mhd</code> only: their
+training runs libmicrohttpd, and a <code>both</code> build's built-in server would be compiled as code never run
+(<code>coraine-build: --http-server both: not with --pgo yet (its training runs libmicrohttpd only - a both build's
+built-in server would be compiled as code never run)</code>). Another value: <code>coraine-build: --http-server:
+'&lt;s&gt;' - mhd, builtin or both</code>; <code>both</code> from a source without it: <code>coraine-build:
+--http-server both: this source has no such build (coraine-build --list-http-servers)</code> (<a
+href="#docs/building/http-server">Choosing the HTTP server</a>).</p>
 
 <h3 id="build-bridges"><code>--bridges</code></h3>
 <table class="g-opts">
@@ -2548,6 +2581,21 @@ coraine 0.6.0~git20261023.cf852586 - bridges (--bridges NAME,...):
   modbus   default  Modbus TCP - values between Modbus registers and entities (modbus.so, no library)
   dds               DDS - topics, services and actions between DDS and entities (dds.so, eProsima Fast DDS and the DDS Enabler)
   ...</pre>
+
+<h3 id="build-list-http-servers"><code>--list-http-servers</code></h3>
+<table class="g-opts">
+  <tr><th>Short · variable · type</th><td>no short form · no environment variable · flag</td></tr>
+  <tr><th>Default</th><td>off</td></tr>
+  <tr><th>Values</th><td>a flag</td></tr>
+  <tr><th>Program</th><td>coraine-build</td></tr>
+</table>
+<p>Prints the <code>--http-server</code> values the source can build and exits 0 - the values its CMakeLists.txt offers
+for <code>COR_HTTP_SERVER</code>; a source from before <code>both</code> offers <code>mhd</code> and
+<code>builtin</code>. With <code>--json</code>: a JSON array. No <code>&lt;dir&gt;</code> is needed;
+<code>--source</code> and <code>--ref</code> as for <code>--list-bridges</code>. c³'s Compile asks it which HTTP servers
+it can tick together.</p>
+<pre>$ coraine-build --list-http-servers --json --source ~/git
+["mhd", "builtin", "both"]</pre>
 
 <h3 id="build-list-features"><code>--list-features</code></h3>
 <table class="g-opts">
