@@ -2,8 +2,8 @@
 // run.js - the Operate page: brokers started and stopped on this machine, natively or in a container, and the
 // services they use
 //
-// Four views, one shown at a time: the list of what runs (and Start a broker); a broker's card (or a service's)
-// with its log; Start a broker step 1, what runs (a build, the installed coraine, an image, or the settings of
+// Four views, one shown at a time: the list of what runs (and Set up a broker); a broker's card (or a service's)
+// with its log; Set up a broker step 1, what runs (a build, the installed coraine, an image, or the settings of
 // a broker started earlier); step 2, how it runs - the form, the command and the services it brings up
 //
 // Copyright 2026 Seamware
@@ -572,7 +572,7 @@ export class Run {
   }
 
   //
-  // startNew - Start a broker: a fresh form, its ports the first free ones, and step 1 - what runs
+  // startNew - Set up a broker: a fresh form, its ports the first free ones, and step 1 - what runs
   //
   startNew() {
     this.f = this.defaults();
@@ -685,7 +685,7 @@ export class Run {
 
   //
   // listed - a broker in the list: one that runs, or is on its way up or down, or failed (its card says why);
-  // one stopped by hand is not - its settings are under Start a broker, Earlier settings
+  // one stopped by hand is not - its settings are under Set up a broker, Earlier settings
   //
   listed(b) { return ['running', 'starting', 'stopping', 'failed'].includes(b.state); }
 
@@ -705,10 +705,10 @@ export class Run {
     //
     for (const x of s.services) if (x.state === 'running' && !x.usedBy.length) items.push(this.serviceRow(x));
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
-    box.replaceChildren(...items);                     // nothing runs: Start a broker alone
+    box.replaceChildren(...items);                     // nothing runs: Set up a broker alone
     box.hidden = !items.length;
     //
-    // Start a broker: as big as a broker's row - the first one's height, kept when nothing runs
+    // Set up a broker: as big as a broker's row - the first one's height, kept when nothing runs
     //
     const first = box.querySelector('.rn-item');
     if (first && first.offsetHeight) this.rowHeight = first.offsetHeight;
@@ -2017,7 +2017,7 @@ export class Run {
     this.renderImages();
   }
 
-  // ------------------------------------------------------------------ Start a broker, step 1: what runs
+  // ------------------------------------------------------------------ Set up a broker, step 1: what runs
 
   //
   // pickRow - a choice of step 1: a button the size of a line - its name, a line about it, marks beside the name

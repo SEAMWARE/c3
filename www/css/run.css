@@ -20,7 +20,7 @@
 .rn-item.rn-row-link { cursor: pointer; }
 .rn-list[hidden] { display: none; }
 
-/* Start a broker: a tile the size of a broker's row */
+/* Set up a broker: a tile the size of a broker's row */
 .rn-newtile {
   display: flex; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 7rem;
   padding: 14px 16px; border-radius: 10px; border: 2px dashed var(--accent-2); background: transparent;
@@ -31,7 +31,7 @@
 .rn-newtile .nt-label { font-family: var(--title); font-size: 1.5rem; font-weight: 400; letter-spacing: 0.01em; }
 .rn-item.rn-row-link:hover, .rn-item.rn-row-link:focus-visible { border-color: var(--accent-2); outline: none; }
 
-/* Start a broker, step 1: what runs */
+/* Set up a broker, step 1: what runs */
 .rn-group { display: flex; flex-direction: column; gap: 0; }
 .rn-group[hidden] { display: none; }
 .rn-picks { display: flex; flex-direction: column; gap: 6px; }

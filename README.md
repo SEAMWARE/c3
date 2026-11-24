@@ -727,14 +727,14 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 - **Running** - the brokers c³ started that run, start, stop or failed (the one Explore is connected to
   first - also one c³ did not start, while it answers `GET /version`, asked every 5 s), and a service still
-  running that no broker uses; then **Start a broker**, a tile the size of a broker's row. A click opens a
+  running that no broker uses; then **Set up a broker**, a tile the size of a broker's row. A click opens a
   card. **Explore** and a broker's URL open it in Explore once it answers its probe (`ready` or `answers`). A
-  broker stopped by hand is not listed: its settings are under Start a broker, **Earlier settings**.
+  broker stopped by hand is not listed: its settings are under Set up a broker, **Earlier settings**.
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
   **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each
   one's **Log** opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
   ← goes back.
-- **Start a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
+- **Set up a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
   the form; **Forget**), Compile's **Builds** (the newest first by `ended`, the latest marked -
   `GET /api/run/sources` gives each build's `mode` and `ended`), the **Installed** `coraine`, the **Docker
   images** (those here, then the newest published; **+** lists them all; another tag typed). Step 2: the
@@ -868,7 +868,7 @@ A native broker reaches them on `127.0.0.1:<port>`, a container broker by name o
 - `mongo:8.2`, not 8.0: mongo 8.0 does not start on Linux 6.19 and newer (SERVER-121912).
 - Stopped (`docker stop`, then `docker rm`) when the broker using them stops and nothing else started from
   c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice;
-  beside the service in Start a broker's step 2) removes it, and only a volume c³ made (label `c3=run`)
+  beside the service in Set up a broker's step 2) removes it, and only a volume c³ made (label `c3=run`)
   whose container does not run.
 
 **Starting.** The broker joins Explore's list (`http://localhost:<port>`, named as in Operate) and is kept in
@@ -987,7 +987,7 @@ opens (`GET /api/run/dds/files`), and the mapper opens on it.
   dds-types/           the bridge's typesDirectory
   ```
 
-- **The files screen** - the two files' full paths, each with Copy, and **Start a broker with it**: the
+- **The files screen** - the two files' full paths, each with Copy, and **Set up a broker with it**: the
   broker of the form with the dds bridge, `--bridgeConfig <dds-bridge.json>`, `--defaultUserContext
   <dds-context.jsonld>`, and **More options** as typed - the command shown. **Start the broker** starts it
   and closes the mapper; **Put it in the broker form** fills the form only. A broker given both c³'s DDS

@@ -1,5 +1,5 @@
 {
-  "about": "CKAN datasets c3 offers in 'Start a broker': each one a record Channel of the ckan bridge (ckan.so) - the portal, the DataStore resource and how a row becomes entities. Read once when the broker starts.",
+  "about": "CKAN datasets c3 offers in 'Set up a broker': each one a record Channel of the ckan bridge (ckan.so) - the portal, the DataStore resource and how a row becomes entities. Read once when the broker starts.",
   "datasets": [
     {
       "id": "boston-bikes", "label": "Boston - Blue Bike stations", "rows": 572,

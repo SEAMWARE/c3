@@ -925,7 +925,7 @@ export class OpcuaMapper {
 
     // a broker with them
     const start = el('div', 'cp-card dm-start');
-    start.append(el('h2', 'section', t('Start a broker with it')));
+    start.append(el('h2', 'section', t('Set up a broker with it')));
     start.append(el('p', 'cp-note', t('The broker of the form on the right - its name, port, store and source - with the opcua bridge and the two files. '
       + 'A native broker: the image has no opcua bridge. More options are added as typed.')));
     const cmd = el('pre', 'cp-cmd dm-cmd');
