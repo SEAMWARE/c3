@@ -19,10 +19,12 @@
 .rn-list { display: flex; flex-direction: column; gap: 10px; }
 .rn-item.rn-row-link { cursor: pointer; }
 .rn-list[hidden] { display: none; }
+.rn-none { margin: 0; color: var(--muted); }
+.rn-none[hidden] { display: none; }
 
-/* Set up a broker: a tile the size of a broker's row */
+/* Set up a broker: a tile above the list of what runs */
 .rn-newtile {
-  display: flex; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 7rem;
+  display: flex; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 5rem;
   padding: 14px 16px; border-radius: 10px; border: 2px dashed var(--accent-2); background: transparent;
   color: var(--text); font: inherit; cursor: pointer;
 }

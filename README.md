@@ -725,10 +725,11 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 **The page** shows one thing at a time:
 
-- **Running** - the brokers c³ started that run, start, stop or failed (the one Explore is connected to
-  first - also one c³ did not start, while it answers `GET /version`, asked every 5 s), and a service still
-  running that no broker uses; then **Set up a broker**, a tile the size of a broker's row. A click opens a
-  card. **Explore** and a broker's URL open it in Explore once it answers its probe (`ready` or `answers`). A
+- **Set up a broker**, a tile at the top, and under it **Running** - the brokers c³ started that run, start,
+  stop or failed (the one Explore is connected to first - also one c³ did not start, while it answers
+  `GET /version`, asked every 5 s), and a service still running that no broker uses; *No broker runs* when
+  there is none. The list follows the brokers: one just started is in it, one stopped leaves it. Each running broker's row has **Stop** and **Explore**. A click
+  elsewhere on a row opens its card. **Explore** and a broker's URL open it in Explore once it answers its probe (`ready` or `answers`). A
   broker stopped by hand is not listed: its settings are under Set up a broker, **Earlier settings**.
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
   **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each

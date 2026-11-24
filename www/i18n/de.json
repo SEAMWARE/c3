@@ -1514,5 +1514,6 @@
   "default ({value})": "Standard ({value})",
   "known after the start pulls the image": "bekannt, wenn der Start das Image geladen hat",
   "reading the broker's options ...": "lese die Optionen des Brokers ...",
-  "the broker did not say": "der Broker hat es nicht gesagt"
+  "the broker did not say": "der Broker hat es nicht gesagt",
+  "No broker runs": "Kein Broker läuft"
 }

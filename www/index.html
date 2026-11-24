@@ -242,14 +242,17 @@
           <span class="chip host" id="rn-engine">containers</span>
         </div>
 
-        <!-- The list: what runs, and Set up a broker -->
-        <section class="cp-card" aria-label="Brokers" id="rn-view-list">
-          <div class="row rn-bar">
-            <h2 class="section">Running</h2><span class="sub" id="rn-bcount"></span>
-          </div>
-          <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
+        <!-- Set up a broker, and the list of what runs -->
+        <div class="rn-view" id="rn-view-list">
           <button type="button" class="rn-newtile" id="rn-new"><span class="nt-plus" aria-hidden="true">+</span><span class="nt-label">Set up a broker</span></button>
-        </section>
+          <section class="cp-card" aria-label="Brokers">
+            <div class="row rn-bar">
+              <h2 class="section">Running</h2><span class="sub" id="rn-bcount"></span>
+            </div>
+            <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
+            <p class="rn-none" id="rn-none" hidden>No broker runs</p>
+          </section>
+        </div>
 
         <!-- A broker (or a service): its card and its log -->
         <div class="rn-view" id="rn-view-item" hidden>

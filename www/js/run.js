@@ -2,7 +2,7 @@
 // run.js - the Operate page: brokers started and stopped on this machine, natively or in a container, and the
 // services they use
 //
-// Four views, one shown at a time: the list of what runs (and Set up a broker); a broker's card (or a service's)
+// Four views, one shown at a time: Set up a broker and the list of what runs; a broker's card (or a service's)
 // with its log; Set up a broker step 1, what runs (a build, the installed coraine, an image, or the settings of
 // a broker started earlier); step 2, how it runs - the form, the command and the services it brings up
 //
@@ -705,14 +705,9 @@ export class Run {
     //
     for (const x of s.services) if (x.state === 'running' && !x.usedBy.length) items.push(this.serviceRow(x));
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
-    box.replaceChildren(...items);                     // nothing runs: Set up a broker alone
+    box.replaceChildren(...items);
     box.hidden = !items.length;
-    //
-    // Set up a broker: as big as a broker's row - the first one's height, kept when nothing runs
-    //
-    const first = box.querySelector('.rn-item');
-    if (first && first.offsetHeight) this.rowHeight = first.offsetHeight;
-    $('rn-new').style.minHeight = this.rowHeight ? this.rowHeight + 'px' : '';
+    $('rn-none').hidden = !!items.length;              // nothing runs: said so
   }
 
   //
@@ -738,7 +733,7 @@ export class Run {
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (b.state === 'running') acts.append(exploreButton(b, this.onConnect));
+    if (b.state === 'running') acts.append(button(t('Stop'), '', () => this.stopInList(b)), exploreButton(b, this.onConnect));
     item.append(acts);
     return item;
   }
@@ -1000,6 +995,12 @@ export class Run {
   note(text) { $('rn-log-note').textContent = text; }
 
   stop(b) { this.select('broker', b.name); return this.act(() => api.runStop(b.name)); }
+
+  //
+  // stopInList - Stop on a broker's row: the list stays, the row goes "stopping" and then leaves; a stop that
+  // fails opens the broker's card, where it says why
+  //
+  stopInList(b) { return this.act(() => api.runStop(b.name).catch((e) => { this.select('broker', b.name); throw e; })); }
   startKept(b) { this.select('broker', b.name); return this.act(() => api.runStartKept(b.name)); }
   stopService(s) { return this.act(() => api.runServiceStop(s.container)); }
 
