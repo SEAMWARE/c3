@@ -1514,5 +1514,6 @@
   "default ({value})": "par défaut ({value})",
   "known after the start pulls the image": "connu quand le démarrage aura téléchargé l'image",
   "reading the broker's options ...": "lecture des options du broker ...",
-  "the broker did not say": "le broker ne l'a pas dit"
+  "the broker did not say": "le broker ne l'a pas dit",
+  "No broker runs": "Aucun broker en marche"
 }
