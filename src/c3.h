@@ -81,7 +81,8 @@ extern bool  dataHome(const char* sub, char* out, int outLen);   // $XDG_DATA_HO
 extern int   runCaptureEnv(char* const argv[], char* const envp[], char* out, int outSize, int timeoutS);   // the exit status (waitpid's), -1: not run
 #define      runCapture(argv, out, outSize, timeoutS)  runCaptureEnv(argv, NULL, out, outSize, timeoutS)   // in c3's environment
 extern char** envClean(char* extra);              // c3's environment less CORAINE_* and SEAMWARE_PLUGIN_DIR, plus 'extra'; free the array
-extern int   brokerVersion(const char* binary, const char* pluginDir, char* out, int outSize);   // its --version as a start sees it; 0: answered
+extern int   brokerVersion(const char* binary, const char* pluginDir, char* out, int outSize);
+extern int   brokerRun(const char* binary, const char* pluginDir, const char* const* args, char* out, int outSize);   // its --version as a start sees it; 0: answered
 extern bool  inPath(const char* name, char* out, int outLen);
 extern void  urlDecodeInPlace(char* s);           // %XX and + of a query parameter's value
 extern bool  tenantValid(const char* t);          // 1-255 printable ASCII characters, no blank - an NGSILD-Tenant

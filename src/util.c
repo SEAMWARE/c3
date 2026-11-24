@@ -272,8 +272,25 @@ char** envClean(char* extra)
 //
 int brokerVersion(const char* binary, const char* pluginDir, char* out, int outSize)
 {
+  const char* args[] = { "--version", NULL };
+
+  return brokerRun(binary, pluginDir, args, out, outSize);
+}
+
+//
+// brokerRun - a broker binary run with these arguments (NULL-terminated) as a start sees it - its usage (-u, -U), its
+// --version: c3's environment less CORAINE_*, its own plugin directory; at most 30 s
+//
+int brokerRun(const char* binary, const char* pluginDir, const char* const* args, char* out, int outSize)
+{
   char  dirVar[2100];
-  char* argv[] = { (char*) binary, (char*) "--version", NULL };
+  char* argv[24];
+  int   n = 0;
+
+  argv[n++] = (char*) binary;
+  for (int ix = 0; (args[ix] != NULL) && (n < 23); ix++)
+    argv[n++] = (char*) args[ix];
+  argv[n] = NULL;
 
   if (pluginDir != NULL)
     snprintf(dirVar, sizeof(dirVar), "SEAMWARE_PLUGIN_DIR=%s", pluginDir);

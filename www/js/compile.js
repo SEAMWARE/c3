@@ -1174,6 +1174,7 @@ export class Compile {
   //
   open(build) {
     this.stopFollowing();
+    this.followed = build.state === 'running' ? build.name : null;   // its end gets the popup; a build ended already, none
     this.run = build;
     this.runLines = build.lines || 0;
     this.lastLine = '';
@@ -1214,6 +1215,7 @@ export class Compile {
       this.renderRun();
       this.loadBuilds();
       this.commandSoon();
+      this.ended(this.run);
     });
     es.addEventListener('skipped', (e) => {
       $('cp-log-note').textContent = t('The first {size} of the log are not shown here - the whole log: {path}', { size: mib(Number(e.data)), path: this.run.log });
@@ -1241,7 +1243,29 @@ export class Compile {
       this.renderRun();
     } catch (e) { /* the next round */ }
     if (this.run && this.run.name === name && this.run.state === 'running') this.poll = setTimeout(() => this.pollLog(from), 1000);
-    else { this.loadBuilds(); this.commandSoon(); }
+    else { this.loadBuilds(); this.commandSoon(); if (this.run && this.run.name === name) this.ended(this.run); }
+  }
+
+  //
+  // ended - a build followed here has ended: a popup says so - "Start it" opens Operate with it chosen (its image
+  // when it made one, else the build itself, natively)
+  //
+  ended(b) {
+    if (this.followed !== b.name) return;
+    this.followed = null;
+    const ok = b.state === 'succeeded';
+    $('cp-done-title').textContent = ok ? t('The compilation is done') : t('The compilation {state}', { state: stateText(b.state) });
+    $('cp-done-what').textContent = ok
+      ? (b.image ? t('{name}, and its image {image}', { name: b.name, image: b.image }) : b.name) + ' · ' + duration(b.seconds || 0)
+      : (b.error || '');
+    $('cp-done-start').hidden = !ok;
+    $('cp-done-start').onclick = () => {
+      $('cp-done').close();
+      window.dispatchEvent(new CustomEvent('c3:run', { detail: b.image ? { image: b.image } : { build: b.name } }));
+    };
+    $('cp-done-close').onclick = () => $('cp-done').close();
+    if (!$('cp-done').open) $('cp-done').showModal();
+    if (ok) $('cp-done-start').focus();
   }
 
   //

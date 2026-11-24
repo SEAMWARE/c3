@@ -500,15 +500,16 @@ export class Source {
 //
 // pickDir - the folder picker of the directory of clones: c³'s backend lists a directory's subdirectories (a page
 // cannot open the system's dialog and get a path back). A click enters a folder, ↑ its parent; the git clones are
-// marked, and whether coraine is among them said. "Use this directory" hands the path to onPick
+// marked, and whether coraine is among them said (clones: false - another directory, Operate's corDB one).
+// "Use this directory" hands the path to onPick
 //
 const FOLDER = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4V12.5H14.5V5.5H7.5L6 3.5H2Z"/></svg>';
 
-function pickDir(start, onPick) {
+export function pickDir(start, onPick, { title = t('Directory of clones'), clones = true } = {}) {
   const ov = el('div', 'overlay cp-modal');
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');
-  ov.setAttribute('aria-label', t('Directory of clones'));
+  ov.setAttribute('aria-label', title);
   const card = el('div', 'card cp-help-card cp-pick-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -560,7 +561,7 @@ function pickDir(start, onPick) {
     }));
     if (!d.dirs.length) list.append(el('div', 'cp-note cp-pick-row', t('No folders here')));
     list.scrollTop = 0;
-    note.textContent = d.coraine ? t('coraine is here: the other repositories a build needs go beside it.')
+    note.textContent = !clones ? '' : d.coraine ? t('coraine is here: the other repositories a build needs go beside it.')
       : t('No coraine clone here: c³ clones it, and the others a build needs, into this folder.');
   };
   up.addEventListener('click', () => { if (cur && cur.parent) go(cur.parent); });
@@ -569,7 +570,7 @@ function pickDir(start, onPick) {
 
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
-  card.append(el('h3', '', t('Directory of clones')), path, list, note, actions);
+  card.append(el('h3', '', title), path, list, note, actions);
   ov.append(card);
   document.body.append(ov);
   ok.focus();
