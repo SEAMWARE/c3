@@ -17,6 +17,17 @@
 
 .rn-list { display: flex; flex-direction: column; gap: 10px; }
 .rn-item.rn-row-link { cursor: pointer; }
+.rn-list[hidden] { display: none; }
+
+/* Start a broker: a tile the size of a broker's row */
+.rn-newtile {
+  display: flex; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 7rem;
+  padding: 14px 16px; border-radius: 10px; border: 2px dashed var(--accent-2); background: transparent;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.rn-newtile:hover, .rn-newtile:focus-visible { background: #2A1420; outline: none; }
+.rn-newtile .nt-plus { font-size: 2.25rem; line-height: 1; font-weight: 300; color: var(--accent-2); }
+.rn-newtile .nt-label { font-family: var(--title); font-size: 1.5rem; font-weight: 400; letter-spacing: 0.01em; }
 .rn-item.rn-row-link:hover, .rn-item.rn-row-link:focus-visible { border-color: var(--accent-2); outline: none; }
 
 /* Start a broker, step 1: what runs */

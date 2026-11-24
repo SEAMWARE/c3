@@ -822,7 +822,6 @@
   "idPattern": "idPattern",
   "idPattern, e.g. .*BikeStation:A3.*": "idPattern, p. ej. .*BikeStation:A3.*",
   "in Explore": "en Explorar",
-  "in Explore - tenant {tenant}": "en Explorar - tenant {tenant}",
   "in Operate - the Compile tab brings you back": "en Operar - la pestaña Compilar te trae de vuelta",
   "in a container": "en un contenedor",
   "in the model of {name}": "en el modelo de {name}",
@@ -1481,7 +1480,6 @@
   "Installed": "Instalado",
   "No coraine in $PATH.": "No hay coraine en $PATH.",
   "None yet - Compile makes them.": "Ninguna todavía - las hace Compile.",
-  "Nothing runs.": "No se ejecuta nada.",
   "Open {name}": "Abrir {name}",
   "Running": "En marcha",
   "Services it brings up": "Servicios que arranca",
@@ -1497,5 +1495,7 @@
   "this build is no longer there": "esta compilación ya no está",
   "pulled at the start when it is not here": "se descarga al arrancar si no está aquí",
   "quay.io: {why}": "quay.io: {why}",
-  "what runs": "qué se ejecuta"
+  "what runs": "qué se ejecuta",
+  "not ready": "no lista",
+  "{name} does not answer yet": "{name} todavía no responde"
 }

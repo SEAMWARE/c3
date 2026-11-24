@@ -26,8 +26,24 @@ import { t, tk, plural } from './i18n.js';
 const STATE_NAMES = {
   running: tk('running'), starting: tk('starting'), stopping: tk('stopping'), stopped: tk('stopped'), failed: tk('failed'),
   ready: tk('ready'), answers: tk('answers'), created: tk('created'), exited: tk('exited'), paused: tk('paused'),
-  restarting: tk('restarting'), dead: tk('dead'), removing: tk('removing'),
+  restarting: tk('restarting'), dead: tk('dead'), removing: tk('removing'), 'not ready': tk('not ready'), 'no answer': tk('no answer'),
 };
+
+//
+// answers - a broker of c³'s that answers its probe (src/run.c, every 2 s: /ready on the health port, else
+// /version): only then does Explore open it
+//
+const answers = (b) => b.state === 'running' && (b.ready === 'ready' || b.ready === 'answers');
+
+//
+// exploreButton - Explore, live while the broker answers
+//
+function exploreButton(b, onConnect) {
+  const x = button(t('Explore'), '', () => onConnect(b.url));
+  x.disabled = !answers(b);
+  if (x.disabled) x.title = t('{name} does not answer yet', { name: b.name });
+  return x;
+}
 const stateName = (v) => (STATE_NAMES[v] ? t(STATE_NAMES[v]) : v);
 
 //
@@ -110,9 +126,14 @@ export class Run {
   constructor({ onConnect } = {}) {
     this.onConnect = onConnect || (() => {});
     this.explored = null;             // {url, tenant, demo}: the broker Explore is connected to - the active one
+    this.exploredAnswers = false;     // it answered the last ask (probeExplored): only then is it in the list
+    this.exploredAsked = 0;
     window.addEventListener('c3-explore-broker', (e) => {
       this.explored = e.detail;
+      this.exploredAnswers = false;
+      this.exploredAsked = 0;
       if (this.state) this.renderLists();
+      if (this.shown) this.probeExplored();
     });
     this.caps = null;                 // GET /api/capabilities: "run"
     this.state = null;                // GET /api/run
@@ -512,6 +533,7 @@ export class Run {
   }
 
   async load() {
+    if (this.explored && Date.now() - this.exploredAsked > 5000) this.probeExplored();
     try {
       const s = await api.run();
       const text = JSON.stringify(s);
@@ -580,14 +602,20 @@ export class Run {
     const ours = shown.find((b) => this.active(b.url));
     const items = shown.map((b) => this.brokerRow(b));
     if (ours) items.unshift(items.splice(shown.indexOf(ours), 1)[0]);
-    else if (this.explored && !s.brokers.some((b) => this.active(b.url))) items.unshift(this.exploredItem());   // one of c³'s that stopped: not a stranger
+    else if (this.explored && this.exploredAnswers && !s.brokers.some((b) => this.active(b.url))) items.unshift(this.exploredItem());   // one of c³'s that stopped: not a stranger
     //
     // A service that runs with no broker of c³'s using it (one left running): listed too, to be stopped
     //
     for (const x of s.services) if (x.state === 'running' && !x.usedBy.length) items.push(this.serviceRow(x));
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
-    if (!items.length) box.replaceChildren(el('span', 'rn-empty', t('Nothing runs.')));
-    else box.replaceChildren(...items);
+    box.replaceChildren(...items);                     // nothing runs: Start a broker alone
+    box.hidden = !items.length;
+    //
+    // Start a broker: as big as a broker's row - the first one's height, kept when nothing runs
+    //
+    const first = box.querySelector('.rn-item');
+    if (first && first.offsetHeight) this.rowHeight = first.offsetHeight;
+    $('rn-new').style.minHeight = this.rowHeight ? this.rowHeight + 'px' : '';
   }
 
   //
@@ -613,7 +641,7 @@ export class Run {
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (b.state === 'running') acts.append(button(t('Explore'), '', () => this.onConnect(b.url)));
+    if (b.state === 'running') acts.append(exploreButton(b, this.onConnect));
     item.append(acts);
     return item;
   }
@@ -646,15 +674,15 @@ export class Run {
   }
 
   //
-  // titleOf - a broker's name, its state, its URL (a link to Explore while it runs)
+  // titleOf - a broker's name, its state, its URL (a link to Explore while it answers)
   //
   titleOf(b, on) {
     const runs = b.state === 'running';
     const title = el('div', 'rtitle');
     title.append(el('span', 'rname', b.name));
-    if (on) title.append(el('span', 'badge active', this.explored.tenant ? t('in Explore - tenant {tenant}', { tenant: this.explored.tenant }) : t('in Explore')));
-    title.append(el('span', 'badge ' + (runs && b.ready ? (b.ready === 'ready' || b.ready === 'answers' ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state)));
-    if (runs || b.state === 'stopping') {
+    if (on) title.append(el('span', 'badge active', t('in Explore')));
+    title.append(el('span', 'badge ' + (runs && b.ready ? (answers(b) ? 'ready' : 'starting') : b.state), stateName(runs && b.ready ? b.ready : b.state)));
+    if (answers(b)) {
       const a = el('a', 'rurl', b.url);
       a.href = '#connect';
       a.title = t('Open it in Explore');
@@ -696,7 +724,29 @@ export class Run {
   }
 
   //
-  // exploredItem - the broker Explore is connected to, when c³ did not start it: its URL and tenant, no more
+  // probeExplored - does the broker Explore is connected to answer (GET /version through the proxy - any HTTP
+  // answer counts, whatever the broker)? Asked every 5 s while Operate is shown; the list follows the answer
+  //
+  async probeExplored() {
+    const x = this.explored;
+    if (!x || this.probing) return;
+    this.probing = true;
+    this.exploredAsked = Date.now();
+    let answers = false;
+    try {
+      const r = await api.brokerGet(x.url, '/version', '');
+      answers = r.reached && r.status > 0 && r.status < 500;
+    } catch (e) { answers = false; }
+    this.probing = false;
+    if (this.explored !== x) return;                   // Explore moved on meanwhile
+    if (answers !== this.exploredAnswers) {
+      this.exploredAnswers = answers;
+      if (this.state) this.renderLists();
+    }
+  }
+
+  //
+  // exploredItem - the broker Explore is connected to, when c³ did not start it and it answers: its URL, no more
   //
   exploredItem() {
     const x = this.explored;
@@ -707,7 +757,7 @@ export class Run {
     title.append(el('span', 'rname', x.demo || x.url), el('span', 'badge active', t('in Explore')));
     if (x.demo) title.append(el('span', 'rurl', x.url));
     main.append(title);
-    main.append(el('div', 'rmeta', [x.tenant ? t('tenant {tenant}', { tenant: x.tenant }) : t('the default tenant'), t('not started by c³')].join(' · ')));
+    main.append(el('div', 'rmeta', t('not started by c³')));
     item.append(main);
     const acts = el('div', 'racts');
     acts.append(button(t('Explore'), '', () => this.onConnect(x.url)));
@@ -755,7 +805,7 @@ export class Run {
     const acts = el('div', 'racts');
     if (runs) {
       acts.append(button(t('Stop'), '', () => this.stop(b)));
-      acts.append(button(t('Explore'), '', () => this.onConnect(b.url)));
+      acts.append(exploreButton(b, this.onConnect));
       acts.append(button(t('Options'), '', () => this.edit(b, 'card')));  // to see them - and browse its OPC UA server
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
       const st = button(t('Start'), 'primary', () => this.startKept(b));
