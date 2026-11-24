@@ -25,21 +25,33 @@ pid=$!
 for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$P/" && break; sleep 0.1; done
 
 rc=0
-# expect <body> <status> <python check on argv, or ''> <what>
+# expect <body> <status> <check> <what> [trains]
+#   200: <check> a python expression on the command's argv (a; f the --features value), or ''
+#   4xx: <check> text the refusal's detail holds - the reason, not only the status
+#   trains: the case needs a machine that can train (curl, wrk, python3); on one that cannot, the 422 saying so is
+#           noted and the case passes - its reason is the machine's
 expect() {
   local got; got=$(curl -s -o "$DIR/body" -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$1" "http://127.0.0.1:$P/api/builds/command")
+  if [ "${5:-}" = trains ] && [ "$got" = 422 ] && grep -q 'training needs' "$DIR/body"; then
+    echo "storeChoice: $4: this machine cannot train ($(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['detail'])" "$DIR/body")) - noted"; return
+  fi
   if [ "$got" != "$2" ]; then echo "storeChoice: $4: HTTP $got, not $2: $(head -c 300 "$DIR/body")"; rc=1; return; fi
   [ -z "$3" ] && return
-  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); a=d['argv']; f=a[a.index('--features')+1] if '--features' in a else ''; sys.exit(0 if ($3) else 1)" "$DIR/body" \
-    || { echo "storeChoice: $4: $(head -c 400 "$DIR/body")"; rc=1; }
+  if [ "$got" = 200 ]; then
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1])); a=d['argv']; f=a[a.index('--features')+1] if '--features' in a else ''; sys.exit(0 if ($3) else 1)" "$DIR/body" \
+      || { echo "storeChoice: $4: $(head -c 400 "$DIR/body")"; rc=1; }
+  elif ! grep -q -F -- "$3" "$DIR/body"; then
+    echo "storeChoice: $4: HTTP $got, but not for '$3': $(head -c 300 "$DIR/body")"; rc=1
+  fi
 }
 
 expect '{"mode":"release","features":{"CORDB":false}}'                        200 "'CORDB=OFF' in f.split(',')"   'mongoc only: CORDB=OFF passed'
 expect '{"mode":"release","features":{"MONGOC":false}}'                       200 "'MONGOC=OFF' in f.split(',')"  'corDB only: MONGOC=OFF passed'
-expect '{"mode":"release","features":{"CORDB":false,"MONGOC":false}}'         422 ''                              'neither store'
-expect '{"mode":"pgo","features":{"CORDB":false}}'                            422 ''                              'pgo without corDB'
-expect '{"mode":"tune","workload":"/tmp/w.json","features":{"CORDB":false}}'  422 ''                              'tune without corDB'
-expect '{"mode":"pgo","features":{"MONGOC":false}}'                           200 ''                              'pgo with corDB only'
+expect '{"mode":"release","features":{"CORDB":false,"MONGOC":false}}'         422 'no current-state store'        'neither store'
+expect '{"mode":"pgo","features":{"CORDB":false}}'                            422 'CORDB off: not with --pgo'     'pgo without corDB'
+echo '{}' > "$DIR/w.json"
+expect '{"mode":"tune","workload":"'"$DIR"'/w.json","features":{"CORDB":false}}'  422 'CORDB off: not with --tune'  'tune without corDB'
+expect '{"mode":"pgo","features":{"MONGOC":false}}'                           200 ''                              'pgo with corDB only'   trains
 
 [ $rc = 0 ] && echo "storeChoice: ok" || cat "$DIR/c3.log"
 exit $rc

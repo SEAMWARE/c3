@@ -1072,13 +1072,6 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
   }
   snprintf(pP->mode, sizeof(pP->mode), "%s", mode);
 
-  if (((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)) && (cP->pgo == false))
-  {
-    *statusP = 422;
-    snprintf(errBuf, errLen, "--%s: %s", mode, cP->pgoWhy);
-    return false;
-  }
-
   //
   // httpServer: mhd (the default), builtin, or both (the broker carries both, picks one at start: --httpServer) -
   // only mhd with pgo / tune (coraine-build's training is tried with libmicrohttpd alone)
@@ -1340,6 +1333,17 @@ static bool planMake(CorHttpConn* connP, const Caps* cP, Plan* pP, int* statusP,
     if (ix > 0)
       strAdd(&pP->command, " ");
     shellQuote(&pP->command, pP->argv[ix]);
+  }
+
+  //
+  // What this machine has, last: a choice that is wrong in itself (the HTTP server, the stores) is said as such on
+  // every machine - then whether this one can train (curl, wrk, python3)
+  //
+  if (((strcmp(mode, "pgo") == 0) || (strcmp(mode, "tune") == 0)) && (cP->pgo == false))
+  {
+    *statusP = 422;
+    snprintf(errBuf, errLen, "--%s: %s", mode, cP->pgoWhy);
+    return false;
   }
 
   return true;
