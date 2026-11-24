@@ -733,7 +733,7 @@ export class Run {
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (b.state === 'running') acts.append(exploreButton(b, this.onConnect));
+    if (b.state === 'running') acts.append(button(t('Stop'), '', () => this.stopInList(b)), exploreButton(b, this.onConnect));
     item.append(acts);
     return item;
   }
@@ -995,6 +995,12 @@ export class Run {
   note(text) { $('rn-log-note').textContent = text; }
 
   stop(b) { this.select('broker', b.name); return this.act(() => api.runStop(b.name)); }
+
+  //
+  // stopInList - Stop on a broker's row: the list stays, the row goes "stopping" and then leaves; a stop that
+  // fails opens the broker's card, where it says why
+  //
+  stopInList(b) { return this.act(() => api.runStop(b.name).catch((e) => { this.select('broker', b.name); throw e; })); }
   startKept(b) { this.select('broker', b.name); return this.act(() => api.runStartKept(b.name)); }
   stopService(s) { return this.act(() => api.runServiceStop(s.container)); }
 
