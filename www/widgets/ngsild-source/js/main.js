@@ -11,6 +11,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var showStatus = C3.settled(showStatusNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -53,7 +54,7 @@
   //
   // showStatus - what it reads and how the last read went
   //
-  function showStatus() {
+  function showStatusNow() {
     if (formOpen) return;
     var box = el("div", "status");
     if (!configured()) {

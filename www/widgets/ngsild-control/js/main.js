@@ -17,6 +17,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var render = C3.settled(renderNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -82,7 +83,7 @@
     });
   }
 
-  function render() {
+  function renderNow() {
     if (formOpen) return;
     if (!configured()) { showForm(); return; }
 

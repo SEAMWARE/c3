@@ -316,5 +316,41 @@ var C3 = (function () {
     return e;
   }
 
-  return { t: t, pref: pref, onPrefs: onPrefs, setPrefs: setPrefs, base: base, request: request, brokers: brokers, get: get, write: write, property: property, username: username, confirm: confirm, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el, shortId: shortId };
+  //
+  // settled(renderNow) - a render that waits while a pointer is pressed in the widget: a widget rebuilt on each read
+  // (every few seconds) would replace the element a press landed on, and the click - a press and a release on the
+  // same element - would never come. The render waits until the release (after its click), once however many
+  // were asked for meanwhile. A release outside the frame, the frame's blur, or 10 s end the wait too.
+  //
+  var pressed = false;
+  var pending = [];
+  var pressCap = null;
+
+  function released() {
+    if (!pressed) return;
+    pressed = false;
+    clearTimeout(pressCap);
+    setTimeout(function () {                     // after the release's click
+      var q = pending;
+      pending = [];
+      q.forEach(function (f) { f(); });
+    }, 0);
+  }
+  document.addEventListener("pointerdown", function () {
+    pressed = true;
+    clearTimeout(pressCap);
+    pressCap = setTimeout(released, 10000);
+  }, true);
+  document.addEventListener("pointerup", released, true);
+  document.addEventListener("pointercancel", released, true);
+  window.addEventListener("blur", released);
+
+  function settled(renderNow) {
+    return function () {
+      if (!pressed) return renderNow();
+      if (pending.indexOf(renderNow) === -1) pending.push(renderNow);
+    };
+  }
+
+  return { t: t, pref: pref, onPrefs: onPrefs, setPrefs: setPrefs, base: base, request: request, brokers: brokers, get: get, write: write, property: property, username: username, confirm: confirm, value: value, show: show, attributesOf: attributesOf, entitiesIn: entitiesIn, fromOf: fromOf, withEntities: withEntities, ago: ago, brokerPicker: brokerPicker, el: el, shortId: shortId, settled: settled };
 })();
