@@ -1146,6 +1146,9 @@ it is part of c³.
   from WireCloud's origin that comes without one is refused the same. Each widget write is a line in the
   Dashboard's log (`a widget writes: <method> <broker><path> - tenant <t>`). Any other origin gets no CORS answer. The widgets find c³'s port in the cookie
   `c3_port`, set with WireCloud's on the login answer.
+- **In c³'s language**: WireCloud and the widgets show the language chosen in c³, not the browser's - the frame's
+  URL carries `?lang=<c³'s>` and the page sets the cookie `lang` (this host's, so WireCloud's port gets it), which
+  WireCloud reads on every request after its redirects drop the parameter.
 - **WireCloud's MCP server**, when the image has it (built with `WIRECLOUD_INSTALL_MCP=true` - c³ asks the image
   once per image id: `python -c "import mcp"`): c³ starts WireCloud with the apps `wirecloud.oauth2provider` and
   `wirecloud.mcp`, `WIRECLOUD_MCP_PUBLIC_URL=http://127.0.0.1:<port>/mcp` and dynamic client registration off,
