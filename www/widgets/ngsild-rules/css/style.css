@@ -1,42 +1,43 @@
 /* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+@import url("../../common/theme.css");
 html, body { height: 100%; }
-body { margin: 0; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+body { margin: 0; font: 12px/1.4 system-ui, sans-serif; color: var(--text); }
 #view { height: 100%; overflow: auto; box-sizing: border-box; }
 .form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; padding: 10px; }
-.form label { color: #555; }
+.form label { color: var(--muted); }
 .form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
 .acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
 button { padding: 3px 10px; font: inherit; cursor: pointer; }
-.head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px; border-bottom: 1px solid #e3e3e3; position: sticky; top: 0; background: #fff; z-index: 1; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .head .what { font-weight: 600; }
-.head .meta { color: #777; flex: 1; overflow-wrap: anywhere; }
+.head .meta { color: var(--dim); flex: 1; overflow-wrap: anywhere; }
 table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 col.c-rule { width: 46%; } col.c-fired { width: 9%; } col.c-when { width: 13%; } col.c-err { width: 32%; }
-th, td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
-th { color: #666; font-weight: 600; white-space: nowrap; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; white-space: nowrap; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td .name { font-weight: 600; overflow-wrap: anywhere; }
-td .sub { color: #777; overflow-wrap: anywhere; }
-td .error { color: #b3261e; overflow-wrap: anywhere; }
+td .sub { color: var(--dim); overflow-wrap: anywhere; }
+td .error { color: var(--bad); overflow-wrap: anywhere; }
 tbody tr { cursor: pointer; }
-tbody tr:hover { background: #fbeef3; }
-tbody tr.sel { background: #f6d6e3; }
-tr.off td { color: #999; }
+tbody tr:hover { background: var(--hover); }
+tbody tr.sel { background: var(--selected); }
+tr.off td { color: var(--faint); }
 tr.flash { animation: flash 2.5s ease-out; }
-@keyframes flash { from { background: #ffd54a; } to { background: transparent; } }
+@keyframes flash { from { background: var(--selected); } to { background: transparent; } }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2a9d8f; margin-right: 6px; vertical-align: 1px; }
-.dot.off { background: #bbb; }
+.dot.off { background: var(--faint); }
 .dot.bad { background: #d1495b; }
-.wait, .err { padding: 10px; color: #777; }
-.err { color: #b3261e; overflow-wrap: anywhere; }
+.wait, .err { padding: 10px; color: var(--dim); }
+.err { color: var(--bad); overflow-wrap: anywhere; }
 .head button { margin-left: 4px; }
 input.onoff { margin: 0 6px 0 0; vertical-align: -2px; cursor: pointer; }
-button.pen { margin-left: 6px; padding: 0 6px; border: 0; background: none; color: #999; cursor: pointer; font-size: 13px; }
-button.pen:hover { color: #e0457b; }
-button.danger { color: #b3261e; }
+button.pen { margin-left: 6px; padding: 0 6px; border: 0; background: none; color: var(--faint); cursor: pointer; font-size: 13px; }
+button.pen:hover { color: var(--accent-2); }
+button.danger { color: var(--bad); }
 .editor .form { grid-template-columns: max-content 1fr; }
 .editor textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, monospace; padding: 4px 6px; }
 .note { padding: 0 10px; }
-.c3-confirm { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff4d6; border-bottom: 1px solid #f0d58a; position: fixed; top: 0; left: 0; right: 0; z-index: 5; }
+.c3-confirm { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel-2); border-bottom: 1px solid var(--warn); position: fixed; top: 0; left: 0; right: 0; z-index: 5; }
 .c3-confirm span { flex: 1; }
-input[type=checkbox] { accent-color: #e0457b; }
+input[type=checkbox] { accent-color: var(--accent-2); }

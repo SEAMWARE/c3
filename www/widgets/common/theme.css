@@ -1,0 +1,24 @@
+/* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
+/* theme.css - c³'s colours in the widgets (c³'s tokens, www/css/c3.css), and the base of every widget: text, buttons,
+   fields, tables. Each widget's css/style.css imports it first; WireCloud's c3theme draws the panels around them. */
+:root {
+  color-scheme: dark;
+  --bg: #0E1014; --bg-deep: #0A0C0F; --panel: #161920; --panel-2: #1D212A;
+  --line: #2B303B; --line-soft: #232833; --line-box: #333A47;
+  --text: #ECEEF2; --text-2: #CDD2DB; --muted: #A6ADBA; --dim: #7A8190; --faint: #5A616E;
+  --accent: #A72E60; --accent-2: #D0558A; --accent-text: #E58AB1; --accent-soft: #F3B3CE;
+  --hover: #D0558A1A; --selected: #D0558A33;
+  --ok: #6FDCA0; --warn: #F2B84B; --bad: #FF8A9A;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+body { background: var(--panel); color: var(--text-2); }
+a { color: var(--accent-text); }
+button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line-box); border-radius: 6px; }
+button:hover:not(:disabled) { border-color: var(--accent-2); }
+button:disabled { opacity: .5; cursor: default; }
+input, select, textarea { background: var(--bg-deep); color: var(--text); border: 1px solid var(--line-box); border-radius: 4px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent-2); }
+input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(--accent-2); }
+::placeholder { color: var(--faint); }
+/* WireCloud's widget CSS draws any .label as a badge; the widgets' .label is plain text */
+.label { background: none; padding: 0; border-radius: 0; font-weight: inherit; text-shadow: none; display: block; white-space: normal; }

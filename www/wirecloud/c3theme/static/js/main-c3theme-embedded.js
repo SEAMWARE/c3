@@ -1,0 +1,1 @@
+../../../../dist/js/main-defaulttheme-embedded.js
