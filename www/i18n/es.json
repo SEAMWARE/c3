@@ -1517,5 +1517,7 @@
   "the broker did not say": "el broker no lo dijo",
   "No broker runs": "Ningún broker en marcha",
   "Leave full screen (F11)": "Salir de pantalla completa (F11)",
-  "Leave full screen": "Salir de pantalla completa"
+  "Leave full screen": "Salir de pantalla completa",
+  "Reset admin's password": "Restablecer la contraseña de admin",
+  "WireCloud's user admin gets c³'s password - for an admin whose password was set outside this c³ (another c³, or by hand). Its workspaces are kept.": "El usuario admin de WireCloud recibe la contraseña de c³ - para un admin cuya contraseña se puso fuera de este c³ (otro c³, o a mano). Sus espacios de trabajo se conservan."
 }

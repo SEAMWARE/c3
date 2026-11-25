@@ -648,6 +648,10 @@ refused (403). Every write a widget makes is a line in the Dashboard's log. The
 widgets find c³'s port in the cookie <code>c3_port</code>, set with WireCloud's when c³ logs in.</p>
 <p><b>In c³'s language</b> - WireCloud and the widgets show the language chosen in c³, whatever the browser's: c³ opens
 WireCloud with <code>?lang=</code> and sets the cookie <code>lang</code>, which WireCloud reads on every request.</p>
+<p><b>When c³ cannot log in to WireCloud</b> - WireCloud's user <code>admin</code> has a password that c³ made and keeps.
+If the Dashboard's data was made by another c³, or the password was changed by hand, c³'s login fails and the start
+stops with that message. <b>Reset admin's password</b>, beside the message, gives <code>admin</code> c³'s password again;
+the workspaces and everything else are kept, and the Dashboard starts again.</p>
 <p><b>In c³'s colours</b> - WireCloud runs with c³'s own theme (<code>www/wirecloud/c3theme</code>, built on WireCloud's
 default theme), and the widgets use c³'s colours too. To change the look, edit the theme's
 <code>static/css/_variables.scss</code> (c³'s palette on WireCloud's variables) or <code>static/css/c3.scss</code> (rules of

@@ -180,6 +180,7 @@ export const dashboard      = () => call('GET', '/api/run/dashboard');
 export const dashboardStart = () => call('POST', '/api/run/dashboard/start');
 export const dashboardStop  = () => call('POST', '/api/run/dashboard/stop');
 export const dashboardSettings = (settings) => call('PUT', '/api/run/dashboard/settings', settings);   // {widgetsWrite}
+export const dashboardResetPassword = () => call('POST', '/api/run/dashboard/reset-password');   // admin gets c3's password
 export const dashboardLogin = () => call('POST', '/api/run/dashboard/login');   // WireCloud's session cookies on the answer
 export async function dashboardLog() {                                           // the log's last 64 KiB, as text
   const response = await fetch('/api/run/dashboard/log', { headers: { Range: 'bytes=-65536' } });

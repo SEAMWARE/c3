@@ -1517,5 +1517,7 @@
   "the broker did not say": "le broker ne l'a pas dit",
   "No broker runs": "Aucun broker en marche",
   "Leave full screen (F11)": "Quitter le plein écran (F11)",
-  "Leave full screen": "Quitter le plein écran"
+  "Leave full screen": "Quitter le plein écran",
+  "Reset admin's password": "Réinitialiser le mot de passe d'admin",
+  "WireCloud's user admin gets c³'s password - for an admin whose password was set outside this c³ (another c³, or by hand). Its workspaces are kept.": "L'utilisateur admin de WireCloud reçoit le mot de passe de c³ - pour un admin dont le mot de passe a été défini hors de ce c³ (un autre c³, ou à la main). Ses espaces de travail sont conservés."
 }
