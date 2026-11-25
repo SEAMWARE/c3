@@ -10,6 +10,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var render = C3.settled(renderNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -58,7 +59,7 @@
     view.replaceChildren(box);
   }
 
-  function render() {
+  function renderNow() {
     if (picking && entities) return;
     if (!entities) {
       view.replaceChildren(el("div", "wait", t("Waiting for entities - wire an NGSI-LD source to this widget")));

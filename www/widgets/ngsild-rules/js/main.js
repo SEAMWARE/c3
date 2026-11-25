@@ -16,6 +16,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var render = C3.settled(renderNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -136,7 +137,7 @@
     if (configured() && s > 0) timer = setInterval(read, Math.max(1, s) * 1000);
   }
 
-  function render() {
+  function renderNow() {
     if (editing || formOpen) return;
     var head = el("div", "head");
     head.append(el("span", "what", rules ? t("{n} rules", { n: rules.length }) : "…"));

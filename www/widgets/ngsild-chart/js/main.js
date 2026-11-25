@@ -12,6 +12,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var draw = C3.settled(drawNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -175,7 +176,7 @@
                 : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
-  function draw() {
+  function drawNow() {
     if (picking && entities) return;
     if (!entities) {
       view.replaceChildren(el("div", "wait", t("Waiting for entities - wire an NGSI-LD source to this widget")));

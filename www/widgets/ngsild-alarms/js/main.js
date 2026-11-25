@@ -16,6 +16,7 @@
 /* globals MashupPlatform, C3 */
 (function () {
   "use strict";
+  var render = C3.settled(renderNow);                 // not while a press is on the widget: its click would be lost
 
   var t = C3.t;
   var el = C3.el;
@@ -124,7 +125,7 @@
 
   function isNew(a) { var s = firstSeen[a.id]; return s !== null && s !== undefined && Date.now() - s < NEW_MS; }
 
-  function render() {
+  function renderNow() {
     if (formOpen) return;
     var head = el("div", "head");
     var fresh = alarms ? alarms.filter(isNew).length : 0;
