@@ -646,6 +646,8 @@ the NGSI-LD API through the proxy, the list of brokers and the downloaded map ar
 is on - it is by default. Anything else - a subscription, <code>/admin</code>, a write with the switch off - is
 refused (403). Every write a widget makes is a line in the Dashboard's log. The
 widgets find c³'s port in the cookie <code>c3_port</code>, set with WireCloud's when c³ logs in.</p>
+<p><b>In c³'s language</b> - WireCloud and the widgets show the language chosen in c³, whatever the browser's: c³ opens
+WireCloud with <code>?lang=</code> and sets the cookie <code>lang</code>, which WireCloud reads on every request.</p>
 <h3 id="dashboard-image">WireCloud's image</h3>
 <p>WireCloud 2 has no published image yet (<a href="https://github.com/Ficodes/WireCloud/issues/7" target="_blank"
 rel="noopener">Ficodes/WireCloud#7</a>); c³ uses <code>wirecloud-fastapi:latest</code>, the name WireCloud's

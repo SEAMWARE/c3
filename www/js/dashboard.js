@@ -13,7 +13,7 @@
 // WireCloud is AGPL-3.0, Ficodes' - a program of its own in a container; nothing of it is part of c3.
 //
 import * as api from './api.js';
-import { t, tk } from './i18n.js';
+import { t, tk, language } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -80,7 +80,7 @@ export class Dashboard {
     //
     window.addEventListener('c3-dashboard-changed', (ev) => {
       const path = ev.detail && ev.detail.path;   // the workspace changed ("owner/name"), else WireCloud's home
-      if (this.frameFor !== null) $('db-frame').src = this.wirecloudUrl(this.frameFor) + (path ? 'workspace/' + path : '');
+      if (this.frameFor !== null) $('db-frame').src = this.wirecloudUrl(this.frameFor, path ? 'workspace/' + path : '');
     });
     $('db-progress').addEventListener('cancel', () => { this.progress = null; });
     $('db-write').addEventListener('change', async (ev) => {
@@ -250,10 +250,14 @@ export class Dashboard {
   //
   // wirecloudUrl - WireCloud on the page's own host: the cookies c3's login set are this host's. WireCloud
   // listens on 127.0.0.1 only: a page loaded from [::1] shows it from 127.0.0.1 - and logs in there itself.
+  // In c³'s language, not the browser's (they may differ): ?lang= for the first request, and the cookie lang, a
+  // cookie of this host that WireCloud's port gets too, for the rest - WireCloud's own redirects and reloads drop
+  // the parameter (/ -> /workspace/wirecloud/home).
   //
-  wirecloudUrl(port) {
+  wirecloudUrl(port, path = '') {
     const host = (location.hostname === '[::1]' || location.hostname === '::1') ? '127.0.0.1' : location.hostname;
-    return `${location.protocol}//${host}:${port}/`;
+    document.cookie = `lang=${language()}; Path=/; SameSite=Lax; Max-Age=31536000`;
+    return `${location.protocol}//${host}:${port}/${path}?lang=${language()}`;
   }
 
   async logShow() {
