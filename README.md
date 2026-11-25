@@ -1107,8 +1107,12 @@ it is part of c³.
   (`localhost` and `127.0.0.1` are two sites).
 - **c³'s widgets** (`www/widgets/`, vendor `Seamware`, plain JS): every start installs each one WireCloud
   does not have at its version - c³ zips the widget's directory (and `common/` as `js/common/`) into a `.wgt`
-  and uploads it as `admin` (`POST /api/resources/`). A changed widget needs a new `version` in its
-  `config.xml` (a change in `common/` too: each widget packs it). A widget's settings go to WireCloud as text -
+  and uploads it as `admin` (`POST /api/resources/`). WireCloud runs a placed widget from the files of the
+  version it was placed with, so the widgets with plain scripts (all but the map and the graph) load their scripts
+  and style from c³ (`js/common/load.js`: `www/widgets/` on c³'s port, served uncached; the `.wgt`'s copies when
+  c³ is not reachable) - a change in them reaches every placed widget at its next load. A change in a widget's
+  `config.xml` (settings, wiring, size), its `index.html`, `common/load.js`, or anything of the map or the graph
+  needs a new `version` in its `config.xml`. A widget's settings go to WireCloud as text -
   WireCloud 2 answers a number or a boolean 422 and keeps none of the values sent with it ([Ficodes/WireCloud#13](https://github.com/Ficodes/WireCloud/issues/13)). The source, rules, alarms and control widgets read a broker themselves (their own form: one of
   c³'s brokers, a tenant); the others take the entities wired to them. The graph and the map colour a type as
   Explore does - its place in the broker's sorted types (`GET /ngsi-ld/v1/types`, through c³), unless it was given

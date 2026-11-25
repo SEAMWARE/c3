@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <title>NGSI-LD chart</title>
-  <link rel="stylesheet" href="css/style.css">
+  <script src="js/common/load.js"></script>
+  <script>C3load.css("ngsild-chart", ["css/style.css"])</script>
 </head>
 <body>
   <div id="view"></div>
-  <script src="js/common/c3.js"></script>
-  <script src="js/main.js"></script>
+  <script>C3load.js("ngsild-chart", ["js/common/c3.js", "js/main.js"])</script>
+  <script>C3load.rest()</script>
 </body>
 </html>
