@@ -73,6 +73,7 @@ export class Dashboard {
     $('db-toggle').addEventListener('click', () => this.act(this.toggleWhat));
     $('db-stop').addEventListener('click', () => this.act('stop'));
     $('db-reload').addEventListener('click', () => { this.frameFor = null; this.render(); });
+    for (const id of ['db-reset', 'db-reset2']) $(id).addEventListener('click', () => this.resetPassword());
     this.progress = null;          // the dialog's: {what: 'start' | 'stop', error} while it is open
     $('db-pclose').addEventListener('click', () => this.progressClose());
     //
@@ -230,6 +231,25 @@ export class Dashboard {
   }
 
   //
+  // resetPassword - WireCloud's admin gets c3's password (one set outside this c3); then logged in again, or - a start
+  // that stopped there - started again
+  //
+  async resetPassword() {
+    const failedStart = !!this.state?.why;
+    for (const id of ['db-reset', 'db-reset2']) $(id).disabled = true;
+    try {
+      await api.dashboardResetPassword();
+      this.loginWhy = null;
+      this.frameFor = null;
+      if (failedStart) this.act('start');
+    } catch (e) {
+      this.loginWhy = e.message;
+    }
+    for (const id of ['db-reset', 'db-reset2']) $(id).disabled = false;
+    this.poll();
+  }
+
+  //
   // login - c3 logs in to WireCloud; the frame then loads it, already logged in
   //
   async login(port) {
@@ -308,6 +328,7 @@ export class Dashboard {
       const barWhy = this.loginWhy ? t('c³ could not log in to WireCloud: {why}', { why: this.loginWhy }) : (this.writeWhy || '');
       $('db-loginwhy').hidden = !barWhy;
       $('db-loginwhy').textContent = barWhy;
+      $('db-reset').hidden = !(s.loginFailed && this.loginWhy);
       if (this.frameFor !== s.port && !this.loginWhy) this.login(s.port);
       return;
     }
@@ -324,6 +345,7 @@ export class Dashboard {
     $('db-doing').textContent = s.busy && s.doing ? doingText(s.doing) : '';
     $('db-why').hidden = !s.why;
     $('db-why').textContent = s.why ? t('The last start failed: {why}', { why: s.why }) : '';
+    $('db-reset2').hidden = !(s.loginFailed && s.why && !s.busy);
 
     const anyRuns = s.services.some((x) => x.state === 'running');
     $('db-stop').hidden = s.busy || !anyRuns;      // partly running: Stop beside Start again

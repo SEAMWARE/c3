@@ -60,6 +60,7 @@
 
 #include <arpa/inet.h>                           // htons, inet_pton
 #include <dirent.h>                              // opendir
+#include <ftw.h>                                 // nftw
 #include <errno.h>                               // errno
 #include <fcntl.h>                               // open, O_*
 #include <netinet/in.h>                          // sockaddr_in
@@ -356,6 +357,7 @@ typedef struct Dashboard
   int      nSteps;
   int      total;                                // how many steps it should take, as far as known
   char     why[600];                             // why the last start failed; "" - it did not
+  bool     loginFailed;                          // WireCloud's admin does not take c3's password (reset-password helps)
   char     logPath[2300];
   int64_t  logEnd;
   SseSubs  subs;
@@ -3088,31 +3090,114 @@ static const char* wirecloudPackage(void)
 }
 
 //
-// wirecloudThemeArgs - WireCloud in c3's colours: www/wirecloud/c3theme (a WireCloud theme, built on defaulttheme -
-// tools/wirecloud-theme.sh compiles its CSS) mounted as the package's themes/c3theme, and made the active theme.
-// Without the theme's folder or the package's path WireCloud keeps its own (logged).
+// treeRemove / treeCopy - a directory's tree removed / copied (symbolic links as links, files' modes kept)
 //
-static void wirecloudThemeArgs(Argv* aP, const char* logPath, const char* name)
+static int treeRemoveOne(const char* path, const struct stat* sbP, int flag, struct FTW* ftwP)
 {
-  char  dir[4200];
-  char* real;
+  (void) sbP; (void) flag; (void) ftwP;
+  return remove(path);
+}
 
-  snprintf(dir, sizeof(dir), "%s/wirecloud/c3theme", c3WwwDir);
-  real = realpath(dir, NULL);
+static void treeRemove(const char* dir)
+{
+  nftw(dir, treeRemoveOne, 16, FTW_DEPTH | FTW_PHYS);
+}
+
+static bool treeCopy(const char* from, const char* to)
+{
+  struct stat st;
+  if ((lstat(from, &st) != 0) || ((mkdir(to, 0755) != 0) && (errno != EEXIST)))
+    return false;
+
+  DIR* dP = opendir(from);
+  if (dP == NULL)
+    return false;
+
+  bool           ok = true;
+  struct dirent* eP;
+  while (ok && ((eP = readdir(dP)) != NULL))
+  {
+    if ((strcmp(eP->d_name, ".") == 0) || (strcmp(eP->d_name, "..") == 0))
+      continue;
+
+    char src[4400];
+    char dst[4400];
+    snprintf(src, sizeof(src), "%s/%s", from, eP->d_name);
+    snprintf(dst, sizeof(dst), "%s/%s", to, eP->d_name);
+    if (lstat(src, &st) != 0)
+      ok = false;
+    else if (S_ISDIR(st.st_mode))
+      ok = treeCopy(src, dst);
+    else if (S_ISLNK(st.st_mode))
+    {
+      char    target[4096];
+      ssize_t n = readlink(src, target, sizeof(target) - 1);
+      if (n < 0)
+        ok = false;
+      else
+      {
+        target[n] = 0;
+        ok = (symlink(target, dst) == 0);
+      }
+    }
+    else if (S_ISREG(st.st_mode))
+    {
+      int in  = open(src, O_RDONLY | O_CLOEXEC);
+      int out = open(dst, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, st.st_mode & 0777);
+      char    buf[65536];
+      ssize_t n = 0;
+      while ((in != -1) && (out != -1) && ((n = read(in, buf, sizeof(buf))) > 0))
+      {
+        if (write(out, buf, n) != n) { n = -1; break; }
+      }
+      ok = (in != -1) && (out != -1) && (n == 0);
+      if (in  != -1) close(in);
+      if (out != -1) close(out);
+    }
+  }
+  closedir(dP);
+  return ok;
+}
+
+//
+// wirecloudThemeArgs - WireCloud in c3's colours: www/wirecloud/c3theme (a WireCloud theme, built on defaulttheme -
+// tools/wirecloud-theme.sh compiles its CSS) copied to <svcDir>/c3-<set>-wirecloud-theme and that copy mounted as the
+// package's themes/c3theme, made the active theme. A copy, not c3's pages: an install or a checkout replaces the pages'
+// folders, and a container's mount of a replaced folder shows it deleted (WireCloud then fails to load its themes).
+// Without the theme or the package's path WireCloud keeps its own (logged).
+//
+static void wirecloudThemeArgs(Argv* aP, const char* logPath, const char* name, const char* set)
+{
+  char from[4200];
+  char to[2300];
+
+  snprintf(from, sizeof(from), "%s/wirecloud/c3theme", c3WwwDir);
+  snprintf(to, sizeof(to), "%s/c3-%s-wirecloud-theme", svcDir, set);
 
   const char* pkg = wirecloudPackage();
-  if ((real == NULL) || (pkg[0] == 0))
+  if (access(from, R_OK) != 0)
   {
-    logLine(logPath, "%s: WireCloud's own theme - %s", name, (real == NULL) ? "no c3theme in c3's pages" : "the image's WireCloud package was not found");
-    if (real != NULL) free(real);
+    logLine(logPath, "%s: WireCloud's own theme - no c3theme in c3's pages (%s)", name, from);
+    return;
+  }
+  if (pkg[0] == 0)
+  {
+    logLine(logPath, "%s: WireCloud's own theme - the image's WireCloud package was not found", name);
     return;
   }
 
-  argAdd(aP, "-v"); argAddf(aP, "%s:%s/themes/c3theme:ro", real, pkg);
+  treeRemove(to);
+  if (treeCopy(from, to) == false)
+  {
+    logLine(logPath, "%s: WireCloud's own theme - c3theme not copied to %s: %s", name, to, strerror(errno));
+    treeRemove(to);
+    return;
+  }
+
+  argAdd(aP, "-v"); argAddf(aP, "%s:%s/themes/c3theme:ro", to, pkg);
   argAdd(aP, "-e"); argAdd(aP, "WIRECLOUD_AVAILABLE_THEMES=c3theme,defaulttheme");
   argAdd(aP, "-e"); argAdd(aP, "WIRECLOUD_THEME_ACTIVE=c3theme");
-  logLine(logPath, "%s: in c3's colours (theme c3theme, %s)", name, real);
-  free(real);
+  logLine(logPath, "%s: in c3's colours (theme c3theme, from %s)", name, from);
 }
 
 //
@@ -3469,7 +3554,7 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
       }
     }
     if (kind == KIND_WIRECLOUD)
-      wirecloudThemeArgs(&a, logPath, name);
+      wirecloudThemeArgs(&a, logPath, name, set);
     argAdd(&a, kinds[kind].image);
     for (int ix = 0; kinds[kind].cmd[ix] != NULL; ix++)
       argAdd(&a, kinds[kind].cmd[ix]);
@@ -7647,6 +7732,7 @@ static void opcuaFiles(CorHttpConn* connP, bool post)
 //   POST   /api/run/dashboard/stop     202: the three stopped, their volumes kept
 //   POST   /api/run/dashboard/login    c3 logs in as admin and hands the page WireCloud's session cookies -
 //                                      the password never goes to the page
+//   POST   /api/run/dashboard/reset-password  admin gets c3's password (one set outside this c3: loginFailed)
 //   GET    /api/run/dashboard/log      what the starts and stops did - c3's lines, the commands
 //
 // The cookies: a browser keeps a cookie per host, not per port, so the cookies of WireCloud's login, set on
@@ -7833,6 +7919,39 @@ static int dashExec(const char* password, int timeoutS, const char* const* args)
   free(envp);
   argFree(&a);
   return status;
+}
+
+//
+// dashAdmin - WireCloud's user admin, in its database (MongoDB, the users collection - WireCloud has no command
+// that changes a password): reset - its password made c3's (C3_PASSWORD, WireCloud's own hash: Django's
+// pbkdf2_sha256, as wirecloud.commons.commands._hash_password); else asked whether it exists. Only
+// wirecloud.database imported: no themes loaded, so a broken theme does not stop it. 0: done / it exists; 1: no
+// user admin; -1: it did not run.
+//
+static const char dashAdminScript[] =
+  "import asyncio, os, sys\n"
+  "from base64 import b64encode\n"
+  "from hashlib import pbkdf2_hmac\n"
+  "from wirecloud.database import database\n"
+  "def hashed(p):\n"
+  "    salt = b64encode(os.urandom(16)).decode('ascii').rstrip('=')[:22]\n"
+  "    h = pbkdf2_hmac('sha256', p.encode('utf-8'), salt.encode('ascii'), 600000)\n"
+  "    return 'pbkdf2_sha256$600000$' + salt + '$' + b64encode(h).decode('ascii')\n"
+  "async def main():\n"
+  "    if sys.argv[1] == 'reset':\n"
+  "        r = await database.users.update_one({'username': sys.argv[2]}, {'$set': {'password': hashed(os.environ['C3_PASSWORD'])}})\n"
+  "        return 10 if r.matched_count == 1 else 11\n"
+  "    return 10 if await database.users.find_one({'username': sys.argv[2]}) is not None else 11\n"
+  "sys.exit(asyncio.run(main()))\n";
+
+static int dashAdmin(const char* password)
+{
+  const char* args[] = { "python", "-c", dashAdminScript, (password != NULL) ? "reset" : "exists", DASHBOARD_USER, NULL };
+  int         status = dashExec(password, 120, args);
+
+  if ((status == -1) || (WIFEXITED(status) == false))
+    return -1;
+  return (WEXITSTATUS(status) == 10) ? 0 : (WEXITSTATUS(status) == 11) ? 1 : -1;
 }
 
 //
@@ -8329,6 +8448,19 @@ static void* dashboardThread(void* vP)
     }
 
     //
+    // A user admin with another password (set outside this c3: another c3's, by hand): not a first start - the
+    // Dashboard's Reset admin's password (POST /api/run/dashboard/reset-password) makes it c3's
+    //
+    if (dashAdmin(NULL) == 0)
+    {
+      pthread_mutex_lock(&rMutex);
+      dash.loginFailed = true;
+      pthread_mutex_unlock(&rMutex);
+      snprintf(err, sizeof(err), "WireCloud's user " DASHBOARD_USER " does not take c3's password - it was set outside this c3 (another c3, or by hand); Reset admin's password makes it c3's");
+      goto fail;
+    }
+
+    //
     // The first start (or its data deleted): its widgets, its user
     //
     dashSteps(2);
@@ -8429,6 +8561,59 @@ static void* dashboardStopThread(void* vP)
 }
 
 //
+// dashboardResetThread - POST /api/run/dashboard/reset-password: WireCloud's user admin gets c3's password (secrets.json)
+// - for an admin whose password was set outside this c3. Its workspaces and everything else kept.
+//
+static void* dashboardResetThread(void* vP)
+{
+  Job* jP   = (Job*) vP;
+  int  port = dashPort();
+  char err[512];
+
+  if (port <= 0)
+  {
+    jobError(jP, 409, "The Dashboard does not run", "start it first");
+    return NULL;
+  }
+
+  char password[65];
+  if (credsDashboard(password, sizeof(password), NULL, 0, NULL, 0, err, sizeof(err)) == false)
+  {
+    jobError(jP, 500, "c3's password for WireCloud", err);
+    return NULL;
+  }
+  logLine(dash.logPath, "resetting the password of WireCloud's user " DASHBOARD_USER " to c3's");
+  int r = dashAdmin(password);
+  memset(password, 0, sizeof(password));
+  if (r == 1)
+  {
+    jobError(jP, 404, "No user " DASHBOARD_USER " in WireCloud", "the Dashboard's Stop and Start makes it");
+    return NULL;
+  }
+  if (r != 0)
+  {
+    jobError(jP, 502, "The password was not reset", "WireCloud's container did not run the reset - the Dashboard's log says why");
+    return NULL;
+  }
+
+  int status = dashLogin(port, NULL, err, sizeof(err));
+  pthread_mutex_lock(&rMutex);
+  dash.loginFailed = (status != 302);
+  pthread_mutex_unlock(&rMutex);
+  if (status != 302)
+  {
+    jobError(jP, 502, "Reset, but WireCloud's login still fails", err);
+    return NULL;
+  }
+  logLine(dash.logPath, "WireCloud's user " DASHBOARD_USER " has c3's password");
+
+  Str s = { NULL, 0, 0 };
+  strAdd(&s, "{\"user\": \"" DASHBOARD_USER "\"}");
+  jobAnswer(jP, 200, &s);
+  return NULL;
+}
+
+//
 // dashboardLoginThread - POST /api/run/dashboard/login: WireCloud's session cookies on c3's answer, its port
 //
 static void* dashboardLoginThread(void* vP)
@@ -8444,7 +8629,11 @@ static void* dashboardLoginThread(void* vP)
   }
 
   Str cookies = { NULL, 0, 0 };
-  if (dashLogin(port, &cookies, err, sizeof(err)) != 302)
+  int status  = dashLogin(port, &cookies, err, sizeof(err));
+  pthread_mutex_lock(&rMutex);
+  dash.loginFailed = (status == 200);            // its password not c3's: the page offers Reset admin's password
+  pthread_mutex_unlock(&rMutex);
+  if (status != 302)
   {
     strFree(&cookies);
     jobError(jP, 502, "WireCloud's login failed", err);
@@ -8489,6 +8678,7 @@ static void dashboardState(CorHttpConn* connP)
   strAddf(&s, ", \"busy\": %s", dash.busy ? "true" : "false");
   strAdd(&s, ", \"doing\": ");     strAddJson(&s, (dash.doing[0] != 0) ? dash.doing : NULL);
   strAdd(&s, ", \"why\": ");       strAddJson(&s, (dash.why[0] != 0) ? dash.why : NULL);
+  strAddf(&s, ", \"loginFailed\": %s", dash.loginFailed ? "true" : "false");
 
   //
   // The last start's or stop's steps: each one's text, its seconds (so far, while it runs), done or failed
@@ -8567,6 +8757,12 @@ static void dashboardRequest(CorHttpConn* connP, const char* action)
     return;
   }
 
+  if (post && (strcmp(action, "reset-password") == 0))
+  {
+    jobStart(connP, dashboardResetThread, NULL);
+    return;
+  }
+
   if (get && (strcmp(action, "brokers") == 0))
   {
     dashboardBrokers(connP);
@@ -8598,6 +8794,7 @@ static void dashboardRequest(CorHttpConn* connP, const char* action)
     }
     dash.busy = true;
     dash.why[0] = 0;
+    dash.loginFailed = false;
     snprintf(dash.doing, sizeof(dash.doing), "%s", start ? "starting" : "stopping");
     dash.stepsOfStart = start;
     dash.nSteps       = 0;

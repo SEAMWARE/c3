@@ -1149,11 +1149,18 @@ it is part of c³.
 - **In c³'s language**: WireCloud and the widgets show the language chosen in c³, not the browser's - the frame's
   URL carries `?lang=<c³'s>` and the page sets the cookie `lang` (this host's, so WireCloud's port gets it), which
   WireCloud reads on every request after its redirects drop the parameter.
+- **admin's password set outside this c³** (WireCloud's data made by another c³, or the password changed by hand): c³'s
+  login fails, and a start stops there (`"loginFailed": true` in the state) rather than taking it for a first start.
+  **Reset admin's password** (beside the failure; `POST /api/run/dashboard/reset-password`) gives `admin` c³'s
+  password in WireCloud's database - its hash as WireCloud's `createsuperuser` makes it - and keeps everything else;
+  after a failed start, the page starts the Dashboard again. WireCloud itself has no command that changes a password.
 - **In c³'s colours**: WireCloud runs with c³'s theme, `www/wirecloud/c3theme` - a WireCloud theme built on its
   `defaulttheme`: `static/css/_variables.scss` maps c³'s palette onto WireCloud's variables, `static/css/c3.scss` holds
   the rules the variables do not reach. c³ mounts the folder as the image's `wirecloud/themes/c3theme` (the package's
   path asked of the image once per image id) and starts WireCloud with `WIRECLOUD_AVAILABLE_THEMES=c3theme,defaulttheme`
-  and `WIRECLOUD_THEME_ACTIVE=c3theme`. The compiled CSS, `static/css/c3theme_*.css`, is committed: after a change to
+  and `WIRECLOUD_THEME_ACTIVE=c3theme`. It mounts a copy, `<data>/run/services/c3-dashboard-wirecloud-theme`, made at
+  each creation of the container: an install or a checkout replaces the pages' folders, and a mount of a replaced
+  folder shows it deleted. The compiled CSS, `static/css/c3theme_*.css`, is committed: after a change to
   the sources, `tools/wirecloud-theme.sh [<WireCloud checkout>]` compiles them with WireCloud's own build (the checkout
   needs `npm ci`); then the Dashboard's Stop and Start. The theme's JS is the default theme's (`static/js/`: links into
   the image's `dist/js/`). The widgets draw in c³'s colours with `www/widgets/common/theme.css` (c³'s tokens, and
@@ -1236,6 +1243,7 @@ The backend's API, used by the pages:
 | `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
 | `POST /api/run/dashboard/login` | c³ logs in to WireCloud as `admin`: `200` `{port, user}` with WireCloud's `Set-Cookie`s and `c3_port`; `409` when it does not run, `502` with why |
+| `POST /api/run/dashboard/reset-password` | WireCloud's user `admin` gets c³'s password (`secrets.json`): `200` `{user}`; `404` no user `admin`; `502` the reset did not run, or the login still fails. For an `admin` whose password was set outside this c³ - the state's `loginFailed` is then `true` |
 | `GET /api/run/dashboard/log` | the log of the Dashboard's starts and stops, as `GET /api/run/brokers/<name>/log` |
 | `GET /api/run/dashboard/brokers` | the brokers c³ knows, for the widgets: `[{url, name, tenant, tenants}]`; CORS for WireCloud's origin (GET) |
 | `PUT /api/run/dashboard/settings` | `{"widgetsWrite": bool}` - may the Dashboard's widgets write entities (the page's switch *Widgets may write*); kept in c3.json as `"dashboard": {"widgetsWrite"}`, on by default. `GET /api/run/dashboard` answers it as `widgetsWrite` |
