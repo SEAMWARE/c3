@@ -1,0 +1,94 @@
+// c³'s palette (www/css/c3.css) on WireCloud's variables (defaulttheme/static/css/_defaults.scss)
+@use "sass:color";
+
+$c3-bg:          #0E1014;
+$c3-bg-deep:     #0A0C0F;
+$c3-panel:       #161920;
+$c3-panel-2:     #1D212A;
+$c3-line:        #2B303B;
+$c3-line-box:    #333A47;
+$c3-text:        #ECEEF2;
+$c3-text-2:      #CDD2DB;
+$c3-muted:       #A6ADBA;
+$c3-dim:         #7A8190;
+$c3-accent:      #A72E60;
+$c3-accent-2:    #D0558A;
+$c3-accent-text: #E58AB1;
+$c3-ok:          #6FDCA0;
+$c3-warn:        #F2B84B;
+$c3-bad:         #FF8A9A;
+
+@forward "defaults" with (
+    $gray-base:                 #000,
+    $brand-default:             $c3-panel-2,
+    $brand-primary:             $c3-accent,
+    $brand-success:             #2E9E63,
+    $brand-info:                #3A7CA5,
+    $brand-warning:             #C98A1B,
+    $brand-danger:              #C9455A,
+
+    $font-family-base:          ("Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif),
+    $headings-font-family:      ("Outfit", "Source Sans 3", system-ui, sans-serif),
+    $headings-font-weight:      500,
+
+    $body-bg:                   $c3-bg,
+    $text-color-light:          $c3-bg,
+    $text-color-dark:           $c3-text,
+    $link-color:                $c3-accent-text,
+    $link-hover-color:          $c3-accent-2,
+
+    $state-default-text:        $c3-text-2,
+    $state-default-bg:          $c3-panel-2,
+    $state-default-border:      $c3-line-box,
+
+    $code-color:                $c3-accent-text,
+    $code-bg:                   $c3-panel-2,
+    $pre-bg:                    $c3-bg-deep,
+    $pre-color:                 $c3-text-2,
+    $pre-border-color:          $c3-line,
+
+    $button-gradients:          false,
+    $button-text-color-dark:    $c3-text,
+
+    $addon-bg:                  $c3-panel-2,
+    $box-bg:                    $c3-panel,
+    $input-border:              $c3-line-box,
+    $input-border-color-focus:  $c3-accent-2,
+    $input-color:               $c3-text,
+    $input-bg:                  $c3-bg-deep,
+
+    $nav-tabs-border-color:     $c3-line,
+    $nav-tabs-active-link-hover-border-color: $c3-line,
+    $nav-tabs-active-link-hover-bg: $c3-panel,
+    $nav-link-hover-text:       $c3-text,
+    $nav-link-hover-bg:         $c3-panel-2,
+    $nav-link-default-text:     $c3-muted,
+    $nav-link-default-active-text: $c3-text,
+    $nav-link-default-active-bg: $c3-accent,
+    $nav-disabled-link-color:   $c3-dim,
+    $nav-disabled-link-hover-color: $c3-dim,
+
+    $panel-bg:                  $c3-panel,
+    $panel-box-shadow:          none,
+    $panel-default-border-color: $c3-line,
+    $panel-default-heading-bg:  $c3-panel-2,
+    $panel-default-heading-text-color: $c3-text-2,
+    $panel-default-footer-bg:   $c3-panel-2,
+    $panel-default-btn-hover-text-color: $c3-accent-text,
+
+    $popover-bg:                $c3-panel-2,
+    $modal-bg:                  $c3-panel,
+    $modal-header-bg:           $c3-panel-2,
+    $modal-footer-bg:           $c3-panel-2,
+    $modal-header-border-color: $c3-line,
+
+    $widget-bg:                 $c3-panel,
+    $widget-footer-bg:          $c3-panel-2,
+
+    $popup-menu-bg:             $c3-panel-2,
+    $popup-menu-border-color:   $c3-line-box,
+    $popup-menu-item-description-text-color: $c3-muted,
+    $popup-menu-item-active-bg: $c3-accent,
+
+    $wiring-content-bg:         $c3-bg
+);

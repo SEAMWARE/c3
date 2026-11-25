@@ -1149,6 +1149,16 @@ it is part of c³.
 - **In c³'s language**: WireCloud and the widgets show the language chosen in c³, not the browser's - the frame's
   URL carries `?lang=<c³'s>` and the page sets the cookie `lang` (this host's, so WireCloud's port gets it), which
   WireCloud reads on every request after its redirects drop the parameter.
+- **In c³'s colours**: WireCloud runs with c³'s theme, `www/wirecloud/c3theme` - a WireCloud theme built on its
+  `defaulttheme`: `static/css/_variables.scss` maps c³'s palette onto WireCloud's variables, `static/css/c3.scss` holds
+  the rules the variables do not reach. c³ mounts the folder as the image's `wirecloud/themes/c3theme` (the package's
+  path asked of the image once per image id) and starts WireCloud with `WIRECLOUD_AVAILABLE_THEMES=c3theme,defaulttheme`
+  and `WIRECLOUD_THEME_ACTIVE=c3theme`. The compiled CSS, `static/css/c3theme_*.css`, is committed: after a change to
+  the sources, `tools/wirecloud-theme.sh [<WireCloud checkout>]` compiles them with WireCloud's own build (the checkout
+  needs `npm ci`); then the Dashboard's Stop and Start. The theme's JS is the default theme's (`static/js/`: links into
+  the image's `dist/js/`). The widgets draw in c³'s colours with `www/widgets/common/theme.css` (c³'s tokens, and
+  buttons, fields and tables), which each widget's `css/style.css` imports - from c³, so a placed widget gets it at
+  its next load.
 - **WireCloud's MCP server**, when the image has it (built with `WIRECLOUD_INSTALL_MCP=true` - c³ asks the image
   once per image id: `python -c "import mcp"`): c³ starts WireCloud with the apps `wirecloud.oauth2provider` and
   `wirecloud.mcp`, `WIRECLOUD_MCP_PUBLIC_URL=http://127.0.0.1:<port>/mcp` and dynamic client registration off,

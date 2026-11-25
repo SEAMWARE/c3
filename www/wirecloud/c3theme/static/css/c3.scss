@@ -1,0 +1,16 @@
+// c3.scss - c³'s own rules on top of the theme's variables: what the variables do not reach.
+// Edit here; tools/wirecloud-theme.sh compiles it into static/css/c3theme_*.css.
+@use "variables" as v;
+
+// WireCloud puts a theme's own CSS before its parent's: "html body" makes these rules win over the parent's
+html body {
+    // The user menu (top right): c³'s panel, not a light grey box (WireCloud's rules are #wirecloud_header ...)
+    #wirecloud_header .menu_wrapper { color: v.$c3-text-2; font-family: inherit; }
+    #wirecloud_header .menu_wrapper > .menu { background: v.$c3-panel-2; box-shadow: none; border: 1px solid v.$c3-line; border-radius: 0 0 0 6px; }
+
+    // The workspace's name in the bar: owner/name in c³'s text colours and font, not red/green Courier
+    #wirecloud_breadcrum { font-family: inherit; font-weight: 600; }
+    #wirecloud_breadcrum > .first_level { color: v.$c3-muted; }
+    #wirecloud_breadcrum > .second_level { color: v.$c3-text; }
+    #wirecloud_breadcrum > .third_level { color: v.$c3-accent-text; }
+}

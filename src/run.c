@@ -3059,6 +3059,63 @@ static bool wirecloudMcp(void)
 }
 
 //
+// wirecloudPackage - where the image has WireCloud's Python package (/usr/local/lib/python3.11/site-packages/wirecloud):
+// c3's theme is mounted into its themes/. Asked of the image once per image id, as wirecloudMcp; "" when unknown.
+//
+static char pkgImageId[80];
+static char pkgPath[512];
+
+static const char* wirecloudPackage(void)
+{
+  char id[256];
+  char out[1024];
+
+  if (engineRun(id, sizeof(id), 30, "image", "inspect", "--format", "{{.Id}}", kinds[KIND_WIRECLOUD].image, NULL) != 0)
+    return "";
+  if (strcmp(id, pkgImageId) == 0)
+    return pkgPath;
+
+  pkgPath[0] = 0;
+  if ((engineRun(out, sizeof(out), 60, "run", "--rm", "--entrypoint", "python", kinds[KIND_WIRECLOUD].image, "-c",
+                 "import os, wirecloud; print(os.path.dirname(wirecloud.__file__))", NULL) == 0) && (out[0] == '/'))
+  {
+    char* nl = strchr(out, '\n');
+    if (nl != NULL) *nl = 0;
+    snprintf(pkgPath, sizeof(pkgPath), "%s", out);
+  }
+  snprintf(pkgImageId, sizeof(pkgImageId), "%s", id);
+  return pkgPath;
+}
+
+//
+// wirecloudThemeArgs - WireCloud in c3's colours: www/wirecloud/c3theme (a WireCloud theme, built on defaulttheme -
+// tools/wirecloud-theme.sh compiles its CSS) mounted as the package's themes/c3theme, and made the active theme.
+// Without the theme's folder or the package's path WireCloud keeps its own (logged).
+//
+static void wirecloudThemeArgs(Argv* aP, const char* logPath, const char* name)
+{
+  char  dir[4200];
+  char* real;
+
+  snprintf(dir, sizeof(dir), "%s/wirecloud/c3theme", c3WwwDir);
+  real = realpath(dir, NULL);
+
+  const char* pkg = wirecloudPackage();
+  if ((real == NULL) || (pkg[0] == 0))
+  {
+    logLine(logPath, "%s: WireCloud's own theme - %s", name, (real == NULL) ? "no c3theme in c3's pages" : "the image's WireCloud package was not found");
+    if (real != NULL) free(real);
+    return;
+  }
+
+  argAdd(aP, "-v"); argAddf(aP, "%s:%s/themes/c3theme:ro", real, pkg);
+  argAdd(aP, "-e"); argAdd(aP, "WIRECLOUD_AVAILABLE_THEMES=c3theme,defaulttheme");
+  argAdd(aP, "-e"); argAdd(aP, "WIRECLOUD_THEME_ACTIVE=c3theme");
+  logLine(logPath, "%s: in c3's colours (theme c3theme, %s)", name, real);
+  free(real);
+}
+
+//
 // mcpSettingsWrite - WireCloud's Docker settings, and the OAuth client AI Assist reaches its MCP server with:
 // the image takes its settings from the environment, but not OAUTH2_CLIENTS. c3's settings.py is mounted over
 // the image's /app/docker/settings.py (its entrypoint puts /app/docker first in PYTHONPATH: nothing beside it
@@ -3411,6 +3468,8 @@ static int svcEnsure(const char* set, int kind, const char* brokerLog, char* err
         logLine(logPath, "%s: its MCP server on (AI Assist builds dashboards) - 127.0.0.1:%d/mcp", name, port);
       }
     }
+    if (kind == KIND_WIRECLOUD)
+      wirecloudThemeArgs(&a, logPath, name);
     argAdd(&a, kinds[kind].image);
     for (int ix = 0; kinds[kind].cmd[ix] != NULL; ix++)
       argAdd(&a, kinds[kind].cmd[ix]);

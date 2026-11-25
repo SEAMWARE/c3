@@ -1,7 +1,8 @@
 /* Copyright 2026 Seamware - SPDX-License-Identifier: Apache-2.0 */
-body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; color: #222; }
+@import url("../../common/theme.css");
+body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; color: var(--text); }
 .form { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; }
-.form label { color: #555; }
+.form label { color: var(--muted); }
 .form select, .form input { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; }
 .form .types { display: flex; flex-wrap: wrap; gap: 2px 12px; max-height: 8em; overflow-y: auto; }
 .form .types label { color: inherit; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -11,5 +12,5 @@ body { margin: 0; padding: 10px; font: 13px/1.4 system-ui, sans-serif; color: #2
 .acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
 button { padding: 4px 12px; font: inherit; cursor: pointer; }
 .status .what { font-weight: 600; overflow-wrap: anywhere; }
-.status .meta { color: #666; margin-top: 2px; overflow-wrap: anywhere; }
-.err { color: #b00020; margin-top: 6px; overflow-wrap: anywhere; }
+.status .meta { color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.err { color: var(--bad); margin-top: 6px; overflow-wrap: anywhere; }
