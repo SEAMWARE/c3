@@ -13,4 +13,11 @@ html body {
     #wirecloud_breadcrum > .first_level { color: v.$c3-muted; }
     #wirecloud_breadcrum > .second_level { color: v.$c3-text; }
     #wirecloud_breadcrum > .third_level { color: v.$c3-accent-text; }
+
+    // The wiring editor's boxes: c³'s panel inside, not white; their endpoints' names readable on it
+    .component-draggable .panel-body,
+    .component-draggable.background.active .panel-body { background-color: v.$c3-panel-2; }
+    .endpoints .endpoint .endpoint-title { color: v.$c3-text-2; }
+    .component-draggable.background .endpoints .endpoint .endpoint-title { color: v.$c3-dim; }
+    .component-draggable .endpoints.orderable .endpoint.dragging { background-color: v.$c3-line; }
 }
