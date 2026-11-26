@@ -23,6 +23,8 @@
 .rn-none[hidden] { display: none; }
 .rn-ctrs { max-height: 28rem; overflow-y: auto; padding-right: 4px; }
 .rn-ctrs .rn-item { flex: 0 0 auto; }
+.rn-morebar { display: flex; justify-content: center; margin-top: 12px; }
+.rn-morebar[hidden] { display: none; }
 .rn-item .racts .btn:disabled { opacity: 0.45; cursor: default; }
 .rn-title { display: flex; align-items: center; gap: 12px; }
 .help-q {

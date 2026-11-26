@@ -210,6 +210,7 @@ export class Run {
     this.remoteAsked = 0;
     this.ctrBusy = new Map();         // container -> its state when Start or Stop was asked: busy until it changes
     this.ctrWhy = new Map();          // container -> why its last Start or Stop failed
+    this.ctrAll = false;              // Containers: all of them, not only the 10 newest
     this.caps = null;                 // GET /api/capabilities: "run"
     this.state = null;                // GET /api/run
     this.stateText = '';
@@ -785,13 +786,17 @@ export class Run {
   }
 
   //
-  // renderContainers - Containers: every container on this machine (GET /api/run "containers"), the newest first,
-  // in a box that scrolls; each one Start or Stop and its Log (while it runs)
+  // renderContainers - Containers: every container on this machine (GET /api/run "containers"), the 10 newest
+  // (Show all for the rest), in a box that scrolls; each one Start or Stop and its Log (while it runs)
   //
   renderContainers() {
     const list = [...(this.state.containers || [])].sort((a, b) => String(b.created).localeCompare(String(a.created)));
     $('rn-ccount').textContent = list.length ? String(list.length) : '';
-    $('rn-ctrs').replaceChildren(...list.map((c) => this.containerRow(c)));
+    const shown = this.ctrAll ? list : list.slice(0, 10);   // the 10 newest; the rest on asking
+    $('rn-ctrs').replaceChildren(...shown.map((c) => this.containerRow(c)));
+    $('rn-cmore').hidden = list.length <= 10;
+    $('rn-cmore').replaceChildren(...(list.length > 10 ? [button(this.ctrAll ? t('Show the 10 newest') : t('Show all {n}', { n: list.length }), '',
+      () => { this.ctrAll = !this.ctrAll; this.renderContainers(); if (!this.ctrAll) $('rn-ctrs').scrollTop = 0; })] : []));
     $('rn-ctrs').hidden = !list.length;
     $('rn-cnone').hidden = !!list.length || !this.state.engine || !this.state.engine.name;
     for (const n of [...this.ctrBusy.keys()]) {          // asked to start or stop: until its state changed

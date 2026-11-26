@@ -738,7 +738,7 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
   Set up and start a broker, **Earlier settings**.
 - **Containers** - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
   that scrolls: its name, state, what it is (a c³ broker's, a c³ service, else its image), docker's status and
-  its ports. **Start** / **Stop** (one button; a c³ broker's container starts and stops as that broker; a service
+  its ports; the 10 newest, **Show all** for the rest. **Start** / **Stop** (one button; a c³ broker's container starts and stops as that broker; a service
   a running c³ broker uses is stopped with that broker, not here) and **Log** (while it runs): its card with the
   container's last 500 lines, read again every 3 s (`GET /api/run/containers/<name>/log`).
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,

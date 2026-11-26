@@ -1530,5 +1530,6 @@
   "{name} does not run": "{name} läuft nicht",
   "← Operate": "← Betreiben",
   "Set up and start a broker - what runs": "Einen Broker einrichten und starten - was läuft",
-  "Set up and start a broker, 1 of 2": "Einen Broker einrichten und starten, 1 von 2"
+  "Set up and start a broker, 1 of 2": "Einen Broker einrichten und starten, 1 von 2",
+  "Show the 10 newest": "Die 10 neuesten zeigen"
 }
