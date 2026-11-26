@@ -48,6 +48,7 @@ export class History {
     this.state = 'none';                         // 'loading', 'ok', 'live' (no temporal API), 'none'
     this.why = '';
     this.onLoaded = () => {};                    // the panel to draw again
+    this.onOpen = () => {};                      // an attribute's History panel (temporal.js)
   }
 
   //
@@ -125,6 +126,11 @@ export class History {
     for (const [a, all] of this.series) {
       const pts = all.filter(([t]) => t >= t0);
       const row = el('div', 'hrow');
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.title = t('Its history over a time range');
+      row.onclick = () => this.onOpen(a);
+      row.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.onOpen(a); } };
       const head = el('div', 'hhead');
       head.append(el('span', 'k', a));
       const unit = e[a] && e[a].unitCode ? ' ' + e[a].unitCode : '';

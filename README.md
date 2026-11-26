@@ -605,13 +605,51 @@ rules; the backend answers `{"op": "alerts", "broker", "installed": [{"rule", "s
 
 ### History
 
-The attribute panel's **History**: each numeric Property of the selected entity over the last 10 minutes,
-as a sparkline (a step line - a value holds until the next) with its range and count. Read once on
+The attribute panel's **History** section: each numeric Property of the selected entity over the last 10
+minutes, as a sparkline (a step line - a value holds until the next) with its range and count. Read once on
 select - `GET /ngsi-ld/v1/temporal/entities/{id}?timerel=after&timeAt=<10 minutes ago>&attrs=...&timeproperty=modifiedAt&options=sysAttrs`
 (every change, with an `observedAt` or not; a value's time is its `observedAt` if it has one) - then grown
 from the live values. A broker without the temporal API, or whose TRoE plugin does not read history
 (coraine's `--troe ramDB` answers 422), shows the live values from the moment the entity was selected,
-and says so. coraine with `--troe corDB` answers it.
+and says so. coraine with `--troe corDB` answers it. A click on a sparkline opens that attribute's History panel.
+
+### The History panel
+
+An attribute's history over a time range, from the broker's temporal API - opened by a click on the attribute in
+the entity panel (its menu: **History…**, Edit, Delete; a right-click opens the same menu) or on its sparkline.
+Over the graph's right side, as the editor.
+
+- **The time range**: 1 h, 24 h, 7 d, 30 d (ending at the moment of each read), or a start and an end typed in.
+  It is the panel's, not the attribute's: kept per broker on this machine (`localStorage`), every History opened
+  afterwards starts from it.
+- **The time property**: `observedAt` (the spec's default), `modifiedAt` or `createdAt`. When `observedAt` finds
+  nothing in the range (values written without one), the panel reads `modifiedAt` instead - unless one was chosen.
+- **The graph**, by the values: numbers as a line with its points; booleans as a step between false and true;
+  strings (a Relationship's targets, a VocabProperty) as a band - a colour per value, each holding until the next
+  instance, and the share of the time each value had. Objects and arrays (a GeoProperty, a JsonProperty, a
+  LanguageProperty) have the table only. The pointer shows the nearest instance's time and value; a click shows it
+  in the table.
+- **The table**: the instances, newest first - the time, the value (with its `unitCode`), the other time
+  properties, the `datasetId`, the `instanceId` - each with **Edit** (the value and its `observedAt`:
+  `PATCH /temporal/entities/{id}/attrs/{attr}/{instanceId}`) and **Delete**
+  (`DELETE /temporal/entities/{id}/attrs/{attr}/{instanceId}`).
+- **Aggregate**: any of `avg`, `min`, `max`, `sum`, `totalCount`, `distinctCount`, `stddev`, `sumsq`, over the whole
+  range (a value per method) or per minute, 5 minutes, 15 minutes, hour, day or week (a row per method, a bar per
+  period, on the same time axis) - `format=aggregatedValues&aggrMethods=...&aggrPeriodDuration=...`, computed by
+  the broker.
+- **Add an instance…**: a value (JSON when it parses as JSON - a number, `true`, an object - else the text) and its
+  `observedAt` (now, by default): `POST /temporal/entities/{id}/attrs`, as the attribute's kind and `datasetId`.
+- **Delete this history…**: `DELETE /temporal/entities/{id}/attrs/{attr}` (with the attribute's `datasetId`) - every
+  instance the broker keeps, also outside the range; the attribute itself stays.
+
+The entity's menu has **Delete its history…**: `DELETE /temporal/entities/{id}` - the entity stays. Every delete
+asks first, as Explore's other deletes do.
+
+The read is `GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr>&timerel=between&timeAt&endTimeAt&timeproperty`,
+in pages of 1000 instances (`firstN`, ascending): the next page is the one the `Link` header's
+`rel="intervalafter"` points at (its `offsetN`), until there is none - at most 20000 instances (the panel says when
+there are more: a shorter range shows them all), with **Stop** while it reads. A 404 (coraine's answer when no
+instance matches) is an empty range.
 
 ## Compile
 
@@ -1289,7 +1327,7 @@ The backend's API, used by the pages:
 | `DELETE /api/brokers/headers` | `{"url"}`: the broker's headers forgotten, in memory and in `secrets.json` |
 | `POST /api/notify/<session>` | a broker's notification for a session's HTTP subscription: to the page (`204`); an unknown session is a `404` |
 | `GET /api/proxy/<path>?<query>` | the same GET to the broker named in the `X-C3-Broker` header - the NGSI-LD API (`/ngsi-ld/...`), `/version`, `/build`, coraine's `/admin/tenants`, `/admin/log`, `/admin/config`, `/admin/metrics` and `/admin/bridges/<bridge>/inventory`, and `/.well-known/oauth-protected-resource` (RFC 9728) only, with the page's `NGSILD-Tenant`, the broker's own headers and its access token (`Authorization: Bearer`, unless an own header is the `Authorization`). Answers the broker's status, body, `Content-Type`, `NGSILD-Results-Count` and every `Link` header joined into one; a broker not reached is a 502 with `"broker": false`. |
-| `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
+| `POST`, `PATCH`, `PUT`, `DELETE /api/proxy/<path>` | the same write to the broker - the entities (`/ngsi-ld/v1/entities`, `/ngsi-ld/v1/entities/...`), the batch create and delete (`POST /ngsi-ld/v1/entityOperations/create`, `/delete`), the temporal entities (`POST`, `PATCH`, `DELETE /ngsi-ld/v1/temporal/entities...`), the temporal query (`POST /ngsi-ld/v1/temporal/entityOperations/query`), the subscriptions (`POST`, `PATCH`, `DELETE`), the declared indexes (`POST /admin/indexes`, `DELETE /admin/indexes/{id}`) and `PUT /admin/log` only, with the body and its `Content-Type` (`application/json` when none), the tenant and the token as for a GET; the broker's `Location` comes back too. Only from c³'s own page: a write without an `Origin` of this machine is a 403 - a browser always sends one on a write, and another site's page can neither set it nor send `X-C3-Broker` without a preflight c³ never answers. |
 
 The proxy is why the browser never talks to a broker: the page and the API share one origin, so there
 is no CORS to configure on the broker. A proxied request leaves the event loop (`corHttpSuspend`) and
@@ -1320,6 +1358,7 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/icons.js` | the icons per type, the state colours, drawn on a canvas |
 | `js/alerts.js` | alert rules and alarms: the toasts, the list, `q` evaluated for clearing, the rules kept per broker |
 | `js/history.js` | the attribute panel's History: the temporal API, sparklines, the live values appended |
+| `js/temporal.js` | the History panel: an attribute's history over a time range - graph, table, aggregation; its instances added, modified, deleted |
 | `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), the alert rules and their notifications, reconnecting |
 | `js/basemap.js` | the base map: c³'s dark style for OpenFreeMap's tiles, the downloaded areas' Protomaps layers, the tile and glyph protocols |
 | `js/offline.js` | "Download this area": the estimate, the download's progress, the list of areas |

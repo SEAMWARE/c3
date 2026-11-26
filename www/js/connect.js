@@ -24,6 +24,7 @@ import { Live, isNullAttr } from './live.js';
 import { EntityEditor, NULL } from './editor.js';
 import { Alerts } from './alerts.js';
 import { History } from './history.js';
+import { Temporal, deleteEntityHistory } from './temporal.js';
 import { t, plural } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
@@ -196,6 +197,12 @@ export class Connect {
     //
     this.history = new History();
     this.history.onLoaded = () => { if (this.graph.sel && this.graph.sel === this.history.id) this.refreshPanel(); };
+    this.history.onOpen = (name) => { const e = this.byId.get(this.shownId); if (e) this.temporal.open(e, name, e[name]); };
+
+    //
+    // The History panel: an attribute's history over a time range, from the temporal API
+    //
+    this.temporal = new Temporal(this, $('histpanel'));
 
     this.relMode = 'all';
     $('rel-mode').onchange = () => {
@@ -764,7 +771,7 @@ export class Connect {
 
     const ticket = ++this.loading;
     if (url !== this.broker) this.tokenClose();
-    if (url !== this.broker || tenant !== this.tenant) this.editor.close();
+    if (url !== this.broker || tenant !== this.tenant) { this.editor.close(); if (this.temporal.isOpen) this.temporal.close(); }
     this.broker = url;
     this.tokenUrl = url;
     this.tenant = tenant;
@@ -1636,6 +1643,14 @@ export class Connect {
     items.push({ label: t('Edit…'), hint: t('attributes, as rows'), action: () => this.edit(id) });
     items.push({ label: t('Replace…'), hint: t('the whole entity'), action: () => this.edit(id, null, 'replace') });
     items.push({
+      label: t('Delete its history…'),
+      hint: t('the temporal API'),
+      items: [
+        { label: t('Delete the history of {entity} - at the broker', { entity: shortId(e) }), action: () => this.deleteHistory(id) },
+        { label: t('Cancel'), action: () => {} },
+      ],
+    });
+    items.push({
       label: t('Delete entity…'),
       items: [
         { label: t('Delete {entity} - at the broker', { entity: shortId(e) }), action: () => this.deleteEntity(id) },
@@ -1754,7 +1769,15 @@ export class Connect {
   }
 
   //
-  // attrMenu - an attribute's menu, from the entity panel: Edit it, Delete it (one instance, or all)
+  // deleteHistory - the entity's history (DELETE /temporal/entities/{id}); an open History of it read again
+  //
+  async deleteHistory(id) {
+    if (!(await deleteEntityHistory(this, id))) return;
+    if (this.temporal.isOpen && this.temporal.ctx && this.temporal.ctx.id === id) this.temporal.read();
+  }
+
+  //
+  // attrMenu - an attribute's menu, from the entity panel: its History, Edit it, Delete it (one instance, or all)
   //
   attrMenu(id, name, v, at, target) {
     const ds = v && typeof v === 'object' && typeof v.datasetId === 'string' ? v.datasetId : null;
@@ -1772,6 +1795,8 @@ export class Connect {
       this.refetch(id);
     };
     const items = [
+      { label: t('History…'), hint: t('the temporal API'), action: () => { if (e) this.temporal.open(e, name, e[name]); } },
+      { separator: true },
       { label: t('Edit {name}…', { name }), action: () => this.edit(id, name) },
       { separator: true },
       { label: t('Delete {what}…', { what }), items: [
@@ -2039,6 +2064,11 @@ export class Connect {
         ev.preventDefault();
         this.attrMenu(id, name, v, { x: ev.clientX, y: ev.clientY }, row);
       });
+      row.addEventListener('click', (ev) => {
+        if (ev.target.closest('button, input, a') || String(window.getSelection() || '')) return;
+        this.attrMenu(id, name, v, { x: ev.clientX, y: ev.clientY }, row);
+      });
+      row.title = t('Its menu: History, Edit, Delete');
       const kind = kindOf(v);
       if (kind !== 'Relationship' && kind !== 'ListRelationship') {
         //

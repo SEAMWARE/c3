@@ -46,5 +46,22 @@ for i in 1 2 3; do                                     # three: the suspend/resu
   case "$body" in *Machine*" 200") ;; *) echo "proxySmoke: proxied GET $i: '$body'"; rc=1 ;; esac
 done
 
+#
+# The writes the proxy forwards - the stub answers them 501 (http.server has no POST, PATCH, DELETE): forwarded,
+# not the proxy's own 403 - and the ones it refuses (403). Origin: this machine, as c3's page sends it
+#
+write() { curl -s -o /dev/null -w '%{http_code}' -X "$1" -H "X-C3-Broker: http://127.0.0.1:$S" -H "Origin: http://127.0.0.1:$P" \
+          -H 'Content-Type: application/json' --data '{}' "http://127.0.0.1:$P/api/proxy$2"; }
+T=/ngsi-ld/v1/temporal/entities
+for w in "POST $T" "POST $T/urn:x/attrs" "PATCH $T/urn:x/attrs/a/urn:i" "DELETE $T/urn:x/attrs/a/urn:i" "DELETE $T/urn:x/attrs/a" \
+         "DELETE $T/urn:x" "POST /ngsi-ld/v1/temporal/entityOperations/query"; do
+  code=$(write $w)
+  [ "$code" = 403 ] && { echo "proxySmoke: $w refused by the proxy - it is forwarded"; rc=1; }
+done
+for w in "PUT $T/urn:x" "POST /ngsi-ld/v1/temporal/entityOperations/delete" "DELETE /ngsi-ld/v1/csourceRegistrations/urn:r"; do
+  code=$(write $w)
+  [ "$code" = 403 ] || { echo "proxySmoke: $w answered $code - the proxy refuses it (403)"; rc=1; }
+done
+
 [ $rc = 0 ] && echo "proxySmoke: ok" || cat "$DIR/c3.log"
 exit $rc
