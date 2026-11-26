@@ -7,6 +7,21 @@
 import { brokerGet } from './api.js';
 import { t, plural } from './i18n.js';
 
+//
+// attrCamel - words joined into an attribute name as the broker's AssetChannels name them (coraine
+// assetChannelSampleIn.c attrName): the first word lower-case, a leading acronym lowered whole except its last
+// capital when a lower-case letter follows (URIOfTheProduct: uriOfTheProduct, PLC: plc, IOData: ioData);
+// every other word with its first letter upper-cased (Hydraulics, Oil Temp: hydraulicsOilTemp)
+//
+export function attrCamel(words) {
+  return words.map((w, i) => {
+    if (i > 0) return w.charAt(0).toUpperCase() + w.slice(1);
+    let n = (w.match(/^[A-Z]+/) || [''])[0].length;
+    if (n > 1 && /[a-z]/.test(w.charAt(n))) n--;
+    return w.slice(0, n).toLowerCase() + w.slice(n);
+  }).join('');
+}
+
 export const PAGE_SIZE = 100;
 export const ENTITY_CAP = 2000;
 

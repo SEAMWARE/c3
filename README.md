@@ -1034,7 +1034,7 @@ AssetChannel - the bridge's `assetChannels`). What was written is read back when
 - **A Variable** - not mapped, its proposal greyed: the entity the nearest Object above it, named as an
   AssetChannel on its Objects would name it - `urn:ngsi-ld:<TypeDefinition>:<the Objects' names from the
   top>` (`urn:ngsi-ld:PressType:Press17`), the attribute its path from that Object camelCased
-  (Hydraulics/Pressure: `hydraulicsPressure`) - so that both write the same entity. **✓** accepts it into
+  (Hydraulics/Pressure: `hydraulicsPressure`; a leading acronym lowered whole, IOData/Status: `ioDataStatus`) - so that both write the same entity. **✓** accepts it into
   the fields still empty. Its name opens the fields: Attribute name, Entity ID, Entity type (optional, once
   per entity, as the DDS mapper's), **its value** as discovered with its SourceTimestamp, **not mapped**. A
   write of the attribute writes the Variable when the server lets it be written.

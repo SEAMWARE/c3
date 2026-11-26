@@ -18,6 +18,7 @@ import { Metrics } from './metrics.js';
 import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
 import { AasForm } from './aasform.js';
+import { attrCamel } from './ngsild.js';
 import { t, tk, plural } from './i18n.js';
 import { helpShow } from './compile.js';
 import { pickDir } from './source.js';
@@ -422,7 +423,7 @@ export class Run {
   // channelFor - a Variable's Channel, named as an AssetChannel on its Object names it (coraine's
   // asset-channels.md), so that both write the same entity: the nearest Object above the Variable, its type the
   // Object's typeName (else "Object"), its id urn:ngsi-ld:<type>:<name> - a byte outside [A-Za-z0-9._-] as
-  // %XX; the attribute the names from the Object down, the first one lower-case, only [A-Za-z0-9_] kept
+  // %XX; the attribute the names from the Object down, the first one lower-case as the broker does it (attrCamel), only [A-Za-z0-9_] kept
   //
   channelFor(path) {
     const v = path[path.length - 1];
@@ -435,7 +436,7 @@ export class Run {
     const type = obj ? (clean(obj.typeName) || 'Object') : 'Object';
     const idPart = (obj ? obj.name : v.name) || 'object';
     const names = path.slice(obj ? ix + 1 : path.length - 1).map((p) => clean(p.name)).filter(Boolean);
-    const attribute = names.map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('') || 'value';
+    const attribute = attrCamel(names) || 'value';
     return { node: v.id, entityId: 'urn:ngsi-ld:' + type + ':' + pct(idPart), entityType: type, attribute };
   }
 

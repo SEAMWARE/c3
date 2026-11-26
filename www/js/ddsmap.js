@@ -16,6 +16,7 @@
 //
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { attrCamel } from './ngsild.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -99,8 +100,7 @@ function segments(name) {
 function suggested(name) {
   const segs = name.replace(/^rt\//, '').split('/').filter(Boolean);
   const last = segs.pop() || name;
-  return last.split(/[^A-Za-z0-9]+/).filter(Boolean)
-    .map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+  return attrCamel(last.split(/[^A-Za-z0-9]+/).filter(Boolean));
 }
 
 export class DdsMapper {
