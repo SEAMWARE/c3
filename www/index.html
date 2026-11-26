@@ -237,27 +237,33 @@
       <div class="cp-main rn-page">
         <div class="cp-head">
           <div>
-            <h1>Operate</h1>
-            <p>The brokers that run on this machine. Start one - the installed coraine, a build of Compile's, or an image - natively or in a container, with the services it uses.</p>
+            <h1 class="rn-title">Operate <a class="help-q" href="#docs/c3/operate" title="The brokers you run here or use elsewhere, and the containers on this machine. Start a broker - the installed coraine, a build of Compile's, or an image - natively or in a container, with the services it uses. ? opens the guide" aria-label="Operate in the guide">?</a></h1>
           </div>
           <span class="chip host" id="rn-engine">containers</span>
         </div>
 
-        <!-- Set up a broker, and the list of what runs -->
+        <!-- Set up and start a broker; the brokers (here and elsewhere) and the containers on this machine -->
         <div class="rn-view" id="rn-view-list">
-          <button type="button" class="rn-newtile" id="rn-new"><span class="nt-plus" aria-hidden="true">+</span><span class="nt-label">Set up a broker</span></button>
+          <button type="button" class="rn-newtile" id="rn-new"><span class="nt-plus" aria-hidden="true">+</span><span class="nt-label">Set up and start a broker</span></button>
           <section class="cp-card" aria-label="Brokers">
             <div class="row rn-bar">
-              <h2 class="section">Running</h2><span class="sub" id="rn-bcount"></span>
+              <h2 class="section" title="The brokers c³ runs here, and the brokers Explore connected to - also on other machines">Brokers</h2><span class="sub" id="rn-bcount"></span>
             </div>
+            <p class="rn-none" id="rn-none" hidden>No broker runs on this machine</p>
             <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
-            <p class="rn-none" id="rn-none" hidden>No broker runs</p>
+          </section>
+          <section class="cp-card" aria-label="Containers">
+            <div class="row rn-bar">
+              <h2 class="section" title="Every container on this machine, c³'s and others, the newest first">Containers</h2><span class="sub" id="rn-ccount"></span>
+            </div>
+            <p class="rn-none" id="rn-cnone" hidden>No container on this machine</p>
+            <div class="rn-list rn-ctrs" id="rn-ctrs"></div>
           </section>
         </div>
 
         <!-- A broker (or a service): its card and its log -->
         <div class="rn-view" id="rn-view-item" hidden>
-          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-card-back">← Running</button></div>
+          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-card-back">← Operate</button></div>
           <section class="cp-card" aria-label="The broker" id="rn-card">
             <div class="rn-list" id="rn-card-item"></div>
             <div class="rn-uses" id="rn-uses-box" hidden>
@@ -292,10 +298,10 @@
 
         <!-- Set up a broker, step 1: what runs -->
         <div class="rn-view" id="rn-view-pick" hidden>
-          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-pick-back">← Running</button></div>
-          <section class="cp-card" aria-label="Set up a broker - what runs">
+          <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-pick-back">← Operate</button></div>
+          <section class="cp-card" aria-label="Set up and start a broker - what runs">
             <div class="row rn-bar">
-              <h2 class="section">What runs</h2><span class="sub">Set up a broker, 1 of 2</span>
+              <h2 class="section">What runs</h2><span class="sub">Set up and start a broker, 1 of 2</span>
             </div>
 
             <div class="rn-group" id="rn-g-earlier">
@@ -326,7 +332,7 @@
         <!-- Set up a broker, step 2: how it runs -->
         <div class="rn-view rn-formview" id="rn-view-form" hidden>
           <div class="rn-nav"><button type="button" class="btn rn-back" id="rn-form-back">← What runs</button></div>
-          <section class="cp-card" aria-label="Set up a broker" id="rn-form">
+          <section class="cp-card" aria-label="Set up and start a broker" id="rn-form">
             <div class="row rn-bar">
               <h2 class="section" id="rn-form-title">Select options</h2><span class="sub" id="rn-form-sub"></span>
             </div>

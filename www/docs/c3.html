@@ -181,18 +181,22 @@ by the backend - the same build as on the command line (<a href="#docs/building"
 <h2 id="operate">Operate - brokers and their services</h2>
 <p><b>The page</b> shows one thing at a time:</p>
 <ul>
-  <li><b>Set up a broker</b>, a tile at the top, and under it <b>Running</b> - the brokers c³ started that run, start,
-  stop or failed, the one Explore is connected to first (also one c³ did not start, while it answers), and a service
-  still running that no broker uses; <i>No broker runs</i> when there is none. The list follows the brokers: one just
-  started is in it, one stopped leaves it. Each running broker's row has <b>Stop</b> and <b>Explore</b>; a click
-  elsewhere on a row opens its card. <b>Explore</b> and a broker's URL open it in
-  Explore once it answers its probe. A broker stopped by
-  hand is not listed: its settings are under Set up a broker, <b>Earlier settings</b>.</li>
+  <li><b>Operate</b> and its <b>?</b> - the page's description as a tooltip; <b>?</b> opens this section.</li>
+  <li><b>Set up and start a broker</b>, a tile at the top. Under it <b>Brokers</b>: the brokers c³ started that run,
+  start, stop or failed, the one Explore is connected to first - <i>No broker runs on this machine</i> when none of
+  c³'s does; then the brokers Explore connected to that c³ does not run - on other machines, or here but started
+  elsewhere - each with whether it answers (asked every 10 s) and <b>Explore</b>. A c³ broker's row has <b>Stop</b>
+  and <b>Explore</b>; a click elsewhere on it opens its card. A broker of c³'s stopped by hand is not listed: its
+  settings are under Set up and start a broker, <b>Earlier settings</b>.</li>
+  <li><b>Containers</b> - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
+  that scrolls: its state, what it is, its status and ports. <b>Start</b> / <b>Stop</b> (one button; a c³ broker's
+  container starts and stops as that broker; a service a running c³ broker uses is stopped with that broker) and
+  <b>Log</b>, while it runs: the container's last 500 lines, kept current.</li>
   <li><b>A broker's card</b> - its state, what it runs from, where its data is, its health; <b>Stop</b>,
   <b>Explore</b>, <b>Options</b> (its options in the form, where its OPC UA server is browsed); the services it uses,
   each one's <b>Log</b> opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
   ← goes back.</li>
-  <li><b>Set up a broker</b>, step 1, what runs: <b>Earlier settings</b> (a broker started before - its options fill
+  <li><b>Set up and start a broker</b>, step 1, what runs: <b>Earlier settings</b> (a broker started before - its options fill
   the form; <b>Forget</b>), Compile's <b>Builds</b> (the newest first, the latest marked), the <b>Installed</b>
   <code>coraine</code>, the <b>Docker images</b> (those here, then the newest published; <b>+</b> lists them all;
   another tag typed). Step 2: the form, and beside it the services the start brings up, the command and
@@ -252,7 +256,7 @@ with a volume, on the network <code>c3</code>, published on <code>127.0.0.1</cod
 + 10000 (MongoDB 37017, PostgreSQL 15432, Mosquitto 11883 - the next free one when that is taken). Each broker has its
 own database in them (<code>--dbName c3_&lt;name&gt;</code>, <code>--troeName c3_&lt;name&gt;_h</code>). They start
 before the broker that needs them, waited for until they answer, and stop when nothing c³ started uses them; their
-volume stays until <b>Delete data</b> - beside the service in Set up a broker's step 2, while it does not run. c³ creates only <code>c3-*</code> containers and volumes and the network
+volume stays until <b>Delete data</b> - beside the service in Set up and start a broker's step 2, while it does not run. c³ creates only <code>c3-*</code> containers and volumes and the network
 <code>c3</code>, all labelled <code>c3=run</code>, and touches nothing else.</p>
 <p><b>Starting and stopping.</b> A started broker joins Explore's list (<code>http://localhost:&lt;port&gt;</code>). A
 native broker runs in a session of its own, its output appended to its log; it does not need c³ - when c³ stops, the
@@ -321,7 +325,7 @@ opens on it.</p>
   <code>@context</code> (<code>--defaultUserContext</code>); with them <code>dds-mapping.json</code>, the mapping as
   the mapper reads it back, and <code>dds-types/</code>, the bridge's type files.</li>
   <li><b>The files screen</b> - the two files' full paths, each with <b>Copy</b>; <b>Set up a broker with it</b>:
-  the broker of Set up a broker's form with the dds bridge and the two files, the command shown, <b>More options</b>
+  the broker of Set up and start a broker's form with the dds bridge and the two files, the command shown, <b>More options</b>
   added as typed. <b>Start the broker</b> starts it and closes the mapper; <b>Put it in the broker form</b> fills the
   form only, to change more before Start. <b>Edit the mapping</b> goes back to it.</li>
   <li>Escape, <b>×</b> or <b>Close</b> closes the mapper, the brokers in view again.</li>

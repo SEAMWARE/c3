@@ -164,6 +164,8 @@ export const runStartKept     = (name) => call('POST', '/api/run/brokers/' + run
 export const runStop          = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/stop');
 export const runForget        = (name, data) => call('DELETE', '/api/run/brokers/' + runName(name) + (data ? '?data=true' : ''));
 export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
+export const runContainer     = (name, action) => call('POST', '/api/run/containers/' + runName(name) + '/' + action);   // start | stop: any container here
+export const runContainerLog  = (name) => call('GET', '/api/run/containers/' + runName(name) + '/log');                // {log}: its last 500 lines
 export const runVolumeDelete  = (volume) => call('DELETE', '/api/run/volumes/' + runName(volume));
 export const runDdsDiscover   = (def) => call('POST', '/api/run/dds/discover', def);     // what its DDS domain announces (a few seconds)
 export const runDdsFiles      = () => call('GET', '/api/run/dds/files');                // the DDS configuration written, and its mapping

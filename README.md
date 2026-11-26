@@ -727,17 +727,25 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 **The page** shows one thing at a time:
 
-- **Set up a broker**, a tile at the top, and under it **Running** - the brokers c³ started that run, start,
-  stop or failed (the one Explore is connected to first - also one c³ did not start, while it answers
-  `GET /version`, asked every 5 s), and a service still running that no broker uses; *No broker runs* when
-  there is none. The list follows the brokers: one just started is in it, one stopped leaves it. Each running broker's row has **Stop** and **Explore**. A click
-  elsewhere on a row opens its card. **Explore** and a broker's URL open it in Explore once it answers its probe (`ready` or `answers`). A
-  broker stopped by hand is not listed: its settings are under Set up a broker, **Earlier settings**.
+- **Operate** and its **?** - the page's description as a tooltip; **?** opens this section of the guide.
+- **Set up and start a broker**, a tile at the top. Under it **Brokers**: the brokers c³ started that run,
+  start, stop or failed, the one Explore is connected to first - *No broker runs on this machine* when none of
+  c³'s does; then the brokers Explore connected to (`c3.json` "brokers") that c³ does not run - on other
+  machines, or here but started elsewhere - each asked `GET /version` through the proxy every 10 s (any answer
+  below 500 counts: *answers*, else *does not answer*), with **Explore**. A c³ broker's row has **Stop** and
+  **Explore**; a click elsewhere on it opens its card. **Explore** and a broker's URL open it in Explore once it
+  answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed: its settings are under
+  Set up and start a broker, **Earlier settings**.
+- **Containers** - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
+  that scrolls: its name, state, what it is (a c³ broker's, a c³ service, else its image), docker's status and
+  its ports. **Start** / **Stop** (one button; a c³ broker's container starts and stops as that broker; a service
+  a running c³ broker uses is stopped with that broker, not here) and **Log** (while it runs): its card with the
+  container's last 500 lines, read again every 3 s (`GET /api/run/containers/<name>/log`).
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
   **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each
   one's **Log** opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
   ← goes back.
-- **Set up a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
+- **Set up and start a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
   the form; **Forget**), Compile's **Builds** (the newest first by `ended`, the latest marked -
   `GET /api/run/sources` gives each build's `mode` and `ended`), the **Installed** `coraine`, the **Docker
   images** (those here, then the newest published; **+** lists them all; another tag typed). Step 2: the
@@ -872,7 +880,7 @@ A native broker reaches them on `127.0.0.1:<port>`, a container broker by name o
 - `mongo:8.2`, not 8.0: mongo 8.0 does not start on Linux 6.19 and newer (SERVER-121912).
 - Stopped (`docker stop`, then `docker rm`) when the broker using them stops and nothing else started from
   c³ uses them; **Stop** on a service nothing uses. The volume is kept: **Delete data** (press twice;
-  beside the service in Set up a broker's step 2) removes it, and only a volume c³ made (label `c3=run`)
+  beside the service in Set up and start a broker's step 2) removes it, and only a volume c³ made (label `c3=run`)
   whose container does not run.
 
 **Starting.** The broker joins Explore's list (`http://localhost:<port>`, named as in Operate) and is kept in
@@ -1239,6 +1247,8 @@ The backend's API, used by the pages:
 | `DELETE /api/run/brokers/<name>` | forget one that does not run (`204`); `?data=true` its directory and volume too |
 | `GET /api/run/brokers/<name>/log`, `GET /api/run/services/<container>/log` | the log as server-sent events (`Accept: text/event-stream`), else the file |
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
+| `POST /api/run/containers/<name>/start` \| `stop` | any container on this machine (Operate's Containers): `202`, done in a thread; `404` for one not seen |
+| `GET /api/run/containers/<name>/log` | `{"log"}`: its last 500 lines, out and err |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
