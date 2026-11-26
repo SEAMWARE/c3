@@ -378,19 +378,26 @@ opens, and the mapper opens on it.</p>
 <!-- ======================================================================= -->
 <h3 id="aas">AAS - an Asset Administration Shell server</h3>
 <p>The broker form's <b>AAS</b>: the aas bridge (<a href="https://github.com/SEAMWARE-cor/corAasBridge">corAasBridge</a>,
-a prototype - <code>coraine-build --bridges aas</code>; native brokers, the image has no aas bridge) reads an AAS
+a prototype - <code>coraine-build --bridges aas</code>, or an image whose <code>coraine -V</code> lists it) reads an AAS
 server's shells and submodels over the AAS HTTP API (IDTA Part 2, V3) and the broker makes each one picked a graph of
 entities - an AssetChannel (coraine's <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/aas.md">AAS</a> and <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/asset-channels.md">AssetChannels</a>).</p>
 <ul>
   <li><b>The server</b> - its URL (<code>http[s]://host:port[/base path]</code>, <code>/api/v3.0</code> on some
-  servers); the <b>Authorization header</b> (<code>Bearer ...</code>), sent once: c³ keeps it in the broker's
-  directory (mode 600) and hands it to the broker in its environment (<code>C3_AAS_AUTHORIZATION</code>, the bridge's
-  <code>authorizationEnv</code>) - never in <code>c3.json</code> or the bridge configuration; the <b>CAs</b> the
-  server's certificate is verified against (a PEM file; none: the system's), or <b>do not verify</b>.</li>
+  servers); an <b>AAS Registry</b>, asked first where a shell and its submodels are (they may live on other servers;
+  the credentials go only to the server's own host); the <b>MQTT broker</b> the server publishes its change events to
+  (<code>mqtt://host[:port]</code> - Eclipse BaSyx and FA³ST: a change is read at once, polling goes on underneath);
+  the <b>credentials</b>: none, an <b>Authorization header</b> (<code>Bearer ...</code>) or an <b>OAuth2 client</b>
+  (the client credentials grant: token endpoint, client id, secret, scope); a <b>client certificate</b> and its key
+  (PEM files - mutual TLS); the <b>CAs</b> the server's certificate is verified against (a PEM file; none: the
+  system's), or <b>do not verify</b>. The secrets - the header's value, the client's secret - are sent once: c³ keeps
+  them in the broker's directory (mode 600) and hands the one in use to the broker in its environment
+  (<code>C3_AAS_AUTHORIZATION</code>, <code>C3_AAS_CLIENT_SECRET</code>) - never in <code>c3.json</code> or the bridge
+  configuration. A broker in a container gets them by name (<code>-e</code>, on no command line) and the PEM files
+  mounted.</li>
   <li><b>Discover the server</b> - a broker of c³'s own, the aas bridge alone, reads the server: its shells, its
   submodels and each one's model, whole (<code>/admin/bridges/aas/inventory</code>, then <code>?from=&lt;id&gt;</code>
-  per shell and per submodel no shell refers to - at most 200), and stops: a few seconds. The Authorization typed, else
-  the one c³ keeps for the broker, goes with it.</li>
+  per shell and per submodel no shell refers to - at most 200), and stops: a few seconds. The secret typed, else the
+  one c³ keeps for the broker, goes with it.</li>
   <li><b>The list</b> - each shell (and each submodel of no shell) with <b>what it makes</b>: the entities an
   AssetChannel on it makes, their types and ids - the shell's and a submodel's own id (an IRI), else
   <code>urn:ngsi-ld:&lt;type&gt;:&lt;the names from the shell&gt;</code>. ▸ opens its model as the bridge hands it to
