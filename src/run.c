@@ -242,6 +242,16 @@ typedef struct Def
     char  url[512];                              // http[s]://host[:port][/base path]; "": no AAS
     char  caFile[1024];                          // the CAs the server's certificate is verified against, a PEM file; "": the system's
     bool  insecure;                              // the server's certificate not verified
+    char  clientCert[1024];                      // the bridge's own certificate (and its chain), PEM - mutual TLS; "": none
+    char  clientKey[1024];                       // its private key, PEM; "": in clientCert's file
+    char  credentials[16];                       // none, authorization (the Authorization header c3 keeps) or oauth2
+    char  tokenUrl[512];                         // oauth2: the token endpoint (the client credentials grant)
+    char  clientId[256];                         // oauth2: the client's id
+    char  scope[256];                            // oauth2: the scope asked for; "": none
+    char  clientSecret[512];                     // WRITE-ONLY: the oauth2 client's secret as a request gave it, kept in
+                                                 // <broker dir>/aas.client-secret (0600) and wiped
+    char  registry[512];                         // an AAS Registry, http[s]://host[:port][/base path]; "": none
+    char  push[512];                             // the MQTT broker the AAS server publishes its change events to, mqtt://host[:port]; "": none
     char  channels[16384];                       // the AssetChannels - a line each: shell (or submodel) id, entities ("natural" or the
                                                  // rules as JSON), attributeLayout, channelDirection, pollInterval ("": the bridge's) - tab-separated
     char  authorization[2048];                   // WRITE-ONLY: the Authorization header's value as a request gave it, kept in
@@ -503,9 +513,9 @@ static int engineRun(char* out, int outSize, int timeoutS, ...)
   return status;
 }
 
-static int engineArgv(Argv* aP, char* out, int outSize, int timeoutS)
+static int engineArgvEnv(Argv* aP, char* const envp[], char* out, int outSize, int timeoutS)
 {
-  int status = runCapture(aP->v, out, outSize, timeoutS);
+  int status = runCaptureEnv(aP->v, envp, out, outSize, timeoutS);
   int len    = strlen(out);
 
   while ((len > 0) && ((out[len - 1] == '\n') || (out[len - 1] == '\r')))
@@ -513,6 +523,8 @@ static int engineArgv(Argv* aP, char* out, int outSize, int timeoutS)
 
   return status;
 }
+
+#define engineArgv(aP, out, outSize, timeoutS)  engineArgvEnv(aP, NULL, out, outSize, timeoutS)   // in c3's environment
 
 
 
@@ -1647,9 +1659,38 @@ static bool aasChannelsParse(CorNode* chP, char* out, int outLen, char* err, int
 
 // -----------------------------------------------------------------------------
 //
-// aasParse - "aas": { "url", "caFile", "insecure", "authorization", "channels": [...] } - the bridge's own "server"
-// shape (corAasBridge's README) but the Authorization header's value, which c3 keeps in a file and hands the
-// broker in its environment
+// aasUrlOk - 'u' empty, or one of the schemes (space-separated, each with its "://") and no space, tab, newline or quote
+//
+static bool aasUrlOk(const char* u, const char* schemes)
+{
+  if (u[0] == 0)
+    return true;
+  if (strpbrk(u, " \t\r\n\"") != NULL)
+    return false;
+
+  char copy[64];
+  char* save = NULL;
+
+  snprintf(copy, sizeof(copy), "%s", schemes);
+  for (char* sch = strtok_r(copy, " ", &save); sch != NULL; sch = strtok_r(NULL, " ", &save))
+  {
+    int n = strlen(sch);
+    if ((strncmp(u, sch, n) == 0) && (u[n] != 0))
+      return true;
+  }
+
+  return false;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// aasParse - "aas": { "url", "caFile", "insecure", "clientCert", "clientKey", "credentials", "authorization",
+// "oauth2": { "tokenUrl", "clientId", "clientSecret", "scope" }, "registry", "push", "channels": [...] } - the bridge's
+// own "server" shape (corAasBridge's README), "registry" and "push" its url, but the secrets: the Authorization
+// header's value and the OAuth2 client's secret, which c3 keeps in files and hands the broker in its environment.
+// "credentials" says which one the broker uses: none, authorization (absent: an older c3.json) or oauth2
 //
 static bool aasParse(CorNode* aP, Def* dP, char* err, int errLen)
 {
@@ -1662,24 +1703,94 @@ static bool aasParse(CorNode* aP, Def* dP, char* err, int errLen)
     return false;
   }
 
+  CorNode* oP = corTreeLookup(aP, "oauth2");
+
+  if ((oP != NULL) && (oP->type != CorNull) && (oP->type != CorObject))
+  {
+    snprintf(err, errLen, "\"aas.oauth2\" is an object: { \"tokenUrl\", \"clientId\", \"clientSecret\", \"scope\" }");
+    return false;
+  }
+
   if (!memberString(aP, "url",           dP->aas.url,           sizeof(dP->aas.url),           err, errLen) ||
       !memberString(aP, "caFile",        dP->aas.caFile,        sizeof(dP->aas.caFile),        err, errLen) ||
       !memberBool(aP,   "insecure",      &dP->aas.insecure,     err, errLen) ||
+      !memberString(aP, "clientCert",    dP->aas.clientCert,    sizeof(dP->aas.clientCert),    err, errLen) ||
+      !memberString(aP, "clientKey",     dP->aas.clientKey,     sizeof(dP->aas.clientKey),     err, errLen) ||
+      !memberString(aP, "credentials",   dP->aas.credentials,   sizeof(dP->aas.credentials),   err, errLen) ||
       !memberString(aP, "authorization", dP->aas.authorization, sizeof(dP->aas.authorization), err, errLen) ||
+      !memberString(aP, "registry",      dP->aas.registry,      sizeof(dP->aas.registry),      err, errLen) ||
+      !memberString(aP, "push",          dP->aas.push,          sizeof(dP->aas.push),          err, errLen) ||
+      ((oP != NULL) && (oP->type == CorObject) &&
+       (!memberString(oP, "tokenUrl",     dP->aas.tokenUrl,     sizeof(dP->aas.tokenUrl),     err, errLen) ||
+        !memberString(oP, "clientId",     dP->aas.clientId,     sizeof(dP->aas.clientId),     err, errLen) ||
+        !memberString(oP, "clientSecret", dP->aas.clientSecret, sizeof(dP->aas.clientSecret), err, errLen) ||
+        !memberString(oP, "scope",        dP->aas.scope,        sizeof(dP->aas.scope),        err, errLen))) ||
       !aasChannelsParse(corTreeLookup(aP, "channels"), dP->aas.channels, sizeof(dP->aas.channels), err, errLen))
     return false;
 
-  const char* u = dP->aas.url;
+  if (dP->aas.credentials[0] == 0)
+    snprintf(dP->aas.credentials, sizeof(dP->aas.credentials), "authorization");
 
-  if ((u[0] != 0) && (((strncmp(u, "http://", 7) != 0) && (strncmp(u, "https://", 8) != 0)) || (strpbrk(u, " \t\n\"") != NULL)))
+  const char* cr = dP->aas.credentials;
+
+  if ((strcmp(cr, "none") != 0) && (strcmp(cr, "authorization") != 0) && (strcmp(cr, "oauth2") != 0))
+  {
+    snprintf(err, errLen, "\"aas.credentials\" is none, authorization (an Authorization header) or oauth2 (an OAuth2 client's token)");
+    return false;
+  }
+
+  if (!aasUrlOk(dP->aas.url, "http:// https://"))
   {
     snprintf(err, errLen, "\"aas.url\" is http[s]://<host>[:<port>][/<base path>] - where the AAS API is (/api/v3.0 on some servers)");
     return false;
   }
 
-  if ((strpbrk(dP->aas.authorization, "\r\n") != NULL))
+  if (!aasUrlOk(dP->aas.registry, "http:// https://"))
+  {
+    snprintf(err, errLen, "\"aas.registry\" is http[s]://<host>[:<port>][/<base path>] - where the AAS Registry's API is");
+    return false;
+  }
+
+  if (!aasUrlOk(dP->aas.push, "mqtt://"))
+  {
+    snprintf(err, errLen, "\"aas.push\" is mqtt://<host>[:<port>] - the MQTT broker the AAS server publishes its changes to (no TLS yet)");
+    return false;
+  }
+
+  if ((dP->aas.clientKey[0] != 0) && (dP->aas.clientCert[0] == 0))
+  {
+    snprintf(err, errLen, "\"aas.clientKey\" is the key of \"aas.clientCert\" - give the certificate too");
+    return false;
+  }
+
+  if (strpbrk(dP->aas.authorization, "\r\n") != NULL)
   {
     snprintf(err, errLen, "\"aas.authorization\" is the Authorization header's value, one line (Bearer ...)");
+    return false;
+  }
+
+  if ((dP->aas.authorization[0] != 0) && (strcmp(cr, "authorization") != 0))
+  {
+    snprintf(err, errLen, "an Authorization header with \"aas.credentials\" %s - the broker would not send it", cr);
+    return false;
+  }
+
+  if (strcmp(cr, "oauth2") == 0)
+  {
+    if ((dP->aas.tokenUrl[0] == 0) || !aasUrlOk(dP->aas.tokenUrl, "http:// https://") || (dP->aas.clientId[0] == 0))
+    {
+      snprintf(err, errLen, "OAuth2 credentials: \"aas.oauth2.tokenUrl\" (http[s]://..., the token endpoint) and \"aas.oauth2.clientId\"");
+      return false;
+    }
+    if (strpbrk(dP->aas.clientSecret, "\r\n") != NULL)
+    {
+      snprintf(err, errLen, "\"aas.oauth2.clientSecret\" is one line");
+      return false;
+    }
+  }
+  else if ((dP->aas.tokenUrl[0] != 0) || (dP->aas.clientId[0] != 0) || (dP->aas.clientSecret[0] != 0))
+  {
+    snprintf(err, errLen, "\"aas.oauth2\" with \"aas.credentials\" %s - the broker would not use it", cr);
     return false;
   }
 
@@ -1988,6 +2099,20 @@ static void aasAuthorizationPath(const char* name, char* out, int outLen)
 
 // -----------------------------------------------------------------------------
 //
+// aasClientSecretPath - where c3 keeps a broker's AAS OAuth2 client secret: its directory, 0600
+//
+static void aasClientSecretPath(const char* name, char* out, int outLen)
+{
+  char dir[2300];
+
+  brokerDir(name, dir, sizeof(dir));
+  snprintf(out, outLen, "%s/aas.client-secret", dir);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // aasChannelsJson - the AAS AssetChannels (aas.channels' lines): as the API has them, an array of { "id", "entities",
 // "attributeLayout", "channelDirection", "pollInterval" } - or 'keyed', the bridge configuration's "assetChannels":
 // an object by id, the poll interval in "channelInfo"
@@ -2149,16 +2274,30 @@ static void defRender(const Def* dP, Str* sP)
   if (dP->aas.url[0] != 0)
   {
     //
-    // The AAS server - never the Authorization header's value: the API says whether c3 keeps one
+    // The AAS server - never a secret: the API says whether c3 keeps the Authorization header's value, the client's secret
     //
     char        authPath[2400];
+    char        secretPath[2400];
     struct stat st;
 
     aasAuthorizationPath(dP->name, authPath, sizeof(authPath));
+    aasClientSecretPath(dP->name, secretPath, sizeof(secretPath));
 
     strAdd(sP, ", \"aas\": {\"url\": ");        strAddJson(sP, dP->aas.url);
     strAdd(sP, ", \"caFile\": ");                strAddJson(sP, (dP->aas.caFile[0] != 0) ? dP->aas.caFile : NULL);
     strAddf(sP, ", \"insecure\": %s, \"authorizationSet\": %s", dP->aas.insecure ? "true" : "false", (stat(authPath, &st) == 0) ? "true" : "false");
+    strAdd(sP, ", \"clientCert\": ");            strAddJson(sP, (dP->aas.clientCert[0] != 0) ? dP->aas.clientCert : NULL);
+    strAdd(sP, ", \"clientKey\": ");             strAddJson(sP, (dP->aas.clientKey[0] != 0) ? dP->aas.clientKey : NULL);
+    strAdd(sP, ", \"credentials\": ");           strAddJson(sP, dP->aas.credentials);
+    if (strcmp(dP->aas.credentials, "oauth2") == 0)
+    {
+      strAdd(sP, ", \"oauth2\": {\"tokenUrl\": "); strAddJson(sP, dP->aas.tokenUrl);
+      strAdd(sP, ", \"clientId\": ");                 strAddJson(sP, dP->aas.clientId);
+      strAdd(sP, ", \"scope\": ");                    strAddJson(sP, (dP->aas.scope[0] != 0) ? dP->aas.scope : NULL);
+      strAddf(sP, ", \"clientSecretSet\": %s}", (stat(secretPath, &st) == 0) ? "true" : "false");
+    }
+    strAdd(sP, ", \"registry\": ");              strAddJson(sP, (dP->aas.registry[0] != 0) ? dP->aas.registry : NULL);
+    strAdd(sP, ", \"push\": ");                  strAddJson(sP, (dP->aas.push[0] != 0) ? dP->aas.push : NULL);
     strAdd(sP, ", \"channels\": ");              aasChannelsJson(sP, dP->aas.channels, false);
     strAdd(sP, "}");
   }
@@ -2451,6 +2590,30 @@ static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, 
     if (dP->userContext[0] != 0)
     {
       argAdd(aP, "-v");       argAddf(aP, "%s:/etc/c3/user-context.jsonld:ro", dP->userContext);
+    }
+    if ((dP->aas.url[0] != 0) && (bridgeFile[0] != 0))
+    {
+      //
+      // The AAS bridge's secrets: by name - the engine takes their values from its own environment (aasEnv), so they are
+      // never on its command line; its PEM files: at the same paths inside, as the bridge configuration names them
+      //
+      if (strcmp(dP->aas.credentials, "authorization") == 0)
+      {
+        argAdd(aP, "-e");     argAdd(aP, "C3_AAS_AUTHORIZATION");
+      }
+      else if (strcmp(dP->aas.credentials, "oauth2") == 0)
+      {
+        argAdd(aP, "-e");     argAdd(aP, "C3_AAS_CLIENT_SECRET");
+      }
+
+      const char* pems[3] = { dP->aas.caFile, dP->aas.clientCert, dP->aas.clientKey };
+      for (int ix = 0; ix < 3; ix++)
+      {
+        if (pems[ix][0] != 0)
+        {
+          argAdd(aP, "-v");   argAddf(aP, "%s:%s:ro", pems[ix], pems[ix]);
+        }
+      }
     }
 
     char ddsConf[2400];
@@ -3895,9 +4058,11 @@ static void opcuaMember(const Def* dP, Str* sP)
 
 
 
+// -----------------------------------------------------------------------------
 //
-// aasMember - a broker's aas member: the server (the Authorization header's value in the broker's environment,
-// C3_AAS_AUTHORIZATION, when c3 keeps one - aasEnv), an AssetChannel per shell or submodel picked
+// aasMember - a broker's aas member: the server - its credentials: the Authorization header's value in the broker's
+// environment, C3_AAS_AUTHORIZATION, when c3 keeps one, or the OAuth2 client, its secret C3_AAS_CLIENT_SECRET (aasEnv) -
+// the registry, the push broker, an AssetChannel per shell or submodel picked
 //
 static void aasMember(const Def* dP, bool authorization, Str* sP)
 {
@@ -3910,9 +4075,46 @@ static void aasMember(const Def* dP, bool authorization, Str* sP)
   }
   if (dP->aas.insecure)
     strAdd(sP, ", \"insecure\": true");
-  if (authorization)
+  if (dP->aas.clientCert[0] != 0)
+  {
+    strAdd(sP, ", \"clientCert\": ");
+    strAddJson(sP, dP->aas.clientCert);
+  }
+  if (dP->aas.clientKey[0] != 0)
+  {
+    strAdd(sP, ", \"clientKey\": ");
+    strAddJson(sP, dP->aas.clientKey);
+  }
+  if (authorization && (strcmp(dP->aas.credentials, "authorization") == 0))
     strAdd(sP, ", \"authorizationEnv\": \"C3_AAS_AUTHORIZATION\"");
-  strAdd(sP, "}, \"ngsild\": {\"defaultEntity\": false, \"assetChannels\": ");
+  if (strcmp(dP->aas.credentials, "oauth2") == 0)
+  {
+    strAdd(sP, ", \"oauth2\": {\"tokenUrl\": ");
+    strAddJson(sP, dP->aas.tokenUrl);
+    strAdd(sP, ", \"clientId\": ");
+    strAddJson(sP, dP->aas.clientId);
+    strAdd(sP, ", \"clientSecretEnv\": \"C3_AAS_CLIENT_SECRET\"");
+    if (dP->aas.scope[0] != 0)
+    {
+      strAdd(sP, ", \"scope\": ");
+      strAddJson(sP, dP->aas.scope);
+    }
+    strAdd(sP, "}");
+  }
+  strAdd(sP, "}");
+  if (dP->aas.registry[0] != 0)
+  {
+    strAdd(sP, ", \"registry\": {\"url\": ");
+    strAddJson(sP, dP->aas.registry);
+    strAdd(sP, "}");
+  }
+  if (dP->aas.push[0] != 0)
+  {
+    strAdd(sP, ", \"push\": {\"url\": ");
+    strAddJson(sP, dP->aas.push);
+    strAdd(sP, "}");
+  }
+  strAdd(sP, ", \"ngsild\": {\"defaultEntity\": false, \"assetChannels\": ");
   aasChannelsJson(sP, dP->aas.channels, true);
   strAdd(sP, "}}");
 }
@@ -3921,58 +4123,73 @@ static void aasMember(const Def* dP, bool authorization, Str* sP)
 
 // -----------------------------------------------------------------------------
 //
-// aasEnv - a native broker's environment: envClean's, and with an AAS server and the Authorization header's value
-// c3 keeps for it, C3_AAS_AUTHORIZATION (the bridge's authorizationEnv) - *varP the string to wipe and free after
-// the start (NULL: none)
+// aasEnv - a broker's environment (native: its own; a container: the engine's, which hands the variables on, -e):
+// envClean's, and with an AAS server the secrets c3 keeps for it - C3_AAS_AUTHORIZATION (the bridge's authorizationEnv),
+// C3_AAS_CLIENT_SECRET (its oauth2 clientSecretEnv). vars[0..1]: the strings to wipe and free after the start (aasEnvFree)
 //
-static char** aasEnv(const Def* dP, char** varP)
+static char** aasEnv(const Def* dP, char* vars[2])
 {
   char** env = envClean(NULL);
-  char   path[2400];
+  int    n   = 0;
 
-  *varP = NULL;
+  vars[0] = NULL;
+  vars[1] = NULL;
   if (dP->aas.url[0] == 0)
     return env;
 
-  aasAuthorizationPath(dP->name, path, sizeof(path));
-
-  char* text = fileText(path);
-  if (text == NULL)
-    return env;
-
-  char* nl = strchr(text, '\n');
-  if (nl != NULL)
-    *nl = 0;
-
-  int n = 0;
   while (env[n] != NULL)
     ++n;
 
-  char** more = realloc(env, (n + 2) * sizeof(char*));
-  if ((more != NULL) && (asprintf(varP, "C3_AAS_AUTHORIZATION=%s", text) != -1))
+  struct { void (*pathOf)(const char*, char*, int); const char* var; const char* credentials; } secrets[2] =
   {
-    env      = more;
-    env[n]   = *varP;
-    env[n+1] = NULL;
-  }
-  else
+    { aasAuthorizationPath, "C3_AAS_AUTHORIZATION", "authorization" },
+    { aasClientSecretPath,  "C3_AAS_CLIENT_SECRET", "oauth2"        }
+  };
+
+  for (int ix = 0; ix < 2; ix++)
   {
+    char path[2400];
+
+    if (strcmp(dP->aas.credentials, secrets[ix].credentials) != 0)
+      continue;
+
+    secrets[ix].pathOf(dP->name, path, sizeof(path));
+
+    char* text = fileText(path);
+    if (text == NULL)
+      continue;
+
+    char* nl = strchr(text, '\n');
+    if (nl != NULL)
+      *nl = 0;
+
+    char** more = realloc(env, (n + 2) * sizeof(char*));
     if (more != NULL)
       env = more;
-    *varP = NULL;
+    if ((more != NULL) && (asprintf(&vars[ix], "%s=%s", secrets[ix].var, text) != -1))
+    {
+      env[n++] = vars[ix];
+      env[n]   = NULL;
+    }
+    else
+      vars[ix] = NULL;
+
+    memset(text, 0, strlen(text));
+    free(text);
   }
 
-  memset(text, 0, strlen(text));
-  free(text);
   return env;
 }
 
-static void aasEnvFree(char** env, char* var)
+static void aasEnvFree(char** env, char* vars[2])
 {
-  if (var != NULL)
+  for (int ix = 0; ix < 2; ix++)
   {
-    memset(var, 0, strlen(var));
-    free(var);
+    if (vars[ix] != NULL)
+    {
+      memset(vars[ix], 0, strlen(vars[ix]));
+      free(vars[ix]);
+    }
   }
   free(env);
 }
@@ -4167,6 +4384,20 @@ static bool bridgesConfigWrite(const Def* dP, int port, char* err, int errLen)
     struct stat st;
 
     aasAuthorizationPath(dP->name, authPath, sizeof(authPath));
+
+    if (strcmp(dP->aas.credentials, "oauth2") == 0)
+    {
+      char secretPath[2400];
+
+      aasClientSecretPath(dP->name, secretPath, sizeof(secretPath));
+      if (stat(secretPath, &st) != 0)
+      {
+        snprintf(err, errLen, "the AAS OAuth2 client '%s' has no secret: give it once, c3 keeps it", dP->aas.clientId);
+        strFree(&s);
+        return false;
+      }
+    }
+
     strAdd(&s, (s.len > 1) ? ", " : "");
     aasMember(dP, stat(authPath, &st) == 0, &s);
   }
@@ -4306,7 +4537,10 @@ static void* startThread(void* vP)
       engineRun(out, sizeof(out), 30, "volume", "create", "--label", "c3=run", "--label", label, vol, NULL);
     }
 
-    int status = engineArgv(&a, out, sizeof(out), 120);
+    char*  aasVars[2];
+    char** env    = aasEnv(&d, aasVars);       // the engine hands the AAS secrets on (-e NAME): never on its command line
+    int    status = engineArgvEnv(&a, env, out, sizeof(out), 120);
+    aasEnvFree(env, aasVars);
     argFree(&a);
 
     if (status != 0)
@@ -4348,11 +4582,11 @@ static void* startThread(void* vP)
     // A session of its own: no terminal, nothing of c3's process group - it outlives c3, which reaps it
     // while it runs and attaches to it again after a restart
     //
-    char*     aasVar = NULL;
-    char**    env    = aasEnv(&d, &aasVar);     // with an AAS server: the Authorization header's value c3 keeps
+    char*     aasVars[2];
+    char**    env    = aasEnv(&d, aasVars);     // with an AAS server: the secrets c3 keeps for it
     ProcSpawn sp     = { a.v, env, fd, dir, false, true, 0 };
     pid_t     pid    = procSpawn(&sp);
-    aasEnvFree(env, aasVar);
+    aasEnvFree(env, aasVars);
     close(fd);
     argFree(&a);
 
@@ -5578,7 +5812,8 @@ static void logRotate(const char* path)
 // opcuaPasswordKeep - a password the request gave: into <broker dir>/opcua.password (0600), and wiped from the
 // Def - c3.json and the API never hold it. None given: the file c3 keeps stays (empty keeps it). false: answered
 //
-// aasAuthorizationKeep - the same for the AAS server's Authorization header value: <broker dir>/aas.authorization
+// aasAuthorizationKeep - the same for the AAS server's Authorization header value (<broker dir>/aas.authorization) and the
+// OAuth2 client's secret (<broker dir>/aas.client-secret); the one its credentials do not use removed
 //
 static void secretWrite(const char* path, const char* secret, const char* what, char* err, int errLen);
 
@@ -5613,7 +5848,24 @@ static bool opcuaPasswordKeep(CorHttpConn* connP, Def* dP)
 
 static bool aasAuthorizationKeep(CorHttpConn* connP, Def* dP)
 {
-  return secretKeep(connP, dP->name, dP->aas.authorization, sizeof(dP->aas.authorization), aasAuthorizationPath, "the AAS Authorization header");
+  char path[2400];
+
+  //
+  // The secret the credentials do not use: gone - a broker that changed its credentials keeps no stale one
+  //
+  if (strcmp(dP->aas.credentials, "authorization") != 0)
+  {
+    aasAuthorizationPath(dP->name, path, sizeof(path));
+    unlink(path);
+  }
+  if (strcmp(dP->aas.credentials, "oauth2") != 0)
+  {
+    aasClientSecretPath(dP->name, path, sizeof(path));
+    unlink(path);
+  }
+
+  return secretKeep(connP, dP->name, dP->aas.authorization, sizeof(dP->aas.authorization), aasAuthorizationPath, "the AAS Authorization header") &&
+         secretKeep(connP, dP->name, dP->aas.clientSecret, sizeof(dP->aas.clientSecret), aasClientSecretPath, "the AAS OAuth2 client secret");
 }
 
 
@@ -6476,7 +6728,12 @@ static bool discoverStart(Def* dP, Discovery* xP, char* err, int errLen)
       brokerContainer(dP->name, xP->name, sizeof(xP->name));
       engineRun(out, sizeof(out), 30, "rm", "-f", xP->name, NULL);    // one a c3 that died left (it ends in 120 s anyway)
 
-      if (engineArgv(&a, out, sizeof(out), 120) != 0)
+      char*  aasVars[2];
+      char** env    = aasEnv(dP, aasVars);
+      int    status = engineArgvEnv(&a, env, out, sizeof(out), 120);
+
+      aasEnvFree(env, aasVars);
+      if (status != 0)
       {
         snprintf(err, errLen, "%s run: %.600s", engineName, out);
         xP->name[0] = 0;
@@ -6490,11 +6747,11 @@ static bool discoverStart(Def* dP, Discovery* xP, char* err, int errLen)
     logLine(xP->logPath, "%s", cmd.s);
     strFree(&cmd);
 
-    char*     aasVar = NULL;
-    char**    env    = aasEnv(dP, &aasVar);
+    char*     aasVars[2];
+    char**    env    = aasEnv(dP, aasVars);
     ProcSpawn sp     = { a.v, env, fd, dir, true, false, SIGKILL };   // its own group (stopped as one), dies with c3
     xP->pid = procSpawn(&sp);
-    aasEnvFree(env, aasVar);
+    aasEnvFree(env, aasVars);
 
     if (xP->pid < 0)
       snprintf(err, errLen, "fork: %s", strerror(errno));
@@ -7118,9 +7375,40 @@ static bool aasModels(const Discovery* xP, const char* url, Str* sP, char* err, 
 
 // -----------------------------------------------------------------------------
 //
+// aasSecretCopy - a secret for the discovery's broker, at 'path': the one the request gave, else the one c3 keeps
+// for the form's broker ('kept'); neither: none. 'given' wiped
+//
+static void aasSecretCopy(char* given, int givenSize, const char* kept, const char* path, const char* what, char* err, int errLen)
+{
+  unlink(path);
+
+  if (given[0] != 0)
+    secretWrite(path, given, what, err, errLen);
+  else
+  {
+    char* text = fileText(kept);
+
+    if (text != NULL)
+    {
+      char* nl = strchr(text, '\n');
+      if (nl != NULL)
+        *nl = 0;
+      secretWrite(path, text, what, err, errLen);
+      memset(text, 0, strlen(text));
+      free(text);
+    }
+  }
+
+  memset(given, 0, givenSize);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // aasDiscoverThread - the aas bridge's view of the server: its shells and submodels, each model whole (aasModels).
-// The Authorization header's value: the one the request gave, else the one c3 keeps for the form's broker - for the
-// discovery's broker in its own directory (aasAuthorizationPath), gone with it
+// The secrets (the Authorization header's value, the OAuth2 client's): the ones the request gave, else the ones c3
+// keeps for the form's broker - for the discovery's broker in its own directory, gone with it
 //
 static void* aasDiscoverThread(void* vP)
 {
@@ -7129,52 +7417,45 @@ static void* aasDiscoverThread(void* vP)
   Discovery    x   = { 0, -1, "", "" };
   char         err[1024] = "";
   Str          s   = { NULL, 0, 0 };
-  char         kept[2400];
+  char         keptAuth[2400];
+  char         keptSecret[2400];
 
-  aasAuthorizationPath(d.name, kept, sizeof(kept));   // the form's broker's, before discoverPrepare renames it
+  aasAuthorizationPath(d.name, keptAuth, sizeof(keptAuth));       // the form's broker's, before discoverPrepare renames it
+  aasClientSecretPath(d.name, keptSecret, sizeof(keptSecret));
   discoverPrepare(&d, "aas");
   memset(djP->def.aas.authorization, 0, sizeof(djP->def.aas.authorization));
+  memset(djP->def.aas.clientSecret, 0, sizeof(djP->def.aas.clientSecret));
 
-  char path[2400];                               // the discovery's copy of the Authorization: gone with it
-  aasAuthorizationPath(d.name, path, sizeof(path));
+  char authPath[2400];                           // the discovery's copies: gone with it
+  char secretPath[2400];
+  aasAuthorizationPath(d.name, authPath, sizeof(authPath));
+  aasClientSecretPath(d.name, secretPath, sizeof(secretPath));
 
   if (d.aas.url[0] == 0)
     snprintf(err, sizeof(err), "the AAS server to discover: its URL (http[s]://host:port[/base path])");
   else if (strcmp(d.where, "container") == 0)
-    snprintf(err, sizeof(err), "AAS discovery needs a native broker - an installed coraine or a build: the image has no aas bridge");
+    snprintf(err, sizeof(err), "AAS discovery runs a native broker - an installed coraine or a build: a server on localhost is reached");
   else
   {
     char dir[2300];
 
     brokerDir(d.name, dir, sizeof(dir));
     dirsMake(dir);
-    unlink(path);
 
-    if (d.aas.authorization[0] != 0)
-      secretWrite(path, d.aas.authorization, "the AAS Authorization header", err, sizeof(err));
-    else
-    {
-      char* text = fileText(kept);
-
-      if (text != NULL)
-      {
-        char* nl = strchr(text, '\n');
-        if (nl != NULL)
-          *nl = 0;
-        secretWrite(path, text, "the AAS Authorization header", err, sizeof(err));
-        memset(text, 0, strlen(text));
-        free(text);
-      }
-    }
-    memset(d.aas.authorization, 0, sizeof(d.aas.authorization));
+    aasSecretCopy(d.aas.authorization, sizeof(d.aas.authorization), keptAuth, authPath, "the AAS Authorization header", err, sizeof(err));
+    if (err[0] == 0)
+      aasSecretCopy(d.aas.clientSecret, sizeof(d.aas.clientSecret), keptSecret, secretPath, "the AAS OAuth2 client secret", err, sizeof(err));
 
     if ((err[0] == 0) && (discoverStart(&d, &x, err, sizeof(err)) == true))
       aasModels(&x, d.aas.url, &s, err, sizeof(err));
 
     discoverStop(&x);
-    unlink(path);
+    unlink(authPath);
+    unlink(secretPath);
   }
 
+  memset(d.aas.authorization, 0, sizeof(d.aas.authorization));
+  memset(d.aas.clientSecret, 0, sizeof(d.aas.clientSecret));
   discoverEnd(djP, &s, err);
   return NULL;
 }

@@ -165,6 +165,9 @@
 .rn-stack { display: flex; flex-direction: column; gap: 6px; }
 .rn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .rn-row > * { flex: 1 1 160px; min-width: 0; }
+.rn-aas-cred { display: flex; flex-direction: column; gap: 6px; }               /* both rows' room kept whatever the credentials: nothing below moves */
+.rn-aas-cred [hidden] { display: none; }
+.rn-aas-cred .rn-invisible { visibility: hidden; }
 .rn-lines { font-family: var(--mono, monospace); resize: vertical; }
 
 /* OPC UA: the Channels, and the server's nodes to pick them from */

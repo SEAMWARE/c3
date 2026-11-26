@@ -5,9 +5,11 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// The server: its URL, the CAs its certificate is verified against (or none verified), the Authorization header's
-// value - sent once, kept by c3 in the broker's directory (0600) and handed to the broker in its environment, never in
-// c3.json. An AssetChannel: the shell's or the submodel's id, which nodes become entities ("natural" - the shell and
+// The server: its URL, an AAS Registry asked first where a shell is, the MQTT broker it publishes its changes to (push),
+// the CAs its certificate is verified against (or none verified), a client certificate (mutual TLS), and its
+// credentials: none, an Authorization header, or an OAuth2 client (the client credentials grant). The secrets - the
+// header's value, the client's secret - are sent once, kept by c3 in the broker's directory (0600) and handed to the
+// broker in its environment, never in c3.json. An AssetChannel: the shell's or the submodel's id, which nodes become entities ("natural" - the shell and
 // each submodel - or rules: a node kind, optionally its semanticId, and the entity type), what a collection that is no
 // entity becomes (attributeLayout), whether a client's write goes to the server first (channelDirection both), and how
 // often the model is read again (pollInterval).
@@ -76,10 +78,19 @@ export class AasForm {
     this.open = new Set();                 // the ids of the models shown open
 
     const a = (id, key, ev, get) => $(id).addEventListener(ev, () => { this.f[key] = get($(id)); this.render(); this.run.changed(false); });
-    a('rn-aas-url',      'url',      'input',  (e) => e.value.trim());
-    a('rn-aas-ca',       'caFile',   'input',  (e) => e.value.trim());
-    a('rn-aas-insecure', 'insecure', 'change', (e) => e.checked);
+    a('rn-aas-url',      'url',         'input',  (e) => e.value.trim());
+    a('rn-aas-registry', 'registry',    'input',  (e) => e.value.trim());
+    a('rn-aas-push',     'push',        'input',  (e) => e.value.trim());
+    a('rn-aas-cred',     'credentials', 'change', (e) => e.value);
+    a('rn-aas-token',    'tokenUrl',    'input',  (e) => e.value.trim());
+    a('rn-aas-client',   'clientId',    'input',  (e) => e.value.trim());
+    a('rn-aas-scope',    'scope',       'input',  (e) => e.value.trim());
+    a('rn-aas-cert',     'clientCert',  'input',  (e) => e.value.trim());
+    a('rn-aas-key',      'clientKey',   'input',  (e) => e.value.trim());
+    a('rn-aas-ca',       'caFile',      'input',  (e) => e.value.trim());
+    a('rn-aas-insecure', 'insecure',    'change', (e) => e.checked);
     $('rn-aas-auth').addEventListener('input', () => { this.f.authorization = $('rn-aas-auth').value; this.renderSum(); });
+    $('rn-aas-secret').addEventListener('input', () => { this.f.clientSecret = $('rn-aas-secret').value; this.renderSum(); });
     $('rn-aas-add').addEventListener('click', () => this.channelAdd(''));
     $('rn-aas-discover').addEventListener('click', () => this.discover());
   }
@@ -87,7 +98,8 @@ export class AasForm {
   get f() { return this.run.f.aas; }
 
   defaults() {
-    return { url: '', caFile: '', insecure: false, authorization: '', authorizationSet: false, channels: [] };
+    return { url: '', registry: '', push: '', caFile: '', insecure: false, clientCert: '', clientKey: '', credentials: 'none',
+             authorization: '', authorizationSet: false, tokenUrl: '', clientId: '', scope: '', clientSecret: '', clientSecretSet: false, channels: [] };
   }
 
   // fromDef - a kept broker's "aas" (the API's shape) as the form has it
@@ -95,7 +107,12 @@ export class AasForm {
     const f = this.defaults();
     if (!a) return f;
     return Object.assign(f, {
-      url: a.url || '', caFile: a.caFile || '', insecure: !!a.insecure, authorizationSet: !!a.authorizationSet,
+      url: a.url || '', registry: a.registry || '', push: a.push || '', caFile: a.caFile || '', insecure: !!a.insecure,
+      clientCert: a.clientCert || '', clientKey: a.clientKey || '', authorizationSet: !!a.authorizationSet,
+      // an older c3 has no credentials: the Authorization header, when it keeps one
+      credentials: a.credentials || (a.authorizationSet ? 'authorization' : 'none'),
+      tokenUrl: (a.oauth2 && a.oauth2.tokenUrl) || '', clientId: (a.oauth2 && a.oauth2.clientId) || '', scope: (a.oauth2 && a.oauth2.scope) || '',
+      clientSecretSet: !!(a.oauth2 && a.oauth2.clientSecretSet),
       channels: (a.channels || []).map((c) => ({
         id: c.id || '', rules: Array.isArray(c.entities) ? c.entities.map((r) => ({ from: r.from, semanticId: r.semanticId || '', type: r.type })) : null,
         attributeLayout: c.attributeLayout || 'attributes', channelDirection: c.channelDirection || 'in', pollInterval: c.pollInterval || '',
@@ -103,13 +120,18 @@ export class AasForm {
     });
   }
 
-  // toDef - the form's AAS as a broker's "aas"; undefined: no server. The Authorization only with 'withSecret' (Start, Discover)
+  // toDef - the form's AAS as a broker's "aas"; undefined: no server. The secrets only with 'withSecret' (Start, Discover)
   toDef(withSecret) {
     const f = this.f;
     if (!f.url) return undefined;
-    const d = { url: f.url, insecure: !!f.insecure };
-    if (f.caFile) d.caFile = f.caFile;
-    if (withSecret && f.authorization) d.authorization = f.authorization;
+    const d = { url: f.url, insecure: !!f.insecure, credentials: f.credentials };
+    for (const k of ['registry', 'push', 'caFile', 'clientCert', 'clientKey']) if (f[k]) d[k] = f[k];
+    if (f.credentials === 'authorization' && withSecret && f.authorization) d.authorization = f.authorization;
+    if (f.credentials === 'oauth2') {
+      d.oauth2 = { tokenUrl: f.tokenUrl, clientId: f.clientId };
+      if (f.scope) d.oauth2.scope = f.scope;
+      if (withSecret && f.clientSecret) d.oauth2.clientSecret = f.clientSecret;
+    }
     d.channels = f.channels.filter((c) => c.id).map((c) => {
       const ch = { id: c.id, entities: c.rules ? c.rules.map((r) => (r.semanticId ? { from: r.from, semanticId: r.semanticId, type: r.type } : { from: r.from, type: r.type })) : 'natural',
                    attributeLayout: c.attributeLayout, channelDirection: c.channelDirection };
@@ -119,10 +141,15 @@ export class AasForm {
     return d;
   }
 
-  // started - the Authorization was sent: c3 keeps it, the page does not
+  // started - the secrets were sent: c3 keeps the one the credentials use (and drops the other), the page none
   started() {
-    if (this.f.authorization) this.f.authorizationSet = true;
-    this.f.authorization = '';
+    const f = this.f;
+    if (f.credentials === 'authorization' && f.authorization) f.authorizationSet = true;
+    if (f.credentials === 'oauth2' && f.clientSecret) f.clientSecretSet = true;
+    if (f.credentials !== 'authorization') f.authorizationSet = false;
+    if (f.credentials !== 'oauth2') f.clientSecretSet = false;
+    f.authorization = '';
+    f.clientSecret = '';
   }
 
   channelAdd(id) {
@@ -141,11 +168,22 @@ export class AasForm {
     const cont = !this.run.bridgeOk('aas');                // a broker without the aas bridge
     const native = this.run.f.where !== 'container';       // Discover runs a broker natively: a server on localhost is reached
     const set = (id, v) => { if ($(id).value !== v) $(id).value = v; };
-    set('rn-aas-url', f.url); set('rn-aas-ca', f.caFile);
+    set('rn-aas-url', f.url); set('rn-aas-registry', f.registry); set('rn-aas-push', f.push); set('rn-aas-ca', f.caFile);
+    set('rn-aas-cred', f.credentials); set('rn-aas-token', f.tokenUrl); set('rn-aas-client', f.clientId); set('rn-aas-scope', f.scope);
+    set('rn-aas-cert', f.clientCert); set('rn-aas-key', f.clientKey);
     $('rn-aas-insecure').checked = f.insecure;
     if (!f.authorization) $('rn-aas-auth').value = '';
-    $('rn-aas-auth').placeholder = f.authorizationSet ? t('Authorization header - kept by c3; empty keeps it') : t('Authorization header (Bearer ...) - none: the server asks for none');
-    for (const id of ['rn-aas-url', 'rn-aas-ca', 'rn-aas-insecure', 'rn-aas-auth', 'rn-aas-add']) $(id).disabled = cont;
+    if (!f.clientSecret) $('rn-aas-secret').value = '';
+    $('rn-aas-auth').placeholder = f.authorizationSet ? t('Authorization header - kept by c3; empty keeps it') : t('Authorization header (Bearer ...)');
+    $('rn-aas-secret').placeholder = f.clientSecretSet ? t('client secret - kept by c3; empty keeps it') : t('client secret');
+    // the credentials' fields: both rows' room kept whatever is chosen - nothing below moves
+    const oauth2 = f.credentials === 'oauth2';
+    $('rn-aas-auth').hidden = oauth2;
+    $('rn-aas-token').hidden = !oauth2;
+    document.querySelector('.rn-aas-cred1').classList.toggle('rn-invisible', f.credentials === 'none');
+    document.querySelector('.rn-aas-cred2').classList.toggle('rn-invisible', !oauth2);
+    for (const id of ['rn-aas-url', 'rn-aas-registry', 'rn-aas-push', 'rn-aas-cred', 'rn-aas-auth', 'rn-aas-token', 'rn-aas-client', 'rn-aas-secret',
+      'rn-aas-scope', 'rn-aas-cert', 'rn-aas-key', 'rn-aas-ca', 'rn-aas-insecure', 'rn-aas-add']) $(id).disabled = cont;
     $('rn-aas-discover').disabled = cont || !native || !f.url || this.busy;
     $('rn-aas-discover').title = cont ? t('this broker has no {name} bridge', { name: 'aas' }) : !native ? t('Discover runs the broker natively - choose Natively to discover')
       : (!f.url ? t('give the server\'s URL first') : '');
@@ -157,10 +195,12 @@ export class AasForm {
   renderSum() {
     const f = this.f;
     const cont = !this.run.bridgeOk('aas');
-    const auth = f.authorization || f.authorizationSet;
+    const cred = f.credentials === 'oauth2' ? t('an OAuth2 client') : (f.credentials === 'authorization' && (f.authorization || f.authorizationSet))
+      ? t('with an Authorization header') : t('no credentials');
     $('rn-aas-sum').textContent = cont ? t('this broker has no {name} bridge', { name: 'aas' })
-      : (!f.url ? t('none') : f.url + ' - ' + (auth ? t('with an Authorization header') : t('no Authorization header'))
-        + (f.insecure ? ', ' + t('certificate not verified') : '') + ', ' + plural(f.channels.length, '{n} AssetChannel', '{n} AssetChannels'));
+      : (!f.url ? t('none') : f.url + ' - ' + cred + (f.clientCert ? ', ' + t('a client certificate') : '')
+        + (f.insecure ? ', ' + t('certificate not verified') : '') + (f.registry ? ', ' + t('a registry') : '') + (f.push ? ', ' + t('change events') : '')
+        + ', ' + plural(f.channels.length, '{n} AssetChannel', '{n} AssetChannels'));
   }
 
   //

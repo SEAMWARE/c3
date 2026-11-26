@@ -444,7 +444,28 @@
                 <summary id="rn-aas-sum">none</summary>
                 <div class="rn-stack">
                   <input class="cp-input" id="rn-aas-url" placeholder="http://aas-server:8081/api/v3.0 - the AAS server (empty: no AAS)" spellcheck="false" autocomplete="off" aria-label="AAS server URL">
-                  <input class="cp-input" id="rn-aas-auth" type="password" placeholder="Authorization header (Bearer ...)" autocomplete="new-password" aria-label="AAS Authorization header">
+                  <input class="cp-input" id="rn-aas-registry" placeholder="http://aas-registry:8080/api/v3.0 - an AAS Registry, asked first where a shell is (none: the server alone)" spellcheck="false" autocomplete="off" aria-label="AAS Registry URL">
+                  <input class="cp-input" id="rn-aas-push" placeholder="mqtt://aas-server:1883 - where the server publishes its changes (BaSyx, FA³ST; none: polled alone)" spellcheck="false" autocomplete="off" aria-label="AAS change events, MQTT broker URL">
+                  <select class="rn-select" id="rn-aas-cred" aria-label="AAS credentials">
+                    <option value="none">no credentials</option>
+                    <option value="authorization">an Authorization header</option>
+                    <option value="oauth2">an OAuth2 client (client credentials)</option>
+                  </select>
+                  <div class="rn-aas-cred">
+                    <div class="rn-row rn-aas-cred1">
+                      <input class="cp-input" id="rn-aas-auth" type="password" placeholder="Authorization header (Bearer ...)" autocomplete="new-password" aria-label="AAS Authorization header">
+                      <input class="cp-input" id="rn-aas-token" placeholder="https://login.example/token - the token endpoint" spellcheck="false" autocomplete="off" aria-label="OAuth2 token endpoint">
+                    </div>
+                    <div class="rn-row rn-aas-cred2">
+                      <input class="cp-input" id="rn-aas-client" placeholder="client id" spellcheck="false" autocomplete="off" aria-label="OAuth2 client id">
+                      <input class="cp-input" id="rn-aas-secret" type="password" placeholder="client secret" autocomplete="new-password" aria-label="OAuth2 client secret">
+                      <input class="cp-input" id="rn-aas-scope" placeholder="scope (none: none asked)" spellcheck="false" autocomplete="off" aria-label="OAuth2 scope">
+                    </div>
+                  </div>
+                  <div class="rn-row">
+                    <input class="cp-input" id="rn-aas-cert" placeholder="the bridge's certificate, a PEM file - mutual TLS (none: none shown)" spellcheck="false" autocomplete="off" aria-label="AAS client certificate file">
+                    <input class="cp-input" id="rn-aas-key" placeholder="its key, a PEM file (none: in the certificate's file)" spellcheck="false" autocomplete="off" aria-label="AAS client key file">
+                  </div>
                   <input class="cp-input" id="rn-aas-ca" placeholder="the CAs its certificate is verified against - a PEM file (none: the system's)" spellcheck="false" autocomplete="off" aria-label="AAS server CA file">
                   <label class="rn-check"><input type="checkbox" id="rn-aas-insecure"> do not verify the server's certificate <span class="why">- cannot tell the server meant from one that pretends to be it</span></label>
                   <div class="rn-ouchans" id="rn-aas-chans" aria-label="AssetChannels"></div>
@@ -456,7 +477,7 @@
                   <div class="rn-outree" id="rn-aas-tree" hidden aria-label="The AAS server's shells and submodels"></div>
                 </div>
               </details>
-              <span class="cp-note">the aas bridge (native brokers; a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header in the broker's directory (0600), never in c3.json</span>
+              <span class="cp-note">the aas bridge (a prototype): a shell or a submodel of an Asset Administration Shell server a model of entities (an AssetChannel). Discover the server to pick them. c3 keeps the Authorization header and the OAuth2 client secret in the broker's directory (0600), never in c3.json</span>
             </div>
 
             <div class="cp-field">

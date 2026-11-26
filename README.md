@@ -818,13 +818,22 @@ needs runs in a container beside the broker:
   **Map an OPC UA server**, under the DDS mapper's button, active with the opcua bridge ticked: the OPC UA
   mapper (below) - the whole address space at once, before a broker runs, written into a bridge
   configuration file of its own.
-- **AAS** (a broker with the aas bridge; corAasBridge, a prototype: `coraine-build --bridges
-  aas`) - an Asset Administration Shell server: its URL (`http[s]://host:port[/base path]`), the
-  Authorization header's value, the CAs its certificate is verified against (a PEM file) or not verified.
-  Filling in the URL ticks the aas bridge. The Authorization is sent once, on Start: c³ keeps it in
-  `<run>/<name>/aas.authorization` (mode 600) and hands it to the broker in its environment,
-  `C3_AAS_AUTHORIZATION` (the bridge's `authorizationEnv` in `bridges.json`); it is never in `c3.json`, the
-  bridge configuration or the API, which says only `authorizationSet`. Empty keeps the one c³ has.
+- **AAS** (a broker with the aas bridge; corAasBridge, a prototype: `coraine-build --bridges aas`, or an image
+  whose `coraine -V` lists it) - an Asset Administration Shell server: its
+  URL (`http[s]://host:port[/base path]`); an **AAS Registry** (`http[s]://...`), asked first where a shell and
+  its submodels are (the bridge's `registry`); the MQTT broker the server publishes its change events to
+  (`mqtt://host[:port]`, Eclipse BaSyx and FA³ST: a change read at once; the bridge's `push`); the
+  **credentials** - none, an **Authorization header** (`Bearer ...`), or an **OAuth2 client** (the client
+  credentials grant: the token endpoint, the client id and secret, a scope); a **client certificate** and its key
+  (PEM files, mutual TLS); the CAs the server's certificate is verified against (a PEM file) or not verified.
+  Filling in the URL ticks the aas bridge. The secrets are sent once, on Start: c³ keeps the Authorization in
+  `<run>/<name>/aas.authorization`, the client secret in `<run>/<name>/aas.client-secret` (mode 600), and hands
+  the one the credentials use to the broker in its environment - `C3_AAS_AUTHORIZATION` (the bridge's
+  `authorizationEnv`), `C3_AAS_CLIENT_SECRET` (its `oauth2.clientSecretEnv`); the other is removed. A secret is
+  never in `c3.json`, the bridge configuration or the API, which says only `authorizationSet`,
+  `oauth2.clientSecretSet`; empty keeps the one c³ has. OAuth2 with no secret kept does not start: c³ says so.
+  A broker in a container gets the secret by name (`-e C3_AAS_...`: the engine takes the value from its own
+  environment, so it is on no command line) and the PEM files mounted at their own paths.
   **AssetChannels** - a shell's (or a submodel's) id each, its model a graph of entities: which nodes become
   entities (`natural` - the shell and each submodel - or rules: a node kind, a semanticId, the entity type;
   the first match wins), what a collection that is no entity becomes (`attributeLayout`), the direction
@@ -1262,7 +1271,7 @@ The backend's API, used by the pages:
 | `GET /api/run/dds/files` | the DDS mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done) |
 | `POST /api/run/dds/files` `{domain, vocabulary, topics, services, actions}` | write them from a mapping: `201` with the same answer; `400` with why for a row that is not one |
 | `POST /api/run/opcua/discover` `{broker}` | the OPC UA server's address space - the opcua bridge's inventory, crawled (`GET /admin/bridges/opcua/inventory`), from a broker of its own started and stopped for it: `200` `{url, complete, nodes, objects}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not reach |
-| `POST /api/run/aas/discover` `{broker}` | the AAS server's shells and submodels, and each one's model - the aas bridge's inventory (`GET /admin/bridges/aas/inventory`, then `?from=<id>` per shell and per submodel no shell refers to, at most 200), from a broker of its own started and stopped for it, with the Authorization given or kept: `200` `{url, complete, shells, submodels, models, errors}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not read |
+| `POST /api/run/aas/discover` `{broker}` | the AAS server's shells and submodels, and each one's model - the aas bridge's inventory (`GET /admin/bridges/aas/inventory`, then `?from=<id>` per shell and per submodel no shell refers to, at most 200), from a broker of its own started and stopped for it, with the Authorization or OAuth2 client secret given or kept: `200` `{url, complete, shells, submodels, models, errors}`; `409` while another discovery runs, `502` with why - a container broker, no URL, a broker that did not start or a server it did not read |
 | `GET /api/run/opcua/files` | the OPC UA mapper's files: `{directory, bridgeConfig, userContext, mapping}` (`mapping` null before the first Done; its `user` says `passwordSet`, never the password) |
 | `POST /api/run/opcua/files` `{url, security, user, vocabulary, channels, models, terms}` | write them from a mapping: `201` with the same answer; `400` with why |
 | `GET /api/maps` | the data directory, the downloaded areas, whether the fonts are there, the download (`job`) |
