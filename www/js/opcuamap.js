@@ -18,6 +18,7 @@
 //
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { attrCamel } from './ngsild.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -94,10 +95,10 @@ function words(name) {
   return String(name || '').split(/\s+/).map((w) => w.replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean);
 }
 
-// camel - names joined in camel case, the first word lower-case (Hydraulics, Oil Temp: hydraulicsOilTemp)
+// camel - names joined in camel case as the broker does it (attrCamel: Hydraulics, Oil Temp: hydraulicsOilTemp)
 function camel(names) {
   const ws = names.flatMap(words);
-  return ws.map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+  return attrCamel(ws);
 }
 
 // pct - a BrowseName in an entity id, as the bridge writes it: each byte outside [A-Za-z0-9._-] as %XX
