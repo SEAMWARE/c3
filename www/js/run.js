@@ -2,7 +2,7 @@
 // run.js - the Operate page: brokers started and stopped on this machine, natively or in a container, and the
 // services they use
 //
-// Four views, one shown at a time: Set up a broker and the list of what runs; a broker's card (or a service's)
+// Four views, one shown at a time: Set up and start a broker, Brokers and Containers; a broker's card (or a service's)
 // with its log; Set up a broker step 1, what runs (a build, the installed coraine, an image, or the settings of
 // a broker started earlier); step 2, how it runs - the form, the command and the services it brings up
 //
@@ -199,15 +199,18 @@ export class Run {
   constructor({ onConnect } = {}) {
     this.onConnect = onConnect || (() => {});
     this.explored = null;             // {url, tenant, demo}: the broker Explore is connected to - the active one
-    this.exploredAnswers = false;     // it answered the last ask (probeExplored): only then is it in the list
-    this.exploredAsked = 0;
     window.addEventListener('c3-explore-broker', (e) => {
       this.explored = e.detail;
-      this.exploredAnswers = false;
-      this.exploredAsked = 0;
+      this.remoteAsked = 0;                              // Explore's list may have a new one: read again
       if (this.state) this.renderLists();
-      if (this.shown) this.probeExplored();
+      if (this.shown) this.probeRemote();
     });
+    this.configBrokers = null;        // the configuration's brokers - those Explore connected to (probeRemote)
+    this.remoteAnswers = new Map();   // url -> it answered the last ask (probeRemote)
+    this.remoteAsked = 0;
+    this.ctrBusy = new Map();         // container -> its state when Start or Stop was asked: busy until it changes
+    this.ctrWhy = new Map();          // container -> why its last Start or Stop failed
+    this.ctrAll = false;              // Containers: all of them, not only the 10 newest
     this.caps = null;                 // GET /api/capabilities: "run"
     this.state = null;                // GET /api/run
     this.stateText = '';
@@ -631,7 +634,7 @@ export class Run {
   }
 
   async load() {
-    if (this.explored && Date.now() - this.exploredAsked > 5000) this.probeExplored();
+    if (Date.now() - this.remoteAsked > 10000) this.probeRemote();
     try {
       const s = await api.run();
       const text = JSON.stringify(s);
@@ -686,29 +689,189 @@ export class Run {
 
   //
   // listed - a broker in the list: one that runs, or is on its way up or down, or failed (its card says why);
-  // one stopped by hand is not - its settings are under Set up a broker, Earlier settings
+  // one stopped by hand is not - its settings are under Set up and start a broker, Earlier settings
   //
   listed(b) { return ['running', 'starting', 'stopping', 'failed'].includes(b.state); }
 
   renderLists() {
+    this.renderBrokers();
+    this.renderContainers();
+  }
+
+  //
+  // renderBrokers - Brokers: c³'s that run here (No broker runs on this machine, when none), then the brokers
+  // Explore connected to that c³ does not run - on other machines, or here but started elsewhere - each with
+  // whether it answers (probeRemote). The one Explore is connected to first
+  //
+  renderBrokers() {
     const s = this.state;
-    const box = $('rn-brokers');
-    //
-    // The broker Explore is connected to is in the list - highlighted, first - also when c³ did not start it
-    //
     const shown = s.brokers.filter((b) => this.listed(b));
     const ours = shown.find((b) => this.active(b.url));
     const items = shown.map((b) => this.brokerRow(b));
     if (ours) items.unshift(items.splice(shown.indexOf(ours), 1)[0]);
-    else if (this.explored && this.exploredAnswers && !s.brokers.some((b) => this.active(b.url))) items.unshift(this.exploredItem());   // one of c³'s that stopped: not a stranger
-    //
-    // A service that runs with no broker of c³'s using it (one left running): listed too, to be stopped
-    //
-    for (const x of s.services) if (x.state === 'running' && !x.usedBy.length) items.push(this.serviceRow(x));
+    const remote = this.remoteBrokers();
+    const on = remote.find((r) => this.active(r.url));
+    if (on) remote.unshift(remote.splice(remote.indexOf(on), 1)[0]);
+    const rows = remote.map((r) => this.remoteRow(r));
+    if (on && !ours) items.unshift(...rows); else items.push(...rows);
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
-    box.replaceChildren(...items);
-    box.hidden = !items.length;
-    $('rn-none').hidden = !!items.length;              // nothing runs: said so
+    $('rn-brokers').replaceChildren(...items);
+    $('rn-brokers').hidden = !items.length;
+    $('rn-none').hidden = !!shown.length;              // none of c³'s runs here: said so
+  }
+
+  //
+  // remoteBrokers - the brokers Explore connected to (the configuration's, the last one first), less c³'s own:
+  // one that runs is listed as c³'s, one stopped is under Set up and start a broker, Earlier settings
+  //
+  remoteBrokers() {
+    const kept = this.state.brokers || [];
+    return (this.configBrokers || []).filter((r) => r && r.url && !kept.some((b) => this.same(b.url, r.url)));
+  }
+
+  //
+  // same - two URLs the same broker: the same host and port (localhost and 127.0.0.1 alike)
+  //
+  same(u1, u2) {
+    const key = (u) => { try { const x = new URL(u); return x.protocol + '//' + x.hostname.replace(/^127\.0\.0\.1$/, 'localhost') + ':' + (x.port || (x.protocol === 'https:' ? '443' : '80')); } catch { return u; } };
+    return key(u1) === key(u2);
+  }
+
+  //
+  // remoteRow - a broker c³ does not run: its name and URL, whether it answers, Explore
+  //
+  remoteRow(r) {
+    const on = this.active(r.url);
+    const ok = this.remoteAnswers.get(r.url);          // true, false, or not asked yet
+    const item = el('div', 'rn-item' + (on ? ' active' : ''));
+    item.append(el('span', 'rdot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'busy')));
+    const main = el('div', 'rmain');
+    const title = el('div', 'rtitle');
+    const name = r.name && r.name !== r.url.replace(/^https?:\/\//, '') ? r.name : '';
+    title.append(el('span', 'rname', name || r.url));
+    if (on) title.append(el('span', 'badge active', t('in Explore')));
+    title.append(el('span', 'badge ' + (ok === true ? 'ready' : 'stopped'), ok === true ? t('answers') : ok === false ? t('does not answer') : t('asking')));
+    if (name) title.append(el('span', 'rurl', r.url));
+    main.append(title, el('div', 'rmeta', t('not run by c³ - connected to in Explore')));
+    item.append(main);
+    const acts = el('div', 'racts');
+    const x = button(t('Explore'), '', () => this.onConnect(r.url));
+    x.disabled = ok === false;
+    if (x.disabled) x.title = t('{name} does not answer', { name: name || r.url });
+    acts.append(x);
+    item.append(acts);
+    return item;
+  }
+
+  //
+  // probeRemote - the configuration's brokers (Explore's), read again, and each one c³ does not run asked GET
+  // /version through the proxy (any HTTP answer below 500 counts); every 10 s while Operate is shown
+  //
+  async probeRemote() {
+    if (this.probingRemote) return;
+    this.probingRemote = true;
+    this.remoteAsked = Date.now();
+    try { this.configBrokers = (await api.config()).brokers || []; } catch (e) { /* the list as it was */ }
+    const ask = async (url) => {
+      try {
+        const r = await Promise.race([api.brokerGet(url, '/version', ''), new Promise((done) => setTimeout(() => done(null), 3000))]);
+        return !!(r && r.reached && r.status > 0 && r.status < 500);
+      } catch (e) { return false; }
+    };
+    const list = this.state ? this.remoteBrokers() : (this.configBrokers || []);
+    const got = await Promise.all(list.map((r) => ask(r.url)));
+    list.forEach((r, ix) => this.remoteAnswers.set(r.url, got[ix]));
+    this.probingRemote = false;
+    if (this.state) this.renderBrokers();
+  }
+
+  //
+  // renderContainers - Containers: every container on this machine (GET /api/run "containers"), the 10 newest
+  // (Show all for the rest), in a box that scrolls; each one Start or Stop and its Log (while it runs)
+  //
+  renderContainers() {
+    const list = [...(this.state.containers || [])].sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    $('rn-ccount').textContent = list.length ? String(list.length) : '';
+    const shown = this.ctrAll ? list : list.slice(0, 10);   // the 10 newest; the rest on asking
+    $('rn-ctrs').replaceChildren(...shown.map((c) => this.containerRow(c)));
+    $('rn-cmore').hidden = list.length <= 10;
+    $('rn-cmore').replaceChildren(...(list.length > 10 ? [button(this.ctrAll ? t('Show the 10 newest') : t('Show all {n}', { n: list.length }), '',
+      () => { this.ctrAll = !this.ctrAll; this.renderContainers(); if (!this.ctrAll) $('rn-ctrs').scrollTop = 0; })] : []));
+    $('rn-ctrs').hidden = !list.length;
+    $('rn-cnone').hidden = !!list.length || !this.state.engine || !this.state.engine.name;
+    for (const n of [...this.ctrBusy.keys()]) {          // asked to start or stop: until its state changed
+      const c = list.find((x) => x.name === n);
+      if (!c || c.state !== this.ctrBusy.get(n)) this.ctrBusy.delete(n);
+    }
+  }
+
+  //
+  // containerRow - a container: its name, state and docker's words for it, what it is (a broker's or a service of
+  // c³'s, else its image), its ports; Start / Stop (one button) and Log. c³'s broker containers start and stop
+  // as the broker; a service a running broker of c³'s uses is stopped with that broker, not here
+  //
+  containerRow(c) {
+    const runs = c.state === 'running';
+    const busy = this.ctrBusy.has(c.name);
+    const item = el('div', 'rn-item');
+    item.append(el('span', 'rdot ' + (busy ? 'busy' : runs ? 'ok' : c.state === 'exited' && !/\(0\)/.test(c.status) ? 'bad' : '')));
+    const main = el('div', 'rmain');
+    const title = el('div', 'rtitle');
+    title.append(el('span', 'rname', c.name), el('span', 'badge ' + (runs ? 'running' : 'exited'), stateName(c.state)));
+    if (c.c3) title.append(el('span', 'badge', 'c³'));
+    main.append(title);
+    const svc = c.c3 && (this.state.services || []).find((x) => x.container === c.name);
+    const what = c.kind === 'broker' ? t('broker {name}', { name: c.broker }) : svc ? svc.label : c.image;
+    const ports = (c.ports || '').split(', ').filter((p) => p.includes('->')).map((p) => p.replace(/^0\.0\.0\.0:|^\[::\]:/, '')).filter((p, ix, all) => all.indexOf(p) === ix);
+    main.append(el('div', 'rmeta', [what, c.status, ...ports].filter(Boolean).join(' · ')));
+    if (this.ctrWhy.has(c.name)) main.append(el('div', 'rwhy bad', this.ctrWhy.get(c.name)));
+    item.append(main);
+
+    const acts = el('div', 'racts');
+    const broker = c.kind === 'broker' && this.kept(c.broker);
+    const users = svc ? svc.usedBy : [];
+    const tog = button(busy ? (runs ? t('Stopping') : t('Starting')) : runs ? t('Stop') : t('Start'), '', () => this.containerToggle(c, broker));
+    tog.disabled = busy || (runs && users.length > 0);
+    if (runs && users.length) tog.title = t('{names} uses it - stop the broker', { names: users.join(', ') });
+    const log = button(t('Log'), '', () => this.select('container', c.name));
+    log.disabled = !runs;
+    if (!runs) log.title = t('{name} does not run', { name: c.name });
+    acts.append(tog, log);
+    item.append(acts);
+    return item;
+  }
+
+  async containerToggle(c, broker) {
+    const runs = c.state === 'running';
+    this.ctrBusy.set(c.name, c.state);
+    this.renderContainers();
+    this.renderCard();
+    try {
+      if (broker) await (runs ? api.runStop(broker.name) : api.runStartKept(broker.name));
+      else await api.runContainer(c.name, runs ? 'stop' : 'start');
+      this.ctrWhy.delete(c.name);
+    } catch (e) {
+      this.ctrBusy.delete(c.name);
+      this.ctrWhy.set(c.name, e.message);
+      this.renderContainers();
+      this.renderCard();
+    }
+  }
+
+  //
+  // containerLog - a container's log on its card: its last 500 lines, read again every 3 s while the card shows
+  //
+  async containerLog(name) {
+    clearTimeout(this.logPoll);
+    if (this.mode !== 'item' || !this.sel || this.sel.kind !== 'container' || this.sel.name !== name) return;
+    try {
+      const r = await api.runContainerLog(name);
+      const pre = $('rn-log');
+      const end = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+      if (pre.textContent !== r.log) { pre.textContent = r.log; if (end) pre.scrollTop = pre.scrollHeight; }
+      this.note('');
+    } catch (e) { this.note(e.message); }
+    if (this.sel && this.sel.kind === 'container' && this.sel.name === name) this.logPoll = setTimeout(() => this.containerLog(name), 3000);
   }
 
   //
@@ -736,26 +899,6 @@ export class Run {
     const acts = el('div', 'racts');
     if (b.state === 'running') acts.append(button(t('Stop'), '', () => this.stopInList(b)), exploreButton(b, this.onConnect));
     item.append(acts);
-    return item;
-  }
-
-  //
-  // serviceRow - a service in the list (one no broker uses): a click opens its card
-  //
-  serviceRow(x) {
-    const item = el('div', 'rn-item rn-row-link');
-    item.tabIndex = 0;
-    item.setAttribute('role', 'button');
-    const open = () => this.select('service', x.container);
-    item.addEventListener('click', (e) => { if (!e.target.closest('a, button')) open(); });
-    item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); open(); } });
-    item.append(el('span', 'rdot ok'));
-    const main = el('div', 'rmain');
-    const title = el('div', 'rtitle');
-    title.append(el('span', 'rname', x.container), el('span', 'badge running', stateName(x.state)));
-    if (x.port) title.append(el('span', 'rurl', '127.0.0.1:' + x.port));
-    main.append(title, el('div', 'rmeta', [x.label, t('used by no broker that runs')].join(' · ')));
-    item.append(main, el('div', 'racts'));
     return item;
   }
 
@@ -806,6 +949,13 @@ export class Run {
       const used = this.state.services.filter((x) => x.usedBy.includes(b.name) || b.services.includes(x.container) || x.neededBy.includes(b.name));
       $('rn-uses-box').hidden = !used.length;
       $('rn-services').replaceChildren(...used.map((x) => this.serviceItem(x, b.name)));
+    } else if (s.kind === 'container') {
+      const c = (this.state.containers || []).find((v) => v.name === s.name);
+      if (!c) { if (this.cardSeen) this.showView('list'); return; }
+      this.cardSeen = true;
+      box.replaceChildren(this.containerRow(c));
+      $('rn-uses-box').hidden = true;
+      $('rn-services').replaceChildren();
     } else {
       const x = this.state.services.find((v) => v.container === s.name);
       if (!x) { if (this.cardSeen) this.showView('list'); return; }
@@ -814,48 +964,6 @@ export class Run {
       $('rn-uses-box').hidden = true;
       $('rn-services').replaceChildren();
     }
-  }
-
-  //
-  // probeExplored - does the broker Explore is connected to answer (GET /version through the proxy - any HTTP
-  // answer counts, whatever the broker)? Asked every 5 s while Operate is shown; the list follows the answer
-  //
-  async probeExplored() {
-    const x = this.explored;
-    if (!x || this.probing) return;
-    this.probing = true;
-    this.exploredAsked = Date.now();
-    let answers = false;
-    try {
-      const r = await api.brokerGet(x.url, '/version', '');
-      answers = r.reached && r.status > 0 && r.status < 500;
-    } catch (e) { answers = false; }
-    this.probing = false;
-    if (this.explored !== x) return;                   // Explore moved on meanwhile
-    if (answers !== this.exploredAnswers) {
-      this.exploredAnswers = answers;
-      if (this.state) this.renderLists();
-    }
-  }
-
-  //
-  // exploredItem - the broker Explore is connected to, when c³ did not start it and it answers: its URL, no more
-  //
-  exploredItem() {
-    const x = this.explored;
-    const item = el('div', 'rn-item active');
-    item.append(el('span', 'rdot ok'));
-    const main = el('div', 'rmain');
-    const title = el('div', 'rtitle');
-    title.append(el('span', 'rname', x.demo || x.url), el('span', 'badge active', t('in Explore')));
-    if (x.demo) title.append(el('span', 'rurl', x.url));
-    main.append(title);
-    main.append(el('div', 'rmeta', t('not started by c³')));
-    item.append(main);
-    const acts = el('div', 'racts');
-    acts.append(button(t('Explore'), '', () => this.onConnect(x.url)));
-    item.append(acts);
-    return item;
   }
 
   //
@@ -1305,11 +1413,17 @@ export class Run {
     this.sel = { kind, name };
     this.back = back;
     this.cardSeen = false;
-    $('rn-card-back').textContent = '← ' + (back ? back.name : t('Running'));
+    $('rn-card-back').textContent = '← ' + (back ? back.name : t('Operate'));
     this.renderCard();
     this.configShow();
     this.levelsShow();
     this.metricsShow();
+    if (kind === 'container') {                        // its last lines from the engine, read again (containerLog)
+      this.follow(null);
+      $('rn-log-name').textContent = name;
+      this.containerLog(name);
+      return;
+    }
     $('rn-log-name').textContent = name;
     const base = '/api/run/' + (kind === 'broker' ? 'brokers' : 'services') + '/' + encodeURIComponent(name) + '/log';
     const a = $('rn-log-file');

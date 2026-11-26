@@ -21,6 +21,17 @@
 .rn-list[hidden] { display: none; }
 .rn-none { margin: 0; color: var(--muted); }
 .rn-none[hidden] { display: none; }
+.rn-ctrs { max-height: 28rem; overflow-y: auto; padding-right: 4px; }
+.rn-ctrs .rn-item { flex: 0 0 auto; }
+.rn-morebar { display: flex; justify-content: center; margin-top: 12px; }
+.rn-morebar[hidden] { display: none; }
+.rn-item .racts .btn:disabled { opacity: 0.45; cursor: default; }
+.rn-title { display: flex; align-items: center; gap: 12px; }
+.help-q {
+  display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--muted); font: 600 1rem var(--sans, inherit); text-decoration: none;
+}
+.help-q:hover, .help-q:focus-visible { border-color: var(--accent-2); color: var(--text); outline: none; }
 
 /* Set up a broker: a tile above the list of what runs */
 .rn-newtile {

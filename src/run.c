@@ -20,6 +20,8 @@
 //   GET    /api/run/brokers/<name>/log          Accept: text/event-stream - its log, live; else the file
 //   GET    /api/run/services/<container>/log    the same for a service
 //   POST   /api/run/services/<container>/stop   a service nothing uses
+//   POST   /api/run/containers/<name>/start|stop   any container on the machine (Operate's Containers)
+//   GET    /api/run/containers/<name>/log       its last 500 lines
 //   DELETE /api/run/volumes/<volume>            a service's or a container broker's data, deleted
 //   POST   /api/run/dds/discover                {broker}: what its DDS domain announces - a broker of its own
 //                                               for it, natively or in a container, started and stopped
@@ -327,6 +329,7 @@ typedef struct Service
 // The state
 //
 static pthread_mutex_t rMutex = PTHREAD_MUTEX_INITIALIZER;
+static char*           containers = NULL;      // every container on the machine, as JSON (engineScan) - Operate's Containers
 static Broker*         brokers[BROKERS_MAX];
 static int             nBrokers  = 0;
 static Service         svcs[SERVICES_MAX];
@@ -4626,11 +4629,15 @@ static void engineScan(void)
   if (engine[0] == 0)
     return;
 
-  if (engineRun(out, sizeof(out), 20, "ps", "-a", "--filter", "label=c3=run", "--format",
-                "{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Label \"c3.kind\"}}\t{{.Label \"c3.set\"}}\t{{.Label \"c3.service\"}}\t{{.Label \"c3.broker\"}}\t{{.Ports}}", NULL) != 0)
+  if (engineRun(out, sizeof(out), 20, "ps", "-a", "--format",
+                "{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Label \"c3.kind\"}}\t{{.Label \"c3.set\"}}\t{{.Label \"c3.service\"}}\t{{.Label \"c3.broker\"}}\t{{.Ports}}"
+                "\t{{.Label \"c3\"}}\t{{.CreatedAt}}\t{{.Image}}", NULL) != 0)
     return;
   if (engineRun(vols, sizeof(vols), 20, "volume", "ls", "--filter", "label=c3=run", "--format", "{{.Name}}", NULL) != 0)
     vols[0] = 0;
+
+  Str ctrs = { NULL, 0, 0 };                    // every container on the machine, for Operate's Containers
+  strAdd(&ctrs, "[");
 
   pthread_mutex_lock(&rMutex);
 
@@ -4640,22 +4647,38 @@ static void engineScan(void)
   char* save = NULL;
   for (char* line = strtok_r(out, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save))
   {
-    char* f[8] = { NULL };
+    char* f[11] = { NULL };
     int   n    = 0;
     char* p    = line;
 
-    while ((n < 8) && (p != NULL))
+    while ((n < 11) && (p != NULL))
     {
       f[n++] = p;
       p = strchr(p, '\t');
       if (p != NULL)
         *p++ = 0;
     }
-    if (n < 8)
+    if (n < 11)
       continue;
 
     const char* name  = f[0];
     const char* state = f[1];
+    bool        ours  = (strcmp(f[8], "run") == 0);
+
+    strAdd(&ctrs, (ctrs.len > 1) ? ", {\"name\": " : "{\"name\": ");
+    strAddJson(&ctrs, name);
+    strAdd(&ctrs, ", \"state\": ");    strAddJson(&ctrs, state);
+    strAdd(&ctrs, ", \"status\": ");   strAddJson(&ctrs, f[2]);
+    strAdd(&ctrs, ", \"created\": ");  strAddJson(&ctrs, f[9]);
+    strAdd(&ctrs, ", \"image\": ");    strAddJson(&ctrs, f[10]);
+    strAdd(&ctrs, ", \"ports\": ");    strAddJson(&ctrs, f[7]);
+    strAddf(&ctrs, ", \"c3\": %s", ours ? "true" : "false");
+    strAdd(&ctrs, ", \"kind\": ");     strAddJson(&ctrs, ours ? f[3] : "");
+    strAdd(&ctrs, ", \"broker\": ");   strAddJson(&ctrs, ours ? f[6] : "");
+    strAdd(&ctrs, "}");
+
+    if (ours == false)
+      continue;
 
     if (strcmp(f[3], "service") == 0)
     {
@@ -4769,6 +4792,11 @@ static void engineScan(void)
       bP->ready[0]     = 0;
     }
   }
+
+  strAdd(&ctrs, "]");
+  if (containers != NULL)
+    free(containers);
+  containers = ctrs.s;
 
   pthread_mutex_unlock(&rMutex);
 }
@@ -5183,7 +5211,9 @@ static void runState(CorHttpConn* connP)
     svcRender(&svcs[ix], &s);
     first = false;
   }
-  strAdd(&s, "], \"sets\": ");
+  strAdd(&s, "], \"containers\": ");
+  strAdd(&s, (containers != NULL) ? containers : "[]");
+  strAdd(&s, ", \"sets\": ");
   setsRender(&s);
   strAdd(&s, "}");
 
@@ -6289,6 +6319,66 @@ static void* volumeThread(void* vP)
   corHttpResume(jP->connP);
   free(jP);
   return NULL;
+}
+
+//
+// Containers - every container on the machine (engineScan), for Operate's Containers: started, stopped, its log.
+// c3's brokers in containers go through their broker (POST /api/run/brokers/<name>/start|stop), not here
+//
+//   POST   /api/run/containers/<name>/start    202: `start` in a thread
+//   POST   /api/run/containers/<name>/stop     202: `stop` in a thread (its grace period, then killed)
+//   GET    /api/run/containers/<name>/log      {"log": its last 500 lines, out and err}
+//
+static void* containerActThread(void* vP)
+{
+  char* name = (char*) vP;                       // "start <name>" or "stop <name>"
+  char  out[1024];
+  char* sp = strchr(name, ' ');
+
+  *sp = 0;
+  engineRun(out, sizeof(out), 60, name, &sp[1], NULL);
+  free(name);
+  return NULL;
+}
+
+static void containerRequest(CorHttpConn* connP, const char* name, const char* action, bool get, bool post, const char* path)
+{
+  char quoted[160];
+  snprintf(quoted, sizeof(quoted), "{\"name\": \"%s\",", name);   // nameOk: nothing to escape
+
+  pthread_mutex_lock(&rMutex);
+  bool known = (containers != NULL) && (strstr(containers, quoted) != NULL);
+  pthread_mutex_unlock(&rMutex);
+
+  if (known == false)
+  {
+    serveError(connP, 404, "No such container", name);
+    return;
+  }
+
+  if (post && ((strcmp(action, "start") == 0) || (strcmp(action, "stop") == 0)))
+  {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "%s %s", action, name);
+    threadStart(containerActThread, strdup(cmd));
+    serveJson(connP, 202, "{}");
+  }
+  else if (get && (strcmp(action, "log") == 0))
+  {
+    static char log[256 * 1024];                 // one at a time: logMutex
+    static pthread_mutex_t logMutex = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&logMutex);
+    engineRun(log, sizeof(log), 15, "logs", "--tail", "500", name, NULL);
+    Str s = { NULL, 0, 0 };
+    strAdd(&s, "{\"log\": ");
+    strAddJson(&s, log);
+    strAdd(&s, "}");
+    pthread_mutex_unlock(&logMutex);
+    respondStr(connP, 200, &s);
+  }
+  else
+    serveError(connP, 405, "Method not allowed", path);
 }
 
 //
@@ -9041,6 +9131,12 @@ void runRequest(CorHttpConn* connP, const char* path)
       pthread_mutex_unlock(&rMutex);
       serveError(connP, 405, "Method not allowed", path);
     }
+    return;
+  }
+
+  if (strcmp(what, "containers") == 0)
+  {
+    containerRequest(connP, name, action, get, post, path);
     return;
   }
 
