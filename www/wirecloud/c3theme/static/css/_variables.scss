@@ -38,6 +38,18 @@ $c3-bad:         #FF8A9A;
     $link-hover-color:          $c3-accent-2,
 
     $state-default-text:        $c3-text-2,
+    $state-info-text:           #A9D3EE,       // the alerts (the tutorials' bubbles are info): dark, tinted
+    $state-info-bg:             #18232E,
+    $state-info-border:         #2E4A63,
+    $state-success-text:        $c3-ok,
+    $state-success-bg:          #16261D,
+    $state-success-border:      #2A4D39,
+    $state-warning-text:        $c3-warn,
+    $state-warning-bg:          #2A2316,
+    $state-warning-border:      #5A4520,
+    $state-danger-text:         $c3-bad,
+    $state-danger-bg:           #2A181D,
+    $state-danger-border:       #5C2A33,
     $state-default-bg:          $c3-panel-2,
     $state-default-border:      $c3-line-box,
 
