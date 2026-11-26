@@ -197,7 +197,7 @@ export class Connect {
     //
     this.history = new History();
     this.history.onLoaded = () => { if (this.graph.sel && this.graph.sel === this.history.id) this.refreshPanel(); };
-    this.history.onOpen = (name) => { const e = this.byId.get(this.shownId); if (e) this.temporal.open(e, name, e[name]); };
+    this.history.onOpen = (name) => { const e = this.byId.get(this.shownId); if (e) this.temporal.open(e, name); };
 
     //
     // The History panel: an attribute's history over a time range, from the temporal API
@@ -1642,6 +1642,7 @@ export class Connect {
     items.push({ separator: true });
     items.push({ label: t('Edit…'), hint: t('attributes, as rows'), action: () => this.edit(id) });
     items.push({ label: t('Replace…'), hint: t('the whole entity'), action: () => this.edit(id, null, 'replace') });
+    items.push({ label: t('History…'), hint: t('the temporal API'), action: () => this.temporal.openEntity(e) });
     items.push({
       label: t('Delete its history…'),
       hint: t('the temporal API'),
@@ -1795,7 +1796,7 @@ export class Connect {
       this.refetch(id);
     };
     const items = [
-      { label: t('History…'), hint: t('the temporal API'), action: () => { if (e) this.temporal.open(e, name, e[name]); } },
+      { label: t('History…'), hint: t('the temporal API'), action: () => { if (e) this.temporal.open(e, name); } },
       { separator: true },
       { label: t('Edit {name}…', { name }), action: () => this.edit(id, name) },
       { separator: true },
@@ -2042,7 +2043,13 @@ export class Connect {
     if (!e) return;
 
     const head = el('div', 'eidrow');
-    head.append(el('div', 'eid', e.id));
+    const eid = el('div', 'eid', e.id);
+    eid.tabIndex = 0;
+    eid.setAttribute('role', 'button');
+    eid.title = t("Its history - the attributes ticked, over a time range");
+    eid.onclick = () => { if (!String(window.getSelection() || '')) this.temporal.openEntity(e); };
+    eid.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.temporal.openEntity(e); } };
+    head.append(eid);
     const eb = el('button', 'btn small', t('Edit…'));
     eb.type = 'button';
     eb.title = t('Edit the attributes');

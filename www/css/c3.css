@@ -856,6 +856,8 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 0.9rem; }
 .hrow[role="button"] { cursor: pointer; border-radius: 6px; }
 .hrow[role="button"]:hover { background: var(--panel-2); }
 #entity-body .attr[title] { cursor: pointer; }
+#entity-body .eid[role="button"] { cursor: pointer; border-radius: 4px; }
+#entity-body .eid[role="button"]:hover { color: var(--accent-soft); text-decoration: underline dotted; }
 
 /* The History panel - an attribute's history over a time range, over the graph's right side */
 .histpanel {
@@ -917,6 +919,15 @@ details.history .hwhy { margin: 6px 0; color: var(--dim); font-size: 0.9rem; }
 .hp-act .btn { margin-left: 4px; }
 .hp-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
 .hp-edit .hp-in, .hp-foot .hp-in { flex: 1 1 140px; min-width: 0; }
+.hp-picks { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); max-height: 96px; overflow: auto; }
+.hp-erow { padding: 4px 0 8px; border-bottom: 1px solid var(--line-soft); }
+.hp-ehead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hp-aname { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-family: var(--mono); font-weight: 600; cursor: pointer; }
+.hp-aname:hover { color: var(--accent-soft); text-decoration: underline; }
+.hp-agghead { display: block; margin: 10px 0 2px; color: var(--accent-text); }
+.hp-table td.held { color: var(--faint); }
+.hp-addbox { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 100%; }
+.hp-addbox .hp-in { flex: 1 1 110px; min-width: 0; }
 .hp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line-soft); }
 .guide h2 { font-size: 1.05rem; margin: 22px 0 6px; }
 .guide p, .guide li { line-height: 1.55; }

@@ -1612,5 +1612,20 @@
   "{n} instance": "{n} instancia",
   "{n} instance - stopped, there may be more": "{n} instancia; detenido, puede haber más",
   "{n} instances": "{n} instancias",
-  "{n} instances - stopped, there may be more": "{n} instancias; detenido, puede haber más"
+  "{n} instances - stopped, there may be more": "{n} instancias; detenido, puede haber más",
+  "A click opens the attribute's history at that instance - to modify or delete it": "Un clic abre el historial del atributo en esa instancia, para modificarla o borrarla",
+  "A value for each ticked attribute, at one instant": "Un valor por cada atributo marcado, en un mismo instante",
+  "Add values…": "Añadir valores…",
+  "Added {n} instance at {time}": "Añadida {n} instancia en {time}",
+  "Added {n} instances at {time}": "Añadidas {n} instancias en {time}",
+  "Attributes": "Atributos",
+  "Download CSV": "Descargar CSV",
+  "Every instance of every attribute the broker keeps of this entity - the entity itself stays": "Todas las instancias de todos los atributos que el broker guarda de esta entidad; la entidad se queda",
+  "Its history - the attributes ticked, over a time range": "Su historial: los atributos marcados, en un intervalo de tiempo",
+  "Its history - to modify it": "Su historial, para modificarlo",
+  "The entity's history": "El historial de la entidad",
+  "The table: a row per instant, a column per ticked attribute": "La tabla: una fila por instante, una columna por atributo marcado",
+  "Tick the attributes to see": "Marca los atributos que ver",
+  "the value it had then - its last instance before": "el valor que tenía entonces: su última instancia anterior",
+  "{attr}: values without a graph - in the table": "{attr}: valores sin gráfico, en la tabla"
 }
