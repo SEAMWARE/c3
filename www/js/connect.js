@@ -2048,7 +2048,8 @@ export class Connect {
     const broker = this.broker;
     const r = await api.brokerGet(broker, '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '?options=sysAttrs');
     if (broker !== this.broker || this.shownId !== id || !this.sysAttrsOn()) return;
-    const got = r.ok && r.body && typeof r.body === 'object' ? r.body : { id };
+    const why = !r.reached ? t('the broker is not reachable') : `${r.status} ${(r.body && (r.body.title || r.body.detail)) || ''}`.trim();
+    const got = r.ok && r.body && typeof r.body === 'object' ? r.body : { id, failed: why };
     const before = this.sysEntity && this.sysEntity.id === id ? JSON.stringify(this.sysEntity) : null;
     this.sysEntity = got;
     if (JSON.stringify(got) !== before) this.showEntity(id);
@@ -2161,7 +2162,8 @@ export class Connect {
     if (e.scope !== undefined) metaRow('scope', [].concat(e.scope).join(', '));
     if (sysOn) {
       const src = sys || e;
-      for (const k of ['createdAt', 'modifiedAt']) metaRow(k, src[k] || (sys ? '-' : '…'), src[k] ? null : 'dim');
+      if (sys && sys.failed) metaRow('sysAttrs', t('not read - {why}', { why: sys.failed }), 'dim');
+      else for (const k of ['createdAt', 'modifiedAt']) metaRow(k, src[k] || (sys ? '-' : '…'), src[k] ? null : 'dim');
     }
     body.append(meta);
 
