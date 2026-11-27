@@ -206,7 +206,6 @@
   "Download this area": "Télécharger cette zone",
   "Downloaded areas": "Zones téléchargées",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Chaque topic, service ou action mappé est un attribut d'une entité : son nom, l'id de l'entité et le type de l'entité - une fois par entité, sur l'un de ses endpoints. Terminé écrit la configuration DDS, deux fichiers, et un broker démarre avec eux.",
-  "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Modifiez-le à votre guise - il est envoyé au dépôt coraine-assistant sur GitHub, où vous le déposez avec votre propre compte. Rien n'est envoyé d'ici.",
   "Edit the entity": "Modifier l'entité",
   "Edit the mapping": "Modifier le mappage",
   "Edit {name}…": "Modifier {name}…",
@@ -1627,5 +1626,12 @@
   "every instance of {name}": "toutes les instances de {name}",
   "Delete…": "Supprimer…",
   "Close the entity panel - selecting an entity brings it back": "Fermer le panneau de l'entité - sélectionner une entité le rouvre",
-  "Close the entity panel": "Fermer le panneau de l'entité"
+  "Close the entity panel": "Fermer le panneau de l'entité",
+  "Edit it as you like - it goes to the {repo} repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Modifiez-le à votre guise - il va au dépôt {repo} sur GitHub, où vous le déposez avec votre propre compte. Rien n'est envoyé d'ici.",
+  "File on GitHub": "Déposer sur GitHub",
+  "Edit it as you like - File on GitHub files it in the {repo} repository with your GitHub login (gh on this machine); Open on GitHub lets you file it there yourself.": "Modifiez-le à votre guise - « Déposer sur GitHub » le dépose dans le dépôt {repo} avec votre compte GitHub (gh sur cette machine) ; « Ouvrir sur GitHub » vous laisse le déposer vous-même.",
+  "Filing…": "Dépôt en cours…",
+  "Filed: ": "Déposé : ",
+  "Not filed: {why}. Open on GitHub to file it there.": "Non déposé : {why}. Ouvrez-le sur GitHub pour l'y déposer.",
+  "c3 did not answer": "c3 n'a pas répondu"
 }

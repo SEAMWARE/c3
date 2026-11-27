@@ -599,6 +599,8 @@ void serveRequest(CorHttpConn* connP)
     oidcRequest(connP, path);
   else if (strncmp(path, "/api/repos/", 11) == 0)
     reposRequest(connP, path);
+  else if (strcmp(path, "/api/issues") == 0)
+    issuesRequest(connP, path);
   else if ((strcmp(path, "/api/window") == 0) || (strncmp(path, "/api/window/", 12) == 0))
     windowRequest(connP, path);
   else if ((strcmp(path, "/api/assist") == 0) || (strncmp(path, "/api/assist/", 12) == 0))

@@ -206,7 +206,6 @@
   "Download this area": "Descargar esta zona",
   "Downloaded areas": "Zonas descargadas",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Cada topic, servicio o acción mapeado es un atributo de una entidad: su nombre, el id de la entidad y el tipo de la entidad - una vez por entidad, en cualquiera de sus endpoints. Hecho escribe la configuración DDS, dos archivos, y un broker se inicia con ellos.",
-  "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Edítalo como quieras - va al repositorio coraine-assistant en GitHub, donde lo registras con tu propia cuenta. Desde aquí no se envía nada.",
   "Edit the entity": "Editar la entidad",
   "Edit the mapping": "Editar el mapeo",
   "Edit {name}…": "Editar {name}…",
@@ -1627,5 +1626,12 @@
   "every instance of {name}": "todas las instancias de {name}",
   "Delete…": "Borrar…",
   "Close the entity panel - selecting an entity brings it back": "Cerrar el panel de la entidad; al seleccionar una entidad vuelve",
-  "Close the entity panel": "Cerrar el panel de la entidad"
+  "Close the entity panel": "Cerrar el panel de la entidad",
+  "Edit it as you like - it goes to the {repo} repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Edítalo a tu gusto: va al repositorio {repo} en GitHub, donde lo registras con tu propia cuenta. Desde aquí no se envía nada.",
+  "File on GitHub": "Registrar en GitHub",
+  "Edit it as you like - File on GitHub files it in the {repo} repository with your GitHub login (gh on this machine); Open on GitHub lets you file it there yourself.": "Edítalo a tu gusto: «Registrar en GitHub» lo registra en el repositorio {repo} con tu cuenta de GitHub (gh en esta máquina); «Abrir en GitHub» te deja registrarlo allí tú mismo.",
+  "Filing…": "Registrando…",
+  "Filed: ": "Registrado: ",
+  "Not filed: {why}. Open on GitHub to file it there.": "No registrado: {why}. Ábrelo en GitHub para registrarlo allí.",
+  "c3 did not answer": "c3 no respondió"
 }

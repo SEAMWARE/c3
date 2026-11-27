@@ -362,11 +362,15 @@ function panelInit(info, connect, compile, run) {
   });
 
   //
-  // report - a gap the assistant drafted (report_gap): shown, editable; "Open on GitHub" opens the new-issue page
-  // of the assistant's repository, filled in - the user files it there, with their own GitHub login
+  // report - a gap the assistant drafted (report_gap): shown, editable. With gh logged in on this machine (GET
+  // /api/issues), "File on GitHub" files it as the user (POST /api/issues) - their press is the go-ahead - and
+  // shows the link; "Open on GitHub" opens the new-issue page of the assistant's repository, filled in, for the
+  // user to file there (the only button without gh, and the way out when filing fails)
   //
-  const ISSUES = 'https://github.com/SEAMWARE-cor/coraine-assistant/issues/new';
-  const report = ({ title, body, labels }) => new Promise((done) => {
+  const ISSUES = { assistant: 'https://github.com/SEAMWARE-cor/coraine-assistant/issues/new', c3: 'https://github.com/SEAMWARE/c3/issues/new' };
+  const report = ({ repo, title, body, labels }) => new Promise((done) => {
+    const where = repo === 'c3' ? 'c3' : 'assistant';
+    const repoName = where === 'c3' ? 'c3' : 'coraine-assistant';
     const box = el('div', 'aip-confirm aip-report');
     box.append(el('div', 'ctitle', t('Report this to Seamware?')));
     const ti = el('input', 'rtitle');
@@ -376,21 +380,56 @@ function panelInit(info, connect, compile, run) {
     b.value = body;
     b.rows = 10;
     b.setAttribute('aria-label', t('Issue text'));
-    box.append(ti, b, el('div', 'rnote', t('Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.')));
+    const note = el('div', 'rnote', t('Edit it as you like - it goes to the {repo} repository on GitHub, where you file it with your own login. Nothing is sent from here.', { repo: repoName }));
+    box.append(ti, b, note);
     const row = el('div', 'crow');
-    const open = el('button', 'btn primary small', t('Open on GitHub'));
+    const file = el('button', 'btn primary small', t('File on GitHub'));
+    const open = el('button', 'btn small', t('Open on GitHub'));
     const no = el('button', 'btn small', t('Not now'));
-    open.type = no.type = 'button';
-    const end = (v, said) => { open.disabled = no.disabled = true; row.replaceWith(el('div', 'cdone', said)); done(v); };
+    file.type = open.type = no.type = 'button';
+    file.hidden = true;
+    const end = (v, said) => { file.disabled = open.disabled = no.disabled = true; row.replaceWith(said); done(v); };
+    fetch('/api/issues').then((r) => r.json()).then((j) => {
+      if (!j || j.gh !== true || file.disabled) return;
+      file.hidden = false;
+      open.classList.remove('primary');
+      note.textContent = t('Edit it as you like - File on GitHub files it in the {repo} repository with your GitHub login (gh on this machine); Open on GitHub lets you file it there yourself.', { repo: repoName });
+      file.focus({ preventScroll: true });
+    }).catch(() => { /* no gh: Open on GitHub */ });
+    file.onclick = async () => {
+      file.disabled = open.disabled = no.disabled = true;
+      file.textContent = t('Filing…');
+      let j = null, ok = false;
+      try {
+        const r = await fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repo: where, title: ti.value, body: b.value, labels }) });
+        j = await r.json().catch(() => null);
+        ok = r.ok && j && j.url;
+      } catch { /* not reached */ }
+      if (ok) {
+        const said = el('div', 'cdone', t('Filed: '));
+        const a = el('a', null, j.url.replace(/^https:\/\/github.com\//, ''));
+        a.href = j.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        said.append(a);
+        end({ filed: j.url }, said);
+        return;
+      }
+      file.textContent = t('File on GitHub');
+      file.disabled = open.disabled = no.disabled = false;
+      note.textContent = t('Not filed: {why}. Open on GitHub to file it there.', { why: (j && (j.detail || j.title)) || t('c3 did not answer') });
+      note.classList.add('err');
+      open.classList.add('primary');
+    };
     open.onclick = () => {
       let text = b.value;
-      const url = (x) => `${ISSUES}?title=${encodeURIComponent(ti.value)}&labels=${encodeURIComponent(labels.join(','))}&body=${encodeURIComponent(x)}`;
+      const url = (x) => `${ISSUES[where]}?title=${encodeURIComponent(ti.value)}&labels=${encodeURIComponent(labels.join(','))}&body=${encodeURIComponent(x)}`;
       while (url(text).length > 7500 && text.length > 200) text = text.slice(0, Math.floor(text.length * 0.9));
       window.open(url(text === b.value ? text : text + '\n\n… (cut - the rest did not fit in a link)'), '_blank', 'noopener');
-      end('opened', t('Opened on GitHub - file it there.'));
+      end('opened', el('div', 'cdone', t('Opened on GitHub - file it there.')));
     };
-    no.onclick = () => end('dismissed', t('Not reported.'));
-    row.append(open, no);
+    no.onclick = () => end('dismissed', el('div', 'cdone', t('Not reported.')));
+    row.append(file, open, no);
     box.append(row);
     log.append(box);
     scroll();

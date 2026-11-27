@@ -843,17 +843,17 @@ export function c3Tools(connect, ctx = {}) {
     },
     {
       name: 'report_gap',
-      description: 'Draft a GitHub issue for Seamware about what the assistant could not do, did wrong or did slowly - when the user says so ("you cannot do X", "that is wrong", "report this"), or offers to. c³ shows the draft; the user edits it and files it on GitHub themselves - nothing is sent by this command. '
+      description: 'Draft a GitHub issue for Seamware: about the assistant - what it could not do, did wrong or did slowly - or about c³ itself - a c³ bug, or an improvement the user wants in c³ ("c³ should ...", "it would be nice if ...") - when the user says so ("you cannot do X", "that is wrong", "report this"), or offers to. The assistant\'s go to its repository, c³\'s to c³\'s (public: never anything private in it). c³ shows the draft; the user edits it and files it (c³\'s File on GitHub button, or on GitHub) - nothing is sent without their press. '
         + 'Write it for the developer who will fix it: what the user asked (their words), what you did (the tools called, with their arguments, and the errors), what was missing or wrong, and what would have answered it (a tool, a filter, knowledge). '
         + 'Leave out the broker\'s URL, tenant, entity ids and values unless the user asks to keep them - describe the data instead ("a Vehicle with fuelLevel 0.05").',
       inputSchema: {
         type: 'object',
         properties: {
-          kind: { type: 'string', enum: ['gap', 'wrong-answer', 'slow', 'c3', 'other'], description: 'gap: could not do it; wrong-answer; slow: too many calls or too long; c3: about c³ itself' },
+          kind: { type: 'string', enum: ['gap', 'wrong-answer', 'slow', 'other', 'c3-bug', 'c3-improvement'], description: 'the assistant: gap (could not do it), wrong-answer, slow (too many calls or too long), other; c³ itself: c3-bug (something in c³ does not work), c3-improvement (something c³ should do or do better)' },
           title: { type: 'string', description: 'One line: what could not be done, e.g. "Cannot tell why a subscription does not notify"' },
           asked: { type: 'string', description: 'What the user asked, in their words' },
-          happened: { type: 'string', description: 'What the assistant did - tools, arguments, errors - and what it answered' },
-          missing: { type: 'string', description: 'What was missing or wrong, and what would have answered it' },
+          happened: { type: 'string', description: 'What the assistant did - tools, arguments, errors - and what it answered; about c³ itself: what c³ does now' },
+          missing: { type: 'string', description: 'What was missing or wrong, and what would have answered it; about c³ itself: what c³ should do' },
         },
         required: ['kind', 'title', 'asked', 'happened', 'missing'],
       },
@@ -865,7 +865,10 @@ export function c3Tools(connect, ctx = {}) {
           '**Missing**', '', args.missing, '',
           '---', `c³ ${ctx.version || ''} · ${ctx.engine || ''} · ${new Date().toISOString().slice(0, 10)}`,
         ].join('\n');
-        const r = await ctx.report({ title: args.title, body, labels: [args.kind] });
+        const c3 = args.kind === 'c3-bug' || args.kind === 'c3-improvement';
+        const labels = c3 ? [args.kind === 'c3-bug' ? 'bug' : 'enhancement'] : (args.kind === 'other' ? [] : [args.kind]);
+        const r = await ctx.report({ repo: c3 ? 'c3' : 'assistant', title: args.title, body, labels });
+        if (r && r.filed) return `filed by the user: ${r.filed}`;
         return r === 'opened'
           ? 'the draft is open on GitHub for the user to file - do not say it is filed'
           : 'the user dismissed the draft - nothing reported';
