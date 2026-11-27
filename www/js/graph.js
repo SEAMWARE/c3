@@ -353,9 +353,12 @@ export class Graph {
     this.zoomAt(this.vp.clientWidth / 2, this.vp.clientHeight / 2, f);
   }
 
-  fit() {
-    this.autoFit = true;
-    const shown = [...this.nodes.values()].filter((n) => this.visible(n));
+  //
+  // fit - every shown box in the view (and kept so as the window changes), or only the boxes of 'ids'
+  //
+  fit(ids = null) {
+    this.autoFit = !ids;                         // some of them: the view stays where it was put
+    const shown = (ids ? ids.map((id) => this.nodes.get(id)).filter(Boolean) : [...this.nodes.values()]).filter((n) => this.visible(n));
     const w = this.vp.clientWidth, h = this.vp.clientHeight, pad = 48;
     if (!shown.length || !w || !h) {
       this.k = 1; this.tx = w / 2; this.ty = h / 2;
