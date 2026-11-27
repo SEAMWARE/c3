@@ -508,8 +508,8 @@ export class Graph {
     else if (e.key === '-' || e.key === '_') { e.preventDefault(); this.zoomCenter(0.8); }
     else if (e.key === '0') { e.preventDefault(); this.fit(); }
     else if (e.key === 'Escape') {
-      if (this.expanded) { const id = this.expanded; this.collapse(); this.onCollapse(id); }
-      else this.select(null);
+      if (this.expanded) { e.preventDefault(); const id = this.expanded; this.collapse(); this.onCollapse(id); }
+      else if (this.sel) { e.preventDefault(); this.select(null); }
     }
   }
 }

@@ -70,6 +70,19 @@ export function windowWidths(top, one, topCss, oneCss) {
 }
 
 //
+// escLeaves - Esc out of full-screen, as F11: only an Esc nothing in the page took (a menu, a panel, a dialog, a
+// selection - each of those marks it, preventDefault, or stops it; an open <dialog> closes on it by itself)
+//
+function escLeaves(full, leave) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!full() || document.querySelector('dialog[open]')) return;   // a modal dialog closes on Esc itself
+    e.preventDefault();
+    leave();
+  });
+}
+
+//
 // qtInit - in c3-window: the buttons as in Chrome's window, the window doing the work
 //
 function qtInit(win) {
@@ -85,6 +98,7 @@ function qtInit(win) {
   qtWin = win;
   show(win.full);
   win.fullChanged.connect(show);
+  escLeaves(() => win.full, () => win.normal());
   $('win-min').addEventListener('click', () => win.minimize());
   $('win-close').addEventListener('click', () => win.close());
   $('win-full').addEventListener('click', () => win.fullScreen());
@@ -109,6 +123,7 @@ export async function windowInit() {
 
   if (!control) return;
   window.dispatchEvent(new Event('resize'));     // the header measures again: the window's width can be had now
+  escLeaves(fullScreen, () => act('normal'));
 
   //
   // Full-screen: minimise and close (no title bar). Not full-screen: a button back to full-screen - the title bar

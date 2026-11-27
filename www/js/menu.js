@@ -155,6 +155,7 @@ function onKey(e, menu) {
       const opener = [...parent.querySelectorAll('[role="menuitem"]')].find((x) => x._item.label === menu.getAttribute('aria-label'));
       if (opener) opener.focus();
     } else if (k === 'Escape') closeMenu(true);
+    if (k === 'Escape') e.preventDefault();
   } else if (k === 'Tab') closeMenu(true);
   else if (k.length === 1 && /\S/.test(k)) {
     //

@@ -512,7 +512,7 @@ export function pickDir(start, onPick, { title = t('Directory of clones'), clone
   ov.setAttribute('aria-label', title);
   const card = el('div', 'card cp-help-card cp-pick-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
 
   const up = el('button', 'iconbtn cp-src-icon', '↑');
   up.type = 'button';
