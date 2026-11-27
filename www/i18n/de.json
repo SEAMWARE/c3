@@ -1627,5 +1627,8 @@
   "The table: a row per instant, a column per ticked attribute": "Die Tabelle: eine Zeile je Zeitpunkt, eine Spalte je angehaktem Attribut",
   "Tick the attributes to see": "Die anzuzeigenden Attribute anhaken",
   "the value it had then - its last instance before": "der Wert, den es damals hatte - seine letzte Instanz davor",
-  "{attr}: values without a graph - in the table": "{attr}: Werte ohne Grafik - in der Tabelle"
+  "{attr}: values without a graph - in the table": "{attr}: Werte ohne Grafik - in der Tabelle",
+  "Drag to resize - a double-click: the default width": "Ziehen zum Ändern der Breite - Doppelklick: die Standardbreite",
+  "The entity panel's width": "Die Breite des Entitätsbereichs",
+  "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Die Systemattribute - createdAt, modifiedAt - der Entität und ihrer Attribute"
 }
