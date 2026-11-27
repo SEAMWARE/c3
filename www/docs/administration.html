@@ -130,8 +130,7 @@ the log from. The package's service runs it that way.</p>
 </table>
 <div class="g-callout warn"><p><code>--daemon</code> with <code>--logTo stdout</code> (the default) or <code>both</code> does not start - a daemon's
 stdout is <code>/dev/null</code>. Exit code 1, one line on stderr:
-<code>coraine: --daemon with --logTo stdout: a daemon's stdout is /dev/null - use --logTo file</code>.
-<code>--daemon</code> with <code>-fg</code> is refused as well.</p></div>
+<code>coraine: --daemon with --logTo stdout: a daemon's stdout is /dev/null - use --logTo file</code>.</p></div>
 <ul>
   <li><b>The file</b> is <code>&lt;logDir&gt;/coraine.log</code> - <code>/var/log/coraine/coraine.log</code> by default. The
   directory is not created; a file that cannot be opened stops the broker at start
@@ -155,9 +154,11 @@ stdout is <code>/dev/null</code>. Exit code 1, one line on stderr:
 coraine --daemon --logTo file --logDir ~/coraine-log --database corDB --dbDir ~/coraine-db --troe none
 grep -- '--daemon: detached' ~/coraine-log/coraine.log      # the pid
 kill "$(sed -n 's/^.*--daemon: detached, pid //p' ~/coraine-log/coraine.log)"</pre>
-<div class="g-callout"><p><code>-fg</code> / <code>--foreground</code> is <b>deprecated</b>: the foreground is the default, so it does nothing.
-Accepted through 0.7.x with one warning line at start, refused from 0.8.0:
-<code>W: ...: main: -fg: the broker runs in the foreground by default now - the option is refused from 0.8.0</code></p></div>
+<div class="g-callout warn"><p><code>-fg</code> / <code>--foreground</code> is <b>removed</b> in 0.8.0 (deprecated through 0.7.x - the
+foreground is the default, so it did nothing). A broker started with it, or with <code>CORAINE_FOREGROUND=true</code>,
+does not start - exit code 1, one line on stderr:
+<code>coraine: -fg / --foreground was removed in 0.8.0: the broker runs in the foreground by default (--daemon detaches) - drop the option</code>.
+Drop it from scripts and units.</p></div>
 
 <h2 id="http-server">The HTTP server</h2>
 <p>A broker carries libmicrohttpd (<code>mhd</code>), the built-in HTTP server corHttp (<code>builtin</code>), or both
