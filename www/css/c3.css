@@ -633,6 +633,7 @@ html { scroll-padding-top: var(--head-h, 0px); }
 .entity .empty { color: var(--dim); font-size: 1.05rem; }
 .ehead2 { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .ehead2 .section { flex: 1; }
+.ehead2 .eclose { min-width: 30px; min-height: 30px; padding: 0; font-size: 1.2rem; line-height: 1; }
 .etools { display: flex; align-items: center; gap: 10px; }
 .etools .esys { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 0.9rem; color: var(--muted); cursor: pointer; }
 .etools .esys input { accent-color: var(--accent-2); margin: 0; cursor: pointer; }

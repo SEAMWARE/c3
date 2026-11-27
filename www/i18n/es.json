@@ -1635,5 +1635,7 @@
   "Its menu: History, Edit, Delete, ...": "Su menú: Historial, Editar, Borrar, ...",
   "Delete {what} at the broker? It cannot be undone.": "¿Borrar {what} en el broker? No se puede deshacer.",
   "every instance of {name}": "todas las instancias de {name}",
-  "Delete…": "Borrar…"
+  "Delete…": "Borrar…",
+  "Close the entity panel - selecting an entity brings it back": "Cerrar el panel de la entidad; al seleccionar una entidad vuelve",
+  "Close the entity panel": "Cerrar el panel de la entidad"
 }
