@@ -36,7 +36,7 @@ services:
       retries: 20
 
   coraine:
-    image: quay.io/seamware/coraine:${CORAINE_TAG:-0.7.0-post-2026-11-23-82bb93c3}
+    image: quay.io/seamware/coraine:${CORAINE_TAG:-0.8.0}
     depends_on:
       mongo:
         condition: service_healthy
