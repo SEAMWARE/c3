@@ -235,7 +235,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   for.
 - `connect.view` (`graph` or `map`), `connect.colourBy` (`type`, or a Relationship's name) and
   `connect.map` (`center` `[lon, lat]`, `zoom`, `bearing`, `pitch`): kept as they change - the map's view
-  when the map is moved by hand. `connect.relationships`: `all`, `selected` or `none` (the map's **relationships**).
+  when the map is moved by hand. `connect.relationships`: `all`, `selected` or `none` (the map's **relationships**); `connect.graphRelationships` the same for the graph's.
 - `connect.alerts`: the broker's alert rules (Alerts, below) - `id` (letters, digits, `-`, `_`, `.`; at
   most 64), `title`, `severity` (`critical`, `warning`, `info`), `type`, `q`; at most 32.
 - `demos`: named demos (Named demos, below) - a name and its descriptor's `url`, with a `hint` for when it
@@ -448,7 +448,9 @@ markers are coloured by), the downloaded map areas, and the last page:
   colour, and the entities pointing at it and the target itself are drawn in it, with a legend. Kept per
   broker.
 - **relationships**: `all` draws every Relationship; `selected` only the selected entity's (a route with
-  dozens of stops); `none` not one - the markers alone. Kept per broker.
+  dozens of stops); `none` not one - the markers alone. Kept per broker. The graph has its own, in its bar beside
+  the zoom - the same three, the arrows and their names (`selected`: the ones the selection lights up); kept per
+  broker apart from the map's.
 - **Icons**: a Point of a kind c³ knows by its type's name is an icon instead of a dot - a bus (`Bus`,
   `Tram`, a vehicle), a stop (`BusStop`, `...Stop`), a streetlight (`Streetlight`, `Streetlamp`), an air
   quality station (`AirQuality...`), a weather station (`Weather...`), a traffic sensor (`Traffic...`), a

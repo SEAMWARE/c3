@@ -316,6 +316,14 @@ export class Graph {
     this.onSelect(this.sel);
   }
 
+  //
+  // setRelationships - the arrows drawn: 'all', the selected entity's only ('selected', the ones it lights), 'none'
+  //
+  setRelationships(mode) {
+    this.svg.classList.toggle('rels-selected', mode === 'selected');
+    this.svg.classList.toggle('rels-none', mode === 'none');
+  }
+
   hot(edge, on) {
     edge.g.classList.toggle('hot', on);
     edge.lg.classList.toggle('hot', on);
