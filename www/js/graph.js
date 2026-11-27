@@ -494,7 +494,6 @@ export class Graph {
     this.drag = null;
     this.vp.classList.remove('grabbing');
     if (d && d.id && !d.moved) this.select(d.id);
-    else if (d && !d.id && !d.moved && this.sel) this.select(null);   // a click on the background unselects (as the map's)
   }
 
   onKey(e) {

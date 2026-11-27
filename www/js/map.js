@@ -774,7 +774,8 @@ export class EntityMap {
         done([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]);
         return;
       }
-      this.onSelect(this.hit(e.point));
+      const id = this.hit(e.point);
+      if (id) this.onSelect(id);                    // a click beside the markers keeps the selection (the panel's × hides it)
     });
     map.on('contextmenu', (e) => {
       const id = this.hit(e.point);
