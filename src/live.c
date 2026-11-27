@@ -26,7 +26,9 @@
 // Bearer, unless an own header is the Authorization) - over the WebSocket in the upgrade request and in
 // each message's metadata.
 //
-// (a) is tried first; a broker that does not upgrade GET /ngsi-ld/v1/ws gets (b). Whichever it is, each
+// (a) is tried first - when the broker's configuration (GET /admin/config) lists the ws transport, or it has
+// no admin API to say; a broker that does not upgrade GET /ngsi-ld/v1/ws gets (b), and is not asked again
+// in this run (no admin API: that one 404 too, once). Whichever it is, each
 // notification goes to the page as {"op": "notify", "broker", "message": {"body": <Notification>}}.
 //
 // No subscription is left behind: a changed pick creates the new one, then deletes the old; the page
@@ -48,7 +50,7 @@
 //
 #include <stdio.h>                               // snprintf, printf
 #include <stdlib.h>                              // malloc, calloc, free
-#include <string.h>                              // strcmp, strncmp, strlen, strrchr
+#include <string.h>                              // strcmp, strncmp, strlen, strrchr, strtok_r
 #include <strings.h>                             // strcasecmp, strcasestr
 #include <sys/random.h>                          // getentropy
 #include <sys/socket.h>                          // shutdown
@@ -828,10 +830,113 @@ static void bwsClose(Live* s)
 
 // -----------------------------------------------------------------------------
 //
-// bwsOpen - (a): the broker's WebSocket and the connection's name; false with why not in s->why
+// Known - what a broker said it lacks, kept for the run: no admin API (GET /admin/config not served), no
+// WebSocket transport (GET /ngsi-ld/v1/ws not upgraded) - each asked once, not on every watch: a refused
+// request is a line in the broker's log
+//
+static pthread_mutex_t knownLock = PTHREAD_MUTEX_INITIALIZER;
+static char            noAdmin[64][512];
+static int             noAdminN  = 0;
+static char            noWs[64][512];
+static int             noWsN     = 0;
+
+static bool knownHas(char (*list)[512], int n, const char* broker)
+{
+  pthread_mutex_lock(&knownLock);
+  bool found = false;
+  for (int ix = 0; (ix < n) && (found == false); ix++)
+    found = (strcmp(list[ix], broker) == 0);
+  pthread_mutex_unlock(&knownLock);
+  return found;
+}
+
+static void knownAdd(char (*list)[512], int* nP, const char* broker)
+{
+  if (knownHas(list, *nP, broker) == true)
+    return;
+  pthread_mutex_lock(&knownLock);
+  if (*nP < 64)
+    snprintf(list[(*nP)++], 512, "%s", broker);
+  pthread_mutex_unlock(&knownLock);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// transportsWs - whether the broker's configuration (GET /admin/config, coraine's admin API) lists the ws
+// transport: 1 yes, 0 no, -1 not known (no admin API, not reached, an answer not understood)
+//
+static int transportsWs(const char* broker)
+{
+  if (knownHas(noAdmin, noAdminN, broker) == true)
+    return -1;
+
+  char       url[1024];
+  HttpAnswer a;
+
+  snprintf(url, sizeof(url), "%s/admin/config", broker);
+  httpCall(CorVerbGet, broker, NULL, url, NULL, LIVE_CONNECT_MS, &a);
+
+  if ((a.status == 404) || (a.status == 405) || (a.status == 501))
+    knownAdd(noAdmin, &noAdminN, broker);
+
+  int answer = -1;
+  if ((a.status == 200) && (a.body != NULL))
+  {
+    Parsed   p;
+    CorNode* treeP = parse(&p, a.body);
+    CorNode* optsP = ((treeP != NULL) && (treeP->type == CorObject)) ? corTreeLookup(treeP, "options") : NULL;
+
+    for (CorNode* oP = ((optsP != NULL) && (optsP->type == CorArray)) ? optsP->value.head : NULL; oP != NULL; oP = oP->next)
+    {
+      const char* name = stringOf(oP, "name");
+      if ((name == NULL) || (strcmp(name, "--transports") != 0))
+        continue;
+
+      CorNode* vP = (oP->type == CorObject) ? corTreeLookup(oP, "value") : NULL;
+      answer = 0;
+      if ((vP != NULL) && (vP->type == CorString))   // "ws", "ws,mqtt", ...: ws as one of the names
+      {
+        char  names[256];
+        char* save = NULL;
+        snprintf(names, sizeof(names), "%s", vP->value.s);
+        for (char* n = strtok_r(names, ", ", &save); (n != NULL) && (answer == 0); n = strtok_r(NULL, ", ", &save))
+          answer = (strcmp(n, "ws") == 0) ? 1 : 0;
+      }
+      break;
+    }
+    parsedRelease(&p);
+  }
+
+  free(a.body);
+  return answer;
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
+// bwsOpen - (a): the broker's WebSocket and the connection's name; false with why not in s->why. Asked only
+// when the broker may have it: its configuration lists the ws transport, or it has no admin API to say and
+// has not refused the WebSocket before
 //
 static bool bwsOpen(Live* s)
 {
+  int ws = transportsWs(s->broker);
+
+  if (ws == 0)
+  {
+    snprintf(s->why, sizeof(s->why), "the broker has no WebSocket transport (its --transports has no ws)");
+    return false;
+  }
+
+  if ((ws == -1) && (knownHas(noWs, noWsN, s->broker) == true))
+  {
+    snprintf(s->why, sizeof(s->why), "the broker refused the WebSocket earlier - it has no WebSocket transport (coraine --transports ws)");
+    return false;
+  }
+
   int             status = 0;
   char            err[400];
   CorRestKeyValue own[17];                       // a gateway in front of the broker may want them on the upgrade
@@ -842,6 +947,7 @@ static bool bwsOpen(Live* s)
 
   if (r == -2)
   {
+    knownAdd(noWs, &noWsN, s->broker);
     snprintf(s->why, sizeof(s->why), "the broker answered GET /ngsi-ld/v1/ws (Upgrade: websocket) with %d - it has no WebSocket transport (coraine --transports ws)", status);
     return false;
   }
