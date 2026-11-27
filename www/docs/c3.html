@@ -554,7 +554,17 @@ when the broker goes away, the page watches again until it is back.</p>
   hand).</li>
   <li><b>History</b> - each numeric Property of the selected entity over the last 10 minutes as a sparkline, from the
   temporal API (<code>GET /temporal/entities/{id}?timerel=after...</code>), then grown from the live values. A broker
-  without history shows the live values from the moment the entity was selected.</li>
+  without history shows the live values from the moment the entity was selected. A click on a sparkline opens that
+  attribute's History panel.</li>
+  <li><b>The History panel</b> - an attribute's history over a time range: a click on the attribute in the entity
+  panel opens its menu, <b>History…</b> the panel. The range (1 h, 24 h, 7 d, 30 d, or a start and an end) is kept per
+  broker and every History opened afterwards starts from it; the time property is <code>observedAt</code>, or
+  <code>modifiedAt</code> when the values have none. Numbers are drawn as a line, booleans as a step, strings and a
+  Relationship's targets as a band with a colour per value; objects (a location) as a table. <b>Aggregate</b>: avg, min,
+  max, sum, counts, stddev, over the whole range or per minute ... week, computed by the broker. The table's instances
+  can be edited and deleted, an instance added, the attribute's whole history deleted - and the entity's, from its
+  menu (<b>Delete its history…</b>). The instances are read in pages of 1000 (the <code>Link</code> header's
+  <code>intervalafter</code>), at most 20000, with a Stop.</li>
   <li><b>Named demos</b> - a name instead of a URL (<code>CDMAD</code>, built in; others under <code>demos</code> in
   <code>c3.json</code>): c³ fetches the demo's descriptor - its broker, tenant, view, the types to load, its alert
   rules - and connects.</li>
