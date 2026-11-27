@@ -453,18 +453,45 @@ export class Metrics {
     d.setAttribute('aria-label', t(c.title));
     d.append(closeX(t('Close'), () => this.close(), true), el('div', 'mx-bigbody'));
     d.addEventListener('close', () => { if (this.big && this.big.d === d) this.close(); });   // Esc
-    try {                                                        // its size as the user left it (dragged corner)
-      const z = JSON.parse(localStorage.getItem('c3.metrics.big') || 'null');
-      if (z && z.w > 0 && z.h > 0) { d.style.width = Math.min(z.w, innerWidth - 16) + 'px'; d.style.height = Math.min(z.h, innerHeight - 16) + 'px'; }
-    } catch { /* the default size */ }
+    //
+    // Its size (the dragged corner) and place (dragged by its title row) as the user left them - kept in the browser,
+    // inside the window
+    //
+    let z = null;
+    try { z = JSON.parse(localStorage.getItem('c3.metrics.big') || 'null'); } catch { /* the default */ }
+    const keep = (patch) => {
+      try { localStorage.setItem('c3.metrics.big', JSON.stringify({ ...(JSON.parse(localStorage.getItem('c3.metrics.big') || 'null') || {}), ...patch })); } catch { /* not kept */ }
+    };
+    if (z && z.w > 0 && z.h > 0) { d.style.width = Math.min(z.w, innerWidth - 16) + 'px'; d.style.height = Math.min(z.h, innerHeight - 16) + 'px'; }
     document.body.append(d);
-    new ResizeObserver(() => {                                   // a size dragged: kept for the next one
-      if (!d.open || !d.offsetWidth) return;
-      try { localStorage.setItem('c3.metrics.big', JSON.stringify({ w: d.offsetWidth, h: d.offsetHeight })); } catch { /* not kept */ }
-    }).observe(d);
+    new ResizeObserver(() => { if (d.open && d.offsetWidth) keep({ w: d.offsetWidth, h: d.offsetHeight }); }).observe(d);
+
+    const place = (x, y) => {                                    // its top left corner, all of it in the window
+      d.style.margin = '0';
+      d.style.left = Math.max(0, Math.min(x, innerWidth - d.offsetWidth)) + 'px';
+      d.style.top = Math.max(0, Math.min(y, innerHeight - d.offsetHeight)) + 'px';
+    };
+    d.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !e.target.closest('.mx-head') || e.target.closest('button')) return;
+      e.preventDefault();
+      const r = d.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      d.setPointerCapture(e.pointerId);
+      const move = (m) => place(m.clientX - dx, m.clientY - dy);
+      const up = () => {
+        d.removeEventListener('pointermove', move);
+        d.removeEventListener('pointerup', up);
+        d.removeEventListener('pointercancel', up);
+        keep({ x: d.offsetLeft, y: d.offsetTop });
+      };
+      d.addEventListener('pointermove', move);
+      d.addEventListener('pointerup', up);
+      d.addEventListener('pointercancel', up);
+    });
+
     this.big = { c, url, d };
     this.bigDraw();
     d.showModal();
+    if (z && Number.isFinite(z.x) && Number.isFinite(z.y)) place(z.x, z.y);
   }
 
   bigDraw() {
