@@ -608,6 +608,7 @@
       </aside>
 
       <section class="graphwrap" id="graphwrap">
+        <div class="ehint" id="entity-hint" aria-live="polite" hidden>Click an entity to see its attributes.</div>
         <div class="viewport" id="viewport" tabindex="0" aria-label="Entity graph">
           <div class="world" id="world">
             <svg class="edges" id="edges" width="1" height="1" aria-hidden="true">
@@ -672,10 +673,9 @@
         <div class="overlay" id="overlay" hidden><div class="card" id="overlay-card"></div></div>
       </section>
 
-      <div class="eresize" id="entity-resize" role="separator" aria-orientation="vertical" tabindex="0"></div>
-      <aside class="panel entity" id="entity">
+      <div class="eresize" id="entity-resize" role="separator" aria-orientation="vertical" tabindex="0" hidden></div>
+      <aside class="panel entity" id="entity" hidden>
         <div class="ehead2"><h2 class="section">Entity</h2><span class="etools" id="entity-tools"></span><button class="xclose" type="button" id="entity-close"></button></div>
-        <div class="empty" id="entity-empty">Click an entity to see its attributes.</div>
         <div id="entity-body" hidden></div>
       </aside>
     </div>
