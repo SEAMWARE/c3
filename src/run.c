@@ -22,6 +22,8 @@
 //   POST   /api/run/services/<container>/stop   a service nothing uses
 //   POST   /api/run/containers/<name>/start|stop   any container on the machine (Operate's Containers)
 //   GET    /api/run/containers/<name>/log       its last 500 lines
+//   GET    /api/run/external/log?port=<port>    the log of a broker on this machine c3 did not start - <logDir>/coraine.log
+//                                               as its GET /admin/config says, when it logs to a file; by Range (externalLog)
 //   DELETE /api/run/volumes/<volume>            a service's or a container broker's data, deleted
 //   POST   /api/run/dds/discover                {broker}: what its DDS domain announces - a broker of its own
 //                                               for it, natively or in a container, started and stopped
@@ -80,6 +82,7 @@
 #include <unistd.h>                              // close, write, usleep
 #include <zlib.h>                                // crc32 - the widgets' .wgt
 
+#include "corAlloc/corAlloc.h"                   // corAlloc
 #include "corAlloc/corAllocStrdup.h"             // corAllocStrdup
 #include "corAlloc/corAllocBufferInit.h"         // corAllocBufferInit
 #include "corAlloc/corAllocBufferReset.h"        // corAllocBufferReset
@@ -6181,6 +6184,131 @@ static void logFollow(CorHttpConn* connP, const char* path, int64_t* endP, SseSu
 
 // -----------------------------------------------------------------------------
 //
+// externalLog - GET /api/run/external/log?port=<port>: a broker on this machine that c3 did not start, its log file
+// - where it says it writes it: GET http://127.0.0.1:<port>/admin/config, --logTo file or both, <--logDir>/coraine.log.
+// The page names a port, never a file; what is served is a coraine.log. The answer of the broker is kept a minute
+// (the page reads the file every second). Served by Range, as serveFileRange does.
+//
+typedef struct ExternalLog
+{
+  int     port;
+  time_t  at;
+  char    path[2100];                                  // "": it logs to no file
+  char    why[256];
+} ExternalLog;
+
+static ExternalLog externalLogs[8];
+
+static void externalLogAsk(ExternalLog* xP)
+{
+  char                url[64];
+  CorRestClientMulti* multiP = corRestClientMultiCreate(1);
+
+  xP->path[0] = 0;
+  xP->at      = time(NULL);
+  if (multiP == NULL)
+  {
+    snprintf(xP->why, sizeof(xP->why), "no HTTP client");
+    return;
+  }
+
+  snprintf(url, sizeof(url), "http://127.0.0.1:%d/admin/config", xP->port);
+  corRestClientMultiMaxResponse(multiP, 1024 * 1024);
+  corRestClientMultiAdd(multiP, CorVerbGet, url, NULL, 0, NULL, 0, NULL, NULL);
+  corRestClientMultiPerform(multiP, 2000);
+
+  CorRestClientResponse* respP = corRestClientMultiResponse(multiP, 0);
+
+  if ((respP == NULL) || (respP->error != 0) || (respP->body == NULL))
+    snprintf(xP->why, sizeof(xP->why), "port %d does not answer", xP->port);
+  else if (respP->statusCode != 200)
+    snprintf(xP->why, sizeof(xP->why), "GET /admin/config: HTTP %d - no admin API", respP->statusCode);
+  else
+  {
+    CorAlloc    alloc;
+    char        buf[16 * 1024];
+    CorJson     json;
+    const char* to  = "stdout";
+    const char* dir = "/var/log/coraine";              // coraine's default
+
+    corAllocBufferInit(&alloc, buf, sizeof(buf), 4 * 1024 * 1024, NULL, "external log");
+    corJsonCreate(&json, &alloc);
+
+    char*    text = corAlloc(&alloc, respP->bodyLen + 1);
+
+    if (text != NULL)
+    {
+      memcpy(text, respP->body, respP->bodyLen);
+      text[respP->bodyLen] = 0;
+    }
+
+    CorNode* topP = (text != NULL) ? corJsonParse(&json, text) : NULL;
+    CorNode* optsP = ((topP != NULL) && (topP->type == CorObject)) ? corTreeLookup(topP, "options") : NULL;
+
+    if ((optsP != NULL) && (optsP->type == CorArray))
+    {
+      for (CorNode* oP = optsP->value.head; oP != NULL; oP = oP->next)
+      {
+        CorNode* nP = (oP->type == CorObject) ? corTreeLookup(oP, "name")  : NULL;
+        CorNode* vP = (oP->type == CorObject) ? corTreeLookup(oP, "value") : NULL;
+
+        if ((nP == NULL) || (nP->type != CorString) || (vP == NULL) || (vP->type != CorString))
+          continue;
+        if (strcmp(nP->value.s, "--logTo") == 0)  to  = vP->value.s;
+        if (strcmp(nP->value.s, "--logDir") == 0) dir = vP->value.s;
+      }
+
+      if ((strcmp(to, "file") == 0) || (strcmp(to, "both") == 0))
+        snprintf(xP->path, sizeof(xP->path), "%.2048s/coraine.log", dir);
+      else
+        snprintf(xP->why, sizeof(xP->why), "it logs to %.32s, not to a file - where its starter sends that", to);
+    }
+    else
+      snprintf(xP->why, sizeof(xP->why), "GET /admin/config: no options - not a coraine");
+
+    corAllocBufferReset(&alloc, false);
+  }
+
+  corRestClientMultiDestroy(multiP);
+}
+
+static void externalLog(CorHttpConn* connP)
+{
+  const char* portP = corHttpUriParam(connP, "port");
+  int         port  = (portP != NULL) ? atoi(portP) : 0;
+
+  if ((port <= 0) || (port > 65535))
+  {
+    serveError(connP, 400, "Bad request", "?port=<the broker's port, on this machine>");
+    return;
+  }
+
+  ExternalLog* xP = NULL;
+  for (int ix = 0; ix < (int) (sizeof(externalLogs) / sizeof(externalLogs[0])); ix++)
+  {
+    if (externalLogs[ix].port == port) { xP = &externalLogs[ix]; break; }
+    if ((xP == NULL) || (externalLogs[ix].at < xP->at)) xP = &externalLogs[ix];   // else the oldest goes
+  }
+
+  if ((xP->port != port) || (time(NULL) - xP->at > 60))
+  {
+    xP->port = port;
+    externalLogAsk(xP);
+  }
+
+  if (xP->path[0] == 0)
+  {
+    serveError(connP, 404, "No log file", xP->why);
+    return;
+  }
+
+  serveFileRange(connP, xP->path, "text/plain; charset=utf-8", 0);
+}
+
+
+
+// -----------------------------------------------------------------------------
+//
 // Engine jobs - answered from a thread of their own (the request suspended meanwhile)
 //
 typedef struct Job
@@ -9209,6 +9337,11 @@ void runRequest(CorHttpConn* connP, const char* path)
   if (strcmp(path, "/api/run") == 0)
   {
     if (get) runState(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/external/log") == 0)
+  {
+    if (get) externalLog(connP); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
   if (strcmp(path, "/api/run/sources") == 0)

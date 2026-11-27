@@ -1488,7 +1488,6 @@
   "Reset admin's password": "Réinitialiser le mot de passe d'admin",
   "WireCloud's user admin gets c³'s password - for an admin whose password was set outside this c³ (another c³, or by hand). Its workspaces are kept.": "L'utilisateur admin de WireCloud reçoit le mot de passe de c³ - pour un admin dont le mot de passe a été défini hors de ce c³ (un autre c³, ou à la main). Ses espaces de travail sont conservés.",
   "Every container on this machine, c³'s and others, the newest first": "Tous les conteneurs de cette machine, ceux de c³ et les autres, les plus récents d'abord",
-  "No broker runs on this machine": "Aucun broker ne tourne sur cette machine",
   "No container on this machine": "Aucun conteneur sur cette machine",
   "Operate in the guide": "Exploiter dans le guide",
   "Set up and start a broker": "Configurer et démarrer un broker",
@@ -1499,7 +1498,6 @@
   "asking": "en attente",
   "broker {name}": "broker {name}",
   "does not answer": "ne répond pas",
-  "not run by c³ - connected to in Explore": "pas lancé par c³ - connecté dans Explorer",
   "{names} uses it - stop the broker": "{names} l'utilise - arrêtez le broker",
   "{name} does not answer": "{name} ne répond pas",
   "{name} does not run": "{name} ne tourne pas",
@@ -1637,5 +1635,12 @@
   "Save the instance": "Enregistrer l'instance",
   "Save this choice under the name": "Enregistrer ce choix sous ce nom",
   "The Relationships drawn: every one, only the selected entity's, or none": "Les Relationships dessinées : toutes, seulement celles de l'entité sélectionnée, ou aucune",
-  "Relationships drawn in the graph": "Relationships dessinées dans le graphe"
+  "Relationships drawn in the graph": "Relationships dessinées dans le graphe",
+  "No broker yet - set one up above, or connect to one in Explore": "Pas encore de broker - configurez-en un ci-dessus, ou connectez-vous à un dans Explorer",
+  "on this machine, started outside c³ - connected to in Explore": "sur cette machine, démarré hors de c³ - connecté dans Explorer",
+  "on another machine - connected to in Explore": "sur une autre machine - connecté dans Explorer",
+  "{url} does not answer.": "{url} ne répond pas.",
+  "No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.": "Pas d'API d'administration dans ce broker (GET /admin/config : HTTP {status}) - ni configuration, ni métriques, ni niveaux ; son log est là où l'envoie celui qui l'a démarré.",
+  "Not started by c³ - its log is in {dir} on the machine that runs it.": "Non démarré par c³ - son log est dans {dir} sur la machine qui l'exécute.",
+  "Not started by c³ - it logs to {to}, wherever its starter sends that.": "Non démarré par c³ - il écrit son log sur {to}, qui va là où l'envoie celui qui l'a démarré."
 }
