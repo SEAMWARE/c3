@@ -146,7 +146,7 @@ export class Connect {
     });
     this.graph.onSelect = (id) => {
       if (this.picking && id) { this.picked(id); return; }
-      if (id) this.entityPanel(true);              // closed: a selection brings it back
+      if (id) { this.entityPanel(true); this.hintOff(); }   // closed: a selection brings it back
       this.showEntity(id);
       this.emap.select(id);
     };
@@ -1165,6 +1165,7 @@ export class Connect {
     this.emap.set(sorted, edges, (e) => this.mapColor(e));
     this.renderMapChrome();
     this.showEntity(null);
+    this.hintShow();
     this.mapPlaced = false;
     this.mapPlace();
   }
@@ -2166,17 +2167,38 @@ export class Connect {
   }
 
   //
+  // hintShow - "Click an entity to see its attributes" over the graph or the map, fading out by itself - each time
+  // entities are drawn, until the user selects one for the first time (hintOff: never again, kept in the browser)
+  //
+  hintShow() {
+    const h = $('entity-hint');
+    try { if (localStorage.getItem('c3.hint.entity') === 'off') return; } catch { /* no storage: shown */ }
+    if (!this.entities.length || this.shownId) return;
+    clearTimeout(this.hintTimer);
+    h.hidden = false;
+    h.classList.remove('fade');
+    void h.offsetWidth;                               // the animation from its start again
+    h.classList.add('fade');
+    this.hintTimer = setTimeout(() => { h.hidden = true; }, 6000);
+  }
+
+  hintOff() {
+    clearTimeout(this.hintTimer);
+    $('entity-hint').hidden = true;
+    try { localStorage.setItem('c3.hint.entity', 'off'); } catch { /* shown again next time */ }
+  }
+
+  //
   // showEntity - the attribute panel
   //
   showEntity(id) {
     this.shownId = id;
     const body = $('entity-body');
     const e = id ? this.byId.get(id) : null;
-    $('entity-empty').hidden = !!e;
     body.hidden = !e;
     body.textContent = '';
     $('entity-tools').textContent = '';
-    if (!e) return;
+    if (!e) { this.entityPanel(false); return; }       // nothing selected: no panel - the graph and the map take its room
 
     //
     // Up to the right: the system attributes (createdAt, modifiedAt - the broker's, read again with

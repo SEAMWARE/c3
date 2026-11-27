@@ -865,6 +865,13 @@ details.raw pre {
 @keyframes c3toast { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .atoast, .arow:not(.acked) .adot { animation: none; } }
 
+.ehint {
+  position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none;
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text-2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); font-size: 1.05rem; white-space: nowrap; opacity: 0;
+}
+.ehint.fade { animation: ehint 6s ease forwards; }
+@keyframes ehint { 0% { opacity: 0; } 8% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
 #entity-body .attr[title] { cursor: pointer; }
 #entity-body .eid[role="button"] { cursor: pointer; border-radius: 4px; }
 #entity-body .eid[role="button"]:hover { color: var(--accent-soft); text-decoration: underline dotted; }
