@@ -203,6 +203,13 @@ export class Connect {
     //
     this.temporal = new Temporal(this, $('histpanel'));
 
+    this.graphRelMode = 'all';
+    $('grel-mode').onchange = () => {
+      this.graphRelMode = $('grel-mode').value;
+      this.graph.setRelationships(this.graphRelMode);
+      if (this.broker) api.brokerConnect(this.broker, { graphRelationships: this.graphRelMode }).catch(() => {});
+    };
+
     this.relMode = 'all';
     $('rel-mode').onchange = () => {
       this.relMode = $('rel-mode').value;
@@ -907,6 +914,7 @@ export class Connect {
       this.mapView = c.map && Array.isArray(c.map.center) ? c.map : null;
       this.colourBy = typeof c.colourBy === 'string' ? c.colourBy : 'type';
       this.relMode = c.relationships === 'selected' || c.relationships === 'none' ? c.relationships : 'all';
+      this.graphRelMode = c.graphRelationships === 'selected' || c.graphRelationships === 'none' ? c.graphRelationships : 'all';
       let view = c.view;
       let rules = Array.isArray(c.alerts) ? c.alerts : null;
 
@@ -925,6 +933,8 @@ export class Connect {
       if (view === 'map' || view === 'graph') this.setView(view, false);
       $('rel-mode').value = this.relMode;
       this.emap.setRelationships(this.relMode);
+      $('grel-mode').value = this.graphRelMode;
+      this.graph.setRelationships(this.graphRelMode);
       this.alerts.setBroker(url, tenant, validRules(rules || []));
       ownColors = new Map(c.typeColours && typeof c.typeColours === 'object' ? Object.entries(c.typeColours) : []);
       this.highlighted = new Set();

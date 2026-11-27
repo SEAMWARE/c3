@@ -1636,5 +1636,6 @@
   "Not now - nothing reported": "Pas maintenant - rien n'est signalé",
   "Save the instance": "Enregistrer l'instance",
   "Save this choice under the name": "Enregistrer ce choix sous ce nom",
-  "The Relationships drawn: every one, only the selected entity's, or none": "Les Relationships dessinées : toutes, seulement celles de l'entité sélectionnée, ou aucune"
+  "The Relationships drawn: every one, only the selected entity's, or none": "Les Relationships dessinées : toutes, seulement celles de l'entité sélectionnée, ou aucune",
+  "Relationships drawn in the graph": "Relationships dessinées dans le graphe"
 }

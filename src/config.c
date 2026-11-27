@@ -1274,6 +1274,7 @@ static CorNode* alertsCheck(Doc* docP, CorNode* alertsP, char* errBuf, int errLe
 //               "tenants": the ones used before, most recent first, CONFIG_TENANTS_MAX of them
 //   "relationships": "all", "selected" or "none" - the Relationships the map draws: every one, the selected
 //               entity's only, or not one
+//   "graphRelationships": the same for the graph's arrows
 //   "alerts":   the alert rules of the broker (alertsCheck), the whole list
 //   "local":    true: the broker's own entities only - every query with local=true, its Context Sources
 //               not asked; false (the default): what the broker answers, with its Context Sources
@@ -1308,6 +1309,15 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
   if ((relationships != NULL) && (strcmp(relationships, "all") != 0) && (strcmp(relationships, "selected") != 0) && (strcmp(relationships, "none") != 0))
   {
     snprintf(errBuf, errLen, "\"relationships\" is \"all\", \"selected\" or \"none\"");
+    goto done;
+  }
+
+  const char* graphRelationships;
+  if (stringMember(bodyP, "graphRelationships", false, 16, &graphRelationships, errBuf, errLen) == false)
+    goto done;
+  if ((graphRelationships != NULL) && (strcmp(graphRelationships, "all") != 0) && (strcmp(graphRelationships, "selected") != 0) && (strcmp(graphRelationships, "none") != 0))
+  {
+    snprintf(errBuf, errLen, "\"graphRelationships\" is \"all\", \"selected\" or \"none\"");
     goto done;
   }
 
@@ -1425,6 +1435,8 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
     corTreeChildAddOrReplace(connectP, "map", newMapP);
   if (relationships != NULL)
     corTreeChildAddOrReplace(connectP, "relationships", corTreeString(&doc.alloc, "relationships", relationships));
+  if (graphRelationships != NULL)
+    corTreeChildAddOrReplace(connectP, "graphRelationships", corTreeString(&doc.alloc, "graphRelationships", graphRelationships));
   if (newAlertsP != NULL)
     corTreeChildAddOrReplace(connectP, "alerts", newAlertsP);
   if (localP != NULL)

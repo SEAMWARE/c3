@@ -24,6 +24,8 @@
 .edges .lbl { display: none; }
 .world.near .edges .lbl, .edges g.hot .lbl { display: inline; }
 .edges g.off { display: none; }
+.edges.rels-none #edge-lines > g, .edges.rels-none #edge-labels > g,
+.edges.rels-selected #edge-lines > g:not(.hot), .edges.rels-selected #edge-labels > g:not(.hot) { display: none; }
 
 .box {
   position: absolute; width: 210px; height: 96px; overflow: hidden;
