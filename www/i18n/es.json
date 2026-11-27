@@ -1668,5 +1668,15 @@
   "entity map": "mapa de entidades",
   "registrations": "registros",
   "{title} - open it big": "{title} - ábrelo en grande",
-  "+{n} more": "+{n} más"
+  "+{n} more": "+{n} más",
+  "Each line as its type and message - a click shows it as a JSON object: time, file, line, function and the rest": "Cada línea como su tipo y mensaje - un clic la muestra como objeto JSON: hora, fichero, línea, función y el resto",
+  "Each line as the broker writes it": "Cada línea tal como la escribe el broker",
+  "How the log is shown": "Cómo se muestra el log",
+  "JSON": "JSON",
+  "Text": "Texto",
+  "The time in a line's object": "La hora en el objeto de una línea",
+  "When the line was written (UTC)": "Cuándo se escribió la línea (UTC)",
+  "Clock": "Reloj",
+  "Seconds since the broker started": "Segundos desde que arrancó el broker",
+  "Uptime": "Desde el arranque"
 }

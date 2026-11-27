@@ -199,6 +199,14 @@
 .cp-log .ph { color: var(--accent-text); font-weight: 500; }
 .cp-log .c3 { color: var(--muted); }
 .cp-log .er { color: var(--bad); }
+.cp-log .lj summary { cursor: pointer; list-style: none; white-space: pre-wrap; }
+.cp-log .lj summary::-webkit-details-marker { display: none; }
+.cp-log .lj summary::before { content: '▸ '; color: var(--dim); }
+.cp-log .lj[open] summary::before { content: '▾ '; }
+.cp-log .ljo { margin: 2px 0 6px 18px; padding: 6px 10px; border-left: 2px solid var(--line); color: var(--text-2); white-space: pre-wrap; font: inherit; }
+.rn-logview { display: inline-flex; gap: 2px; margin-right: 12px; }
+.rn-logview button { padding: 2px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; font-size: 0.9rem; }
+.rn-logview button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent-2); }
 
 /* in the log's place and of its height: a finished build's result does not move the page */
 .cp-result { display: grid; grid-template-columns: auto 1fr; align-content: start; column-gap: 16px; row-gap: 8px; font-size: 1.125rem; margin: 0;

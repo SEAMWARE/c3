@@ -831,6 +831,13 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
   **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each
   one's **Log** opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
+- **The log, Text or JSON** (any log on a card, kept in the browser): **Text** - each line as written, errors and
+  warnings coloured; **JSON** - a coraine line as its type and message (`W: <message>`), a click opening it as an
+  object: the time, type, level, file, line, function, the trace level of a trace, the message (`www/js/logline.js`,
+  `test/logline.mjs`); a line of another kind as it is. The time in it: **Clock** - when the line was written, UTC
+  (a line from memory has its own; a file's line its uptime added to the broker's start, which the broker's own
+  in-memory line gives - its time less its uptime - else c³'s start of it) - or **Uptime**, seconds since the
+  broker started (also when the start is not known: a container's log).
 - **A card of a broker c³ does not run** - whether it answers, **Explore**; when it has the admin API (its
   `GET /admin/config` answers) Configuration and build, Metrics, Log and trace levels, as on c³'s own. Its log:
   a broker on this machine that logs to a file (`--logTo file` or `both`) is read from that file,
