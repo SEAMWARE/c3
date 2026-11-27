@@ -20,6 +20,7 @@ import { OpcuaMapper } from './opcuamap.js';
 import { AasForm } from './aasform.js';
 import { attrCamel } from './ngsild.js';
 import { closeX } from './ui.js';
+import { logLine } from './logline.js';
 import { t, tk, plural } from './i18n.js';
 import { helpShow } from './compile.js';
 import { pickDir } from './source.js';
@@ -209,6 +210,15 @@ export class Run {
     this.configBrokers = null;        // the configuration's brokers - those Explore connected to (probeRemote)
     this.remoteAnswers = new Map();   // url -> it answered the last ask (probeRemote)
     this.remoteAdmin = new Map();     // url -> it has the admin API (remoteCard)
+    this.logRaw = [];                 // the log's lines as written (append) - shown again when the view changes
+    this.logView = 'text';            // 'text' or 'json' (logViewSet)
+    try { if (localStorage.getItem('c3.log.view') === 'json') this.logView = 'json'; } catch { /* text */ }
+    for (const b of $('rn-log-view').querySelectorAll('button')) b.addEventListener('click', () => this.logViewSet(b.dataset.v));
+    this.logTime = 'clock';           // 'clock' or 'uptime' (logTimeSet)
+    this.logStart = null;             // the broker's start, ms (logStartAsk), null: not known
+    try { if (localStorage.getItem('c3.log.time') === 'uptime') this.logTime = 'uptime'; } catch { /* clock */ }
+    for (const b of $('rn-log-time').querySelectorAll('button')) b.addEventListener('click', () => this.logTimeSet(b.dataset.v));
+    this.logTimeSet(this.logTime);    // and the view (logViewSet)
     this.remoteAsked = 0;
     this.ctrBusy = new Map();         // container -> its state when Start or Stop was asked: busy until it changes
     this.ctrWhy = new Map();          // container -> why its last Start or Stop failed
@@ -886,7 +896,12 @@ export class Run {
       const r = await api.runContainerLog(name);
       const pre = $('rn-log');
       const end = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
-      if (pre.textContent !== r.log) { pre.textContent = r.log; if (end) pre.scrollTop = pre.scrollHeight; }
+      if (this.containerText !== r.log) {
+        this.containerText = r.log;
+        this.logReset();
+        this.append(r.log.replace(/\n$/, ''));
+        if (end) pre.scrollTop = pre.scrollHeight;
+      }
       this.note('');
     } catch (e) { this.note(e.message); }
     if (this.sel && this.sel.kind === 'container' && this.sel.name === name) this.logPoll = setTimeout(() => this.containerLog(name), 3000);
@@ -1467,11 +1482,13 @@ export class Run {
     if (kind === 'remote') {                           // its log is not c³'s: where it goes said (remoteCard)
       this.follow(null);
       $('rn-log-name').textContent = name;
+      this.logStart = null;
       this.remoteCard(name);
       return;
     }
     if (kind === 'container') {                        // its last lines from the engine, read again (containerLog)
       this.follow(null);
+      this.logStart = null;
       $('rn-log-name').textContent = name;
       this.containerLog(name);
       return;
@@ -1482,6 +1499,12 @@ export class Run {
     a.href = base;
     a.hidden = false;
     this.follow(base);
+    this.logStart = null;                              // a service's: not known
+    if (kind === 'broker') {                           // its start: c3's 'started', then the broker's own (logStartAsk)
+      const k = this.kept(name);
+      this.logStart = k && k.started ? Date.parse(k.started) : null;
+      this.logStartAsk(this.levelsBroker());
+    }
   }
 
   //
@@ -1505,8 +1528,9 @@ export class Run {
       a.hidden = false;
       this.logGen++;                                   // one reading loop, also when the card is shown again
       clearTimeout(this.logPoll);
-      $('rn-log').replaceChildren();
+      this.logReset();
       this.pollLog(base, -65536);
+      this.logStartAsk(url);                           // after the log's own start: its generation
       return;
     }
     if (!opts) {
@@ -1515,8 +1539,9 @@ export class Run {
     }
     this.logGen++;
     clearTimeout(this.logPoll);
-    $('rn-log').replaceChildren();
+    this.logReset();
     this.ringLog(url, null, new Set(), this.logGen);
+    this.logStartAsk(url);
   }
 
   //
@@ -1559,7 +1584,7 @@ export class Run {
     clearTimeout(this.logPoll);
     this.logGen = (this.logGen || 0) + 1;              // pollLog: a read of an earlier follow drops its answer
     this.noLog(null);
-    $('rn-log').replaceChildren();
+    this.logReset();
     this.note('');
     if (!url) { $('rn-log-name').textContent = '-'; $('rn-log-file').hidden = true; return; }
 
@@ -1569,7 +1594,7 @@ export class Run {
     const es = new EventSource(url);
     this.es = es;
     es.onmessage = (e) => this.append(e.data);
-    es.addEventListener('reset', () => { $('rn-log').replaceChildren(); });
+    es.addEventListener('reset', () => this.logReset());
     es.addEventListener('skipped', (e) => this.note(t('The first {n} MiB of the log are not shown here - the whole file has them.', { n: (Number(e.data) / 1048576).toFixed(1) })));
     es.addEventListener('busy', (e) => this.note(e.data));
   }
@@ -1609,17 +1634,92 @@ export class Run {
       // in the whole file (the link). Without this, every attempt added its lines under the last.
       //
       if (/^c3: \S+ start '/.test(line)) {
-        pre.replaceChildren();
+        this.logReset();
+        this.logStart = Date.now();                    // until the broker says (logStartAsk, once it answers)
+        const url = this.levelsBroker(), gen = this.logGen;
+        if (url) setTimeout(() => this.logStartAsk(url, gen), 5000);
         frag = document.createDocumentFragment();
       }
-      let cls = '';
-      if (line.startsWith('c3: ')) cls = 'c3';
-      else if (/^(\S+Z )?[EX]: /.test(line)) cls = 'er';       // a broker's in-memory lines start with their UTC time
-      else if (/^(\S+Z )?W: /.test(line)) cls = 'wa';
-      frag.append(cls ? el('span', cls, line + '\n') : document.createTextNode(line + '\n'));
+      this.logRaw.push(line);
+      frag.append(this.logRow(line));
     }
     pre.append(frag);
-    while (pre.childNodes.length > 20000) pre.firstChild.remove();
+    while (pre.childNodes.length > 20000) { pre.firstChild.remove(); this.logRaw.shift(); }
+    if (atEnd) pre.scrollTop = pre.scrollHeight;
+  }
+
+  //
+  // logReset - an empty log: its lines and what is shown of them
+  //
+  logReset() {
+    $('rn-log').replaceChildren();
+    this.logRaw = [];
+    this.containerText = null;
+  }
+
+  //
+  // logRow - a line as the log shows it: Text - the line as written, errors and warnings coloured; JSON - a corLog
+  // line as its type and message, its object (logLine) opened by a click; a line of another kind as it is
+  //
+  logRow(line) {
+    const cls = line.startsWith('c3: ') ? 'c3' : /^(\S+Z )?[EX]: /.test(line) ? 'er' : /^(\S+Z )?W: /.test(line) ? 'wa' : '';
+    const o = this.logView === 'json' ? logLine(line) : null;
+    if (!o) return cls ? el('span', cls, line + '\n') : document.createTextNode(line + '\n');
+    const d = el('details', 'lj' + (cls ? ' ' + cls : ''));
+    d.append(el('summary', '', o.type + ': ' + o.message));
+    d.addEventListener('toggle', () => {                            // its object, made when first opened
+      if (d.open && d.children.length === 1) d.append(el('pre', 'ljo', JSON.stringify(this.logShown(o), null, 2)));
+    });
+    return d;
+  }
+
+  //
+  // logShown - a line's object with the time chosen (Clock / Uptime): 'time' - when it was written, UTC (its own
+  // time, or the broker's start plus its uptime) - or 'uptime', seconds since the broker started; uptime when the
+  // start is not known
+  //
+  logShown(o) {
+    const { time, uptime, ...rest } = o;
+    const at = time || (this.logStart !== null ? new Date(this.logStart + Math.round(uptime * 1000)).toISOString() : null);
+    return this.logTime === 'clock' && at ? { time: at, ...rest } : { uptime, ...rest };
+  }
+
+  //
+  // logStartAsk - the broker's start, exactly: one line of what it keeps in memory has both its UTC time and its
+  // uptime (GET /admin/log/lines?lines=1); a broker without it keeps what c3 knows (its 'started', or nothing)
+  //
+  async logStartAsk(url, gen = this.logGen) {
+    if (!url) return;
+    const r = await api.brokerGet(url, '/admin/log/lines?lines=1');
+    const o = r.ok && r.body && Array.isArray(r.body.lines) && r.body.lines.length ? logLine(r.body.lines[0]) : null;
+    if (this.logGen !== gen || !o || !o.time) return;
+    this.logStart = Date.parse(o.time) - Math.round(o.uptime * 1000);
+  }
+
+  //
+  // logTimeSet - Clock or Uptime in the JSON view's objects: kept in the browser; the log shown again
+  //
+  logTimeSet(v) {
+    this.logTime = v === 'uptime' ? 'uptime' : 'clock';
+    try { localStorage.setItem('c3.log.time', this.logTime); } catch { /* not kept */ }
+    for (const b of $('rn-log-time').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === this.logTime));
+    this.logViewSet(this.logView);
+  }
+
+  //
+  // logViewSet - Text or JSON: the switch pressed, every line kept shown again that way, the choice kept
+  //
+  logViewSet(view) {
+    this.logView = view === 'json' ? 'json' : 'text';
+    try { localStorage.setItem('c3.log.view', this.logView); } catch { /* not kept */ }
+    for (const b of $('rn-log-view').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === this.logView));
+    const pre = $('rn-log');
+    const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+    const frag = document.createDocumentFragment();
+    for (const line of this.logRaw) frag.append(this.logRow(line));
+    pre.replaceChildren(frag);
+    pre.classList.toggle('json', this.logView === 'json');
+    $('rn-log-time').hidden = this.logView !== 'json';
     if (atEnd) pre.scrollTop = pre.scrollHeight;
   }
 

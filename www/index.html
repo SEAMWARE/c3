@@ -291,6 +291,8 @@
               <h2 class="section">Log</h2>
               <span class="nm" id="rn-log-name">-</span>
               <span class="grow"></span>
+              <span class="rn-logview" id="rn-log-view" role="group" aria-label="How the log is shown"><button type="button" data-v="text" aria-pressed="true" title="Each line as the broker writes it">Text</button><button type="button" data-v="json" aria-pressed="false" title="Each line as its type and message - a click shows it as a JSON object: time, file, line, function and the rest">JSON</button></span>
+              <span class="rn-logview" id="rn-log-time" role="group" aria-label="The time in a line's object" hidden><button type="button" data-v="clock" aria-pressed="true" title="When the line was written (UTC)">Clock</button><button type="button" data-v="uptime" aria-pressed="false" title="Seconds since the broker started">Uptime</button></span>
               <a id="rn-log-file" target="_blank" hidden>the whole file</a>
             </div>
             <pre class="cp-log" id="rn-log" tabindex="0" aria-label="The log"></pre>
