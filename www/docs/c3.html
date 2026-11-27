@@ -183,10 +183,10 @@ by the backend - the same build as on the command line (<a href="#docs/building"
 <ul>
   <li><b>Operate</b> and its <b>?</b> - the page's description as a tooltip; <b>?</b> opens this section.</li>
   <li><b>Set up and start a broker</b>, a tile at the top. Under it <b>Brokers</b>: the brokers c³ started that run,
-  start, stop or failed, the one Explore is connected to first - <i>No broker runs on this machine</i> when none of
-  c³'s does; then the brokers Explore connected to that c³ does not run - on other machines, or here but started
-  elsewhere - each with whether it answers (asked every 10 s) and <b>Explore</b>. A c³ broker's row has <b>Stop</b>
-  and <b>Explore</b>; a click elsewhere on it opens its card. A broker of c³'s stopped by hand is not listed: its
+  start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to that c³ does
+  not run - <i>on this machine, started outside c³</i> or <i>on another machine</i> - each with whether it answers
+  (asked every 10 s) and <b>Explore</b>. <i>No broker yet</i> when there is none of either. A c³ broker's row has
+  <b>Stop</b> and <b>Explore</b>; a click elsewhere on any row opens its card. A broker of c³'s stopped by hand is not listed: its
   settings are under Set up and start a broker, <b>Earlier settings</b>.</li>
   <li><b>Containers</b> - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
   that scrolls: its state, what it is, its status and ports; the 10 newest, <b>Show all</b> for the rest. <b>Start</b> / <b>Stop</b> (one button; a c³ broker's
@@ -196,6 +196,11 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   <b>Explore</b>, <b>Options</b> (its options in the form, where its OPC UA server is browsed); the services it uses,
   each one's <b>Log</b> opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
   ← goes back.</li>
+  <li><b>A card of a broker c³ does not run</b> - whether it answers, <b>Explore</b>; with the admin API in it,
+  Configuration and build, Metrics, Log and trace levels, as on c³'s own. Its log, when it runs on this machine and
+  logs to a file (<code>--logTo file</code> or <code>both</code>): read from that file, where the broker says it is,
+  kept current; else the card says where the log goes. Its options and the OPC UA and DDS mappings belong to
+  starting a broker: c³'s own only.</li>
   <li><b>Set up and start a broker</b>, step 1, what runs: <b>Earlier settings</b> (a broker started before - its options fill
   the form; <b>Forget</b>), Compile's <b>Builds</b> (the newest first, the latest marked), the <b>Installed</b>
   <code>coraine</code>, the <b>Docker images</b> (those here, then the newest published; <b>+</b> lists them all;

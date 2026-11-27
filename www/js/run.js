@@ -208,6 +208,7 @@ export class Run {
     });
     this.configBrokers = null;        // the configuration's brokers - those Explore connected to (probeRemote)
     this.remoteAnswers = new Map();   // url -> it answered the last ask (probeRemote)
+    this.remoteAdmin = new Map();     // url -> it has the admin API (remoteCard)
     this.remoteAsked = 0;
     this.ctrBusy = new Map();         // container -> its state when Start or Stop was asked: busy until it changes
     this.ctrWhy = new Map();          // container -> why its last Start or Stop failed
@@ -718,7 +719,7 @@ export class Run {
     $('rn-bcount').textContent = items.length ? String(items.length) : '';
     $('rn-brokers').replaceChildren(...items);
     $('rn-brokers').hidden = !items.length;
-    $('rn-none').hidden = !!shown.length;              // none of c³'s runs here: said so
+    $('rn-none').hidden = !!items.length;              // not one broker, c³'s or another: said so
   }
 
   //
@@ -728,6 +729,13 @@ export class Run {
   remoteBrokers() {
     const kept = this.state.brokers || [];
     return (this.configBrokers || []).filter((r) => r && r.url && !kept.some((b) => this.same(b.url, r.url)));
+  }
+
+  //
+  // local - a URL of this machine
+  //
+  local(u) {
+    try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(u).hostname); } catch { return false; }
   }
 
   //
@@ -741,10 +749,18 @@ export class Run {
   //
   // remoteRow - a broker c³ does not run: its name and URL, whether it answers, Explore
   //
-  remoteRow(r) {
+  remoteRow(r, inCard = false) {
     const on = this.active(r.url);
     const ok = this.remoteAnswers.get(r.url);          // true, false, or not asked yet
-    const item = el('div', 'rn-item' + (on ? ' active' : ''));
+    const item = el('div', 'rn-item' + (inCard ? '' : ' rn-row-link') + (on ? ' active' : ''));
+    if (!inCard) {                                     // the row opens its card: configuration, metrics, levels
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.title = t('Open {name}', { name: r.name || r.url });
+      const open = () => this.select('remote', r.url);
+      item.addEventListener('click', (e) => { if (!e.target.closest('a, button')) open(); });
+      item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); open(); } });
+    }
     item.append(el('span', 'rdot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'busy')));
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
@@ -753,7 +769,7 @@ export class Run {
     if (on) title.append(el('span', 'badge active', t('in Explore')));
     title.append(el('span', 'badge ' + (ok === true ? 'ready' : 'stopped'), ok === true ? t('answers') : ok === false ? t('does not answer') : t('asking')));
     if (name) title.append(el('span', 'rurl', r.url));
-    main.append(title, el('div', 'rmeta', t('not run by c³ - connected to in Explore')));
+    main.append(title, el('div', 'rmeta', this.local(r.url) ? t('on this machine, started outside c³ - connected to in Explore') : t('on another machine - connected to in Explore')));
     item.append(main);
     const acts = el('div', 'racts');
     const x = button(t('Explore'), '', () => this.onConnect(r.url));
@@ -950,6 +966,13 @@ export class Run {
       const used = this.state.services.filter((x) => x.usedBy.includes(b.name) || b.services.includes(x.container) || x.neededBy.includes(b.name));
       $('rn-uses-box').hidden = !used.length;
       $('rn-services').replaceChildren(...used.map((x) => this.serviceItem(x, b.name)));
+    } else if (s.kind === 'remote') {
+      const r = this.remoteBrokers().find((v) => v.url === s.name);
+      if (!r) { if (this.cardSeen) this.showView('list'); else box.replaceChildren(el('span', 'rn-empty', s.name)); return; }
+      this.cardSeen = true;
+      box.replaceChildren(this.remoteRow(r, true));
+      $('rn-uses-box').hidden = true;
+      $('rn-services').replaceChildren();
     } else if (s.kind === 'container') {
       const c = (this.state.containers || []).find((v) => v.name === s.name);
       if (!c) { if (this.cardSeen) this.showView('list'); return; }
@@ -1175,6 +1198,7 @@ export class Run {
   //
   levelsBroker() {
     const s = this.sel;
+    if (s && s.kind === 'remote') return this.remoteAdmin.get(s.name) === true ? s.name : null;   // remoteCard
     const k = s && s.kind === 'broker' ? this.kept(s.name) : null;
     return k && k.state === 'running' && k.def.admin ? 'http://localhost:' + k.def.port : null;
   }
@@ -1290,7 +1314,7 @@ export class Run {
       return;
     }
     const urls = () => ((this.state && this.state.brokers) || []).filter((b) => b.state === 'running' && b.def.admin)
-      .map((b) => 'http://localhost:' + b.def.port);
+      .map((b) => 'http://localhost:' + b.def.port).concat(this.sel && this.sel.kind === 'remote' && this.levelsBroker() ? [this.sel.name] : []);
     this.metrics.start(urls, () => this.metricsRender());
     this.metricsRender();
   }
@@ -1419,6 +1443,12 @@ export class Run {
     this.configShow();
     this.levelsShow();
     this.metricsShow();
+    if (kind === 'remote') {                           // its log is not c³'s: where it goes said (remoteCard)
+      this.follow(null);
+      $('rn-log-name').textContent = name;
+      this.remoteCard(name);
+      return;
+    }
     if (kind === 'container') {                        // its last lines from the engine, read again (containerLog)
       this.follow(null);
       $('rn-log-name').textContent = name;
@@ -1433,9 +1463,40 @@ export class Run {
     this.follow(base);
   }
 
+  //
+  // remoteCard - a broker c³ does not run: GET /admin/config says whether it has the admin API (Configuration,
+  // Metrics and Levels shown then) and where its log goes (--logTo, --logDir) - c³ cannot show that log
+  //
+  async remoteCard(url) {
+    const r = await api.brokerGet(url, '/admin/config');
+    if (!this.sel || this.sel.kind !== 'remote' || this.sel.name !== url) return;
+    const opts = r.ok && r.body && Array.isArray(r.body.options) ? r.body.options : null;
+    this.remoteAdmin.set(url, !!opts);
+    this.configShow();
+    this.levelsShow();
+    this.metricsShow();
+    const opt = (n) => { const o = opts && opts.find((x) => x.name === n); return o ? o.value : null; };
+    const to = opt('--logTo');
+    if (opts && (to === 'file' || to === 'both') && this.local(url)) {   // c3 reads it: externalLog
+      const base = '/api/run/external/log?port=' + (new URL(url).port || '80');
+      const a = $('rn-log-file');
+      a.href = base;
+      a.hidden = false;
+      this.logGen++;                                   // one reading loop, also when the card is shown again
+      clearTimeout(this.logPoll);
+      $('rn-log').replaceChildren();
+      this.pollLog(base, -65536);
+      return;
+    }
+    if (!opts) this.note(r.reached === false ? t('{url} does not answer.', { url }) : t('No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.', { status: r.status }));
+    else if (to === 'file' || to === 'both') this.note(t('Not started by c³ - its log is in {dir} on the machine that runs it.', { dir: opt('--logDir') || '?' }));
+    else this.note(t('Not started by c³ - it logs to {to}, wherever its starter sends that.', { to: to || 'stdout' }));
+  }
+
   follow(url) {
     if (this.es) { this.es.close(); this.es = null; }
     clearTimeout(this.logPoll);
+    this.logGen = (this.logGen || 0) + 1;              // pollLog: a read of an earlier follow drops its answer
     $('rn-log').replaceChildren();
     this.note('');
     if (!url) { $('rn-log-name').textContent = '-'; $('rn-log-file').hidden = true; return; }
@@ -1454,16 +1515,26 @@ export class Run {
   //
   // pollLog - a backend without streamed responses: the file by Range, every second
   //
-  async pollLog(url, from) {
+  async pollLog(url, from, gen = this.logGen) {
     try {
-      const r = await fetch(url, { headers: { Range: 'bytes=' + from + '-' } });
+      const r = await fetch(url, { headers: { Range: from < 0 ? 'bytes=' + from : 'bytes=' + from + '-' } });   // < 0: its last -from bytes
+      if (this.logGen !== gen) return;
       if (r.status === 206 || r.status === 200) {
-        const text = await r.text();
+        let text = await r.text();
+        if (from < 0) {                                  // the tail: from its first whole line, the next read after it
+          const m = /bytes (\d+)-\d+\/(\d+)/.exec(r.headers.get('Content-Range') || '');
+          const start = m ? Number(m[1]) : 0;
+          from = start;
+          if (start > 0) { const nl = text.indexOf('\n') + 1; from += new TextEncoder().encode(text.slice(0, nl)).length; text = text.slice(nl); }
+        }
         const cut = text.lastIndexOf('\n') + 1;
         if (cut > 0) { this.append(text.slice(0, cut - 1)); from += new TextEncoder().encode(text.slice(0, cut)).length; }
-      } else if (r.status === 416) from = 0;
+      } else if (r.status === 416) {                     // nothing new - or the file is shorter now (a new start): from its top
+        const m = /bytes \*\/(\d+)/.exec(r.headers.get('Content-Range') || '');
+        if (from < 0 || (m && Number(m[1]) < from)) from = 0;
+      }
     } catch (e) { /* the next round */ }
-    if (this.shown) this.logPoll = setTimeout(() => this.pollLog(url, from), 1000);
+    if (this.shown && this.logGen === gen) this.logPoll = setTimeout(() => this.pollLog(url, from, gen), 1000);
   }
 
   append(text) {

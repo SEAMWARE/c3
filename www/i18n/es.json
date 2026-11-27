@@ -1488,7 +1488,6 @@
   "Reset admin's password": "Restablecer la contraseña de admin",
   "WireCloud's user admin gets c³'s password - for an admin whose password was set outside this c³ (another c³, or by hand). Its workspaces are kept.": "El usuario admin de WireCloud recibe la contraseña de c³ - para un admin cuya contraseña se puso fuera de este c³ (otro c³, o a mano). Sus espacios de trabajo se conservan.",
   "Every container on this machine, c³'s and others, the newest first": "Todos los contenedores de esta máquina, los de c³ y los demás, los más nuevos primero",
-  "No broker runs on this machine": "Ningún broker en marcha en esta máquina",
   "No container on this machine": "Ningún contenedor en esta máquina",
   "Operate in the guide": "Operar en la guía",
   "Set up and start a broker": "Preparar y arrancar un broker",
@@ -1499,7 +1498,6 @@
   "asking": "preguntando",
   "broker {name}": "broker {name}",
   "does not answer": "no responde",
-  "not run by c³ - connected to in Explore": "no lo ejecuta c³ - conectado en Explorar",
   "{names} uses it - stop the broker": "{names} lo usa - para el broker",
   "{name} does not answer": "{name} no responde",
   "{name} does not run": "{name} no está en marcha",
@@ -1637,5 +1635,12 @@
   "Save the instance": "Guardar la instancia",
   "Save this choice under the name": "Guardar esta selección con el nombre",
   "The Relationships drawn: every one, only the selected entity's, or none": "Las Relationships dibujadas: todas, solo las de la entidad seleccionada, o ninguna",
-  "Relationships drawn in the graph": "Relationships dibujadas en el grafo"
+  "Relationships drawn in the graph": "Relationships dibujadas en el grafo",
+  "No broker yet - set one up above, or connect to one in Explore": "Aún no hay ningún broker - configura uno arriba, o conéctate a uno en Explorar",
+  "on this machine, started outside c³ - connected to in Explore": "en esta máquina, arrancado fuera de c³ - conectado en Explorar",
+  "on another machine - connected to in Explore": "en otra máquina - conectado en Explorar",
+  "{url} does not answer.": "{url} no responde.",
+  "No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.": "Este broker no tiene API de administración (GET /admin/config: HTTP {status}) - sin configuración, métricas ni niveles; su log está donde lo envíe quien lo arrancó.",
+  "Not started by c³ - its log is in {dir} on the machine that runs it.": "No arrancado por c³ - su log está en {dir} en la máquina que lo ejecuta.",
+  "Not started by c³ - it logs to {to}, wherever its starter sends that.": "No arrancado por c³ - escribe su log en {to}, que va donde lo envíe quien lo arrancó."
 }

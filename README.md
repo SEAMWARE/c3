@@ -815,11 +815,11 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 - **Operate** and its **?** - the page's description as a tooltip; **?** opens this section of the guide.
 - **Set up and start a broker**, a tile at the top. Under it **Brokers**: the brokers c³ started that run,
-  start, stop or failed, the one Explore is connected to first - *No broker runs on this machine* when none of
-  c³'s does; then the brokers Explore connected to (`c3.json` "brokers") that c³ does not run - on other
-  machines, or here but started elsewhere - each asked `GET /version` through the proxy every 10 s (any answer
-  below 500 counts: *answers*, else *does not answer*), with **Explore**. A c³ broker's row has **Stop** and
-  **Explore**; a click elsewhere on it opens its card. **Explore** and a broker's URL open it in Explore once it
+  start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to
+  (`c3.json` "brokers") that c³ does not run - *on this machine, started outside c³* or *on another machine* -
+  each asked `GET /version` through the proxy every 10 s (any answer below 500 counts: *answers*, else *does not
+  answer*), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
+  **Explore**; a click elsewhere on any row opens its card. **Explore** and a broker's URL open it in Explore once it
   answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed: its settings are under
   Set up and start a broker, **Earlier settings**.
 - **Containers** - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
@@ -830,6 +830,14 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 - **A broker's card** - its state, what it runs from, where its data is, its health; **Stop**, **Explore**,
   **Options** (its options in the form, where its OPC UA server is browsed); the services it uses, each
   one's **Log** opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
+- **A card of a broker c³ does not run** - whether it answers, **Explore**; when it has the admin API (its
+  `GET /admin/config` answers) Configuration and build, Metrics, Log and trace levels, as on c³'s own. Its log:
+  a broker on this machine that logs to a file (`--logTo file` or `both`) is read from that file,
+  `<--logDir>/coraine.log`, as its `/admin/config` says (`GET /api/run/external/log?port=<port>` - c³ asks the
+  broker, the page names only the port), its last 64 KiB and then what is added, every second, from the top
+  again when the file is shorter (a new start); else the card says where the log goes (stdout: wherever its
+  starter sends it; a file on another machine). Its options, the OPC UA and DDS mappings are part of starting a
+  broker: c³'s own only.
   ← goes back.
 - **Set up and start a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
   the form; **Forget**), Compile's **Builds** (the newest first by `ended`, the latest marked -
@@ -1344,6 +1352,7 @@ The backend's API, used by the pages:
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `POST /api/run/containers/<name>/start` \| `stop` | any container on this machine (Operate's Containers): `202`, done in a thread; `404` for one not seen |
 | `GET /api/run/containers/<name>/log` | `{"log"}`: its last 500 lines, out and err |
+| `GET /api/run/external/log?port=<port>` | the log file of a broker on this machine c³ did not start: `<--logDir>/coraine.log` as its `GET /admin/config` says (asked once a minute), when `--logTo` is `file` or `both`; by Range; 404 with the reason otherwise |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |
 | `POST /api/run/dashboard/start`, `/stop` | `202`; `409` while a start or stop runs, or without a container engine |
