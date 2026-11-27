@@ -264,6 +264,58 @@ export function c3Tools(connect, ctx = {}) {
       },
     },
     {
+      name: 'show_history',
+      description: 'Open Explore\'s History panel: an entity\'s history over a time range, for the user to see - a graph per attribute, '
+        + 'or a table. One attribute in attrs: that attribute\'s History (its instances, to edit or delete); several, or none: the '
+        + 'entity\'s, those attributes ticked (none: those with a number, a boolean or a text). The range: preset (1h, 24h, 7d, 30d), '
+        + 'or from and to (ISO 8601); left out, the range the user had. Read the values themselves with the temporal tool; this shows them.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'The entity id, in full' },
+          attrs: { type: 'array', items: { type: 'string' }, description: 'The attributes - one: that attribute\'s History' },
+          preset: { type: 'string', enum: ['1h', '24h', '7d', '30d'] },
+          from: { type: 'string', description: 'ISO 8601 - with to, instead of preset' },
+          to: { type: 'string', description: 'ISO 8601 - with from' },
+          view: { type: 'string', enum: ['graph', 'table'], description: 'graph (default) or table' },
+        },
+        required: ['id'],
+      },
+      async run({ id, attrs, preset, from, to, view }) {
+        if (!connect.broker) throw new Error('Explore is connected to no broker');
+        let e = connect.byId.get(id);
+        if (!e) {
+          const r = await api.brokerGet(connect.broker, '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
+          if (!r.ok || !r.body || typeof r.body !== 'object') throw new Error(r.status === 404 ? `no entity ${id} in the broker` : `the broker answered ${r.status} for ${id}`);
+          e = r.body;
+        }
+        const has = (a) => a in e && a !== 'id' && a !== 'type';
+        const want = (attrs || []).filter(has);
+        const unknown = (attrs || []).filter((a) => !has(a));
+        if (attrs && attrs.length && !want.length) throw new Error(`${id} has none of ${attrs.join(', ')} - it has ${Object.keys(e).filter(has).join(', ')}`);
+        const tp = connect.temporal;
+        let range;
+        if (from || to) {
+          const f = Date.parse(from), u = to ? Date.parse(to) : Date.now();
+          if (!(f < u)) throw new Error('from and to: ISO 8601, from before to');
+          tp.saveRange({ preset: 'custom', from: f, to: u });
+          range = `${new Date(f).toISOString()} - ${new Date(u).toISOString()}`;
+        } else if (preset) {
+          tp.saveRange({ preset });
+          range = `the last ${preset}`;
+        } else range = 'the range the user had';
+        if (location.hash !== '#connect') location.hash = '#connect';
+        if (want.length === 1) tp.open(e, want[0]);
+        else {
+          if (want.length) tp.ticks = { id, attrs: want };
+          tp.openEntity(e);
+        }
+        if (view === 'table') { tp.view = 'table'; tp.render(); }
+        const what = want.length === 1 ? `the History of ${want[0]} of ${id}` : `the History of ${id}` + (want.length ? ` (${want.join(', ')})` : '');
+        return `opened ${what}, ${range}, as a ${view === 'table' ? 'table' : 'graph'}` + (unknown.length ? `; ${id} has no ${unknown.join(', ')}` : '');
+      },
+    },
+    {
       name: 'set_view',
       description: 'Explore as the graph (entities as boxes, Relationships as arrows) or on the map (entities with a location).',
       inputSchema: { type: 'object', properties: { view: { type: 'string', enum: ['graph', 'map'] } }, required: ['view'] },
