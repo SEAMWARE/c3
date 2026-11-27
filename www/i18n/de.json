@@ -1630,5 +1630,6 @@
   "{attr}: values without a graph - in the table": "{attr}: Werte ohne Grafik - in der Tabelle",
   "Drag to resize - a double-click: the default width": "Ziehen zum Ändern der Breite - Doppelklick: die Standardbreite",
   "The entity panel's width": "Die Breite des Entitätsbereichs",
-  "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Die Systemattribute - createdAt, modifiedAt - der Entität und ihrer Attribute"
+  "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Die Systemattribute - createdAt, modifiedAt - der Entität und ihrer Attribute",
+  "not read - {why}": "nicht gelesen - {why}"
 }

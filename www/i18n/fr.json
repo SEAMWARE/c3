@@ -1630,5 +1630,6 @@
   "{attr}: values without a graph - in the table": "{attr} : des valeurs sans graphique - dans le tableau",
   "Drag to resize - a double-click: the default width": "Glisser pour redimensionner - un double-clic : la largeur par défaut",
   "The entity panel's width": "La largeur du panneau de l'entité",
-  "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Les attributs système - createdAt, modifiedAt - de l'entité et de ses attributs"
+  "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Les attributs système - createdAt, modifiedAt - de l'entité et de ses attributs",
+  "not read - {why}": "non lus - {why}"
 }
