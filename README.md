@@ -628,20 +628,10 @@ On the page's WebSocket: `{"op": "alerts", "broker", "tenant", "rules": [{"id", 
 rules; the backend answers `{"op": "alerts", "broker", "installed": [{"rule", "subscription"}], "failed":
 [{"rule", "detail"}]}` and sends each notification as `{"op": "alert", "broker", "rule", "message"}`.
 
-### History
-
-The attribute panel's **History** section: each numeric Property of the selected entity over the last 10
-minutes, as a sparkline (a step line - a value holds until the next) with its range and count. Read once on
-select - `GET /ngsi-ld/v1/temporal/entities/{id}?timerel=after&timeAt=<10 minutes ago>&attrs=...&timeproperty=modifiedAt&options=sysAttrs`
-(every change, with an `observedAt` or not; a value's time is its `observedAt` if it has one) - then grown
-from the live values. A broker without the temporal API, or whose TRoE plugin does not read history
-(coraine's `--troe ramDB` answers 422), shows the live values from the moment the entity was selected,
-and says so. coraine with `--troe corDB` answers it. A click on a sparkline opens that attribute's History panel.
-
 ### The History panel
 
 An attribute's history over a time range, from the broker's temporal API - opened by a click on the attribute in
-the entity panel (its menu: **History…**, Edit, Delete; a right-click opens the same menu) or on its sparkline.
+the entity panel (its menu: **History…**, Edit, Delete; a right-click opens the same menu).
 Over the graph's right side, as the editor.
 
 - **The time range**: 1 h, 24 h, 7 d, 30 d (ending at the moment of each read), or a start and an end typed in.
@@ -697,7 +687,7 @@ in pages of 1000 instances (`firstN`, ascending): the next page is the one the `
 `rel="intervalafter"` points at (its `offsetN`), until there is none - at most 20000 instances (the panel says when
 there are more: a shorter range shows them all), with **Stop** while it reads. A 404 (coraine's answer when no
 instance matches: type `ResourceNotFound`) is an empty range - another 404 (a broker without the temporal API) is
-said. The attribute panel's sparklines read it so too.
+said.
 
 ## Compile
 
@@ -1405,7 +1395,6 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/map.js` | the map: GeoProperties as markers, lines and areas, Relationships with arrowheads (all, or the selected entity's), selection, click and menu, the changed entities ringed, movers gliding, alarms ringed |
 | `js/icons.js` | the icons per type, the state colours, drawn on a canvas |
 | `js/alerts.js` | alert rules and alarms: the toasts, the list, `q` evaluated for clearing, the rules kept per broker |
-| `js/history.js` | the attribute panel's History: the temporal API, sparklines, the live values appended |
 | `js/temporal.js` | the History panel: an attribute's or an entity's history over a time range - graph, table, aggregation, CSV; instances added, modified, deleted |
 | `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), the alert rules and their notifications, reconnecting |
 | `js/basemap.js` | the base map: c³'s dark style for OpenFreeMap's tiles, the downloaded areas' Protomaps layers, the tile and glyph protocols |

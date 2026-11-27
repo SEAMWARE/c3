@@ -23,7 +23,6 @@ import { OfflinePanel } from './offline.js';
 import { Live, isNullAttr } from './live.js';
 import { EntityEditor, NULL } from './editor.js';
 import { Alerts } from './alerts.js';
-import { History } from './history.js';
 import { Temporal, deleteEntityHistory } from './temporal.js';
 import { t, plural } from './i18n.js';
 
@@ -197,9 +196,6 @@ export class Connect {
     //
     // History: the selected entity's numeric Properties, the last minutes
     //
-    this.history = new History();
-    this.history.onLoaded = () => { if (this.graph.sel && this.graph.sel === this.history.id) this.refreshPanel(); };
-    this.history.onOpen = (name) => { const e = this.byId.get(this.shownId); if (e) this.temporal.open(e, name); };
 
     //
     // The History panel: an attribute's history over a time range, from the temporal API
@@ -2317,9 +2313,6 @@ export class Connect {
       }
       body.append(row);
     }
-
-    this.history.select(this.broker, e);
-    body.append(this.history.render(e));
 
     const raw = el('details', 'raw');
     raw.append(el('summary', null, 'JSON'), el('pre', null, JSON.stringify(e, null, 2)));
