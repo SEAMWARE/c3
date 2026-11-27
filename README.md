@@ -1038,7 +1038,7 @@ the budget, the entity map), entity operations, batch operations, subscription a
 streams refused), response bytes, forwarding (distributed operations: forwarded, failed, the mean latency),
 the mean batch size, the entity map's entities, tenants and a paused store; and **Other**, when the broker
 serves metrics none of these draws (a newer coraine): a counter as its rate, a gauge as it is - every one
-drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways; a chart with more
+drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways (it stays where it was scrolled as new reads draw it again); a chart with more
 than 4 lines names the 4 highest and how many more. A click on a chart (Enter) opens it big: every line named,
 grid lines, the clock time below; drawn again with each read; resized by its corner, the chart filling it (the
 size kept in the browser for the next one); × or Esc closes it. Below them the busiest
