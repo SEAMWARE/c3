@@ -554,11 +554,14 @@ attribute panel of the selected entity follows. Nothing is reloaded.
     subscription over it (`POST /ngsi-ld/v1/subscriptions` in a message's `metadata`, the endpoint the
     connection's name, `urn:ngsi-ld:WebSocket:<n>`) and the notifications come back on the same
     socket. The broker needs to reach nothing, and it deletes the subscription itself when the socket
-    closes - also when c³ is killed. **Tried first.**
+    closes - also when c³ is killed. **Tried first**, when the broker may have it: its configuration
+    (`GET /admin/config`, coraine's admin API) lists `ws` in `--transports`, or it has no admin API to say.
   - **(b) an HTTP subscription** whose endpoint is the backend,
     `http://127.0.0.1:<port>/api/notify/<session>` (a random 128-bit session id): any NGSI-LD
-    broker, as long as it can reach the backend - a broker on the same machine. Used when the broker
-    does not upgrade `GET /ngsi-ld/v1/ws` (a broker without the transport answers 404).
+    broker, as long as it can reach the backend - a broker on the same machine. Used when the broker's
+    configuration has no `ws`, or the broker does not upgrade `GET /ngsi-ld/v1/ws` (without the transport it
+    answers 404). A refusal is kept for c³'s run - the broker is not asked again, nor for `/admin/config` when it
+    has no admin API: each a line in the broker's log, once.
 
   **Live · WebSocket** / **Live · HTTP** next to the counts says which; its tooltip gives the
   subscription and, for HTTP, why not the WebSocket. **Not live** with the broker's answer when the

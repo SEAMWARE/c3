@@ -548,7 +548,8 @@ marked; an entity created appears, one deleted disappears; nothing is reloaded. 
 HTTP</b> says how the changes arrive:</p>
 <ul>
   <li><b>The broker's WebSocket transport</b> (<code>coraine --transports ws</code>,
-  <a href="#docs/websocket">WebSocket</a>) - tried first: the backend opens <code>/ngsi-ld/v1/ws</code>, creates one
+  <a href="#docs/websocket">WebSocket</a>) - tried first when the broker's configuration lists <code>ws</code> (its
+  admin API), or it has no admin API to say and has not refused it before: the backend opens <code>/ngsi-ld/v1/ws</code>, creates one
   subscription over it, and the notifications come back on the same socket. The broker deletes the subscription when
   the socket closes, also when c³ is killed.</li>
   <li><b>An HTTP subscription</b> notifying the backend (<code>http://127.0.0.1:&lt;port&gt;/api/notify/&lt;session&gt;</code>)
