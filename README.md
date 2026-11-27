@@ -373,9 +373,9 @@ markers are coloured by), the downloaded map areas, and the last page:
 - **The attribute panel** - the entity's `id` (in bold; a click opens the entity's menu, as a right-click on its box does), `type` and `scope` in a table, then its
   attributes. Up to the right, **sysAttrs**: ticked, the entity is read again with `options=sysAttrs` and its
   `createdAt` and `modifiedAt` are shown, the entity's and every attribute's (kept in the browser). Its width: drag the handle on its left edge (or ←/→ on it), kept in the browser; a
-  double-click gives the default width back. It is there only while an entity is selected: a click on the
-  background (graph or map) unselects, and the graph and the map take its room. Its **×** closes it too, the selection
-  kept; selecting an entity (a click on a box or a marker, even the selected one) brings it back - a live change does
+  double-click gives the default width back. It comes with the first selection - until then the graph and the
+  map have its room - and a click beside the boxes or the markers keeps the selection. Its **×** closes it, the
+  selection kept; selecting an entity (a click on a box or a marker, even the selected one) brings it back - a live change does
   not. Until the first selection, each time entities are drawn "Click an entity to see its attributes" shows over
   the view and fades out by itself; after it, never again (kept in the browser).
 - **Deletes ask first** - every delete in Explore (the entity, an attribute, a history, an instance) asks
