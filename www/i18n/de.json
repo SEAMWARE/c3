@@ -210,7 +210,6 @@
   "Downloaded areas": "Heruntergeladene Gebiete",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Jedes abgebildete Topic, jeder Service oder jede Action ist ein Attribut einer Entität: sein Name, die ID der Entität und der Typ der Entität - einmal je Entität, an einem ihrer Endpunkte. Fertig schreibt die DDS-Konfiguration, zwei Dateien, und ein Broker startet damit.",
   "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Bearbeiten Sie ihn nach Belieben - er geht an das Repository coraine-assistant auf GitHub, wo Sie ihn mit Ihrem eigenen Login einreichen. Von hier wird nichts gesendet.",
-  "Edit the attributes": "Attribute bearbeiten",
   "Edit the entity": "Entität bearbeiten",
   "Edit the mapping": "Abbildung bearbeiten",
   "Edit {name}…": "{name} bearbeiten…",
@@ -1621,7 +1620,6 @@
   "Attributes": "Attribute",
   "Download CSV": "CSV herunterladen",
   "Every instance of every attribute the broker keeps of this entity - the entity itself stays": "Jede Instanz jedes Attributs, die der Broker von dieser Entität hat - die Entität selbst bleibt",
-  "Its history - the attributes ticked, over a time range": "Seine Historie - die angehakten Attribute, über einen Zeitraum",
   "Its history - to modify it": "Seine Historie - zum Ändern",
   "The entity's history": "Die Historie der Entität",
   "The table: a row per instant, a column per ticked attribute": "Die Tabelle: eine Zeile je Zeitpunkt, eine Spalte je angehaktem Attribut",
@@ -1637,5 +1635,6 @@
   "OK": "OK",
   "The broker answers again - connecting": "Der Broker antwortet wieder - verbinde",
   "The broker stopped answering": "Der Broker antwortet nicht mehr",
-  "not read - {why}": "nicht gelesen - {why}"
+  "not read - {why}": "nicht gelesen - {why}",
+  "Its menu: History, Edit, Delete, ...": "Sein Menü: Historie, Bearbeiten, Löschen, ..."
 }

@@ -210,7 +210,6 @@
   "Downloaded areas": "Zonas descargadas",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Cada topic, servicio o acción mapeado es un atributo de una entidad: su nombre, el id de la entidad y el tipo de la entidad - una vez por entidad, en cualquiera de sus endpoints. Hecho escribe la configuración DDS, dos archivos, y un broker se inicia con ellos.",
   "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Edítalo como quieras - va al repositorio coraine-assistant en GitHub, donde lo registras con tu propia cuenta. Desde aquí no se envía nada.",
-  "Edit the attributes": "Editar los atributos",
   "Edit the entity": "Editar la entidad",
   "Edit the mapping": "Editar el mapeo",
   "Edit {name}…": "Editar {name}…",
@@ -1621,7 +1620,6 @@
   "Attributes": "Atributos",
   "Download CSV": "Descargar CSV",
   "Every instance of every attribute the broker keeps of this entity - the entity itself stays": "Todas las instancias de todos los atributos que el broker guarda de esta entidad; la entidad se queda",
-  "Its history - the attributes ticked, over a time range": "Su historial: los atributos marcados, en un intervalo de tiempo",
   "Its history - to modify it": "Su historial, para modificarlo",
   "The entity's history": "El historial de la entidad",
   "The table: a row per instant, a column per ticked attribute": "La tabla: una fila por instante, una columna por atributo marcado",
@@ -1637,5 +1635,6 @@
   "OK": "OK",
   "The broker answers again - connecting": "El broker responde de nuevo: conectando",
   "The broker stopped answering": "El broker dejó de responder",
-  "not read - {why}": "no leídos: {why}"
+  "not read - {why}": "no leídos: {why}",
+  "Its menu: History, Edit, Delete, ...": "Su menú: Historial, Editar, Borrar, ..."
 }
