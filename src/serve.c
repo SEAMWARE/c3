@@ -53,37 +53,6 @@
 
 // -----------------------------------------------------------------------------
 //
-// jsonEscape - 's' as the inside of a JSON string, allocated from the connection
-//
-static char* jsonEscape(CorHttpConn* connP, const char* s)
-{
-  int   len = strlen(s);
-  char* out = corAlloc(&connP->alloc, len * 6 + 1);
-  int   o   = 0;
-
-  for (; *s != 0; ++s)
-  {
-    unsigned char c = (unsigned char) *s;
-
-    if ((c == '"') || (c == '\\'))
-    {
-      out[o++] = '\\';
-      out[o++] = c;
-    }
-    else if (c < 0x20)
-      o += sprintf(&out[o], "\\u%04x", c);
-    else
-      out[o++] = c;
-  }
-
-  out[o] = 0;
-  return out;
-}
-
-
-
-// -----------------------------------------------------------------------------
-//
 // serveJson - a JSON answer; 'json' must outlive the callback (a literal, or from connP->alloc)
 //
 void serveJson(CorHttpConn* connP, int status, const char* json)

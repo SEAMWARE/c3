@@ -286,6 +286,12 @@ brokers keep running, and the next c³ attaches to them (by pid and the process'
   <li><b>Log and trace levels</b> - verbose and info, and a tick box per trace level, grouped by library, its tooltip
   what it traces - set live through <code>/admin/log</code>. Traces exist in debug builds only; on a release build
   the tick boxes are greyed.</li>
+  <li><b>Log file</b> - for a broker that logs to a file and is built with the log trim
+  (<a href="#docs/administration" data-scroll="log-trim">Administration</a>): the limits (trim when the disk is N % full,
+  down to N %, the newest lines always kept, how long the trimmed-off lines are kept), each sent as you leave its field;
+  <b>Trim now</b>; the last trim; and the trimmed-off lines the broker keeps, each saved by <b>Save here</b> into
+  <code>~/.local/share/c3/logs</code> and then deleted on the broker. The log marks the trim's line (✂) and a merged
+  line's count.</li>
 </ul>
 
 <!-- ======================================================================= -->

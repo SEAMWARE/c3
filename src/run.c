@@ -9339,6 +9339,11 @@ void runRequest(CorHttpConn* connP, const char* path)
     if (get) runState(connP); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
+  if (strcmp(path, "/api/run/trimmed") == 0)
+  {
+    if (post) trimmedSave(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
   if (strcmp(path, "/api/run/external/log") == 0)
   {
     if (get) externalLog(connP); else serveError(connP, 405, "Method not allowed", path);

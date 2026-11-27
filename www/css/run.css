@@ -156,6 +156,8 @@
 #rn-log { height: 340px; }
 #rn-log .er { color: var(--bad); }
 #rn-log .wa { color: var(--warn); }
+#rn-log .rep { color: var(--accent); font-weight: 600; cursor: help; }
+#rn-log .tr { display: block; color: var(--accent); border-top: 1px dashed var(--accent); border-bottom: 1px dashed var(--accent); margin: 2px 0; }
 
 /* CKAN data: a dropdown of ticks */
 .rn-drop { border: 1px solid var(--line, rgba(255,255,255,.15)); border-radius: 6px; padding: 6px 10px; }
@@ -222,6 +224,19 @@
 .rn-lv .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rn-lvnote { font-size: 0.9rem; color: var(--muted); margin: 4px 0; }
 .rn-lvnote.warn { color: var(--warn); }
+
+/* The log file - coraine's log trim (GET /admin/log's file and trim) */
+.rn-trimgrid { display: grid; grid-template-columns: max-content 7.5em max-content 1fr; gap: 4px 8px; align-items: baseline; margin: 6px 0; font-size: 0.9rem; }
+.rn-trimgrid input { width: 100%; font: inherit; font-family: var(--mono, monospace); }
+.rn-trimgrid .u { color: var(--muted); }
+.rn-trimgrid .h { color: var(--muted); font-size: 0.85rem; }
+.rn-trimbar { margin: 8px 0; }
+.rn-h4 { margin: 10px 0 4px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.rn-trimrow { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 0.9rem; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.rn-trimsaid { color: var(--muted); overflow-wrap: anywhere; }
+.rn-trimsaid.ok { color: var(--ok); }
+.rn-trimsaid.warn { color: var(--warn); }
+@media (max-width: 600px) { .rn-trimgrid { grid-template-columns: max-content 6em max-content; } .rn-trimgrid .h { grid-column: 1 / -1; } }
 
 /* Configuration and build of a running broker (/admin/config, /build) */
 .rn-cfgfeat { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }

@@ -12,6 +12,10 @@
 // object: time (when there is one), uptime (seconds since the start), type, level (its name), file, line, function,
 // message, traceLevel (T lines). Any other line - c3's own, a container's, a message's second line: null.
 //
+// coraine's log trim (COR_FEATURE_LOG_TRIM) merges repeated lines: the merged one ends " (<n> times, <first uptime> -
+// <last uptime>)" - in the object 'repeated': {times, first, last}, out of the message - and says what it did in an
+// I line that starts "Log trimmed (" - 'trim': true.
+//
 const LINE = /^(?:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z) )?([A-Z]): (\d+\.\d+): ([^\s\[\]]+)\[(\d+)\]: ([^:\s]+): (.*)$/;
 const LEVELS = { E: 'error', W: 'warning', I: 'info', V: 'verbose', T: 'trace', X: 'exit', D: 'debug' };
 
@@ -29,6 +33,9 @@ export function logLine(line) {
   let msg = m[7];
   const tl = m[2] === 'T' ? / \(T-(\d+)\)$/.exec(msg) : null;
   if (tl) { msg = msg.slice(0, tl.index); o.traceLevel = Number(tl[1]); }
+  const rp = / \((\d+) times, (\d+\.\d+) - (\d+\.\d+)\)$/.exec(msg);
+  if (rp) { msg = msg.slice(0, rp.index); o.repeated = { times: Number(rp[1]), first: Number(rp[2]), last: Number(rp[3]) }; }
+  if (m[2] === 'I' && msg.startsWith('Log trimmed (')) o.trim = true;
   o.message = msg;                                               // last: the object reads as the line does
   return o;
 }
