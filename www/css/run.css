@@ -240,14 +240,18 @@
 .mx-grid { display: flex; gap: 10px 18px; margin: 6px 0 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
 .mx-chart { flex: 0 0 280px; min-width: 0; cursor: pointer; border-radius: 6px; padding: 2px 4px; scroll-snap-align: start; }
 .mx-chart:hover, .mx-chart:focus-visible { background: #FFFFFF0A; }
-.mx-chart.big { flex: none; cursor: default; padding: 0; }
-.mx-chart.big .mx-svg { height: 300px; }
+.mx-chart.big { flex: 1; min-height: 0; display: flex; flex-direction: column; cursor: default; padding: 0; }
+.mx-chart.big .mx-frame { flex: 1; min-height: 120px; }
+.mx-chart.big .mx-svg { height: 100%; }
 .mx-chart.big .mx-head { font-size: 1rem; margin-right: 36px; }
 .mx-chart.big .mx-title { font-size: 1.2rem; }
 .mx-gridline { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 4; }
 .mx-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.75rem; color: var(--dim); margin-top: 3px; }
-.mx-dialog { width: min(980px, calc(100vw - 32px)); padding: 20px 22px 16px; border: 1px solid var(--line); border-radius: 12px;
-  background: var(--panel); color: var(--text); position: fixed; }
+.mx-dialog { width: min(980px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); min-width: 360px; min-height: 260px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 20px 22px 16px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); color: var(--text); position: fixed; resize: both; overflow: hidden; }
+.mx-dialog[open] { display: flex; flex-direction: column; }
+.mx-bigbody { flex: 1; min-height: 0; display: flex; overflow: auto; }
 .mx-dialog::backdrop { background: #0009; }
 .mx-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 0.9rem; }
 .mx-title { font-weight: 600; font-size: 0.975rem; color: var(--text-2); }
