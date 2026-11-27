@@ -794,7 +794,7 @@ export class EntityMap {
         const p = map.project(this.anchors.get(this.sel));
         const r = map.getCanvas().getBoundingClientRect();
         this.onMenu(this.sel, { x: r.left + p.x, y: r.top + p.y }, map.getCanvas());
-      } else if (e.key === 'Escape') this.onSelect(null);
+      } else if (e.key === 'Escape' && this.sel) { e.preventDefault(); this.onSelect(null); }
       else if (e.key === '0') { e.preventDefault(); this.fit(); }
     });
   }

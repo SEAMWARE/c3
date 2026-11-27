@@ -384,7 +384,7 @@ function searchWire(inputId, outId) {
     timer = setTimeout(() => searchRun(input, out), 120);
   });
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { input.value = ''; out.hidden = true; }
+    if (e.key === 'Escape' && (input.value || !out.hidden)) { e.preventDefault(); input.value = ''; out.hidden = true; }
     if (e.key === 'Enter') out.querySelector('a')?.click();
   });
   out.addEventListener('click', (e) => {

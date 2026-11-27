@@ -214,7 +214,7 @@ export class Temporal {
     this.state = '';                  // 'reading', 'done', 'stopped', 'capped', 'error'
     this.why = '';
     this.highlight = null;            // an instanceId, shown in the table
-    root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.target.closest('input, select')) { e.stopPropagation(); this.close(); } });
+    root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.target.closest('input, select')) { e.preventDefault(); e.stopPropagation(); this.close(); } });
     let timer = null;
     window.addEventListener('resize', () => {
       clearTimeout(timer);

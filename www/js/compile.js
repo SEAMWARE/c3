@@ -308,7 +308,7 @@ export function helpShow(title, text) {
   ov.setAttribute('aria-label', title);
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
   const ok = el('button', 'btn', t('Close'));
   ok.type = 'button';
   ok.addEventListener('click', close);
@@ -364,7 +364,7 @@ function mapAsk(m) {
   ov.setAttribute('aria-label', t(m.label));
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
   const cancel = el('button', 'btn', t('Stay here'));
   cancel.type = 'button';
   cancel.addEventListener('click', close);
@@ -632,7 +632,7 @@ export class Compile {
     const no = el('button', 'btn', t('Keep {server}', { server: httpLabel(this.choice.httpServer) }));
     yes.type = no.type = 'button';
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
     yes.addEventListener('click', () => { close(); apply(); });
     no.addEventListener('click', close);
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });

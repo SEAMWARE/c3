@@ -145,6 +145,9 @@ window is the running c3's, so its minimise and close buttons work. A running c3
 version, or one with no screen, cannot: the second `c3` opens the window itself, without those
 buttons. Any other program on the port is an error.
 
+Full-screen, **Esc** leaves it, as F11 does - an Esc nothing on the page used: an open menu, panel, dialog
+or selection takes it first (and closes), so leaving full-screen takes one more.
+
 The Chrome profile in `~/.local/state/c3/chrome` is c³'s alone. A Chrome on it that no c3 controls - a
 window opened without the buttons, or one whose c3 was stopped - would take every new window over, and
 none could be shown again. Before c3 opens the window it controls, it stops that Chrome (SIGTERM; the

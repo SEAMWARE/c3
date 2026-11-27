@@ -173,7 +173,7 @@ export class OpcuaMapper {
     main.append(this.box);
     // Escape on Operate only: the listener is the document's, and the mapper stays open while another page is shown
     this.onKey = (e) => {
-      if (e.key === 'Escape' && !e.target.closest('input, select, textarea') && !$('page-run').hidden) this.close();
+      if (e.key === 'Escape' && !e.target.closest('input, select, textarea') && !$('page-run').hidden) { e.preventDefault(); this.close(); }
     };
   }
 
