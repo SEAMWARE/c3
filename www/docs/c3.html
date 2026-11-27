@@ -552,10 +552,6 @@ when the broker goes away, the page watches again until it is back.</p>
   subscription of its own. A match raises an alarm - a toast, a row, the entity ringed on the map until
   acknowledged - cleared when the live values no longer match (for the simple forms of <code>q</code>; otherwise by
   hand).</li>
-  <li><b>History</b> - each numeric Property of the selected entity over the last 10 minutes as a sparkline, from the
-  temporal API (<code>GET /temporal/entities/{id}?timerel=after...</code>), then grown from the live values. A broker
-  without history shows the live values from the moment the entity was selected. A click on a sparkline opens that
-  attribute's History panel.</li>
   <li><b>The History panel</b> - an attribute's history over a time range: a click on the attribute in the entity
   panel opens its menu, <b>History…</b> the panel. The range (1 h, 24 h, 7 d, 30 d, or a start and an end) is kept per
   broker and every History opened afterwards starts from it; the time property is <code>observedAt</code>, or
