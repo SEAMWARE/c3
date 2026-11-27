@@ -40,14 +40,16 @@ minute - so macOS needs no signed download:
 
 ```sh
 brew tap seamware/c3 https://github.com/SEAMWARE/c3
-brew install --HEAD seamware/c3/c3
+brew install seamware/c3/c3
 c3
 ```
 
-`c3` opens c³ in Google Chrome when it is installed (a window of its own), else in your default browser;
-`Ctrl-C` in the terminal stops it. `c3 -u` lists its options.
+That is the release (0.8.0); `brew install --HEAD seamware/c3/c3` builds c³'s main instead, with the cor-libs' main.
 
-Newer c³: `brew upgrade --fetch-HEAD seamware/c3/c3`. Removed: `brew uninstall c3`; its configuration stays in
+`c3` opens c³ in Google Chrome when it is installed (a window of its own), else in your default browser;
+`Ctrl-C` in the terminal stops it. `c3 -u` lists its options, `c3 --version` names the version.
+
+Newer c³: `brew update && brew upgrade seamware/c3/c3` (a `--HEAD` installation: `brew upgrade --fetch-HEAD seamware/c3/c3`). Removed: `brew uninstall c3`; its configuration stays in
 `~/.config/c3/c3.json`.
 
 ## c³ on Linux
@@ -66,6 +68,9 @@ make -C corMcp && sudo make -C corMcp install       # AI Assist's tool server
 cd c3 && make && sudo make install                  # c3 in /usr/local/bin, and in the desktop's menu
 c3
 ```
+
+That is main. The release instead: `git clone -b v0.8.0` for c3 and the eight cor-libs (corMcp has no release
+tags - `git -C corMcp checkout 4d3df05d5ddb`, the commit c³ 0.8.0 was tested with).
 
 With Qt 6 WebEngine installed (`qt6-webengine-dev`), `make` also builds `c3-window`, c³'s own window; without
 it, c³ opens in Chrome or the default browser. [README.md](README.md#try-it) has the rest: example data, the

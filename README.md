@@ -103,6 +103,7 @@ services it started keep running and the new one attaches to them, a build that 
 ```
 c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
    [--coraine-build <path>] [--source <tarball>] [--token-file <file>]
+c3 --version
 ```
 
 | Option | Default | |
@@ -115,6 +116,7 @@ c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--plane
 | `--coraine-build`, `-cb` | `coraine-build` in `$PATH` (the `coraine-dev` package); else the coraine clone's, `<clones>/coraine/packaging/deb/coraine-build` | the script Compile runs |
 | `--source`, `-src` | `coraine-build`'s own, `/usr/share/coraine/src/coraine-src.tar.xz`; else `<clones>` | the coraine source Compile builds from (passed on as `--source`): a tarball, or a directory of clones |
 | `--token-file`, `-tf` | `$C3_TOKEN` | a file holding the access token sent to every broker that has none of its own (Explore, below) - read again whenever it changes |
+| `--version`, `-V` | | prints `c3 <version>` and exits - read from the command line only |
 
 Every request c³ sends - to a broker, an OpenID provider, a verifier - goes through the proxies of the
 environment: `https_proxy`, `http_proxy`, `no_proxy` (or their upper-case names). A broker on this machine

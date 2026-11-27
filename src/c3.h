@@ -25,7 +25,7 @@
 //
 // C3_VERSION -
 //
-#define C3_VERSION "0.7.0"
+#define C3_VERSION "0.8.0"
 
 
 
