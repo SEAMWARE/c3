@@ -1,0 +1,49 @@
+#
+# A c³ release: its GitHub Release page, made when its tag is pushed
+#
+#   git tag -a v0.8.0 <commit> -m "c³ 0.8.0" && git push origin v0.8.0
+#
+# The tag must name the version the source says (C3_VERSION, src/c3.h) - a page "0.8.0" over a c3 that says
+# 0.7.0 is found only by someone holding both. The notes: tools/releaseNotes.sh (the pull requests since the
+# previous tag, by kind). c³ goes with the coraine of the same version; coraine's release.yml checks that c³'s
+# tag is the commit its pre-release campaign tested, so c³ is tagged before coraine.
+#
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # gh release create, on this repository
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0       # the previous tag and the merges since it
+          fetch-tags: true
+
+      - name: The tag, checked against C3_VERSION
+        run: |
+          tagVersion="${GITHUB_REF_NAME#v}"
+          srcVersion=$(sed -n 's/^#define C3_VERSION[[:space:]]*"\(.*\)"/\1/p' src/c3.h)
+          echo "tag=$tagVersion  source=$srcVersion"
+          if [ "$tagVersion" != "$srcVersion" ]; then
+            echo "::error::tag $GITHUB_REF_NAME says $tagVersion, src/c3.h's C3_VERSION says $srcVersion"
+            exit 1
+          fi
+
+      - name: The release page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tools/releaseNotes.sh "$GITHUB_REF_NAME" > notes.md
+          cat notes.md
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "c³ ${GITHUB_REF_NAME#v}" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "c³ ${GITHUB_REF_NAME#v}" --notes-file notes.md
+          fi
