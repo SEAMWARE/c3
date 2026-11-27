@@ -368,7 +368,8 @@ markers are coloured by), the downloaded map areas, and the last page:
 - **The attribute panel** - the entity's `id` (in bold; a click opens the entity's menu, as a right-click on its box does), `type` and `scope` in a table, then its
   attributes. Up to the right, **sysAttrs**: ticked, the entity is read again with `options=sysAttrs` and its
   `createdAt` and `modifiedAt` are shown, the entity's and every attribute's (kept in the browser). Its width: drag the handle on its left edge (or ←/→ on it), kept in the browser; a
-  double-click gives the default width back.
+  double-click gives the default width back. Its **×** closes it - the graph and the map take its room; the selection stays, and selecting an
+  entity (a click on a box or a marker, even the selected one) brings the panel back. A live change does not.
 - **Deletes ask first** - every delete in Explore (the entity, an attribute, a history, an instance) asks
   in a box of its own: "Delete <what> at the broker? It cannot be undone.", Cancel focused (Esc too). On a
   broker c³ sends no token to, the question says that anyone who can reach it can delete as well.

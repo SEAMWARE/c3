@@ -1635,5 +1635,7 @@
   "Its menu: History, Edit, Delete, ...": "Sein Menü: Historie, Bearbeiten, Löschen, ...",
   "Delete {what} at the broker? It cannot be undone.": "{what} beim Broker löschen? Das lässt sich nicht rückgängig machen.",
   "every instance of {name}": "jede Instanz von {name}",
-  "Delete…": "Löschen…"
+  "Delete…": "Löschen…",
+  "Close the entity panel - selecting an entity brings it back": "Den Entitätsbereich schließen - eine Auswahl bringt ihn zurück",
+  "Close the entity panel": "Den Entitätsbereich schließen"
 }

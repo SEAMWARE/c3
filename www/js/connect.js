@@ -146,6 +146,7 @@ export class Connect {
     });
     this.graph.onSelect = (id) => {
       if (this.picking && id) { this.picked(id); return; }
+      if (id) this.entityPanel(true);              // closed: a selection brings it back
       this.showEntity(id);
       this.emap.select(id);
     };
@@ -326,6 +327,9 @@ export class Connect {
     $('mode-back').onclick = () => this.back();
     $('json-close').onclick = () => this.closeJson();
     this.entityResize();
+    $('entity-close').title = t('Close the entity panel - selecting an entity brings it back');
+    $('entity-close').setAttribute('aria-label', t('Close the entity panel'));
+    $('entity-close').onclick = () => this.entityPanel(false);
     $('json-copy').onclick = () => this.copy($('json-pre').textContent, t('the JSON'));
     $('jsonpanel').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeJson(); }
@@ -2154,6 +2158,19 @@ export class Connect {
       ev.preventDefault();
       set(panel.getBoundingClientRect().width + (ev.key === 'ArrowLeft' ? 24 : -24));
     });
+  }
+
+  //
+  // entityPanel - the entity panel shown or not: closed, the graph and the map take its room; the selection stays
+  // (the panel shows it again when it comes back), and only a selection by the user brings it back - a live
+  // change of the shown entity does not
+  //
+  entityPanel(on) {
+    if ($('entity').hidden === !on) return;
+    $('entity').hidden = !on;
+    $('entity-resize').hidden = !on;
+    if (!on && $('entity').contains(document.activeElement)) $('viewport').focus({ preventScroll: true });
+    requestAnimationFrame(() => this.emap.resize());   // the map's canvas to its new width
   }
 
   //
