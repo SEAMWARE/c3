@@ -642,14 +642,33 @@ Over the graph's right side, as the editor.
 - **Delete this history…**: `DELETE /temporal/entities/{id}/attrs/{attr}` (with the attribute's `datasetId`) - every
   instance the broker keeps, also outside the range; the attribute itself stays.
 
-The entity's menu has **Delete its history…**: `DELETE /temporal/entities/{id}` - the entity stays. Every delete
-asks first, as Explore's other deletes do.
+**The entity's history** - a click on the entity's id in the entity panel, or **History…** in the entity's menu: the
+same panel, for its attributes.
 
-The read is `GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr>&timerel=between&timeAt&endTimeAt&timeproperty`,
+- **The attributes**: ticked above the range - at first those whose value is a number, a boolean or a text; the ticks
+  come back when the same entity is opened again. They are read together (`attrs=a,b,c`); `firstN` is per attribute,
+  so the pages go on while any of them has more.
+- **The graph**: a row per ticked attribute, drawn as above, on one time axis, with its latest value in the range.
+  A click on a row opens that attribute's History at the instance clicked - to modify or delete it; its name opens it
+  too, and the attribute's History has **↑** back to the entity's.
+- **The table**: a row per instant any ticked attribute has, a column per attribute - its value at that instant, or
+  (dimmed) the value it had then: its last instance before, held until the next one.
+- **Aggregate**: as for one attribute, per ticked attribute.
+- **Add values…**: a value for each ticked attribute (an empty one: none for it) at one `observedAt` - one
+  `POST /temporal/entities/{id}/attrs` with an instance of each.
+- **Download CSV**: the table as CSV (RFC 4180) - the time (ISO 8601, in the time property's column) and a column per
+  attribute, the values as the table shows them, held ones included; objects as JSON.
+- **Delete its history…**: `DELETE /temporal/entities/{id}` - every instance of every attribute; the entity stays.
+  The entity's menu has it too.
+
+Every delete asks first, as Explore's other deletes do.
+
+The read is `GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr,...>&timerel=between&timeAt&endTimeAt&timeproperty`,
 in pages of 1000 instances (`firstN`, ascending): the next page is the one the `Link` header's
 `rel="intervalafter"` points at (its `offsetN`), until there is none - at most 20000 instances (the panel says when
 there are more: a shorter range shows them all), with **Stop** while it reads. A 404 (coraine's answer when no
-instance matches) is an empty range.
+instance matches: type `ResourceNotFound`) is an empty range - another 404 (a broker without the temporal API) is
+said. The attribute panel's sparklines read it so too.
 
 ## Compile
 
@@ -1358,7 +1377,7 @@ libraries are copied, as published, into `www/vendor/` (below) and loaded when t
 | `js/icons.js` | the icons per type, the state colours, drawn on a canvas |
 | `js/alerts.js` | alert rules and alarms: the toasts, the list, `q` evaluated for clearing, the rules kept per broker |
 | `js/history.js` | the attribute panel's History: the temporal API, sparklines, the live values appended |
-| `js/temporal.js` | the History panel: an attribute's history over a time range - graph, table, aggregation; its instances added, modified, deleted |
+| `js/temporal.js` | the History panel: an attribute's or an entity's history over a time range - graph, table, aggregation, CSV; instances added, modified, deleted |
 | `js/live.js` | live values: the backend's WebSocket, watch/unwatch, the notifications gathered into batches (250 ms), the alert rules and their notifications, reconnecting |
 | `js/basemap.js` | the base map: c³'s dark style for OpenFreeMap's tiles, the downloaded areas' Protomaps layers, the tile and glyph protocols |
 | `js/offline.js` | "Download this area": the estimate, the download's progress, the list of areas |

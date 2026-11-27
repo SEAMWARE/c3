@@ -1,7 +1,8 @@
 //
 // temporal.js - Explore's History panel: an attribute's history from the broker's temporal API, over a time
 // range - as a graph (by the kind of its values) or as a table of its instances, raw or aggregated - and its
-// instances added, modified and deleted
+// instances added, modified and deleted; or an entity's: the attributes ticked, a row each on one time axis, or
+// one table (a row per instant), as CSV too
 //
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
@@ -10,7 +11,7 @@
 // moment of each read) or a start and an end; it is kept per broker on this machine and every History opened
 // later starts from it.
 //
-// The read: GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr>&timerel=between&timeAt&endTimeAt&timeproperty,
+// The read: GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr,...>&timerel=between&timeAt&endTimeAt&timeproperty,
 // in pages of PAGE instances (firstN, ascending): the next page is the Link header's rel="intervalafter" -
 // its offsetN; at most CAP instances, and a Stop. Aggregated: format=aggregatedValues&aggrMethods
 // (&aggrPeriodDuration) - one answer, no pages.
@@ -100,6 +101,14 @@ export function intervalAfter(link) {
 }
 
 //
+// emptyRange - a temporal read's answer that is "no instance matches": 404 ResourceNotFound from the broker (coraine's
+// answer to a range, or a time property, with nothing in it) - not a broker without the temporal API (another 404)
+//
+export function emptyRange(r) {
+  return r.status === 404 && r.reached !== false && !!r.body && typeof r.body.type === 'string' && /ResourceNotFound$/.test(r.body.type);
+}
+
+//
 // The time range: a preset's span ending now, or a start and an end
 //
 export function rangeOf(r, now = Date.now()) {
@@ -133,21 +142,75 @@ function ticks(from, to, n = 6) {
   return out;
 }
 
+//
+// timeline - several attributes' instances as one table: a row per instant (ascending) that any of them has, a
+// cell per attribute - its value at that instant ('fresh'), else the value it had then (the one before, held
+// until the next instance; none before its first)
+//
+//   series: Map attr -> [instance, ...] (any order); timeOf(instance) -> ms
+//   returns [{ t, cells: [{ v, fresh } | null, ...] }] - the cells in the order of 'attrs'
+//
+export function timeline(attrs, series, timeOf) {
+  const lists = attrs.map((a) => (series.get(a) || []).map((i) => [timeOf(i), valueOf(i)]).filter(([x]) => x).sort((p, q) => p[0] - q[0]));
+  const times = [...new Set(lists.flat().map(([x]) => x))].sort((p, q) => p - q);
+  const ix = attrs.map(() => 0);
+  const held = attrs.map(() => null);
+  const rows = [];
+  for (const x of times) {
+    const cells = lists.map((l, k) => {
+      //
+      // Every instant is a row: an instance is taken at its own - fresh there, held after
+      //
+      let fresh = false;
+      while (ix[k] < l.length && l[ix[k]][0] === x) { held[k] = l[ix[k]][1]; fresh = true; ix[k]++; }
+      return ix[k] === 0 ? null : { v: held[k], fresh };
+    });
+    rows.push({ t: x, cells });
+  }
+  return rows;
+}
+
+//
+// csvOf - the timeline as CSV (RFC 4180): the time (ISO 8601) and a column per attribute, the values as the table
+// shows them - held until the next instance; objects as JSON
+//
+export function csvOf(attrs, rows, timeHeader = 'time') {
+  const q = (s) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  const cell = (c) => (!c || c.v === undefined || c.v === null ? '' : q(typeof c.v === 'string' ? c.v : JSON.stringify(c.v)));
+  return [[timeHeader, ...attrs].map(q).join(','), ...rows.map((r) => [new Date(r.t).toISOString(), ...r.cells.map(cell)].join(','))].join('\r\n') + '\r\n';
+}
+
+//
+// The attribute's kind, as the entity has it now, and its datasetId
+//
+function attrInfo(v) {
+  const inst = Array.isArray(v) ? v[0] : v;
+  return {
+    kind: (inst && typeof inst === 'object' && inst.type) || 'Property',
+    datasetId: inst && typeof inst.datasetId === 'string' ? inst.datasetId : null,
+    graphable: shapeOf([valueOf(inst)]) !== 'table',
+  };
+}
+
+const MEMBER = { Relationship: 'object', ListRelationship: 'objectList', VocabProperty: 'vocab', LanguageProperty: 'languageMap', JsonProperty: 'json', ListProperty: 'valueList' };
+const JSON_KINDS = ['GeoProperty', 'LanguageProperty', 'JsonProperty', 'ListProperty', 'ListRelationship'];
+
 export class Temporal {
   //
-  // host: Connect - its broker, ask(), openWrite(), toast(), refetch()
+  // host: Connect - its broker, ask(), openWrite(), toast()
   //
   constructor(host, root) {
     this.host = host;
     this.root = root;
-    this.ctx = null;                  // { id, attr, kind, datasetId, entity }
+    this.ctx = null;                  // { id, entity, attr (null: the entity's history), attrs: [ticked], info: Map attr -> attrInfo }
+    this.ticks = null;                // { id, attrs } - the last entity's ticks, again when it is opened again
     this.ticket = 0;
     this.view = 'graph';
     this.methods = new Set();
     this.period = '';
     this.timeprop = 'observedAt';
-    this.instances = [];
-    this.agg = null;
+    this.series = new Map();          // attr -> [instance] of the range
+    this.aggs = null;                 // attr -> its aggregation, when aggregated
     this.state = '';                  // 'reading', 'done', 'stopped', 'capped', 'error'
     this.why = '';
     this.highlight = null;            // an instanceId, shown in the table
@@ -160,6 +223,11 @@ export class Temporal {
   }
 
   get isOpen() { return !this.root.hidden; }
+
+  // The one attribute's instances (an attribute's history)
+  get instances() { return (this.ctx && this.ctx.attr && this.series.get(this.ctx.attr)) || []; }
+
+  total() { let n = 0; for (const l of this.series.values()) n += l.length; return n; }
 
   //
   // The range - kept per broker
@@ -180,26 +248,46 @@ export class Temporal {
   }
 
   //
-  // open - an attribute's history: 'v' the attribute as the entity has it now (its kind, observedAt, datasetId)
+  // start - the panel open on 'ctx': the range kept, the rest as new
   //
-  open(entity, attr, v) {
-    const inst = Array.isArray(v) ? v[0] : v;
-    this.ctx = {
-      id: entity.id,
-      attr,
-      kind: (inst && inst.type) || 'Property',
-      datasetId: inst && typeof inst.datasetId === 'string' ? inst.datasetId : null,
-    };
+  start(ctx, keepView = false) {
+    if (!this.isOpen) this.returnFocus = document.activeElement;
+    this.ctx = ctx;
     this.range = this.loadRange();
     this.timeprop = 'observedAt';
     this.timepropAuto = true;
     this.methods = new Set();
     this.period = '';
-    this.view = 'graph';
-    this.highlight = null;
-    this.returnFocus = document.activeElement;
+    if (!keepView) this.view = 'graph';
     this.root.hidden = false;
     this.read();
+  }
+
+  //
+  // open - an attribute's history: the entity as Explore has it (the attribute's kind, its datasetId)
+  //
+  open(entity, attr, highlight = null) {
+    const info = new Map([[attr, attrInfo(entity[attr])]]);
+    this.highlight = highlight;
+    this.start({ id: entity.id, entity, attr, attrs: [attr], info }, !!highlight);
+    if (highlight) this.view = 'table';
+  }
+
+  //
+  // openEntity - the entity's history: its attributes to tick, those with a number, a boolean or a text ticked
+  //
+  openEntity(entity) {
+    const info = new Map();
+    for (const [k, v] of Object.entries(entity)) {
+      if (k === 'id' || k === 'type' || k === '@context' || k === 'scope' || !v || typeof v !== 'object') continue;
+      info.set(k, attrInfo(v));
+    }
+    const names = [...info.keys()].sort();
+    const prev = this.ticks && this.ticks.id === entity.id ? this.ticks.attrs.filter((a) => info.has(a)) : null;
+    const attrs = prev || names.filter((k) => info.get(k).graphable);
+    this.ticks = { id: entity.id, attrs };
+    this.highlight = null;
+    this.start({ id: entity.id, entity, attr: null, attrs: attrs.length ? attrs : names.slice(0, 1), info, names });
   }
 
   close() {
@@ -217,44 +305,48 @@ export class Temporal {
     const ticket = ++this.ticket;
     const c = this.ctx;
     const { from, to } = rangeOf(this.range);
-    this.instances = [];
-    this.agg = null;
+    this.series = new Map(c.attrs.map((a) => [a, []]));
+    this.aggs = null;
     this.state = 'reading';
     this.why = '';
     this.render();
+    if (!c.attrs.length) { this.state = 'done'; this.render(); return; }
 
-    const base = `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(c.id)}?attrs=${encodeURIComponent(c.attr)}` +
+    const ds = c.attr && c.info.get(c.attr).datasetId;
+    const base = `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(c.id)}?attrs=${c.attrs.map(encodeURIComponent).join(',')}` +
       `&timerel=between&timeAt=${encodeURIComponent(iso(from))}&endTimeAt=${encodeURIComponent(iso(to))}&timeproperty=${this.timeprop}` +
-      (c.datasetId ? `&datasetId=${encodeURIComponent(c.datasetId)}` : '') +
+      (ds ? `&datasetId=${encodeURIComponent(ds)}` : '') +
       (this.timeprop !== 'observedAt' ? '&options=sysAttrs' : '');
+    const listOf = (body, a) => { const x = body && body[a]; return Array.isArray(x) ? x : x ? [x] : []; };
 
     if (this.methods.size) {
       const q = `${base}&format=aggregatedValues&aggrMethods=${[...this.methods].join(',')}` + (this.period ? `&aggrPeriodDuration=${this.period}` : '');
       const r = await api.brokerGet(this.host.broker, q);
       if (ticket !== this.ticket) return;
-      if (r.status !== 404 && (!r.ok || !r.body || typeof r.body !== 'object')) { this.fail(r); return; }
-      const a = r.ok ? r.body[c.attr] : null;
-      this.agg = (Array.isArray(a) ? a[0] : a) || {};
+      if (!emptyRange(r) && (!r.ok || !r.body || typeof r.body !== 'object')) { this.fail(r); return; }
+      this.aggs = new Map(c.attrs.map((a) => [a, (r.ok && listOf(r.body, a)[0]) || {}]));
       this.state = 'done';
       this.render();
       return;
     }
 
+    //
+    // firstN is per attribute: a page holds up to PAGE instances of each; the next one is there while any has more
+    //
     let offset = 0;
     for (;;) {
       const r = await api.brokerGet(this.host.broker, `${base}&firstN=${PAGE}` + (offset ? `&offsetN=${offset}` : ''));
       if (ticket !== this.ticket) return;
       //
-      // 404: no instance matches (coraine's answer to a range, or a time property, with nothing in it) - an empty page
+      // No instance matches: an empty page
       //
-      if (r.status === 404 && r.reached !== false) { this.state = 'done'; break; }
+      if (emptyRange(r)) { this.state = 'done'; break; }
       if (!r.ok || !r.body || typeof r.body !== 'object') { this.fail(r); return; }
-      const a = r.body[c.attr];
-      const got = Array.isArray(a) ? a : a ? [a] : [];
-      this.instances.push(...got);
+      let got = 0;
+      for (const a of c.attrs) { const l = listOf(r.body, a); got += l.length; this.series.get(a).push(...l); }
       const next = intervalAfter(r.headers.get('Link'));
-      if (next === null || !got.length) { this.state = 'done'; break; }
-      if (this.instances.length >= CAP) { this.state = 'capped'; break; }
+      if (next === null || !got) { this.state = 'done'; break; }
+      if (this.total() >= CAP) { this.state = 'capped'; break; }
       offset = next;
       this.render();
     }
@@ -262,15 +354,17 @@ export class Temporal {
     // observedAt, the spec's default, found nothing - the instances may have none (a value without observedAt):
     // modifiedAt then, unless the time property was chosen
     //
-    if (this.timepropAuto && this.state === 'done' && !this.instances.length && this.timeprop === 'observedAt') {
+    if (this.timepropAuto && this.state === 'done' && !this.total() && this.timeprop === 'observedAt') {
       this.timeprop = 'modifiedAt';
       this.timepropAuto = false;
       this.read();
       return;
     }
-    this.instances.sort((p, q) => this.timeOf(p) - this.timeOf(q));
+    this.sortAll();
     this.render();
   }
+
+  sortAll() { for (const l of this.series.values()) l.sort((p, q) => this.timeOf(p) - this.timeOf(q)); }
 
   //
   // width - the drawing's width in CSS pixels: the panel's, less its padding and the y axis' labels
@@ -286,7 +380,7 @@ export class Temporal {
   stop() {
     this.ticket++;
     this.state = 'stopped';
-    this.instances.sort((p, q) => this.timeOf(p) - this.timeOf(q));
+    this.sortAll();
     this.render();
   }
 
@@ -302,18 +396,30 @@ export class Temporal {
     this.root.textContent = '';
 
     const head = el('div', 'jhead');
-    const title = el('span', 'jtitle', `${c.attr} · ${c.id}`);
-    title.title = c.datasetId ? `${c.attr} (${c.datasetId}) · ${c.id}` : `${c.attr} · ${c.id}`;
+    if (c.attr) {
+      const up = button('↑', 'btn', () => this.openEntity(c.entity), t("The entity's history"));
+      up.setAttribute('aria-label', t("The entity's history"));
+      head.append(up);
+    }
+    const ds = c.attr && c.info.get(c.attr).datasetId;
+    const name = c.attr ? `${c.attr} · ${c.id}` : c.id;
+    const title = el('span', 'jtitle', name);
+    title.title = ds ? `${c.attr} (${ds}) · ${c.id}` : name;
     head.append(title, button('×', 'btn', () => this.close(), t('Close the history')));
     head.lastChild.setAttribute('aria-label', t('Close the history'));
     this.root.append(head, this.controls(), this.statusLine());
 
     const body = el('div', 'hp-body');
     if (this.state === 'error') body.append(el('p', 'hp-why', this.why));
-    else if (this.agg) body.append(this.aggView());
+    else if (!c.attrs.length) body.append(el('p', 'hp-hint', t('Tick the attributes to see')));
+    else if (this.aggs) body.append(this.aggView());
+    else if (!c.attr) body.append(this.view === 'table' ? this.entityTable() : this.entityGraph());
     else if (this.view === 'table' || this.shape() === 'table') body.append(this.table());
-    else body.append(this.graph());
-    this.root.append(body, this.foot());
+    else {
+      body.append(this.graphRow(c.attr, this.instances, ROW_H, (inst) => { this.highlight = inst.instanceId; this.view = 'table'; this.render(); }));
+      if (this.instances.length) body.append(el('p', 'hp-hint', t('A click shows the instance in the table - to modify or delete it')));
+    }
+    this.root.append(body, c.attr ? this.foot() : this.entityFoot());
     body.scrollTop = scroll;
     const hl = body.querySelector('tr.hl');
     if (hl) { hl.scrollIntoView({ block: 'center' }); this.highlight = null; }
@@ -322,7 +428,27 @@ export class Temporal {
   shape() { return shapeOf(this.instances.map(valueOf)); }
 
   controls() {
+    const c = this.ctx;
     const box = el('div', 'hp-ctl');
+
+    //
+    // The entity's: its attributes, ticked to be shown
+    //
+    if (!c.attr) {
+      const picks = el('div', 'hp-picks');
+      picks.setAttribute('role', 'group');
+      picks.setAttribute('aria-label', t('Attributes'));
+      for (const a of c.names) {
+        const lab = el('label', 'hp-chip');
+        const cb = el('input');
+        cb.type = 'checkbox';
+        cb.checked = c.attrs.includes(a);
+        cb.onchange = () => { c.attrs = c.names.filter((n) => (n === a ? cb.checked : c.attrs.includes(n))); this.ticks = { id: c.id, attrs: c.attrs }; this.read(); };
+        lab.append(cb, a);
+        picks.append(lab);
+      }
+      box.append(picks);
+    }
 
     //
     // The range: presets, or a start and an end (typed: the range becomes those two)
@@ -373,8 +499,8 @@ export class Temporal {
     vseg.setAttribute('aria-label', t('Shown as'));
     for (const [k, label] of [['graph', t('Graph')], ['table', t('Table')]]) {
       const b = button(label, null, () => { this.view = k; this.render(); });
-      b.setAttribute('aria-pressed', String(this.view === k && !this.agg));
-      b.disabled = !!this.agg || (k === 'graph' && this.state !== 'reading' && this.instances.length > 0 && this.shape() === 'table');
+      b.setAttribute('aria-pressed', String(this.view === k && !this.aggs));
+      b.disabled = !!this.aggs || (k === 'graph' && !!c.attr && this.state !== 'reading' && this.instances.length > 0 && this.shape() === 'table');
       vseg.append(b);
     }
     row2.append(vseg);
@@ -406,8 +532,8 @@ export class Temporal {
   statusLine() {
     const p = el('div', 'hp-status');
     p.setAttribute('aria-live', 'polite');
-    const n = this.instances.length;
-    if (this.agg) p.append(t('aggregated by the broker'));
+    const n = this.total();
+    if (this.aggs) p.append(t('aggregated by the broker'));
     else if (this.state === 'reading') {
       p.append(n ? plural(n, 'reading - {n} instance so far', 'reading - {n} instances so far') : t('reading…'));
       p.append(button(t('Stop'), 'btn small', () => this.stop()));
@@ -431,16 +557,21 @@ export class Temporal {
     }
   }
 
-  graph() {
+  //
+  // graphRow - one attribute's instances over the range, drawn by its values: a line (numbers), a step (booleans),
+  // a band (texts); 'h' the height of a line or a step; 'onPick' the instance clicked
+  //
+  graphRow(attr, instances, h0, onPick) {
     const box = el('div', 'hp-graph');
-    const pts = this.instances.map((i) => [this.timeOf(i), valueOf(i), i]).filter(([x]) => x);
+    const pts = instances.map((i) => [this.timeOf(i), valueOf(i), i]).filter(([x]) => x);
     if (!pts.length) return box;
     const W = this.width();
     const { from, to } = rangeOf(this.range);
     const span = to - from || 1;
     const px = (x) => ((x - from) / span) * W;
-    const shape = this.shape();
-    const h = shape === 'category' ? BAND_H : ROW_H;
+    const shape = shapeOf(pts.map((p) => p[1]));
+    if (shape === 'table') { box.append(el('p', 'hp-hint', t('{attr}: values without a graph - in the table', { attr }))); return box; }
+    const h = shape === 'category' ? BAND_H : h0;
     const s = svg('svg', { viewBox: `${-YAXIS} -8 ${W + YAXIS + 4} ${h + 30}`, width: W + YAXIS + 4, height: h + 30, class: 'hp-svg', role: 'img' });
     const g = svg('g');
     s.append(g);
@@ -449,13 +580,14 @@ export class Temporal {
     tip.hidden = true;
     const marker = svg('line', { y1: 0, y2: h, class: 'hp-cursor', visibility: 'hidden' });
 
-    let at;                                       // the instance nearest a pointer x, and its y
+    let at;                                       // the y of the instance nearest the pointer
     if (shape === 'number' || shape === 'boolean') {
       const vals = pts.map((p) => (shape === 'boolean' ? (p[1] ? 1 : 0) : p[1]));
-      let lo = Math.min(...vals), hi = Math.max(...vals);
+      const vLo = Math.min(...vals), vHi = Math.max(...vals);
+      let lo = vLo, hi = vHi;
       if (shape === 'boolean') { lo = 0; hi = 1; } else if (hi === lo) { hi += 1; lo -= 1; }
       const y = (v) => h - 6 - ((v - lo) / (hi - lo)) * (h - 12);
-      for (const [v, label] of shape === 'boolean' ? [[0, 'false'], [1, 'true']] : [[lo, fmtNum(lo)], [hi, fmtNum(hi)]]) {
+      for (const [v, label] of shape === 'boolean' ? [[0, 'false'], [1, 'true']] : vLo === vHi ? [[vLo, fmtNum(vLo)]] : [[vLo, fmtNum(vLo)], [vHi, fmtNum(vHi)]]) {
         const lab = svg('text', { x: -6, y: y(v) + 4, class: 'hp-tick', 'text-anchor': 'end' });
         lab.textContent = label;
         g.append(lab);
@@ -472,7 +604,7 @@ export class Temporal {
       if (pts.length <= 300) for (let i = 0; i < pts.length; i++) g.append(svg('circle', { cx: px(pts[i][0]).toFixed(1), cy: y(vals[i]).toFixed(1), r: 2.4, class: 'hp-dot' }));
       at = (i) => y(vals[i]);
       s.setAttribute('aria-label', plural(pts.length, '{attr}: {n} value, from {lo} to {hi}', '{attr}: {n} values, from {lo} to {hi}',
-        { attr: this.ctx.attr, lo: fmtValue(Math.min(...pts.map((p) => p[1]))), hi: fmtValue(Math.max(...pts.map((p) => p[1]))) }));
+        { attr, lo: fmtValue(Math.min(...pts.map((p) => p[1]))), hi: fmtValue(Math.max(...pts.map((p) => p[1]))) }));
     } else {
       //
       // A band: each value holds until the next instance; a colour per value, the legend its share of the time
@@ -497,12 +629,12 @@ export class Temporal {
         legend.append(item);
       }
       box.append(legend);
-      s.setAttribute('aria-label', plural(colour.size, '{attr}: {n} distinct value', '{attr}: {n} distinct values', { attr: this.ctx.attr }));
+      s.setAttribute('aria-label', plural(colour.size, '{attr}: {n} distinct value', '{attr}: {n} distinct values', { attr }));
     }
     g.append(marker);
 
     //
-    // The pointer: the instance nearest it, its time and value; a click shows it in the table
+    // The pointer: the instance nearest it, its time and value; a click picks it
     //
     const nearest = (ev) => {
       const r = s.getBoundingClientRect();
@@ -527,28 +659,91 @@ export class Temporal {
       tip.style.top = `${Math.max(0, r.top - bx.top + ((at(i) + 8) / (h + 30)) * r.height - 28)}px`;
     });
     s.addEventListener('pointerleave', () => { tip.hidden = true; marker.setAttribute('visibility', 'hidden'); });
-    s.addEventListener('click', (ev) => { this.highlight = pts[nearest(ev)][2].instanceId; this.view = 'table'; this.render(); });
+    s.addEventListener('click', (ev) => onPick(pts[nearest(ev)][2]));
     s.style.cursor = 'pointer';
     box.prepend(s);
-    box.append(tip, el('p', 'hp-hint', t('A click shows the instance in the table - to modify or delete it')));
+    box.append(tip);
+    return box;
+  }
+
+  //
+  // entityGraph - a row per ticked attribute, on the same time axis; a click: that attribute's History, at the
+  // instance clicked
+  //
+  entityGraph() {
+    const c = this.ctx;
+    const box = el('div', 'hp-rows');
+    for (const a of c.attrs) {
+      const row = el('div', 'hp-erow');
+      const head = el('div', 'hp-ehead');
+      const name = button(a, 'hp-aname', () => this.open(c.entity, a), t('Its history - to modify it'));
+      const l = this.series.get(a) || [];
+      head.append(name, el('span', 'hp-av', l.length ? fmtValue(valueOf(l[l.length - 1])) + (l[l.length - 1].unitCode ? ' ' + l[l.length - 1].unitCode : '') : '–'));
+      row.append(head);
+      if (l.length) row.append(this.graphRow(a, l, 90, (inst) => this.open(c.entity, a, inst.instanceId)));
+      else row.append(el('p', 'hp-range', t('no instances in this range')));
+      box.append(row);
+    }
+    if (this.total()) box.append(el('p', 'hp-hint', t("A click opens the attribute's history at that instance - to modify or delete it")));
+    return box;
+  }
+
+  //
+  // entityTable - a row per instant, a column per ticked attribute: the value at that instant, or (dimmed) the one
+  // it had then
+  //
+  entityTable() {
+    const c = this.ctx;
+    const box = el('div', 'hp-tablebox');
+    const rows = timeline(c.attrs, this.series, (i) => this.timeOf(i));
+    if (!rows.length) return box;
+    const tbl = el('table', 'hp-table');
+    const hr = el('tr');
+    hr.append(el('th', null, this.timeprop));
+    for (const a of c.attrs) hr.append(el('th', null, a));
+    const thead = el('thead');
+    thead.append(hr);
+    tbl.append(thead);
+    const tb = el('tbody');
+    for (const r of [...rows].reverse()) {
+      const tr = el('tr');
+      tr.append(el('td', 'mono', new Date(r.t).toISOString()));
+      for (const cell of r.cells) {
+        const td = el('td', 'mono hp-v' + (cell && !cell.fresh ? ' held' : ''), cell ? fmtValue(cell.v) : '');
+        if (cell && !cell.fresh) td.title = t('the value it had then - its last instance before');
+        tr.append(td);
+      }
+      tb.append(tr);
+    }
+    tbl.append(tb);
+    box.append(tbl);
     return box;
   }
 
   // ------------------------------------------------------------------ the aggregation
 
   //
-  // aggView - per method: with a period, a row of its own over the range (a step per period); without one,
-  // its value
+  // aggView - per attribute, per method: with a period, a row of its own over the range (a bar per period);
+  // without one, its value
   //
   aggView() {
+    const c = this.ctx;
     const box = el('div', 'hp-aggview');
+    for (const a of c.attrs) {
+      if (!c.attr) box.append(button(a, 'hp-aname hp-agghead', () => this.open(c.entity, a), t('Its history - to modify it')));
+      this.aggRows(box, a, this.aggs.get(a) || {});
+    }
+    return box;
+  }
+
+  aggRows(box, attr, agg) {
     const W = this.width();
     const { from, to } = rangeOf(this.range);
     const span = to - from || 1;
     const px = (x) => ((Math.min(to, Math.max(from, x)) - from) / span) * W;
     for (const m of METHODS) {
       if (!this.methods.has(m)) continue;
-      const list = Array.isArray(this.agg[m]) ? this.agg[m] : [];
+      const list = Array.isArray(agg[m]) ? agg[m] : [];
       const row = el('div', 'hp-arow');
       const head = el('div', 'hp-ahead');
       head.append(el('span', 'k', m));
@@ -567,22 +762,23 @@ export class Temporal {
         box.append(row);
         continue;
       }
-      let lo = Math.min(...nums), hi = Math.max(...nums);
+      const nLo = Math.min(...nums), nHi = Math.max(...nums);
+      let lo = nLo, hi = nHi;
       if (hi === lo) { hi += 1; lo -= 1; }
       //
       // The bars stand on the axis: counts and sums from 0, the others from a little under the lowest - so the
       // lowest has a height too
       //
       const counts = m === 'totalCount' || m === 'distinctCount' || m === 'sum' || m === 'sumsq';
-      const base = counts ? Math.min(0, lo) : lo;
-      lo = counts ? base : lo - (hi - lo) * 0.15;
+      const base = counts ? Math.min(0, nLo) : nLo;
+      lo = counts ? Math.min(base, lo) : lo - (hi - lo) * 0.15;
       const h = AGG_H;
       const y = (v) => h - 4 - ((v - lo) / (hi - lo)) * (h - 8);
       const s = svg('svg', { viewBox: `${-YAXIS} -6 ${W + YAXIS + 4} ${h + 26}`, width: W + YAXIS + 4, height: h + 26, class: 'hp-svg', role: 'img' });
       s.setAttribute('aria-label', plural(pts.length, '{attr} {method}: {n} period, from {lo} to {hi}', '{attr} {method}: {n} periods, from {lo} to {hi}',
-        { attr: this.ctx.attr, method: m, lo: fmtNum(Math.min(...nums)), hi: fmtNum(Math.max(...nums)) }));
+        { attr, method: m, lo: fmtNum(Math.min(...nums)), hi: fmtNum(Math.max(...nums)) }));
       this.axis(s, from, to, h);
-      for (const [v, label] of (y(base) - y(hi) >= 14 ? [[base, fmtNum(base)], [hi, fmtNum(hi)]] : [[hi, fmtNum(hi)]])) {
+      for (const [v, label] of (y(base) - y(nHi) >= 14 ? [[base, fmtNum(base)], [nHi, fmtNum(nHi)]] : [[nHi, fmtNum(nHi)]])) {
         const lab = svg('text', { x: -6, y: y(v) + 4, class: 'hp-tick', 'text-anchor': 'end' });
         lab.textContent = label;
         s.append(lab);
@@ -595,11 +791,10 @@ export class Temporal {
         r.append(tt);
         s.append(r);
       }
-      head.append(el('span', 'hp-av', `${fmtNum(Math.min(...nums))} – ${fmtNum(Math.max(...nums))}`));
+      head.append(el('span', 'hp-av', nLo === nHi ? fmtNum(nLo) : `${fmtNum(nLo)} – ${fmtNum(nHi)}`));
       row.append(s);
       box.append(row);
     }
-    return box;
   }
 
   // ------------------------------------------------------------------ the table, and the writes
@@ -642,29 +837,33 @@ export class Temporal {
   }
 
   //
-  // parseValue - a value as typed: JSON when it is JSON (a number, true, an object), else the text itself
+  // parseValue - a value as typed for an attribute of kind 'kind': JSON when it is JSON (a number, true, an
+  // object), else the text itself; a Relationship's target and a vocab as typed
   //
-  parseValue(text) {
+  parseValue(text, kind) {
     const s = text.trim();
-    if (this.ctx.kind === 'Relationship' || this.ctx.kind === 'VocabProperty') return s;
+    if (kind === 'Relationship' || kind === 'VocabProperty') return s;
     try { return JSON.parse(s); } catch { return text; }
   }
 
-  instanceBody(value, observedAt, orig) {
-    const k = this.ctx.kind;
-    const inst = { type: k };
-    const member = { Relationship: 'object', ListRelationship: 'objectList', VocabProperty: 'vocab', LanguageProperty: 'languageMap', JsonProperty: 'json', ListProperty: 'valueList' }[k] || 'value';
-    inst[member] = value;
+  //
+  // instance - an instance of 'attr', as its kind takes the value, with its datasetId
+  //
+  instance(attr, value, observedAt, orig) {
+    const { kind, datasetId } = this.ctx.info.get(attr);
+    const inst = { type: kind };
+    inst[MEMBER[kind] || 'value'] = value;
     if (observedAt) inst.observedAt = observedAt;
     if (orig && orig.unitCode) inst.unitCode = orig.unitCode;
-    if (this.ctx.datasetId) inst.datasetId = this.ctx.datasetId;
-    return { [this.ctx.attr]: [inst] };
+    if (datasetId) inst.datasetId = datasetId;
+    return inst;
   }
 
   //
   // editRow - the row's value and observedAt in fields: Save sends PATCH .../attrs/{attr}/{instanceId}
   //
   editRow(tr, inst) {
+    const a = this.ctx.attr;
     tr.textContent = '';
     tr.className = 'editing';
     const td = el('td');
@@ -680,7 +879,8 @@ export class Temporal {
     at.placeholder = 'observedAt';
     at.setAttribute('aria-label', 'observedAt');
     const save = button(t('Save'), 'btn small primary', async () => {
-      const r = await api.brokerWrite(this.host.broker, 'PATCH', this.instancePath(inst.instanceId), this.instanceBody(this.parseValue(v.value), at.value.trim() || undefined, inst));
+      const body = { [a]: [this.instance(a, this.parseValue(v.value, this.ctx.info.get(a).kind), at.value.trim() || undefined, inst)] };
+      const r = await api.brokerWrite(this.host.broker, 'PATCH', this.instancePath(inst.instanceId), body);
       if (!r.ok) { this.host.toast(t('Not saved - {why}', { why: brokerError(r) })); return; }
       this.host.toast(t('Saved the instance'));
       this.highlight = inst.instanceId;
@@ -709,12 +909,43 @@ export class Temporal {
 
   foot() {
     const f = el('div', 'hp-foot');
-    const json = ['GeoProperty', 'LanguageProperty', 'JsonProperty', 'ListProperty', 'ListRelationship'].includes(this.ctx.kind);
-    f.append(button(t('Add an instance…'), 'btn small', () => this.addForm(f, json)));
+    f.append(button(t('Add an instance…'), 'btn small', () => this.addForm(f, [this.ctx.attr])));
     const del = button(t('Delete this history…'), 'btn small', () => this.confirm(del, this.historyWhat(), () => this.deleteHistory()));
     del.title = t('Every instance the broker keeps of this attribute, also outside the range - the attribute itself stays');
     f.append(del);
     return f;
+  }
+
+  //
+  // entityFoot - values added at one instant, the table as CSV, the entity's history deleted
+  //
+  entityFoot() {
+    const c = this.ctx;
+    const f = el('div', 'hp-foot');
+    const add = button(t('Add values…'), 'btn small', () => this.addForm(f, c.attrs));
+    add.title = t('A value for each ticked attribute, at one instant');
+    add.disabled = !c.attrs.length;
+    const csv = button(t('Download CSV'), 'btn small', () => this.download());
+    csv.title = t('The table: a row per instant, a column per ticked attribute');
+    csv.disabled = !this.total() || !!this.aggs;
+    const what = t('the history of {entity}', { entity: c.id });
+    const del = button(t('Delete its history…'), 'btn small', () => this.confirm(del, what, async () => { if (await deleteEntityHistory(this.host, c.id)) this.read(); }));
+    del.title = t('Every instance of every attribute the broker keeps of this entity - the entity itself stays');
+    f.append(add, csv, del);
+    return f;
+  }
+
+  download() {
+    const c = this.ctx;
+    const text = csvOf(c.attrs, timeline(c.attrs, this.series, (i) => this.timeOf(i)), this.timeprop);
+    const a = el('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    const { from, to } = rangeOf(this.range);
+    a.download = `${c.id.split(':').pop()}-${iso(from).slice(0, 16)}-${iso(to).slice(0, 16)}.csv`.replace(/[^\w.-]/g, '_');
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   //
@@ -729,40 +960,52 @@ export class Temporal {
   }
 
   //
-  // addForm - a value and its observedAt (now, by default): POST /temporal/entities/{id}/attrs
+  // addForm - a value per attribute (an empty one: none for it) and their observedAt (now, by default):
+  // POST /temporal/entities/{id}/attrs - one instance each
   //
-  addForm(f, json = false) {
+  addForm(f, attrs) {
+    const c = this.ctx;
     f.textContent = '';
-    const v = el('input', 'hp-in mono');
-    v.placeholder = json ? t('the value, as JSON') : t('the value');
-    v.setAttribute('aria-label', t('value'));
+    const fields = attrs.map((a) => {
+      const v = el('input', 'hp-in mono');
+      v.placeholder = JSON_KINDS.includes(c.info.get(a).kind) ? t('the value, as JSON') : t('the value');
+      v.setAttribute('aria-label', attrs.length > 1 ? a : t('value'));
+      return [a, v];
+    });
     const at = el('input', 'hp-in mono');
     at.value = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     at.setAttribute('aria-label', 'observedAt');
     const add = button(t('Add'), 'btn small primary', async () => {
-      if (!v.value.trim()) { v.focus(); return; }
-      const r = await api.brokerWrite(this.host.broker, 'POST', `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(this.ctx.id)}/attrs`,
-        this.instanceBody(this.parseValue(v.value), at.value.trim() || undefined));
+      const body = {};
+      for (const [a, v] of fields) if (v.value.trim()) body[a] = [this.instance(a, this.parseValue(v.value, c.info.get(a).kind), at.value.trim() || undefined)];
+      if (!Object.keys(body).length) { fields[0][1].focus(); return; }
+      const r = await api.brokerWrite(this.host.broker, 'POST', `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(c.id)}/attrs`, body);
       if (!r.ok) { this.host.toast(t('Not added - {why}', { why: brokerError(r) })); return; }
-      this.host.toast(t('Added an instance to the history of {attr}', { attr: this.ctx.attr }));
+      const n = Object.keys(body).length;
+      this.host.toast(c.attr ? t('Added an instance to the history of {attr}', { attr: c.attr }) : plural(n, 'Added {n} instance at {time}', 'Added {n} instances at {time}', { time: at.value.trim() || '–' }));
       this.read();
     });
-    f.append(el('span', 'hp-lbl', t('value')), v, el('span', 'hp-lbl', 'observedAt'), at, add, button(t('Cancel'), 'btn small', () => this.render()));
-    v.focus();
-    v.addEventListener('keydown', (e) => { if (e.key === 'Enter') add.click(); });
+    const box = el('div', 'hp-addbox');
+    for (const [a, v] of fields) box.append(el('span', 'hp-lbl', attrs.length > 1 ? a : t('value')), v);
+    box.append(el('span', 'hp-lbl', 'observedAt'), at);
+    f.append(box, add, button(t('Cancel'), 'btn small', () => this.render()));
+    fields[0][1].focus();
+    for (const [, v] of fields) v.addEventListener('keydown', (e) => { if (e.key === 'Enter') add.click(); });
   }
 
   historyWhat() {
     const c = this.ctx;
-    return c.datasetId ? t('the history of {attr} (datasetId {ds})', { attr: c.attr, ds: c.datasetId }) : t('the history of {attr}', { attr: c.attr });
+    const ds = c.info.get(c.attr).datasetId;
+    return ds ? t('the history of {attr} (datasetId {ds})', { attr: c.attr, ds }) : t('the history of {attr}', { attr: c.attr });
   }
 
   async deleteHistory() {
     const c = this.ctx;
     const what = this.historyWhat();
+    const ds = c.info.get(c.attr).datasetId;
     if (!(await this.host.openWrite(what))) return;
     const r = await api.brokerWrite(this.host.broker, 'DELETE', `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(c.id)}/attrs/${encodeURIComponent(c.attr)}` +
-      (c.datasetId ? `?datasetId=${encodeURIComponent(c.datasetId)}` : ''));
+      (ds ? `?datasetId=${encodeURIComponent(ds)}` : ''));
     if (!r.ok) { this.host.toast(t('Not deleted - {why}', { why: brokerError(r) })); return; }
     this.host.toast(t('Deleted {what}', { what }));
     this.read();
@@ -771,7 +1014,7 @@ export class Temporal {
 
 //
 // deleteEntityHistory - DELETE /temporal/entities/{id}: the entity's whole history (the entity itself stays) -
-// asked first by the entity's menu
+// asked first by the menu it comes from
 //
 export async function deleteEntityHistory(host, id) {
   const what = t('the history of {entity}', { entity: id });

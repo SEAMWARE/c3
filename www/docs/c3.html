@@ -565,6 +565,11 @@ when the broker goes away, the page watches again until it is back.</p>
   can be edited and deleted, an instance added, the attribute's whole history deleted - and the entity's, from its
   menu (<b>Delete its history…</b>). The instances are read in pages of 1000 (the <code>Link</code> header's
   <code>intervalafter</code>), at most 20000, with a Stop.</li>
+  <li><b>The entity's history</b> - a click on the entity's id (or <b>History…</b> in its menu): its attributes ticked,
+  a row each on one time axis - a click on a row opens that attribute's History at that instance - or one table, a row
+  per instant with each attribute's value then (held until its next instance, dimmed), as <b>CSV</b> too. <b>Add
+  values…</b> writes a value for each ticked attribute at one instant; <b>Delete its history…</b> deletes it all, the
+  entity stays.</li>
   <li><b>Named demos</b> - a name instead of a URL (<code>CDMAD</code>, built in; others under <code>demos</code> in
   <code>c3.json</code>): c³ fetches the demo's descriptor - its broker, tenant, view, the types to load, its alert
   rules - and connects.</li>

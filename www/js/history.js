@@ -11,6 +11,7 @@
 //
 import * as api from './api.js';
 import { t, plural } from './i18n.js';
+import { emptyRange } from './temporal.js';
 
 const WINDOW_MS = 10 * 60 * 1000;
 const POINTS_MAX = 600;                          // per attribute
@@ -74,6 +75,11 @@ export class History {
       `&attrs=${attrs.map(encodeURIComponent).join(',')}&timeproperty=modifiedAt&options=sysAttrs&lastN=${POINTS_MAX}`;
     const r = await api.brokerGet(broker, path);
     if (id !== this.id || broker !== this.broker) return;
+    //
+    // 404 ResourceNotFound from a broker that keeps history: nothing in the last minutes (coraine's answer when no
+    // instance matches)
+    //
+    if (emptyRange(r)) { this.state = 'ok'; this.onLoaded(); return; }
     if (!r.ok || !r.body || typeof r.body !== 'object') {
       this.state = 'live';
       this.why = r.status === 0 || r.reached === false ? t('the broker is not reachable') : t('the broker has no history for it ({status})', { status: `${r.status}${r.body && r.body.title ? ' ' + r.body.title : ''}` });
