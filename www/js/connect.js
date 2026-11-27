@@ -380,8 +380,9 @@ export class Connect {
     this.watchTimer = null;
     this.watchUrl = url;
     if (!url) return;
-    const tick = async () => {
+    const tick = async (force = false) => {
       if (this.watchUrl !== url) return;
+      if (!force && api.answeredWithin(url, 5000)) { this.watchTimer = setTimeout(tick, 5000); return; }   // it answered the page anyway
       let r = await api.brokerGet(url, '/version');
       if (r.reached === false && this.watchUrl === url) {
         await new Promise((ok) => setTimeout(ok, 1500));
@@ -391,7 +392,7 @@ export class Connect {
       if (r.reached === false) { this.brokerLost(url, r); return; }
       this.watchTimer = setTimeout(tick, 5000);
     };
-    this.watchTick = () => { clearTimeout(this.watchTimer); tick(); };
+    this.watchTick = () => { clearTimeout(this.watchTimer); tick(true); };   // the live connection lost it: asked, whatever answered before
     this.watchTimer = setTimeout(tick, 5000);
   }
 

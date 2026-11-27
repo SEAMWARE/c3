@@ -790,6 +790,7 @@ export class Run {
     this.remoteAsked = Date.now();
     try { this.configBrokers = (await api.config()).brokers || []; } catch (e) { /* the list as it was */ }
     const ask = async (url) => {
+      if (api.answeredWithin(url, 10000)) return true;           // it answered the page anyway (metrics, log lines, Explore)
       try {
         const r = await Promise.race([api.brokerGet(url, '/version', ''), new Promise((done) => setTimeout(() => done(null), 3000))]);
         return !!(r && r.reached && r.status > 0 && r.status < 500);

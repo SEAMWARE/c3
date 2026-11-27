@@ -108,6 +108,15 @@ export const clones              = () => call('GET', '/api/compile/clone');
 export const compileDirs         = (path) => call('GET', '/api/compile/dirs' + (path ? '?path=' + encodeURIComponent(path) : ''));
 
 //
+// answered - when each broker last answered a request (status below 500, through the proxy): a page that talks to
+// it anyway (metrics, log lines, Explore's queries) is proof it is there - answeredWithin spares the /version
+// checks (Explore's lost-broker watch, Operate's probe) a request of their own
+//
+const answered = new Map();
+const lived = (broker, status, reached) => { if (reached && status > 0 && status < 500) answered.set(broker.replace(/\/+$/, ''), Date.now()); };
+export const answeredWithin = (broker, ms) => Date.now() - (answered.get(broker.replace(/\/+$/, '')) || 0) < ms;
+
+//
 // brokerGet - a GET to the broker, through the backend's proxy
 //
 // pathAndQuery starts with /ngsi-ld/, or is /version or /admin/tenants; the broker's tenant (setTenant)
@@ -127,6 +136,7 @@ export async function brokerGet(broker, pathAndQuery, tenant) {
   }
   const body = await json(response);
   const reached = !(body && body.broker === false);
+  lived(broker, response.status, reached);
   return { ok: response.ok, status: response.status, headers: response.headers, body, reached };
 }
 
@@ -146,6 +156,7 @@ export async function brokerText(broker, pathAndQuery) {
   const text = await response.text();
   let reached = true;
   if (!response.ok) { try { reached = JSON.parse(text).broker !== false; } catch { /* the broker's own error */ } }
+  lived(broker, response.status, reached);
   return { ok: response.ok, status: response.status, text, reached };
 }
 
@@ -213,5 +224,6 @@ export async function brokerWrite(broker, method, pathAndQuery, body, contentTyp
   }
   const data = await json(response);
   const reached = !(data && data.broker === false);
+  lived(broker, response.status, reached);
   return { ok: response.ok, status: response.status, headers: response.headers, body: data, reached, location: response.headers.get('Location') };
 }

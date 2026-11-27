@@ -521,8 +521,9 @@ schema) need two sets of style layers, kept in the same colours.
 ### When the broker goes away
 
 While Explore is connected, c³ asks the broker every 5 s whether it is there (`GET /version` - any answer
-will do; only the proxy's "not reached" counts as gone), and at once when the live connection loses the
-broker's WebSocket. Not reached twice, 1.5 s apart:
+will do; only the proxy's "not reached" counts as gone) - unless it answered another of the page's requests in
+those 5 s (Explore's queries, Operate's metrics or log lines: proof enough, no request of its own) - and at once
+when the live connection loses the broker's WebSocket. Not reached twice, 1.5 s apart:
 
 - Explore goes back to **The broker cannot be reached** - "It stopped answering at <time>" - with its
   editor, History panel and JSON closed; the state says **Lost**.
@@ -818,7 +819,7 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
   start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to
   (`c3.json` "brokers") that c³ does not run - *on this machine, started outside c³* or *on another machine* -
   each asked `GET /version` through the proxy every 10 s (any answer below 500 counts: *answers*, else *does not
-  answer*), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
+  answer*; one that answered another request of the page in those 10 s is not asked), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
   **Explore**; a click elsewhere on any row opens its card. **Explore** and a broker's URL open it in Explore once it
   answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed: its settings are under
   Set up and start a broker, **Earlier settings**.
