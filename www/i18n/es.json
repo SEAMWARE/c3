@@ -1639,8 +1639,11 @@
   "No broker yet - set one up above, or connect to one in Explore": "Aún no hay ningún broker - configura uno arriba, o conéctate a uno en Explorar",
   "on this machine, started outside c³ - connected to in Explore": "en esta máquina, arrancado fuera de c³ - conectado en Explorar",
   "on another machine - connected to in Explore": "en otra máquina - conectado en Explorar",
-  "{url} does not answer.": "{url} no responde.",
-  "No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.": "Este broker no tiene API de administración (GET /admin/config: HTTP {status}) - sin configuración, métricas ni niveles; su log está donde lo envíe quien lo arrancó.",
-  "Not started by c³ - its log is in {dir} on the machine that runs it.": "No arrancado por c³ - su log está en {dir} en la máquina que lo ejecuta.",
-  "Not started by c³ - it logs to {to}, wherever its starter sends that.": "No arrancado por c³ - escribe su log en {to}, que va donde lo envíe quien lo arrancó."
+  "No log: {url} does not answer.": "Sin log: {url} no responde.",
+  "No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).": "Sin log, configuración, métricas ni niveles: este broker no tiene API de administración (GET /admin/config: HTTP {status}).",
+  "No log: this broker keeps none in memory (--logLines 0) and c³ cannot read where it writes it.": "Sin log: este broker no guarda ninguno en memoria (--logLines 0) y c³ no puede leer donde lo escribe.",
+  "No log: this coraine is older than GET /admin/log/lines, and c³ cannot read where it writes its log.": "Sin log: este coraine es anterior a GET /admin/log/lines, y c³ no puede leer donde escribe su log.",
+  "No log: GET /admin/log/lines: {why}": "Sin log: GET /admin/log/lines: {why}",
+  "A tick takes effect at once: it is sent to the broker (PUT /admin/log) as you click.": "Cada casilla se aplica al momento: se envía al broker (PUT /admin/log) al hacer clic.",
+  "sent to the broker": "enviado al broker"
 }

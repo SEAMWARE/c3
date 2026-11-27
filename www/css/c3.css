@@ -1055,3 +1055,5 @@ details.raw pre {
 .doclist .dmore { display: inline-flex; gap: 14px; margin-left: 14px; font-size: 0.975rem; white-space: nowrap; }
 
 .aip-tool .tkind { font-size: 0.75rem; padding: 0 6px; border-radius: 4px; background: var(--accent-2); color: #fff; }
+
+.rn-lvsent { color: var(--ok); margin-left: 8px; white-space: nowrap; }

@@ -1639,8 +1639,11 @@
   "No broker yet - set one up above, or connect to one in Explore": "Pas encore de broker - configurez-en un ci-dessus, ou connectez-vous à un dans Explorer",
   "on this machine, started outside c³ - connected to in Explore": "sur cette machine, démarré hors de c³ - connecté dans Explorer",
   "on another machine - connected to in Explore": "sur une autre machine - connecté dans Explorer",
-  "{url} does not answer.": "{url} ne répond pas.",
-  "No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.": "Pas d'API d'administration dans ce broker (GET /admin/config : HTTP {status}) - ni configuration, ni métriques, ni niveaux ; son log est là où l'envoie celui qui l'a démarré.",
-  "Not started by c³ - its log is in {dir} on the machine that runs it.": "Non démarré par c³ - son log est dans {dir} sur la machine qui l'exécute.",
-  "Not started by c³ - it logs to {to}, wherever its starter sends that.": "Non démarré par c³ - il écrit son log sur {to}, qui va là où l'envoie celui qui l'a démarré."
+  "No log: {url} does not answer.": "Pas de log : {url} ne répond pas.",
+  "No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).": "Ni log, ni configuration, ni métriques, ni niveaux : ce broker n'a pas d'API d'administration (GET /admin/config : HTTP {status}).",
+  "No log: this broker keeps none in memory (--logLines 0) and c³ cannot read where it writes it.": "Pas de log : ce broker n'en garde aucun en mémoire (--logLines 0) et c³ ne peut pas lire là où il l'écrit.",
+  "No log: this coraine is older than GET /admin/log/lines, and c³ cannot read where it writes its log.": "Pas de log : ce coraine est antérieur à GET /admin/log/lines, et c³ ne peut pas lire là où il écrit son log.",
+  "No log: GET /admin/log/lines: {why}": "Pas de log : GET /admin/log/lines : {why}",
+  "A tick takes effect at once: it is sent to the broker (PUT /admin/log) as you click.": "Chaque case s'applique aussitôt : elle est envoyée au broker (PUT /admin/log) dès le clic.",
+  "sent to the broker": "envoyé au broker"
 }

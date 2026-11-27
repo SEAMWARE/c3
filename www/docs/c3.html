@@ -197,9 +197,10 @@ by the backend - the same build as on the command line (<a href="#docs/building"
   each one's <b>Log</b> opening that service's card; Configuration and build, Metrics, Log and trace levels; its log.
   ← goes back.</li>
   <li><b>A card of a broker c³ does not run</b> - whether it answers, <b>Explore</b>; with the admin API in it,
-  Configuration and build, Metrics, Log and trace levels, as on c³'s own. Its log, when it runs on this machine and
-  logs to a file (<code>--logTo file</code> or <code>both</code>): read from that file, where the broker says it is,
-  kept current; else the card says where the log goes. Its options and the OPC UA and DDS mappings belong to
+  Configuration and build, Metrics, Log and trace levels, as on c³'s own. Its log, kept current: from its log file
+  when it runs on this machine and logs to one (<code>--logTo file</code> or <code>both</code>), else from the
+  recent log the broker keeps in memory (<code>GET /admin/log/lines</code>) - stdout and other machines too. With
+  neither, no Log section: one line says why. Its options and the OPC UA and DDS mappings belong to
   starting a broker: c³'s own only.</li>
   <li><b>Set up and start a broker</b>, step 1, what runs: <b>Earlier settings</b> (a broker started before - its options fill
   the form; <b>Forget</b>), Compile's <b>Builds</b> (the newest first, the latest marked), the <b>Installed</b>

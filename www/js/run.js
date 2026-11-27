@@ -1373,9 +1373,15 @@ export class Run {
       q.set('traceLevels', rangesOf(set));
       const w = await api.brokerWrite(url, 'PUT', '/admin/log?' + q.toString());
       this.levelsRender(url, w.ok ? w : r);
+      if (w.ok) {                                      // the broker has it - said, for a moment
+        const ok = el('span', 'rn-lvsent', '✓ ' + t('sent to the broker'));
+        $('rn-levels-body').querySelector('.rn-lvhow').append(ok);
+        setTimeout(() => ok.remove(), 2500);
+      }
       if (!w.ok) $('rn-levels-body').prepend(el('div', 'rn-lvnote warn', 'PUT /admin/log: ' + ((w.body && (w.body.detail || w.body.title)) || 'HTTP ' + w.status)));
     };
 
+    body.append(el('div', 'rn-lvnote rn-lvhow', t('A tick takes effect at once: it is sent to the broker (PUT /admin/log) as you click.') + ' '));
     const flags = el('div', 'rn-lvflags');
     for (const [f, label, why] of [['verbose', 'verbose', t('the -v lines: what the broker does, request by request')],
                                    ['info', 'info', t('info lines')]]) {
@@ -1488,15 +1494,56 @@ export class Run {
       this.pollLog(base, -65536);
       return;
     }
-    if (!opts) this.note(r.reached === false ? t('{url} does not answer.', { url }) : t('No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.', { status: r.status }));
-    else if (to === 'file' || to === 'both') this.note(t('Not started by c³ - its log is in {dir} on the machine that runs it.', { dir: opt('--logDir') || '?' }));
-    else this.note(t('Not started by c³ - it logs to {to}, wherever its starter sends that.', { to: to || 'stdout' }));
+    if (!opts) {
+      this.noLog(r.reached === false ? t('No log: {url} does not answer.', { url }) : t('No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).', { status: r.status }));
+      return;
+    }
+    this.logGen++;
+    clearTimeout(this.logPoll);
+    $('rn-log').replaceChildren();
+    this.ringLog(url, null, new Set(), this.logGen);
+  }
+
+  //
+  // ringLog - the recent log a coraine keeps in memory (GET /admin/log/lines, --logLines), whatever --logTo is:
+  // its last 500 lines, then what is new every 2 s ('since' the last line's time - that time's lines come again,
+  // the ones shown dropped). None (an older coraine, --logLines 0): no Log section, why said
+  //
+  async ringLog(url, since, seen, gen) {
+    const r = await api.brokerGet(url, '/admin/log/lines?lines=' + (since ? 2000 : 500) + (since ? '&since=' + encodeURIComponent(since) : ''));
+    if (this.logGen !== gen) return;
+    if (r.ok && r.body && Array.isArray(r.body.lines)) {
+      const fresh = r.body.lines.filter((l) => !seen.has(l));
+      if (fresh.length) {
+        const last = fresh[fresh.length - 1].slice(0, 24);
+        if (last !== since) seen.clear();
+        for (const l of fresh) if (l.startsWith(last)) seen.add(l);
+        since = last;
+        this.append(fresh.join('\n'));
+      }
+    } else if (!since) {
+      this.noLog(r.status === 409 ? t('No log: this broker keeps none in memory (--logLines 0) and c³ cannot read where it writes it.')
+        : r.status === 404 ? t('No log: this coraine is older than GET /admin/log/lines, and c³ cannot read where it writes its log.')
+        : t('No log: GET /admin/log/lines: {why}', { why: (r.body && (r.body.detail || r.body.title)) || 'HTTP ' + r.status }));
+      return;
+    }
+    if (this.shown) this.logPoll = setTimeout(() => this.ringLog(url, since, seen, gen), 2000);
+  }
+
+  //
+  // noLog - no log to show: the Log section hidden, one line saying why (null: the Log section back)
+  //
+  noLog(why) {
+    $('rn-logcard').hidden = !!why;
+    $('rn-nolog').hidden = !why;
+    $('rn-nolog').textContent = why || '';
   }
 
   follow(url) {
     if (this.es) { this.es.close(); this.es = null; }
     clearTimeout(this.logPoll);
     this.logGen = (this.logGen || 0) + 1;              // pollLog: a read of an earlier follow drops its answer
+    this.noLog(null);
     $('rn-log').replaceChildren();
     this.note('');
     if (!url) { $('rn-log-name').textContent = '-'; $('rn-log-file').hidden = true; return; }
@@ -1552,8 +1599,8 @@ export class Run {
       }
       let cls = '';
       if (line.startsWith('c3: ')) cls = 'c3';
-      else if (line.startsWith('E: ') || line.startsWith('X: ')) cls = 'er';
-      else if (line.startsWith('W: ')) cls = 'wa';
+      else if (/^(\S+Z )?[EX]: /.test(line)) cls = 'er';       // a broker's in-memory lines start with their UTC time
+      else if (/^(\S+Z )?W: /.test(line)) cls = 'wa';
       frag.append(cls ? el('span', cls, line + '\n') : document.createTextNode(line + '\n'));
     }
     pre.append(frag);

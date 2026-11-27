@@ -835,8 +835,10 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
   a broker on this machine that logs to a file (`--logTo file` or `both`) is read from that file,
   `<--logDir>/coraine.log`, as its `/admin/config` says (`GET /api/run/external/log?port=<port>` - c³ asks the
   broker, the page names only the port), its last 64 KiB and then what is added, every second, from the top
-  again when the file is shorter (a new start); else the card says where the log goes (stdout: wherever its
-  starter sends it; a file on another machine). Its options, the OPC UA and DDS mappings are part of starting a
+  again when the file is shorter (a new start). Any other - stdout, another machine - is read from the log the
+  broker keeps in memory (`GET /admin/log/lines`, `--logLines` KiB, 256 by default, whatever `--logTo` is; each
+  line with its UTC time): its last 500 lines, then what is new every 2 s. With neither (no admin API, a coraine
+  older than `/admin/log/lines`, `--logLines 0`, no answer) there is no Log section; one line says why. Its options, the OPC UA and DDS mappings are part of starting a
   broker: c³'s own only.
   ← goes back.
 - **Set up and start a broker**, step 1, what runs: **Earlier settings** (a broker started before - its options fill
@@ -1036,7 +1038,8 @@ so. The summary line carries requests per second, the mean latency and the subsc
 
 **Log and trace levels** - above the log of a running broker with the admin API: verbose and info,
 and a tick box per trace level, grouped by library, its tooltip what it traces - set live through coraine's
-`/admin/log` (a change PUTs the whole set; a level c³ has no name for, set elsewhere, is kept). The levels
+`/admin/log` - at once, each tick (said above them; *sent to the broker* shows when the broker has it; a change
+PUTs the whole set; a level c³ has no name for, set elsewhere, is kept). The levels
 and what each traces are `www/data/traceLevels.json`, made from the libraries' trace-level headers by
 `tools/traceLevels.py <dir of the cor* repos>` - run it again when a library adds one. Traces exist in
 debug builds only: on coraine's `"traces": false` (a release build) the tick boxes are greyed, and say why.
