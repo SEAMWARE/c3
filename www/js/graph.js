@@ -507,9 +507,11 @@ export class Graph {
     } else if (e.key === '+' || e.key === '=') { e.preventDefault(); this.zoomCenter(1.25); }
     else if (e.key === '-' || e.key === '_') { e.preventDefault(); this.zoomCenter(0.8); }
     else if (e.key === '0') { e.preventDefault(); this.fit(); }
-    else if (e.key === 'Escape') {
-      if (this.expanded) { e.preventDefault(); const id = this.expanded; this.collapse(); this.onCollapse(id); }
-      else if (this.sel) { e.preventDefault(); this.select(null); }
+    else if (e.key === 'Escape' && this.expanded) {   // the selection stays: Esc is the window's (leaves full-screen)
+      e.preventDefault();
+      const id = this.expanded;
+      this.collapse();
+      this.onCollapse(id);
     }
   }
 }

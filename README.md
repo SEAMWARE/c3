@@ -145,8 +145,8 @@ window is the running c3's, so its minimise and close buttons work. A running c3
 version, or one with no screen, cannot: the second `c3` opens the window itself, without those
 buttons. Any other program on the port is an error.
 
-Full-screen, **Esc** leaves it, as F11 does - an Esc nothing on the page used: an open menu, panel, dialog
-or selection takes it first (and closes), so leaving full-screen takes one more.
+Full-screen, **Esc** leaves it, as F11 does - an Esc nothing on the page used: an open menu, panel or dialog
+takes it first (and closes), so leaving full-screen takes one more. A selected entity stays selected.
 
 The Chrome profile in `~/.local/state/c3/chrome` is c³'s alone. A Chrome on it that no c3 controls - a
 window opened without the buttons, or one whose c3 was stopped - would take every new window over, and
@@ -432,7 +432,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   centre of its first area.
 - **Click** selects (the attribute panel); **right-click** opens the entity's menu, with **Show in the
   graph** - and the graph's menu has **Show on the map**. On the map's canvas the menu key / Shift+F10
-  opens the selected entity's menu, Esc unselects, `0` fits. **With linked entities** opens in the graph.
+  opens the selected entity's menu, `0` fits; Esc keeps the selection (it leaves full-screen). **With linked entities** opens in the graph.
   Hiding a type hides it on the map too.
 - **Fit** zooms to the entities shown; `on the map: N · not on the map: M` counts them (the title names
   the types of those without a location).
