@@ -178,10 +178,7 @@
   "Delete data": "Supprimer les données",
   "Delete entity…": "Supprimer l'entité…",
   "Delete every instance of {name}…": "Supprimer toutes les instances de {name}…",
-  "Delete it - at the broker": "La supprimer - dans le broker",
   "Delete the subscription {id}?": "Supprimer l'abonnement {id} ?",
-  "Delete them all - at the broker": "Les supprimer toutes - dans le broker",
-  "Delete {entity} - at the broker": "Supprimer {entity} - dans le broker",
   "Delete {name}": "Supprimer {name}",
   "Delete {name} - this instance": "Supprimer {name} - cette instance",
   "Delete {volume}? Sure": "Supprimer {volume} ? Vraiment",
@@ -1565,7 +1562,6 @@
   "Aggregation period": "Période d'agrégation",
   "Close the history": "Fermer l'historique",
   "Delete its history…": "Supprimer son historique…",
-  "Delete the history of {entity} - at the broker": "Supprimer l'historique de {entity} - dans le broker",
   "Delete this history…": "Supprimer cet historique…",
   "Edit": "Modifier",
   "Every instance the broker keeps of this attribute, also outside the range - the attribute itself stays": "Toutes les instances que le broker garde de cet attribut, aussi hors de la plage - l'attribut lui-même reste",
@@ -1636,5 +1632,8 @@
   "The broker answers again - connecting": "Le broker répond de nouveau - connexion",
   "The broker stopped answering": "Le broker ne répond plus",
   "not read - {why}": "non lus - {why}",
-  "Its menu: History, Edit, Delete, ...": "Son menu : Historique, Modifier, Supprimer, ..."
+  "Its menu: History, Edit, Delete, ...": "Son menu : Historique, Modifier, Supprimer, ...",
+  "Delete {what} at the broker? It cannot be undone.": "Supprimer {what} chez le broker ? C'est irréversible.",
+  "every instance of {name}": "toutes les instances de {name}",
+  "Delete…": "Supprimer…"
 }
