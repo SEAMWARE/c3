@@ -1636,5 +1636,6 @@
   "Lost": "Verloren",
   "OK": "OK",
   "The broker answers again - connecting": "Der Broker antwortet wieder - verbinde",
-  "The broker stopped answering": "Der Broker antwortet nicht mehr"
+  "The broker stopped answering": "Der Broker antwortet nicht mehr",
+  "not read - {why}": "nicht gelesen - {why}"
 }
