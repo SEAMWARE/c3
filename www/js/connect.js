@@ -27,6 +27,8 @@ import { History } from './history.js';
 import { Temporal, deleteEntityHistory } from './temporal.js';
 import { t, plural } from './i18n.js';
 
+const PEN = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 2.3l2.5 2.5L5.5 13H3v-2.5z"/><path d="M9.6 3.9l2.5 2.5"/></svg>';
+
 const $ = (id) => document.getElementById(id);
 
 //
@@ -324,6 +326,7 @@ export class Connect {
     $('id-clear').onclick = () => idApply('');
     $('mode-back').onclick = () => this.back();
     $('json-close').onclick = () => this.closeJson();
+    this.entityResize();
     $('json-copy').onclick = () => this.copy($('json-pre').textContent, t('the JSON'));
     $('jsonpanel').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeJson(); }
@@ -2031,6 +2034,63 @@ export class Connect {
   }
 
   //
+  // sysAttrsOn - the entity panel's sysAttrs tick, kept in the browser
+  //
+  sysAttrsOn() {
+    try { return localStorage.getItem('c3.entity.sysAttrs') === '1'; } catch (e) { return false; }
+  }
+
+  //
+  // readSysAttrs - the entity again, with options=sysAttrs: its createdAt and modifiedAt and its attributes'.
+  // The panel is drawn again with them when it still shows that entity and they changed
+  //
+  async readSysAttrs(id) {
+    const broker = this.broker;
+    const r = await api.brokerGet(broker, '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '?options=sysAttrs');
+    if (broker !== this.broker || this.shownId !== id || !this.sysAttrsOn()) return;
+    const got = r.ok && r.body && typeof r.body === 'object' ? r.body : { id };
+    const before = this.sysEntity && this.sysEntity.id === id ? JSON.stringify(this.sysEntity) : null;
+    this.sysEntity = got;
+    if (JSON.stringify(got) !== before) this.showEntity(id);
+  }
+
+  //
+  // entityResize - the handle left of the entity panel: dragged (or ←/→), the panel's width, kept in the
+  // browser; a double-click, the default width
+  //
+  entityResize() {
+    const h = $('entity-resize');
+    const panel = $('entity');
+    h.title = t('Drag to resize - a double-click: the default width');
+    h.setAttribute('aria-label', t('The entity panel\'s width'));
+    const set = (w, keep = true) => {
+      if (!w) { panel.style.flex = ''; panel.style.maxWidth = ''; } else {
+        w = Math.round(Math.max(280, Math.min(w, window.innerWidth * 0.7)));
+        panel.style.flex = `0 0 ${w}px`;
+        panel.style.maxWidth = 'none';
+      }
+      if (keep) try { if (w) localStorage.setItem('c3.entity.width', String(w)); else localStorage.removeItem('c3.entity.width'); } catch (e) { /* no storage */ }
+    };
+    try { const w = parseInt(localStorage.getItem('c3.entity.width'), 10); if (w) set(w, false); } catch (e) { /* no storage */ }
+    h.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      h.setPointerCapture(ev.pointerId);
+      h.classList.add('drag');
+      const x0 = ev.clientX, w0 = panel.getBoundingClientRect().width;
+      const move = (m) => set(w0 + (x0 - m.clientX));
+      const up = () => { h.classList.remove('drag'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); };
+      h.addEventListener('pointermove', move);
+      h.addEventListener('pointerup', up);
+    });
+    h.addEventListener('dblclick', () => set(0));
+    h.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+      ev.preventDefault();
+      set(panel.getBoundingClientRect().width + (ev.key === 'ArrowLeft' ? 24 : -24));
+    });
+  }
+
+  //
   // showEntity - the attribute panel
   //
   showEntity(id) {
@@ -2040,22 +2100,56 @@ export class Connect {
     $('entity-empty').hidden = !!e;
     body.hidden = !e;
     body.textContent = '';
+    $('entity-tools').textContent = '';
     if (!e) return;
 
-    const head = el('div', 'eidrow');
-    const eid = el('div', 'eid', e.id);
+    //
+    // Up to the right: the system attributes (createdAt, modifiedAt - the broker's, read again with
+    // options=sysAttrs while ticked) and the pen, the editor
+    //
+    const tools = $('entity-tools');
+    tools.textContent = '';
+    const sysOn = this.sysAttrsOn();
+    const sysBox = el('label', 'esys');
+    const sysTick = el('input');
+    sysTick.type = 'checkbox';
+    sysTick.checked = sysOn;
+    sysTick.onchange = () => {
+      try { localStorage.setItem('c3.entity.sysAttrs', sysTick.checked ? '1' : '0'); } catch (err) { /* no storage */ }
+      this.showEntity(this.shownId);
+    };
+    sysBox.title = t('The system attributes - createdAt, modifiedAt - of the entity and its attributes');
+    sysBox.append(sysTick, 'sysAttrs');
+    const pen = el('button', 'btn icon');
+    pen.type = 'button';
+    pen.innerHTML = PEN;
+    pen.title = t('Edit the attributes');
+    pen.setAttribute('aria-label', t('Edit the attributes'));
+    pen.onclick = () => this.edit(id);
+    tools.append(sysBox, pen);
+
+    const sys = sysOn && this.sysEntity && this.sysEntity.id === e.id ? this.sysEntity : null;
+    if (sysOn) this.readSysAttrs(e.id);
+
+    //
+    // The entity: id (a click - its history), type, scope; createdAt and modifiedAt while sysAttrs is ticked
+    //
+    const meta = el('table', 'emeta');
+    const metaRow = (k, v, cls) => {
+      const tr = el('tr');
+      const td = el('td', cls || null);
+      if (v instanceof Node) td.append(v); else td.textContent = v;
+      tr.append(el('th', null, k), td);
+      meta.append(tr);
+      return td;
+    };
+    const eid = el('span', 'eid', e.id);
     eid.tabIndex = 0;
     eid.setAttribute('role', 'button');
     eid.title = t("Its history - the attributes ticked, over a time range");
     eid.onclick = () => { if (!String(window.getSelection() || '')) this.temporal.openEntity(e); };
     eid.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.temporal.openEntity(e); } };
-    head.append(eid);
-    const eb = el('button', 'btn small', t('Edit…'));
-    eb.type = 'button';
-    eb.title = t('Edit the attributes');
-    eb.onclick = () => this.edit(id);
-    head.append(eb);
-    body.append(head);
+    metaRow('id', eid);
     const types = el('div', 'etypes');
     for (const t of typesOf(e)) {
       const s = el('span', 'etype', typeLabel(t));
@@ -2063,7 +2157,13 @@ export class Connect {
       s.title = t;
       types.append(s);
     }
-    body.append(types);
+    metaRow('type', types);
+    if (e.scope !== undefined) metaRow('scope', [].concat(e.scope).join(', '));
+    if (sysOn) {
+      const src = sys || e;
+      for (const k of ['createdAt', 'modifiedAt']) metaRow(k, src[k] || (sys ? '-' : '…'), src[k] ? null : 'dim');
+    }
+    body.append(meta);
 
     for (const [name, v] of attributes(e)) {
       const row = el('div', 'attr');
@@ -2077,6 +2177,7 @@ export class Connect {
       });
       row.title = t('Its menu: History, Edit, Delete');
       const kind = kindOf(v);
+      const ah = el('span', 'ah');
       if (kind !== 'Relationship' && kind !== 'ListRelationship') {
         //
         // The one attribute shown on the map: its value as every entity's label; clicked again, the names
@@ -2092,9 +2193,10 @@ export class Connect {
           this.emap.setLabelAttr(on ? name : null);
           pick.checked = on;
         });
-        row.append(pick);
+        ah.append(pick);
       }
-      row.append(el('span', 'k', name), el('span', 'kind', kind));
+      ah.append(el('span', 'k', name));
+      row.append(ah, el('span', 'kind', kind));
 
       if (kind === 'Relationship' || kind === 'ListRelationship') {
         for (const target of relationshipTargets(v)) {
@@ -2111,8 +2213,13 @@ export class Connect {
         row.append(el('span', 'v', valueText(v, 400)));
       }
 
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        for (const [sk, sv] of Object.entries(v)) {
+      const sysV = sys && sys[name] && typeof sys[name] === 'object' && !Array.isArray(sys[name]) ? sys[name] : null;
+      const subs = v && typeof v === 'object' && !Array.isArray(v) ? { ...v } : null;
+      if (subs) {
+        delete subs.createdAt;
+        delete subs.modifiedAt;
+        if (sysV) { if (sysV.createdAt) subs.createdAt = sysV.createdAt; if (sysV.modifiedAt) subs.modifiedAt = sysV.modifiedAt; }
+        for (const [sk, sv] of Object.entries(subs)) {
           if (['type', 'value', 'object', 'objectList', 'languageMap', 'valueList', 'vocab', 'json', 'unitCode', 'entity', 'entityList'].includes(sk)) continue;
           const sub = el('span', 'sub');
           sub.append(sk + ' ', el('span', 'mono', typeof sv === 'object' && sv !== null && 'type' in sv ? valueText(sv, 120) : (typeof sv === 'string' ? sv : JSON.stringify(sv))));
