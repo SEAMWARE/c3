@@ -505,6 +505,20 @@ in `src/maps.c`, rather than running the CLI:
 The cost: the tiles of the online map (OpenMapTiles schema) and of the downloaded areas (Protomaps
 schema) need two sets of style layers, kept in the same colours.
 
+### When the broker goes away
+
+While Explore is connected, c³ asks the broker every 5 s whether it is there (`GET /version` - any answer
+will do; only the proxy's "not reached" counts as gone), and at once when the live connection loses the
+broker's WebSocket. Not reached twice, 1.5 s apart:
+
+- Explore goes back to **The broker cannot be reached** - "It stopped answering at <time>" - with its
+  editor, History panel and JSON closed; the state says **Lost**.
+- A popup says so over Explore, the Dashboard and Operate (not over Compile or the Documentation).
+- c³ keeps asking every 5 s; when the broker answers again, Explore connects to it again by itself.
+
+Operate's Metrics panel says "the broker does not answer" on its own, and a broker's log follows its
+process, not the broker's API.
+
 ### Live values
 
 When an attribute of a loaded entity changes in the broker, its box and its marker change within about

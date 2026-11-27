@@ -178,7 +178,7 @@ export class Connect {
     //
     this.live = new Live({
       onBatch: (batch) => this.applyLive(batch),
-      onStatus: (st) => this.liveStatus(st),
+      onStatus: (st) => { this.liveStatus(st); if (st && st.mode === 'off' && this.watchTick) this.watchTick(); },
       onAlert: (rule, entities) => this.alerts.notified(rule, entities),
       onAlerts: (m) => this.alerts.installed(m),
     });
@@ -360,6 +360,91 @@ export class Connect {
   setState(kind, label) {
     $('state').className = 'state ' + kind;
     $('state-label').textContent = label;
+    if (kind === 'ok') this.watchBroker(this.broker); else this.watchBroker(null);
+  }
+
+  //
+  // watchBroker - while Explore is connected, the broker asked every 5 s whether it is there (GET /version: any
+  // answer is one; only the proxy's "not reached" is not), and at once when the live connection says it lost the
+  // broker's WebSocket. Gone - twice, 1.5 s apart: brokerLost
+  //
+  watchBroker(url) {
+    clearTimeout(this.watchTimer);
+    this.watchTimer = null;
+    this.watchUrl = url;
+    if (!url) return;
+    const tick = async () => {
+      if (this.watchUrl !== url) return;
+      let r = await api.brokerGet(url, '/version');
+      if (r.reached === false && this.watchUrl === url) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        if (this.watchUrl === url) r = await api.brokerGet(url, '/version');
+      }
+      if (this.watchUrl !== url) return;
+      if (r.reached === false) { this.brokerLost(url, r); return; }
+      this.watchTimer = setTimeout(tick, 5000);
+    };
+    this.watchTick = () => { clearTimeout(this.watchTimer); tick(); };
+    this.watchTimer = setTimeout(tick, 5000);
+  }
+
+  //
+  // brokerLost - the broker of Explore stopped answering: Explore goes back to "The broker cannot be reached"
+  // (its panels closed), a popup says so on the pages that use the broker (Explore, Dashboard, Operate), and the
+  // broker is asked every 5 s - answering again, Explore connects to it again
+  //
+  brokerLost(url, r) {
+    if (this.broker !== url) return;
+    const at = new Date().toLocaleTimeString();
+    this.editor.close();
+    if (this.temporal.isOpen) this.temporal.close();
+    this.closeJson();
+    closeMenu(false);
+    this.failed(url, { reached: false, title: t('It stopped answering at {time}', { time: at }), detail: (r.body && (r.body.detail || r.body.title)) || '' });
+    $('state-label').textContent = t('Lost');
+    if (['page-connect', 'page-dashboard', 'page-run'].some((id) => !$(id).hidden)) this.lostPopup(url, at);
+    const again = async () => {
+      if (this.broker !== url || this.watchUrl) return;                 // another broker, or connected again
+      const a = await api.brokerGet(url, '/version');
+      if (this.broker !== url || this.watchUrl) return;
+      if (a.reached !== false) {
+        this.toast(t('The broker answers again - connecting'));
+        const pop = document.querySelector('.brokerlost');
+        if (pop) pop.remove();
+        this.connect(url);
+        return;
+      }
+      this.lostTimer = setTimeout(again, 5000);
+    };
+    clearTimeout(this.lostTimer);
+    this.lostTimer = setTimeout(again, 5000);
+  }
+
+  //
+  // lostPopup - over whichever page is shown: the broker is gone; OK closes it (Explore keeps saying so)
+  //
+  lostPopup(url, at) {
+    const old = document.querySelector('.brokerlost');
+    if (old) old.remove();
+    const ov = el('div', 'overlay brokerlost');
+    ov.setAttribute('role', 'alertdialog');
+    ov.setAttribute('aria-modal', 'true');
+    const card = el('div', 'card bad');
+    const ok = el('button', 'btn primary', t('OK'));
+    ok.type = 'button';
+    const close = () => { ov.remove(); document.removeEventListener('keydown', key, true); };
+    const key = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(); } };
+    ok.onclick = close;
+    const actions = el('div', 'actions');
+    actions.append(ok);
+    const h = el('h3', null, t('The broker stopped answering'));
+    h.id = 'brokerlost-title';
+    ov.setAttribute('aria-labelledby', h.id);
+    card.append(h, el('p', 'mono', url), el('p', null, t('At {time}. Explore shows nothing of it now; when it answers again, c³ connects to it again.', { time: at })), actions);
+    ov.append(card);
+    document.body.append(ov);
+    document.addEventListener('keydown', key, true);
+    ok.focus();
   }
 
   overlay(card) {
