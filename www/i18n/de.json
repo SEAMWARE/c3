@@ -1631,5 +1631,11 @@
   "Drag to resize - a double-click: the default width": "Ziehen zum Ändern der Breite - Doppelklick: die Standardbreite",
   "The entity panel's width": "Die Breite des Entitätsbereichs",
   "The system attributes - createdAt, modifiedAt - of the entity and its attributes": "Die Systemattribute - createdAt, modifiedAt - der Entität und ihrer Attribute",
+  "At {time}. Explore shows nothing of it now; when it answers again, c³ connects to it again.": "Um {time}. Erkunden zeigt jetzt nichts davon; antwortet er wieder, verbindet sich c³ erneut.",
+  "It stopped answering at {time}": "Er antwortet seit {time} nicht mehr",
+  "Lost": "Verloren",
+  "OK": "OK",
+  "The broker answers again - connecting": "Der Broker antwortet wieder - verbinde",
+  "The broker stopped answering": "Der Broker antwortet nicht mehr",
   "not read - {why}": "nicht gelesen - {why}"
 }
