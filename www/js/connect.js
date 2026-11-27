@@ -2306,12 +2306,17 @@ export class Connect {
         delete subs.createdAt;
         delete subs.modifiedAt;
         if (sysV) { if (sysV.createdAt) subs.createdAt = sysV.createdAt; if (sysV.modifiedAt) subs.modifiedAt = sysV.modifiedAt; }
+        //
+        // Its sub-attributes and timestamps (observedAt, datasetId, createdAt, ...): a table, key and value
+        //
+        const tbl = el('table', 'esub');
         for (const [sk, sv] of Object.entries(subs)) {
           if (['type', 'value', 'object', 'objectList', 'languageMap', 'valueList', 'vocab', 'json', 'unitCode', 'entity', 'entityList'].includes(sk)) continue;
-          const sub = el('span', 'sub');
-          sub.append(sk + ' ', el('span', 'mono', typeof sv === 'object' && sv !== null && 'type' in sv ? valueText(sv, 120) : (typeof sv === 'string' ? sv : JSON.stringify(sv))));
-          row.append(sub);
+          const tr = el('tr');
+          tr.append(el('th', null, sk), el('td', null, typeof sv === 'object' && sv !== null && 'type' in sv ? valueText(sv, 120) : (typeof sv === 'string' ? sv : JSON.stringify(sv))));
+          tbl.append(tr);
         }
+        if (tbl.rows.length) row.append(tbl);
       }
       body.append(row);
     }
