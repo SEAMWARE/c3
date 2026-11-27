@@ -27,7 +27,6 @@ import { History } from './history.js';
 import { Temporal, deleteEntityHistory } from './temporal.js';
 import { t, plural } from './i18n.js';
 
-const PEN = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 2.3l2.5 2.5L5.5 13H3v-2.5z"/><path d="M9.6 3.9l2.5 2.5"/></svg>';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2191,7 +2190,7 @@ export class Connect {
 
     //
     // Up to the right: the system attributes (createdAt, modifiedAt - the broker's, read again with
-    // options=sysAttrs while ticked) and the pen, the editor
+    // options=sysAttrs while ticked)
     //
     const tools = $('entity-tools');
     tools.textContent = '';
@@ -2206,19 +2205,13 @@ export class Connect {
     };
     sysBox.title = t('The system attributes - createdAt, modifiedAt - of the entity and its attributes');
     sysBox.append(sysTick, 'sysAttrs');
-    const pen = el('button', 'btn icon');
-    pen.type = 'button';
-    pen.innerHTML = PEN;
-    pen.title = t('Edit the attributes');
-    pen.setAttribute('aria-label', t('Edit the attributes'));
-    pen.onclick = () => this.edit(id);
-    tools.append(sysBox, pen);
+    tools.append(sysBox);
 
     const sys = sysOn && this.sysEntity && this.sysEntity.id === e.id ? this.sysEntity : null;
     if (sysOn) this.readSysAttrs(e.id);
 
     //
-    // The entity: id (a click - its history), type, scope; createdAt and modifiedAt while sysAttrs is ticked
+    // The entity: id (a click - its menu, as a right-click on its box), type, scope; createdAt and modifiedAt while sysAttrs is ticked
     //
     const meta = el('table', 'emeta');
     const metaRow = (k, v, cls) => {
@@ -2232,9 +2225,15 @@ export class Connect {
     const eid = el('span', 'eid', e.id);
     eid.tabIndex = 0;
     eid.setAttribute('role', 'button');
-    eid.title = t("Its history - the attributes ticked, over a time range");
-    eid.onclick = () => { if (!String(window.getSelection() || '')) this.temporal.openEntity(e); };
-    eid.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.temporal.openEntity(e); } };
+    eid.title = t('Its menu: History, Edit, Delete, ...');
+    eid.setAttribute('aria-haspopup', 'menu');
+    eid.onclick = (ev) => { if (!String(window.getSelection() || '')) this.menu(id, { x: ev.clientX, y: ev.clientY }, eid); };
+    eid.onkeydown = (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      const r = eid.getBoundingClientRect();
+      this.menu(id, { x: r.left, y: r.bottom }, eid);
+    };
     metaRow('id', eid);
     const types = el('div', 'etypes');
     for (const t of typesOf(e)) {

@@ -210,7 +210,6 @@
   "Downloaded areas": "Zones téléchargées",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Chaque topic, service ou action mappé est un attribut d'une entité : son nom, l'id de l'entité et le type de l'entité - une fois par entité, sur l'un de ses endpoints. Terminé écrit la configuration DDS, deux fichiers, et un broker démarre avec eux.",
   "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Modifiez-le à votre guise - il est envoyé au dépôt coraine-assistant sur GitHub, où vous le déposez avec votre propre compte. Rien n'est envoyé d'ici.",
-  "Edit the attributes": "Modifier les attributs",
   "Edit the entity": "Modifier l'entité",
   "Edit the mapping": "Modifier le mappage",
   "Edit {name}…": "Modifier {name}…",
@@ -1621,7 +1620,6 @@
   "Attributes": "Attributs",
   "Download CSV": "Télécharger le CSV",
   "Every instance of every attribute the broker keeps of this entity - the entity itself stays": "Toutes les instances de tous les attributs que le broker garde de cette entité - l'entité elle-même reste",
-  "Its history - the attributes ticked, over a time range": "Son historique - les attributs cochés, sur une plage de temps",
   "Its history - to modify it": "Son historique - pour le modifier",
   "The entity's history": "L'historique de l'entité",
   "The table: a row per instant, a column per ticked attribute": "Le tableau : une ligne par instant, une colonne par attribut coché",
@@ -1637,5 +1635,6 @@
   "OK": "OK",
   "The broker answers again - connecting": "Le broker répond de nouveau - connexion",
   "The broker stopped answering": "Le broker ne répond plus",
-  "not read - {why}": "non lus - {why}"
+  "not read - {why}": "non lus - {why}",
+  "Its menu: History, Edit, Delete, ...": "Son menu : Historique, Modifier, Supprimer, ..."
 }

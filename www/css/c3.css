@@ -627,7 +627,7 @@ html { scroll-padding-top: var(--head-h, 0px); }
   flex: 1 1 368px; max-width: 437px; min-width: 280px; padding: 16px;
   display: flex; flex-direction: column; gap: 10px; overflow: auto;
 }
-.entity .eid { font-family: var(--mono); font-size: 0.975rem; word-break: break-all; }
+.entity .eid { font-family: var(--mono); font-size: 0.975rem; font-weight: 700; word-break: break-all; }
 .entity .etypes { display: flex; flex-wrap: wrap; gap: 6px; }
 .entity .etype { font-size: 0.825rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; }
 .entity .empty { color: var(--dim); font-size: 1.05rem; }
@@ -636,8 +636,6 @@ html { scroll-padding-top: var(--head-h, 0px); }
 .etools { display: flex; align-items: center; gap: 10px; }
 .etools .esys { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 0.9rem; color: var(--muted); cursor: pointer; }
 .etools .esys input { accent-color: var(--accent-2); margin: 0; cursor: pointer; }
-.btn.icon { min-width: 30px; min-height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-.btn.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .emeta { width: 100%; border-collapse: collapse; margin: 0 0 18px; }
 .emeta th { width: 1%; white-space: nowrap; padding: 4px 14px 4px 0; text-align: left; vertical-align: top; font-weight: 400; font-family: var(--mono); font-size: 0.9rem; color: var(--muted); }
 .emeta td { padding: 4px 0; vertical-align: top; font-family: var(--mono); font-size: 0.975rem; color: var(--text-2); overflow-wrap: anywhere; }

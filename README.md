@@ -362,13 +362,12 @@ markers are coloured by), the downloaded map areas, and the last page:
     when it is not loaded.
   - **Hide type <T>**, **Copy id**, **Show JSON** (the entity as the broker returned it, in a panel
     with **Copy**; Esc closes it).
-  - **Edit…** - the editor (below), also the pen up to the right of the attribute panel; **Replace…** - the
+  - **Edit…** - the editor (below), also from the entity's id in the attribute panel; **Replace…** - the
     same rows, Save sends the whole entity (`PUT /entities/{id}`).
   - **Delete entity…** › **Delete <id> - at the broker**: `DELETE /entities/{id}`.
-- **The attribute panel** - the entity's `id` (a click: its history), `type` and `scope` in a table, then its
+- **The attribute panel** - the entity's `id` (in bold; a click opens the entity's menu, as a right-click on its box does), `type` and `scope` in a table, then its
   attributes. Up to the right, **sysAttrs**: ticked, the entity is read again with `options=sysAttrs` and its
-  `createdAt` and `modifiedAt` are shown, the entity's and every attribute's (kept in the browser); the pen
-  opens the editor. Its width: drag the handle on its left edge (or ←/→ on it), kept in the browser; a
+  `createdAt` and `modifiedAt` are shown, the entity's and every attribute's (kept in the browser). Its width: drag the handle on its left edge (or ←/→ on it), kept in the browser; a
   double-click gives the default width back.
 - **An attribute's menu** - right-click it in the attribute panel: **Edit <name>…** (the editor, that
   attribute opened), **Delete <name>…** (`DELETE /entities/{id}/attrs/{name}`, with `datasetId` for an
