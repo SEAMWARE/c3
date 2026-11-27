@@ -83,6 +83,7 @@ class C3 < Formula
     pid  = spawn bin/"c3", "--port", port.to_s, "--no-browser", "--config", testpath/"c3.json"
     sleep 2
     assert_match "<html", shell_output("curl -s http://127.0.0.1:#{port}/")
+    assert_match(/^c3 \d+\.\d+\.\d+/, shell_output("#{bin}/c3 --version"))
     assert_match "corMcp", shell_output("#{bin}/corMcp --broker http://127.0.0.1:1 < /dev/null 2>&1", 0)
   ensure
     Process.kill("TERM", pid) if pid

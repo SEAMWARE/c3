@@ -47,7 +47,7 @@ c3
 That is the release (0.8.0); `brew install --HEAD seamware/c3/c3` builds c³'s main instead, with the cor-libs' main.
 
 `c3` opens c³ in Google Chrome when it is installed (a window of its own), else in your default browser;
-`Ctrl-C` in the terminal stops it. `c3 -u` lists its options.
+`Ctrl-C` in the terminal stops it. `c3 -u` lists its options, `c3 --version` names the version.
 
 Newer c³: `brew update && brew upgrade seamware/c3/c3` (a `--HEAD` installation: `brew upgrade --fetch-HEAD seamware/c3/c3`). Removed: `brew uninstall c3`; its configuration stays in
 `~/.config/c3/c3.json`.

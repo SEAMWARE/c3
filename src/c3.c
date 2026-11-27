@@ -10,6 +10,7 @@
 //
 //   c3 [--port <port>] [--config <file>] [--no-browser] [--www <directory>] [--planet <url>]
 //      [--coraine-build <path>] [--source <tarball>]
+//   c3 --version                                  "c3 <version>", and nothing else
 //
 // If the port is taken by a c3 already, that one opens its window (POST /api/window/open) and this one exits.
 //
@@ -45,6 +46,7 @@ char            c3ConfigPath[4096];
 static char*    configArg  = NULL;
 static char*    wwwArg     = NULL;
 static bool     noBrowser  = false;
+static bool     versionOnly = false;                 // --version: answered before corArgsInit; in the table so --usage lists it
 static char*    tokenFileArg = NULL;
 static CorHttpServer server;
 
@@ -64,6 +66,7 @@ static CorArg options[] =
   { "--coraine-build", "-cb", CorArgString, &c3CoraineBuild, CorArgOpt, NULL, NULL, NULL,   "coraine-build, for Compile (default: the one in $PATH - coraine-dev; else the coraine clone's, beside the cor-libs c3 was built against)" },
   { "--source",     "-src", CorArgString, &c3Source, CorArgOpt, NULL,     NULL,  NULL,      "the coraine source Compile builds from: a tarball, or a directory of git clones (default: the tarball coraine-dev installs; else the clones c3 was built against)" },
   { "--token-file", "-tf", CorArgString, &tokenFileArg, CorArgOpt, NULL,  NULL,  NULL,      "a file holding the access token sent to brokers that have none of their own - read again when it changes (default: $C3_TOKEN)" },
+  { "--version",    "-V",  CorArgBool,   &versionOnly, CorArgOpt, _vp false, NULL, NULL,   "print the version and exit" },
   CORARGS_END
 };
 
@@ -310,6 +313,15 @@ static bool earlierBuildStop(int pid)
 //
 int main(int argC, char* argV[])
 {
+  //
+  // The command line only (corArgsPeek reads argv, not $C3_VERSION), and before anything is looked at
+  //
+  if (corArgsPeek(argC, argV, options, (char*) "--version") != NULL)
+  {
+    printf("c3 %s\n", C3_VERSION);
+    return 0;
+  }
+
   if (corArgsInit("c3", options, "C3_") != CorArgsOk)
   {
     fprintf(stderr, "c3: corArgsInit failed\n");
