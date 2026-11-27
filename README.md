@@ -1041,8 +1041,8 @@ the mean batch size, the entity map's entities, tenants and a paused store; and 
 serves metrics none of these draws (a newer coraine): a counter as its rate, a gauge as it is - every one
 drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways (it stays where it was scrolled as new reads draw it again); a chart with more
 than 4 lines names the 4 highest and how many more. A click on a chart (Enter) opens it big: every line named,
-grid lines, the clock time below; drawn again with each read; resized by its corner, the chart filling it (the
-size kept in the browser for the next one); × or Esc closes it. Below them the busiest
+grid lines, the clock time below; drawn again with each read; resized by its corner, the chart filling it, and
+moved by its title row, kept inside the window (size and place kept in the browser for the next one); × or Esc closes it. Below them the busiest
 operations over the last minute. A read that fails, or a request count that goes down (the
 broker started again), is a break: no rate across it. A chart whose metrics the broker does not serve says
 so. The summary line carries requests per second, the mean latency and the subscriptions.

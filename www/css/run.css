@@ -243,7 +243,7 @@
 .mx-chart.big { flex: 1; min-height: 0; display: flex; flex-direction: column; cursor: default; padding: 0; }
 .mx-chart.big .mx-frame { flex: 1; min-height: 120px; }
 .mx-chart.big .mx-svg { height: 100%; }
-.mx-chart.big .mx-head { font-size: 1rem; margin-right: 36px; }
+.mx-chart.big .mx-head { font-size: 1rem; margin-right: 36px; cursor: move; user-select: none; touch-action: none; }
 .mx-chart.big .mx-title { font-size: 1.2rem; }
 .mx-gridline { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 4; }
 .mx-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.75rem; color: var(--dim); margin-top: 3px; }
