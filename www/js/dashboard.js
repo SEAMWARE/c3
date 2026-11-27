@@ -215,7 +215,8 @@ export class Dashboard {
     if ($('db-plog').open) this.progressLog();
 
     $('db-plog').hidden = !!p.error;                              // c³ never took it: no log of it
-    $('db-pclose').textContent = over ? t('Close') : t('Hide');
+    $('db-pclose').title = over ? t('Close') : t('Hide - the Dashboard goes on starting');
+    $('db-pclose').setAttribute('aria-label', $('db-pclose').title);
     if (over && !failed && !this.progressTimer) {
       this.progressTimer = setTimeout(() => { this.progressTimer = null; this.progressClose(); }, 2500);
     }

@@ -14,6 +14,7 @@
 //
 import { c3Tools } from './c3tools.js';
 import { t, plural, language } from './i18n.js';
+import { closeX } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -349,12 +350,13 @@ function panelInit(info, connect, compile, run) {
     for (const l of lines || []) box.append(el('pre', null, l));
     const row = el('div', 'crow');
     const yes = el('button', 'btn primary small', t('Do it'));
-    const no = el('button', 'btn small', t('No'));
-    yes.type = no.type = 'button';
-    const end = (v) => { yes.disabled = no.disabled = true; box.classList.add(v ? 'yes' : 'no'); row.replaceWith(el('div', 'cdone', v ? t('Done as asked.') : t('Declined.'))); done(v); };
+    yes.type = 'button';
+    const no = closeX(t('No - do not do it'), null, true);
+    const end = (v) => { yes.disabled = true; no.remove(); box.classList.add(v ? 'yes' : 'no'); row.replaceWith(el('div', 'cdone', v ? t('Done as asked.') : t('Declined.'))); done(v); };
     yes.onclick = () => end(true);
     no.onclick = () => end(false);
-    row.append(yes, no);
+    row.append(yes);
+    box.prepend(no);
     box.append(row);
     log.append(box);
     scroll();
@@ -385,10 +387,10 @@ function panelInit(info, connect, compile, run) {
     const row = el('div', 'crow');
     const file = el('button', 'btn primary small', t('File on GitHub'));
     const open = el('button', 'btn small', t('Open on GitHub'));
-    const no = el('button', 'btn small', t('Not now'));
-    file.type = open.type = no.type = 'button';
+    const no = closeX(t('Not now - nothing reported'), null, true);
+    file.type = open.type = 'button';
     file.hidden = true;
-    const end = (v, said) => { file.disabled = open.disabled = no.disabled = true; row.replaceWith(said); done(v); };
+    const end = (v, said) => { file.disabled = open.disabled = true; no.remove(); row.replaceWith(said); done(v); };
     fetch('/api/issues').then((r) => r.json()).then((j) => {
       if (!j || j.gh !== true || file.disabled) return;
       file.hidden = false;
@@ -429,7 +431,8 @@ function panelInit(info, connect, compile, run) {
       end('opened', el('div', 'cdone', t('Opened on GitHub - file it there.')));
     };
     no.onclick = () => end('dismissed', el('div', 'cdone', t('Not reported.')));
-    row.append(file, open, no);
+    row.append(file, open);
+    box.prepend(no);
     box.append(row);
     log.append(box);
     scroll();

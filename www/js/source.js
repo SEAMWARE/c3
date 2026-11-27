@@ -14,6 +14,7 @@
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
 import { helpShow } from './compile.js';
+import { closeX } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -529,13 +530,11 @@ export function pickDir(start, onPick, { title = t('Directory of clones'), clone
   list.setAttribute('role', 'list');
   const note = el('p', 'cp-note cp-pick-note');
 
-  const cancel = el('button', 'btn', t('Cancel'));
-  cancel.type = 'button';
-  cancel.addEventListener('click', close);
+  const x = closeX(t('Close - keep the directory as it was'), close, true);
   const ok = el('button', 'btn primary', t('Use this directory'));
   ok.type = 'button';
   const actions = el('div', 'actions');
-  actions.append(cancel, ok);
+  actions.append(ok);
 
   let cur = null;
   const go = async (p) => {
@@ -570,7 +569,7 @@ export function pickDir(start, onPick, { title = t('Directory of clones'), clone
 
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
-  card.append(el('h3', '', title), path, list, note, actions);
+  card.append(x, el('h3', '', title), path, list, note, actions);
   ov.append(card);
   document.body.append(ov);
   ok.focus();

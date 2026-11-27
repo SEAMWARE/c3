@@ -19,6 +19,7 @@ import { DdsMapper } from './ddsmap.js';
 import { OpcuaMapper } from './opcuamap.js';
 import { AasForm } from './aasform.js';
 import { attrCamel } from './ngsild.js';
+import { closeX } from './ui.js';
 import { t, tk, plural } from './i18n.js';
 import { helpShow } from './compile.js';
 import { pickDir } from './source.js';
@@ -1018,7 +1019,7 @@ export class Run {
       if (this.armed === 'forget:' + b.name) {
         acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
         if ((b.dataDir && b.dataOwn !== false) || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
-        acts.append(button(t('Cancel'), '', () => this.disarm()));
+        acts.append(closeX(t('Cancel - forget nothing'), () => this.disarm()));
       } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
     }
     item.append(acts);
@@ -2229,7 +2230,7 @@ export class Run {
       if (this.armed === 'forget:' + b.name) {
         acts.append(button(t('Forget, keep data'), 'armed', () => this.forget(b, false)));
         if ((b.dataDir && b.dataOwn !== false) || b.volume) acts.append(button(t('Forget and delete data'), 'armed', () => this.forget(b, true)));
-        acts.append(button(t('Cancel'), '', () => this.disarm()));
+        acts.append(closeX(t('Cancel - forget nothing'), () => this.disarm()));
       } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
       row.append(acts);
       return row;

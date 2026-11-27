@@ -23,6 +23,7 @@
 import * as api from './api.js';
 import { PALETTE } from './entity.js';
 import { t, tk, plural, number } from './i18n.js';
+import { closeX, saveButton } from './ui.js';
 
 const PAGE = 1000;
 const CAP = 20000;
@@ -404,8 +405,7 @@ export class Temporal {
     const name = c.attr ? `${c.attr} · ${c.id}` : c.id;
     const title = el('span', 'jtitle', name);
     title.title = ds ? `${c.attr} (${ds}) · ${c.id}` : name;
-    head.append(title, button('×', 'btn', () => this.close(), t('Close the history')));
-    head.lastChild.setAttribute('aria-label', t('Close the history'));
+    head.append(title, closeX(t('Close the history'), () => this.close()));
     this.root.append(head, this.controls(), this.statusLine());
 
     const body = el('div', 'hp-body');
@@ -877,15 +877,15 @@ export class Temporal {
     at.value = inst.observedAt || '';
     at.placeholder = 'observedAt';
     at.setAttribute('aria-label', 'observedAt');
-    const save = button(t('Save'), 'btn small primary', async () => {
+    const save = saveButton(t('Save the instance'), async () => {
       const body = { [a]: [this.instance(a, this.parseValue(v.value, this.ctx.info.get(a).kind), at.value.trim() || undefined, inst)] };
       const r = await api.brokerWrite(this.host.broker, 'PATCH', this.instancePath(inst.instanceId), body);
       if (!r.ok) { this.host.toast(t('Not saved - {why}', { why: brokerError(r) })); return; }
       this.host.toast(t('Saved the instance'));
       this.highlight = inst.instanceId;
       this.read();
-    });
-    box.append(el('span', 'hp-lbl', t('value')), v, el('span', 'hp-lbl', 'observedAt'), at, save, button(t('Cancel'), 'btn small', () => this.render()));
+    }, 'btn small primary');
+    box.append(el('span', 'hp-lbl', t('value')), v, el('span', 'hp-lbl', 'observedAt'), at, save, closeX(t('Cancel - keep the instance as it was'), () => this.render()));
     tr.append(td);
     v.focus();
     v.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
@@ -975,7 +975,7 @@ export class Temporal {
     const box = el('div', 'hp-addbox');
     for (const [a, v] of fields) box.append(el('span', 'hp-lbl', attrs.length > 1 ? a : t('value')), v);
     box.append(el('span', 'hp-lbl', 'observedAt'), at);
-    f.append(box, add, button(t('Cancel'), 'btn small', () => this.render()));
+    f.append(box, add, closeX(t('Cancel - add nothing'), () => this.render()));
     fields[0][1].focus();
     for (const [, v] of fields) v.addEventListener('keydown', (e) => { if (e.key === 'Enter') add.click(); });
   }
