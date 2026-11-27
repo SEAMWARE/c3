@@ -184,7 +184,7 @@ export class EntityMap {
     this.anchors = new Map();
     this.boxes = new Map();                      // id -> [w, s, e, n]
     this.notOnMap = [];
-    this.relMode = 'all';                        // 'all' or 'selected' (setRelationships)
+    this.relMode = 'all';                        // 'all', 'selected' or 'none' (setRelationships)
     this.lastPos = new Map();                    // id -> [lon, lat]: where its Point was last drawn to
     this.motion = new Map();                     // id -> {from, to, t0, dur}: a glide in progress
     this.movedAt = new Map();                    // id -> performance.now() of its last move
@@ -383,10 +383,10 @@ export class EntityMap {
   }
 
   //
-  // setRelationships - 'all': every Relationship drawn; 'selected': the selected entity's only
+  // setRelationships - 'all': every Relationship drawn; 'selected': the selected entity's only; 'none': not one
   //
   setRelationships(mode) {
-    this.relMode = mode === 'selected' ? 'selected' : 'all';
+    this.relMode = mode === 'selected' || mode === 'none' ? mode : 'all';
     this.renderRels();
   }
 
@@ -542,7 +542,7 @@ export class EntityMap {
       const m = this.motion.get(id);
       return m ? posAt(m, now) : this.anchors.get(id);
     };
-    for (const ed of this.edges) {
+    for (const ed of this.relMode === 'none' ? [] : this.edges) {
       if (this.relMode === 'selected' && ed.from !== this.sel && ed.to !== this.sel) continue;
       const a = at(ed.from), b = at(ed.to);
       if (!a || !b || (a[0] === b[0] && a[1] === b[1])) continue;
@@ -589,7 +589,8 @@ export class EntityMap {
       // The lines of the gliding entities follow them: the selected one's every frame, all of them ten times
       // a second (there may be hundreds), and once more on arrival
       //
-      if (this.relMode === 'selected') { if (selMoves) this.renderRels(now); }
+      if (this.relMode === 'none') { /* no line to follow */ }
+      else if (this.relMode === 'selected') { if (selMoves) this.renderRels(now); }
       else if (!this.motion.size || now - (this.relAt || 0) >= 100) { this.relAt = now; this.renderRels(now); }
     }
 

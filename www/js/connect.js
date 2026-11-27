@@ -906,7 +906,7 @@ export class Connect {
       this.tenantsOffer(url, b);
       this.mapView = c.map && Array.isArray(c.map.center) ? c.map : null;
       this.colourBy = typeof c.colourBy === 'string' ? c.colourBy : 'type';
-      this.relMode = c.relationships === 'selected' ? 'selected' : 'all';
+      this.relMode = c.relationships === 'selected' || c.relationships === 'none' ? c.relationships : 'all';
       let view = c.view;
       let rules = Array.isArray(c.alerts) ? c.alerts : null;
 
@@ -916,7 +916,7 @@ export class Connect {
       if (demo) {
         const v = demo.view && typeof demo.view === 'object' ? demo.view : {};
         if (!this.mapView && Array.isArray(v.center) && v.center.length === 2) this.mapView = { center: v.center, zoom: Number.isFinite(v.zoom) ? v.zoom : 12 };
-        if (!c.relationships && (v.relationships === 'selected' || v.relationships === 'all')) this.relMode = v.relationships;
+        if (!c.relationships && ['all', 'selected', 'none'].includes(v.relationships)) this.relMode = v.relationships;
         if (view !== 'map' && view !== 'graph') view = v.mode;
         if (saved === undefined && Array.isArray(demo.watch)) saved = demo.watch.filter((t) => typeof t === 'string');
         if (!rules && Array.isArray(demo.alerts)) rules = demo.alerts;

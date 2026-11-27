@@ -1272,8 +1272,8 @@ static CorNode* alertsCheck(Doc* docP, CorNode* alertsP, char* errBuf, int errLe
 //   "colourBy": "type", or the name of a Relationship: the map's markers coloured by its target
 //   "tenant":   the tenant Connect works on ("": the default one) - kept in the broker itself, beside
 //               "tenants": the ones used before, most recent first, CONFIG_TENANTS_MAX of them
-//   "relationships": "all" or "selected" - the Relationships the map draws: every one, or the selected
-//               entity's only
+//   "relationships": "all", "selected" or "none" - the Relationships the map draws: every one, the selected
+//               entity's only, or not one
 //   "alerts":   the alert rules of the broker (alertsCheck), the whole list
 //   "local":    true: the broker's own entities only - every query with local=true, its Context Sources
 //               not asked; false (the default): what the broker answers, with its Context Sources
@@ -1305,9 +1305,9 @@ bool configBrokerConnect(char* body, char* errBuf, int errLen)
   const char* relationships;
   if (stringMember(bodyP, "relationships", false, 16, &relationships, errBuf, errLen) == false)
     goto done;
-  if ((relationships != NULL) && (strcmp(relationships, "all") != 0) && (strcmp(relationships, "selected") != 0))
+  if ((relationships != NULL) && (strcmp(relationships, "all") != 0) && (strcmp(relationships, "selected") != 0) && (strcmp(relationships, "none") != 0))
   {
-    snprintf(errBuf, errLen, "\"relationships\" is \"all\" or \"selected\"");
+    snprintf(errBuf, errLen, "\"relationships\" is \"all\", \"selected\" or \"none\"");
     goto done;
   }
 

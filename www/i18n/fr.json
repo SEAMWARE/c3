@@ -520,7 +520,6 @@
   "The OPC UA configuration is written": "La configuration OPC UA est écrite",
   "The OPC UA mapping is in Operate": "Le mappage OPC UA est dans Exploiter",
   "The OPC UA server's nodes": "Les nœuds du serveur OPC UA",
-  "The Relationships drawn: every one, or only the selected entity's": "Les Relationships dessinées : toutes, ou seulement celles de l'entité sélectionnée",
   "The absolute path of a workload file on this machine -": "Le chemin absolu d'un fichier de charge de travail sur cette machine -",
   "The access token sent to this broker": "Le jeton d'accès envoyé à ce broker",
   "The backend does not answer: {error}": "Le backend ne répond pas : {error}",
@@ -1636,5 +1635,6 @@
   "No - do not do it": "Non - ne pas le faire",
   "Not now - nothing reported": "Pas maintenant - rien n'est signalé",
   "Save the instance": "Enregistrer l'instance",
-  "Save this choice under the name": "Enregistrer ce choix sous ce nom"
+  "Save this choice under the name": "Enregistrer ce choix sous ce nom",
+  "The Relationships drawn: every one, only the selected entity's, or none": "Les Relationships dessinées : toutes, seulement celles de l'entité sélectionnée, ou aucune"
 }
