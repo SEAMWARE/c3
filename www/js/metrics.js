@@ -4,8 +4,9 @@
 // Copyright 2026 Seamware
 // SPDX-License-Identifier: Apache-2.0
 //
-// Sampled every 5 s while the panel is open, from every broker running here with the admin API, so that a
-// broker selected later has its last minutes too; 120 samples (10 minutes) kept per broker. A counter is
+// Sampled every 5 s while the panel is open (a broker just opened: at once and a second later), from every
+// broker running here with the admin API, so that a broker selected later has its last minutes too; 120
+// samples (10 minutes) kept per broker. A counter is
 // drawn as its rate between two samples, a gauge as it is, the request latency as the mean and the 95th
 // percentile of the requests in the interval (from the histogram's buckets, interpolated). A read that
 // fails is a break in the samples, and so is a request count that goes down (the broker started again):
@@ -16,6 +17,7 @@ import { t, tk, plural } from './i18n.js';
 import { closeX } from './ui.js';
 
 const PERIOD_MS = 5000;
+const QUICK_MS = 1000;                 // the second read of a broker just opened (start)
 const SAMPLES_MAX = 120;
 const W = 300, H = 56;                // a chart in the row; a chart opened big (open): BW x BH
 const BW = 900, BH = 300;
@@ -261,6 +263,7 @@ export class Metrics {
   constructor() {
     this.samples = new Map();        // broker url -> [{t, v}]
     this.errors = new Map();         // broker url -> why the last read failed
+    this.quickAt = new Map();        // broker url -> when its quick start (start) began
     this.timer = null;
     this.urls = () => [];
     this.onSample = () => {};
@@ -269,16 +272,28 @@ export class Metrics {
   //
   // start - read every PERIOD_MS the brokers urls() names, onSample() after each round; stop - no more
   //
+  //
+  // A broker without two recent reads (just opened, or not read for a while) is read at once and again after
+  // QUICK_MS - its charts (rates need two reads) in a second, not after a whole period
+  //
   start(urls, onSample) {
     this.urls = urls;
     this.onSample = onSample;
+    const stale = (u) => {
+      const s = this.samples.get(u) || [];
+      return s.length < 2 || !s[s.length - 1].v || !s[s.length - 2].v || Date.now() - s[s.length - 1].t > 2 * PERIOD_MS;
+    };
+    const quick = this.urls().filter((u) => stale(u) && !(Date.now() - (this.quickAt.get(u) || 0) < 2 * QUICK_MS));
+    for (const u of quick) this.quickAt.set(u, Date.now());   // one quick start at a time - start runs on every redraw
+    if (quick.length) {
+      const now = async () => { await Promise.all(quick.map((u) => this.read(u))); this.onSample(); };
+      now().then(() => setTimeout(() => { if (this.timer) now(); }, QUICK_MS));
+    }
     if (this.timer) return;
-    const round = async () => {
+    this.timer = setInterval(async () => {
       await Promise.all(this.urls().map((u) => this.read(u)));
       this.onSample();
-    };
-    this.timer = setInterval(round, PERIOD_MS);
-    round();
+    }, PERIOD_MS);
   }
 
   stop() {
@@ -437,8 +452,16 @@ export class Metrics {
     const d = el('dialog', 'mx-dialog');
     d.setAttribute('aria-label', t(c.title));
     d.append(closeX(t('Close'), () => this.close(), true), el('div', 'mx-bigbody'));
-    d.addEventListener('close', () => { if (this.big && this.big.d === d) { this.big = null; d.remove(); } });
+    d.addEventListener('close', () => { if (this.big && this.big.d === d) this.close(); });   // Esc
+    try {                                                        // its size as the user left it (dragged corner)
+      const z = JSON.parse(localStorage.getItem('c3.metrics.big') || 'null');
+      if (z && z.w > 0 && z.h > 0) { d.style.width = Math.min(z.w, innerWidth - 16) + 'px'; d.style.height = Math.min(z.h, innerHeight - 16) + 'px'; }
+    } catch { /* the default size */ }
     document.body.append(d);
+    new ResizeObserver(() => {                                   // a size dragged: kept for the next one
+      if (!d.open || !d.offsetWidth) return;
+      try { localStorage.setItem('c3.metrics.big', JSON.stringify({ w: d.offsetWidth, h: d.offsetHeight })); } catch { /* not kept */ }
+    }).observe(d);
     this.big = { c, url, d };
     this.bigDraw();
     d.showModal();

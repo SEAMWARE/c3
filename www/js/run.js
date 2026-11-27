@@ -790,6 +790,7 @@ export class Run {
     this.remoteAsked = Date.now();
     try { this.configBrokers = (await api.config()).brokers || []; } catch (e) { /* the list as it was */ }
     const ask = async (url) => {
+      if (api.answeredWithin(url, 10000)) return true;           // it answered the page anyway (metrics, log lines, Explore)
       try {
         const r = await Promise.race([api.brokerGet(url, '/version', ''), new Promise((done) => setTimeout(() => done(null), 3000))]);
         return !!(r && r.reached && r.status > 0 && r.status < 500);
@@ -1322,7 +1323,21 @@ export class Run {
   metricsRender() {
     const url = this.levelsBroker();
     if (!url || !$('rn-metrics').open) return;
-    $('rn-metrics-body').replaceChildren(this.metrics.render(url));
+    //
+    // Drawn again with each read: the row stays scrolled where the user left it, the chart with the focus keeps it
+    //
+    const body = $('rn-metrics-body');
+    const old = body.querySelector('.mx-grid');
+    const left = old && this.metricsUrl === url ? old.scrollLeft : 0;
+    const charts = old ? [...old.children] : [];
+    const focused = charts.indexOf(document.activeElement);
+    body.replaceChildren(this.metrics.render(url));
+    this.metricsUrl = url;
+    const grid = body.querySelector('.mx-grid');
+    if (grid) {
+      grid.scrollLeft = left;
+      if (focused >= 0 && grid.children[focused]) grid.children[focused].focus({ preventScroll: true });
+    }
     const sum = this.metrics.summary(url);
     $('rn-metrics-sum').textContent = t('Metrics') + (sum ? ' - ' + sum : '');
   }

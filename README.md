@@ -521,8 +521,9 @@ schema) need two sets of style layers, kept in the same colours.
 ### When the broker goes away
 
 While Explore is connected, c³ asks the broker every 5 s whether it is there (`GET /version` - any answer
-will do; only the proxy's "not reached" counts as gone), and at once when the live connection loses the
-broker's WebSocket. Not reached twice, 1.5 s apart:
+will do; only the proxy's "not reached" counts as gone) - unless it answered another of the page's requests in
+those 5 s (Explore's queries, Operate's metrics or log lines: proof enough, no request of its own) - and at once
+when the live connection loses the broker's WebSocket. Not reached twice, 1.5 s apart:
 
 - Explore goes back to **The broker cannot be reached** - "It stopped answering at <time>" - with its
   editor, History panel and JSON closed; the state says **Lost**.
@@ -818,7 +819,7 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
   start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to
   (`c3.json` "brokers") that c³ does not run - *on this machine, started outside c³* or *on another machine* -
   each asked `GET /version` through the proxy every 10 s (any answer below 500 counts: *answers*, else *does not
-  answer*), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
+  answer*; one that answered another request of the page in those 10 s is not asked), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
   **Explore**; a click elsewhere on any row opens its card. **Explore** and a broker's URL open it in Explore once it
   answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed: its settings are under
   Set up and start a broker, **Earlier settings**.
@@ -1028,7 +1029,8 @@ a plugin's options under its section. A secret (`--dbPwd`, `--dbURI`, `--troePwd
 
 **Metrics** - above the log of a running broker with the admin API: its `/admin/metrics` as charts over
 the last 10 minutes, read every 5 s while the panel is open - from every broker running here with the admin
-API, so one selected later has its last minutes too. Requests per second (all, reads, writes), errors (4xx,
+API, so one selected later has its last minutes too. A broker just opened (or not read for a while) is read at
+once and again a second later: its charts show in a second, not after a whole period. Requests per second (all, reads, writes), errors (4xx,
 5xx), latency (the mean and the 95th percentile of the requests in each 5 s, from the histogram's buckets),
 notifications per second (sent, to context sources, Server-Sent Events, failed), subscriptions (entity,
 periodic, context source, Server-Sent Events streams, context source registrations), memory (used, resident,
@@ -1037,9 +1039,10 @@ the budget, the entity map), entity operations, batch operations, subscription a
 streams refused), response bytes, forwarding (distributed operations: forwarded, failed, the mean latency),
 the mean batch size, the entity map's entities, tenants and a paused store; and **Other**, when the broker
 serves metrics none of these draws (a newer coraine): a counter as its rate, a gauge as it is - every one
-drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways; a chart with more
+drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways (it stays where it was scrolled as new reads draw it again); a chart with more
 than 4 lines names the 4 highest and how many more. A click on a chart (Enter) opens it big: every line named,
-grid lines, the clock time below; drawn again with each read; × or Esc closes it. Below them the busiest
+grid lines, the clock time below; drawn again with each read; resized by its corner, the chart filling it (the
+size kept in the browser for the next one); × or Esc closes it. Below them the busiest
 operations over the last minute. A read that fails, or a request count that goes down (the
 broker started again), is a break: no rate across it. A chart whose metrics the broker does not serve says
 so. The summary line carries requests per second, the mean latency and the subscriptions.
