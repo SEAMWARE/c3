@@ -1713,13 +1713,15 @@ export class Connect {
 
     const items = [];
     if (this.graph.expanded === id) items.push({ label: t('Close linked entities'), action: () => this.collapse(id) });
-    items.push({
-      label: t('With linked entities'),
-      items: [1, 2, 3].map((l) => ({ label: t('Level {level}', { level: l }), hint: l === 1 ? t('its targets') : t('{n} Relationships deep', { n: l }), action: () => this.expandLinked(id, l) })),
-    });
+    if (follows.length) {                          // linked = its Relationships' targets: none, nothing to embed
+      items.push({
+        label: t('With linked entities'),
+        items: [1, 2, 3].map((l) => ({ label: t('Level {level}', { level: l }), hint: l === 1 ? t('its targets') : t('{n} Relationships deep', { n: l }), action: () => this.expandLinked(id, l) })),
+      });
+    }
     if (this.mode && this.mode.id === id) items.push({ label: t('Back to the picked types'), action: () => this.back() });
     else items.push({ label: t('Neighbourhood'), hint: t('one Relationship away'), action: () => this.neighbourhood(id) });
-    items.push({ label: t('Follow'), items: follows });
+    if (follows.length) items.push({ label: t('Follow'), items: follows });
     items.push({ separator: true });
     for (const ty of types) items.push({ label: t('Hide type {type}', { type: typeLabel(ty) }), action: () => this.setHidden([...this.hidden, ty]) });
     if (this.view === 'map') items.push({ label: t('Show in the graph'), action: () => { this.setView('graph', true); this.graph.select(id, { center: true }); } });

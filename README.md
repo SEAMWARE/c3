@@ -352,14 +352,15 @@ markers are coloured by), the downloaded map areas, and the last page:
     grows into one box holding the entities its Relationships point to - each with its type, the end
     of its id and up to three Properties - and inside them theirs, level by level (`entity` of a
     Relationship, `entityList` of a ListRelationship). A Relationship not embedded says why: deeper
-    than the level asked for, or not embedded by the broker. × or Esc closes it.
+    than the level asked for, or not embedded by the broker. × or Esc closes it. Only on an entity with a
+    Relationship of its own (as **Follow**).
   - **Neighbourhood** - only this entity and the entities one Relationship away, out or in: its targets
     (the loaded ones, the others by `GET /entities?id=a,b,...`) and the entities pointing at
     it (the loaded ones, and the broker's: `q=<r1>=="<id>"|<r2>=="<id>"|...` over every
     Relationship name of the discovery, the first 300). Laid out on its own; **Back to the picked
     types** returns to them.
   - **Follow** › one item per Relationship target: selects and centres it, or opens its neighbourhood
-    when it is not loaded.
+    when it is not loaded. Not on an entity with no Relationship.
   - **Hide type <T>**, **Copy id**, **Show JSON** (the entity as the broker returned it, in a panel
     with **Copy**; Esc closes it).
   - **Edit…** - the editor (below), also from the entity's id in the attribute panel; **Replace…** - the
