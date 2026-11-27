@@ -335,6 +335,7 @@ extern const char* startToken(void);
 
 // repos.c
 extern void  reposRequest(CorHttpConn* connP, const char* path);
+extern void  issuesRequest(CorHttpConn* connP, const char* path);
 
 // window.c
 extern void  windowPipesSet(int toFd, int fromFd, bool qt);

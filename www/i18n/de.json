@@ -206,7 +206,6 @@
   "Download this area": "Dieses Gebiet herunterladen",
   "Downloaded areas": "Heruntergeladene Gebiete",
   "Each topic, service or action mapped is one attribute of an entity: its name, the entity's id, and the entity's type - once for each entity, on any of its endpoints. Done writes the DDS configuration, two files, and a broker starts with them.": "Jedes abgebildete Topic, jeder Service oder jede Action ist ein Attribut einer Entität: sein Name, die ID der Entität und der Typ der Entität - einmal je Entität, an einem ihrer Endpunkte. Fertig schreibt die DDS-Konfiguration, zwei Dateien, und ein Broker startet damit.",
-  "Edit it as you like - it goes to the coraine-assistant repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Bearbeiten Sie ihn nach Belieben - er geht an das Repository coraine-assistant auf GitHub, wo Sie ihn mit Ihrem eigenen Login einreichen. Von hier wird nichts gesendet.",
   "Edit the entity": "Entität bearbeiten",
   "Edit the mapping": "Abbildung bearbeiten",
   "Edit {name}…": "{name} bearbeiten…",
@@ -1627,5 +1626,12 @@
   "every instance of {name}": "jede Instanz von {name}",
   "Delete…": "Löschen…",
   "Close the entity panel - selecting an entity brings it back": "Den Entitätsbereich schließen - eine Auswahl bringt ihn zurück",
-  "Close the entity panel": "Den Entitätsbereich schließen"
+  "Close the entity panel": "Den Entitätsbereich schließen",
+  "Edit it as you like - it goes to the {repo} repository on GitHub, where you file it with your own login. Nothing is sent from here.": "Bearbeite es nach Belieben - es geht an das Repository {repo} auf GitHub, wo du es mit deinem eigenen Login einreichst. Von hier wird nichts gesendet.",
+  "File on GitHub": "Auf GitHub einreichen",
+  "Edit it as you like - File on GitHub files it in the {repo} repository with your GitHub login (gh on this machine); Open on GitHub lets you file it there yourself.": "Bearbeite es nach Belieben - „Auf GitHub einreichen“ reicht es im Repository {repo} mit deinem GitHub-Login ein (gh auf diesem Rechner); „Auf GitHub öffnen“ lässt dich es dort selbst einreichen.",
+  "Filing…": "Wird eingereicht…",
+  "Filed: ": "Eingereicht: ",
+  "Not filed: {why}. Open on GitHub to file it there.": "Nicht eingereicht: {why}. Öffne es auf GitHub, um es dort einzureichen.",
+  "c3 did not answer": "c3 hat nicht geantwortet"
 }
