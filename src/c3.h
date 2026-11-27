@@ -336,6 +336,8 @@ extern const char* startToken(void);
 // repos.c
 extern void  reposRequest(CorHttpConn* connP, const char* path);
 extern void  issuesRequest(CorHttpConn* connP, const char* path);
+extern void  trimmedSave(CorHttpConn* connP);               // POST /api/run/trimmed (trimmed.c)
+extern char* jsonEscape(CorHttpConn* connP, const char* s);  // the inside of a JSON string, from the connection (demo.c)
 
 // window.c
 extern void  windowPipesSet(int toFd, int fromFd, bool qt);

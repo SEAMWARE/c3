@@ -13,6 +13,7 @@
 // coraine's /admin/bridges/<bridge>/inventory (what a bridge's source offers - Operate's OPC UA browser),
 // coraine's /admin/log (the log and trace levels - Operate's Levels; PUT sets them, from c3's own page),
 // coraine's /admin/log/lines (its recent log, kept in memory - the log of a broker c3 does not run),
+// coraine's /admin/log/trimmed (the trimmed-off log lines it keeps - Operate's Log file; c3's backend saves them),
 // coraine's /admin/config and /build (the options a broker runs with, what it is built with - Operate),
 // coraine's /admin/metrics (Prometheus text, passed on as it is - Operate's Metrics) and
 // /.well-known/oauth-protected-resource (RFC 9728: how to get a token the broker takes - Connect reads it on
@@ -21,7 +22,7 @@
 // delete (POST /ngsi-ld/v1/entityOperations/create and /delete), the temporal entities (POST,
 // PATCH, DELETE /ngsi-ld/v1/temporal/entities... - Explore's History, AI Assist's populate_broker and its undo) and
 // the temporal query (POST /ngsi-ld/v1/temporal/entityOperations/query), the subscriptions (POST, PATCH, DELETE - AI Assist's writes, each confirmed by the user), coraine's declared indexes (POST
-// /admin/indexes, DELETE /admin/indexes/{id}; GET too) and PUT /admin/log, with the body and its Content-Type - and only from c3's own page: a write must carry an Origin of this machine
+// /admin/indexes, DELETE /admin/indexes/{id}; GET too), PUT /admin/log and POST /admin/log/trim, with the body and its Content-Type - and only from c3's own page: a write must carry an Origin of this machine
 // (a browser always sends one on them; a page of another site cannot set it, nor the X-C3-Broker header
 // without a preflight c3 never answers). The broker's own headers and its access token (creds.c) go with
 // every request - the token as Authorization: Bearer, unless an own header is the Authorization; the tenant
@@ -374,10 +375,10 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   {
     if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0) &&
         (strcmp(path, "/.well-known/oauth-protected-resource") != 0) && (inventoryPath(path) == false) && (strcmp(path, "/admin/log") != 0) &&
-        (strcmp(path, "/admin/log/lines") != 0) && (strcmp(path, "/admin/config") != 0) && (strcmp(path, "/admin/metrics") != 0) && (strcmp(path, "/build") != 0) &&
+        (strcmp(path, "/admin/log/lines") != 0) && (strcmp(path, "/admin/log/trimmed") != 0) && (strcmp(path, "/admin/config") != 0) && (strcmp(path, "/admin/metrics") != 0) && (strcmp(path, "/build") != 0) &&
         (strcmp(path, "/admin/indexes") != 0))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /build, /admin/tenants, /admin/log, /admin/log/lines, /admin/config, /admin/metrics, /admin/indexes, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /build, /admin/tenants, /admin/log, /admin/log/lines, /admin/log/trimmed, /admin/config, /admin/metrics, /admin/indexes, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
       return;
     }
   }
@@ -386,14 +387,14 @@ void proxyRequest(CorHttpConn* connP, const char* path)
     bool entities = (strcmp(path, "/ngsi-ld/v1/entities") == 0) || (strncmp(path, "/ngsi-ld/v1/entities/", 21) == 0);
     bool subs     = ((verb != CorVerbPut) && ((strcmp(path, "/ngsi-ld/v1/subscriptions") == 0) || (strncmp(path, "/ngsi-ld/v1/subscriptions/", 26) == 0)));
     bool indexes  = (((verb == CorVerbPost) && (strcmp(path, "/admin/indexes") == 0)) || ((verb == CorVerbDelete) && (strncmp(path, "/admin/indexes/", 15) == 0)));
-    bool log      = ((verb == CorVerbPut) && (strcmp(path, "/admin/log") == 0));
+    bool log      = ((verb == CorVerbPut) && (strcmp(path, "/admin/log") == 0)) || ((verb == CorVerbPost) && (strcmp(path, "/admin/log/trim") == 0));
     bool batch    = ((verb == CorVerbPost) && ((strcmp(path, "/ngsi-ld/v1/entityOperations/create") == 0) || (strcmp(path, "/ngsi-ld/v1/entityOperations/delete") == 0)));
     bool temporal = ((verb != CorVerbPut) && ((strcmp(path, "/ngsi-ld/v1/temporal/entities") == 0) || (strncmp(path, "/ngsi-ld/v1/temporal/entities/", 30) == 0))) ||
                     ((verb == CorVerbPost) && (strcmp(path, "/ngsi-ld/v1/temporal/entityOperations/query") == 0));
 
     if ((entities == false) && (batch == false) && (temporal == false) && (subs == false) && (indexes == false) && (log == false))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards writes for the entities (/ngsi-ld/v1/entities...), the batch create and delete (POST /ngsi-ld/v1/entityOperations/create, /delete), the temporal entities (POST, PATCH, DELETE /ngsi-ld/v1/temporal/entities...), the temporal query (POST /ngsi-ld/v1/temporal/entityOperations/query), the subscriptions (POST, PATCH, DELETE /ngsi-ld/v1/subscriptions...), the declared indexes (POST /admin/indexes, DELETE /admin/indexes/{id}) and PUT /admin/log only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards writes for the entities (/ngsi-ld/v1/entities...), the batch create and delete (POST /ngsi-ld/v1/entityOperations/create, /delete), the temporal entities (POST, PATCH, DELETE /ngsi-ld/v1/temporal/entities...), the temporal query (POST /ngsi-ld/v1/temporal/entityOperations/query), the subscriptions (POST, PATCH, DELETE /ngsi-ld/v1/subscriptions...), the declared indexes (POST /admin/indexes, DELETE /admin/indexes/{id}), PUT /admin/log and POST /admin/log/trim only");
       return;
     }
 

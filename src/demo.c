@@ -89,7 +89,7 @@ static void originOf(const char* url, char* out, int outLen)
 //
 // jsonEscape - 's' as the inside of a JSON string, allocated from the connection
 //
-static char* jsonEscape(CorHttpConn* connP, const char* s)
+char* jsonEscape(CorHttpConn* connP, const char* s)
 {
   char* out = corAlloc(&connP->alloc, strlen(s) * 6 + 1);
   int   o   = 0;

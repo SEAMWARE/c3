@@ -36,6 +36,7 @@ export const uiSet        = (ui) => call('PUT', '/api/ui', ui);
 export const brokerTypes  = (url, types, tenant = '') => call('PUT', '/api/brokers/types', tenant ? { url, types, tenant } : { url, types });
 export const brokerConnect = (url, patch) => call('PUT', '/api/brokers/connect', { url, ...patch });
 export const demo          = (name) => call('GET', '/api/demos/' + encodeURIComponent(name));
+export const trimmedSave   = (broker, name) => call('POST', '/api/run/trimmed', { broker, name });   // saved here, then deleted on the broker
 
 //
 // The brokers' access tokens - kept by the backend (creds.c); the page learns where one comes from and its

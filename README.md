@@ -1065,6 +1065,24 @@ and what each traces are `www/data/traceLevels.json`, made from the libraries' t
 `tools/traceLevels.py <dir of the cor* repos>` - run it again when a library adds one. Traces exist in
 debug builds only: on coraine's `"traces": false` (a release build) the tick boxes are greyed, and say why.
 
+**Log file** - coraine's log trim ([doc/log-file.md](https://github.com/SEAMWARE/coraine/blob/main/doc/log-file.md)):
+shown for a broker whose `GET /admin/log` names its log file and its `trim` (a build with `COR_FEATURE_LOG_TRIM`,
+logging to a file) - that one GET per broker shown decides it, so a broker without it is asked nothing it refuses.
+- **The limits** - trim when the disk is N % full (0: only on request), down to N %, always keep the newest N lines,
+  keep the trimmed-off lines N hours - each sent as you leave its field (`PUT /admin/log?trimAt=` ... `trimKeepFor=`,
+  in seconds), the broker's refusal shown; beside each its value at start and where it came from (`GET /admin/config`).
+- **Trim now** - `POST /admin/log/trim`; then **Last trim**: when, why, the lines dropped by type, the repeats merged,
+  the size and the disk before and after.
+- **Trimmed-off lines kept on the broker** (`GET /admin/log/trimmed`) - each with **Save here**: c³'s backend
+  (`POST /api/run/trimmed`, `src/trimmed.c`, from c³'s own page only) reads it in parts of 32 MiB (`Range`), writes it
+  to `$XDG_DATA_HOME/c3/logs/<host_port>/<name>` (else `~/.local/share/c3/logs/...`), checks its size against the
+  broker's list, and only then deletes it on the broker (`DELETE /admin/log/trimmed/<name>`). A failure leaves the
+  broker's copy, and nothing half-written here.
+
+In the log, Text and JSON: the trim's line (`I:` ... `Log trimmed (`) between dashed lines, marked ✂; a merged line's
+` (17 times, <first> - <last>)` (uptimes) marked, in JSON as ×17 and `"repeated": {times, first, last}` - its tooltip
+and, with Clock, the object give the first and last as clock times.
+
 ### The DDS mapper
 
 Operate's page, given to the mapping of a DDS domain to NGSI-LD - from Operate's **Map DDS topics,

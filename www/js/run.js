@@ -99,6 +99,34 @@ const ago = (s) => (s >= 3600 ? t('{h} h {m} min', { h: Math.floor(s / 3600), m:
 
 //
 // featuresOf - "features: A=1 B=0" of a --version, as {A: true, B: false}; null: not known (an image)
+
+//
+// logWhen - a broker's UTC time as this browser's: the time today, the date and time otherwise
+//
+function logWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  const p = (n) => String(n).padStart(2, '0');
+  const time = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  return d.toDateString() === new Date().toDateString() ? time : d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + time;
+}
+
+function kib(bytes) {
+  return bytes < 1024 ? bytes + ' B' : bytes < 1048576 ? Math.round(bytes / 1024) + ' KiB' : (bytes / 1048576).toFixed(1) + ' MiB';
+}
+
+//
+// trimSays - a log trim (GET /admin/log's trim.last, POST /admin/log/trim's answer) in one line
+//
+function trimSays(l) {
+  const dropped = Object.entries(l.dropped || {}).map(([k, n]) => k + ' ' + n).join(', ');
+  return [logWhen(l.time) + ', ' + (l.why === 'disk' ? t('the disk was full') : t('on request')),
+    dropped ? t('dropped {what}', { what: dropped }) : t('nothing dropped'),
+    l.merged ? plural(l.merged, '{n} repeated line merged', '{n} repeated lines merged') : null,
+    (l.sizeBefore !== undefined && l.sizeAfter !== undefined) ? kib(l.sizeBefore) + ' → ' + kib(l.sizeAfter) : null,
+    (l.diskBefore !== undefined && l.diskBefore !== null) ? t('disk {a}% → {b}%', { a: l.diskBefore, b: l.diskAfter }) : null,
+    l.error ? t('failed: {why}', { why: l.error }) : null].filter(Boolean).join('; ');
+}
 //
 function featuresOf(version) {
   const m = /features: ([^\n]*)/.exec(version || '');
@@ -1367,6 +1395,146 @@ export class Run {
       d.addEventListener('toggle', () => { if (d.open) this.levelsLoad(); });
     }
     if (d.open && reload) this.levelsLoad();
+    this.logFileShow(url, reload);
+  }
+
+  // ------------------------------------------------------------------ the log file (coraine's log trim)
+
+  //
+  // logFileShow - the Log file section: shown for a broker whose GET /admin/log names its log file and its trim
+  // ("file", "trim": a build with COR_FEATURE_LOG_TRIM, logging to a file) - asked once per broker shown, again
+  // when it is opened; nothing else is asked, so a broker without it sees no request it refuses
+  //
+  async logFileShow(url, reload = true) {
+    const d = $('rn-logfile');
+    if (!this.logFileWired) {
+      this.logFileWired = true;
+      d.addEventListener('toggle', () => { if (d.open && this.logFileUrl) this.logFileLoad(this.logFileUrl); });
+    }
+    if (!url) { d.hidden = true; d.open = false; this.logFileUrl = null; return; }
+    if (url === this.logFileUrl && !reload) return;
+    this.logFileUrl = url;
+    const r = await api.brokerGet(url, '/admin/log');
+    if (this.logFileUrl !== url) return;
+    const has = r.ok && r.body && r.body.file && r.body.trim;
+    d.hidden = !has;
+    if (!has) { d.open = false; return; }
+    this.logFileSum(r.body);
+    if (d.open) this.logFileLoad(url, r);
+  }
+
+  logFileSum(log) {
+    const tr = log.trim;
+    const parts = [log.file.split('/').pop()];
+    if (tr.disk !== null && tr.disk !== undefined) parts.push(t('disk {n}% full', { n: tr.disk }));
+    if (tr.last) parts.push(t('last trimmed {when}', { when: logWhen(tr.last.time) }));
+    $('rn-logfile-sum').textContent = t('Log file') + ' - ' + parts.join(', ');
+  }
+
+  //
+  // logFileLoad - its limits (now, and at start with where they came from - GET /admin/config), Trim now, the
+  // last trim, and the trimmed-off lines the broker keeps (GET /admin/log/trimmed), each saved here on a click
+  //
+  async logFileLoad(url, logAnswer) {
+    const [r, c, k] = await Promise.all([logAnswer || api.brokerGet(url, '/admin/log'), api.brokerGet(url, '/admin/config'),
+      api.brokerGet(url, '/admin/log/trimmed')]);
+    if (this.logFileUrl !== url) return;
+    const body = $('rn-logfile-body');
+    body.replaceChildren();
+    if (!r.ok || !r.body || !r.body.trim) {
+      body.append(el('div', 'rn-lvnote warn', 'GET /admin/log: ' + ((r.body && (r.body.detail || r.body.title)) || 'HTTP ' + r.status)));
+      return;
+    }
+    const log = r.body, tr = log.trim;
+    this.logFileSum(log);
+    const opts = new Map(((c.ok && c.body && c.body.options) || []).map((o) => [o.name, o]));
+    const note = (text, cls = '') => el('div', 'rn-lvnote' + (cls ? ' ' + cls : ''), text);
+
+    const head = note('');
+    head.append(el('code', '', log.file));
+    if (tr.disk !== null && tr.disk !== undefined) head.append(document.createTextNode(' - ' + t('its disk is {n}% full', { n: tr.disk })));
+    body.append(head);
+
+    // The limits: a change is PUT at once, like the levels
+    const how = note(t('A change takes effect at once: it is sent to the broker (PUT /admin/log) as you leave the field.'), 'rn-lvhow');
+    body.append(how);
+    const grid = el('div', 'rn-trimgrid');
+    const limits = [
+      ['trimAt', 'at', '--logTrimAt', t('Trim when the disk is'), '%', 0, 100, 1, t('0: never for the disk - only Trim now')],
+      ['trimTo', 'to', '--logTrimTo', t('Trim down to'), '%', 1, 99, 1, t('below the first; a trim also stops once the log is half its size')],
+      ['trimKeep', 'keep', '--logTrimKeep', t('Always keep the newest'), t('lines'), 0, 10000000, 1, t('and every error line')],
+      ['trimKeepFor', 'keepFor', '--logTrimKeepFor', t('Keep the trimmed-off lines'), t('hours'), 0, 720, 3600, t('0: not kept')],
+    ];
+    for (const [param, key, opt, label, unit, min, max, scale, hint] of limits) {
+      const input = el('input');
+      input.type = 'number';
+      input.min = min; input.max = max; input.step = scale === 1 ? 1 : 'any';
+      input.value = tr[key] / scale;
+      input.setAttribute('aria-label', label);
+      input.addEventListener('change', async () => {
+        const v = Math.round(Number(input.value) * scale);
+        const w = await api.brokerWrite(url, 'PUT', '/admin/log?' + param + '=' + encodeURIComponent(v));
+        await this.logFileLoad(url, w.ok ? w : null);
+        const b = $('rn-logfile-body');
+        if (w.ok) { const ok = el('span', 'rn-lvsent', '✓ ' + t('sent to the broker')); b.querySelector('.rn-lvhow').append(ok); setTimeout(() => ok.remove(), 2500); }
+        else b.prepend(note('PUT /admin/log: ' + ((w.body && (w.body.detail || w.body.title)) || 'HTTP ' + w.status), 'warn'));
+      });
+      const o = opts.get(opt);
+      const from = o && ({ default: t('the default'), env: t('environment'), longOption: t('command line'), shortOption: t('command line'), configFile: t('config file') }[o.from] || o.from);
+      const start = o ? t('at start {v}', { v: (o.value ?? o.default) / scale }) + ' (' + from + ')' : '';
+      grid.append(el('span', 'l', label), input, el('span', 'u', unit), el('span', 'h', [hint, start].filter(Boolean).join(' - ')));
+    }
+    body.append(grid);
+
+    // Trim now
+    const bar = el('div', 'rn-trimbar');
+    const now = el('button', 'btn', t('Trim now'));
+    now.type = 'button';
+    now.title = t('POST /admin/log/trim: the oldest, least important lines dropped (traces, debug, verbose ... first), down to the limits - kept on the broker, gzipped, to be saved here');
+    now.addEventListener('click', async () => {
+      now.disabled = true;
+      const w = await api.brokerWrite(url, 'POST', '/admin/log/trim');
+      await this.logFileLoad(url);
+      if (!w.ok) $('rn-logfile-body').prepend(note('POST /admin/log/trim: ' + ((w.body && (w.body.detail || w.body.title)) || 'HTTP ' + w.status), 'warn'));
+    });
+    bar.append(now);
+    body.append(bar);
+
+    // The last trim
+    if (tr.last) body.append(note(t('Last trim') + ': ' + trimSays(tr.last), tr.last.error ? 'warn' : ''));
+
+    // The trimmed-off lines the broker keeps
+    const kept = (k.ok && Array.isArray(k.body)) ? k.body : [];
+    if (kept.length) {
+      body.append(el('h4', 'rn-h4', t('Trimmed-off lines kept on the broker')));
+      const list = el('div', 'rn-trimkept');
+      for (const f of kept) {
+        const row = el('div', 'rn-trimrow');
+        const what = [logWhen(f.time), f.why === 'disk' ? t('disk full') : f.why === 'request' ? t('on request') : t('an earlier run'),
+          f.lines !== null && f.lines !== undefined ? plural(f.lines, '{n} line', '{n} lines') : null, kib(f.size) + ' gz',
+          t('kept until {when}', { when: logWhen(f.expires) })].filter(Boolean).join(' · ');
+        const save = el('button', 'btn', t('Save here'));
+        save.type = 'button';
+        save.title = t('Read from the broker into ~/.local/share/c3/logs, then deleted on the broker');
+        const said = el('span', 'rn-trimsaid');
+        save.addEventListener('click', async () => {
+          save.disabled = true;
+          said.textContent = t('saving…');
+          try {
+            const a = await api.trimmedSave(url, f.name);
+            row.replaceChildren(el('span', '', what), el('span', 'rn-trimsaid ok', '✓ ' + t('saved: {path}', { path: a.path }) +
+              (a.deleted ? '' : ' - ' + t('not deleted on the broker'))));
+          } catch (e) {
+            save.disabled = false;
+            said.textContent = e.message;
+            said.className = 'rn-trimsaid warn';
+          }
+        });
+        row.append(el('span', '', what), save, said);
+        list.append(row);
+      }
+      body.append(list);
+    }
   }
 
   async levelsLoad() {
@@ -1662,11 +1830,23 @@ export class Run {
   // line as its type and message, its object (logLine) opened by a click; a line of another kind as it is
   //
   logRow(line) {
-    const cls = line.startsWith('c3: ') ? 'c3' : /^(\S+Z )?[EX]: /.test(line) ? 'er' : /^(\S+Z )?W: /.test(line) ? 'wa' : '';
-    const o = this.logView === 'json' ? logLine(line) : null;
-    if (!o) return cls ? el('span', cls, line + '\n') : document.createTextNode(line + '\n');
+    let cls = line.startsWith('c3: ') ? 'c3' : /^(\S+Z )?[EX]: /.test(line) ? 'er' : /^(\S+Z )?W: /.test(line) ? 'wa' : '';
+    const p = /^(\S+Z )?[IWE]: /.test(line) ? logLine(line) : null;           // a trim's line, a merged line: marked
+    if (p && p.trim) cls = 'tr';
+    if (this.logView !== 'json' || !logLine(line)) {
+      if (!cls && !(p && p.repeated)) return document.createTextNode(line + '\n');
+      const s = el('span', cls, p && p.trim ? '✂ ' : '');
+      const rp = p && p.repeated ? / \(\d+ times, \S+ - \S+\)$/.exec(line) : null;
+      s.append(rp ? line.slice(0, rp.index) : line);
+      if (rp) s.append(this.logRepeat(p.repeated, rp[0]));
+      s.append('\n');
+      return s;
+    }
+    const o = p || logLine(line);
     const d = el('details', 'lj' + (cls ? ' ' + cls : ''));
-    d.append(el('summary', '', o.type + ': ' + o.message));
+    const sum = el('summary', '', (o.trim ? '✂ ' : '') + o.type + ': ' + o.message);
+    if (o.repeated) sum.append(this.logRepeat(o.repeated, ' ×' + o.repeated.times));
+    d.append(sum);
     d.addEventListener('toggle', () => {                            // its object, made when first opened
       if (d.open && d.children.length === 1) d.append(el('pre', 'ljo', JSON.stringify(this.logShown(o), null, 2)));
     });
@@ -1680,8 +1860,22 @@ export class Run {
   //
   logShown(o) {
     const { time, uptime, ...rest } = o;
-    const at = time || (this.logStart !== null ? new Date(this.logStart + Math.round(uptime * 1000)).toISOString() : null);
+    const clock = (u) => this.logStart !== null ? new Date(this.logStart + Math.round(u * 1000)).toISOString() : null;
+    const at = time || clock(uptime);
+    if (rest.repeated && this.logTime === 'clock' && this.logStart !== null)      // its first and last, the same way
+      rest.repeated = { times: rest.repeated.times, first: clock(rest.repeated.first), last: clock(rest.repeated.last) };
     return this.logTime === 'clock' && at ? { time: at, ...rest } : { uptime, ...rest };
+  }
+
+  //
+  // logRepeat - a merged line's count (coraine's log trim: "(17 times, <first> - <last>)"), marked; its tooltip the
+  // first and the last, as clock times when the broker's start is known
+  //
+  logRepeat(r, text) {
+    const at = (u) => this.logStart !== null ? logWhen(new Date(this.logStart + Math.round(u * 1000)).toISOString()) : u.toFixed(3) + ' s';
+    const s = el('span', 'rep', text);
+    s.title = t('{n} times the same line, merged by a log trim: the first at {first}, the last at {last}', { n: r.times, first: at(r.first), last: at(r.last) });
+    return s;
   }
 
   //
