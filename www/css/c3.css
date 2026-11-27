@@ -653,8 +653,9 @@ html { scroll-padding-top: var(--head-h, 0px); }
 .attr .k { font-size: 1.05rem; font-weight: 600; overflow-wrap: anywhere; text-align: left; }
 .attr .kind { font-size: 0.9rem; color: var(--muted); }
 .attr .v { grid-column: 1 / -1; font-family: var(--mono); font-size: 0.975rem; color: var(--text-2); overflow-wrap: anywhere; white-space: pre-wrap; }
-.attr .sub { grid-column: 1 / -1; font-size: 0.9rem; color: var(--dim); overflow-wrap: anywhere; }
-.attr .sub .mono { color: var(--muted); }
+.attr .esub { grid-column: 1 / -1; border-collapse: collapse; margin-top: 2px; }
+.attr .esub th { width: 1%; white-space: nowrap; padding: 2px 14px 2px 0; text-align: left; vertical-align: top; font-weight: 400; font-size: 0.9rem; color: var(--dim); }
+.attr .esub td { padding: 2px 0; vertical-align: top; font-family: var(--mono); font-size: 0.9rem; color: var(--muted); overflow-wrap: anywhere; }
 .attr .rel {
   grid-column: 1 / -1; justify-self: start; padding: 0; border: 0; background: none; text-align: left;
   color: var(--accent-text); font-family: var(--mono); font-size: 0.975rem; cursor: pointer;
