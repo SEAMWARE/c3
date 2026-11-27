@@ -276,7 +276,10 @@ brokers keep running, and the next c³ attaches to them (by pid and the process'
   <li><b>Configuration and build</b> - what it is built with (<code>GET /build</code>) and every option it runs with,
   where each came from (<code>GET /admin/config</code>), a secret masked by the broker.</li>
   <li><b>Metrics</b> - <code>/admin/metrics</code> as charts over the last 10 minutes, read every 5 s: requests per
-  second, errors, latency (mean and 95th percentile), notifications, subscriptions, memory; the busiest operations
+  second, errors, latency (mean and 95th percentile), notifications, subscriptions, memory, entity, batch,
+  subscription and registration operations, request handling, response bytes, forwarding, batch size, the entity
+  map, tenants - every metric the broker serves, in a row that scrolls sideways; a click on a chart opens it big,
+  every line named and kept current; the busiest operations
   (<a href="#docs/administration">Administration</a>).</li>
   <li><b>Log and trace levels</b> - verbose and info, and a tick box per trace level, grouped by library, its tooltip
   what it traces - set live through <code>/admin/log</code>. Traces exist in debug builds only; on a release build

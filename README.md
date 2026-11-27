@@ -1031,8 +1031,16 @@ the last 10 minutes, read every 5 s while the panel is open - from every broker 
 API, so one selected later has its last minutes too. Requests per second (all, reads, writes), errors (4xx,
 5xx), latency (the mean and the 95th percentile of the requests in each 5 s, from the histogram's buckets),
 notifications per second (sent, to context sources, Server-Sent Events, failed), subscriptions (entity,
-periodic, context source, Server-Sent Events streams) and memory (used, resident, the budget); below them
-the busiest operations over the last minute. A read that fails, or a request count that goes down (the
+periodic, context source, Server-Sent Events streams, context source registrations), memory (used, resident,
+the budget, the entity map), entity operations, batch operations, subscription and registration operations
+(each a line per operation), request handling (inline, worker, refused for memory, for a paused store, SSE
+streams refused), response bytes, forwarding (distributed operations: forwarded, failed, the mean latency),
+the mean batch size, the entity map's entities, tenants and a paused store; and **Other**, when the broker
+serves metrics none of these draws (a newer coraine): a counter as its rate, a gauge as it is - every one
+drawn (`test/metrics.mjs` holds a coraine's 69). The charts are a row that scrolls sideways; a chart with more
+than 4 lines names the 4 highest and how many more. A click on a chart (Enter) opens it big: every line named,
+grid lines, the clock time below; drawn again with each read; × or Esc closes it. Below them the busiest
+operations over the last minute. A read that fails, or a request count that goes down (the
 broker started again), is a break: no rate across it. A chart whose metrics the broker does not serve says
 so. The summary line carries requests per second, the mean latency and the subscriptions.
 
