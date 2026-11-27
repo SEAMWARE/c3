@@ -247,9 +247,16 @@
           <button type="button" class="rn-newtile" id="rn-new"><span class="nt-plus" aria-hidden="true">+</span><span class="nt-label">Set up and start a broker</span></button>
           <section class="cp-card" aria-label="Brokers">
             <div class="row rn-bar">
-              <h2 class="section" title="The brokers c³ runs here, and the brokers Explore connected to - also on other machines">Brokers</h2><span class="sub" id="rn-bcount"></span>
+              <h2 class="section" title="The brokers c³ runs here, and the brokers added or connected to - also on other machines">Brokers</h2><span class="sub" id="rn-bcount"></span>
+              <button type="button" class="btn rn-addbtn" id="rn-add-btn" title="Add a broker - its URL" aria-label="Add a broker - its URL">+</button>
             </div>
-            <p class="rn-none" id="rn-none" hidden>No broker yet - set one up above, or connect to one in Explore</p>
+            <div class="rn-add" id="rn-add" hidden>
+              <input class="cp-input mono" id="rn-add-url" placeholder="http://host:1026" spellcheck="false" aria-label="The broker's URL">
+              <input class="cp-input" id="rn-add-name" placeholder="name (optional)" spellcheck="false" aria-label="A name for it (optional)">
+              <button type="button" class="btn primary" id="rn-add-go">Add</button>
+              <span class="rn-add-note" id="rn-add-note" hidden></span>
+            </div>
+            <p class="rn-none" id="rn-none" hidden>No broker yet - set one up above, or add one with +</p>
             <div class="rn-list" id="rn-brokers" aria-live="polite"></div>
           </section>
           <section class="cp-card" aria-label="Containers">

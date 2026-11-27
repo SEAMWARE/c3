@@ -22,6 +22,9 @@
 //   POST   /api/run/services/<container>/stop   a service nothing uses
 //   POST   /api/run/containers/<name>/start|stop   any container on the machine (Operate's Containers)
 //   GET    /api/run/containers/<name>/log       its last 500 lines
+//   GET    /api/run/external?port=<port>        a broker on this machine c3 did not start: how it runs (its process), and
+//                                               how it ran, kept from when it did (external.c)
+//   POST   /api/run/external/stop?port=<port>   SIGTERM to it (external.c)
 //   GET    /api/run/external/log?port=<port>    the log of a broker on this machine c3 did not start - <logDir>/coraine.log
 //                                               as its GET /admin/config says, when it logs to a file; by Range (externalLog)
 //   DELETE /api/run/volumes/<volume>            a service's or a container broker's data, deleted
@@ -207,7 +210,7 @@ static const SetDef* setFind(const char* id)
 typedef struct Def
 {
   char  name[65];
-  char  from[16];                                // installed, build, image
+  char  from[16];                                // installed, build, image, command (a broker c3 did not start, started again as it ran)
   char  build[65];                               // from a build: its name
   char  image[512];                              // from an image: repository:tag
   char  where[16];                               // native, container
@@ -273,6 +276,10 @@ typedef struct Def
   bool  verbose;                                 // -v
   char  options[4096];                           // the form's options of the broker's usage (-u), quoted as args
   char  args[2048];                              // more options, as typed
+  char  exe[1024];                               // from a command: the executable, an absolute path
+  char  cwd[1024];                               // from a command: its working directory; "": the broker's directory
+  char  env[2048];                               // from a command: its environment of its own - NAME=value, quoted as args
+  char  command[4096];                           // from a command: the arguments after the executable, as typed (quoted)
   int   grace;
   char  lastStarted[32];
 } Def;
@@ -1843,6 +1850,10 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
       !memberString(oP, "dbPath",       dP->dbPath,       sizeof(dP->dbPath),       err, errLen) ||
       !memberString(oP, "args",         dP->args,         sizeof(dP->args),         err, errLen) ||
       !memberString(oP, "options",      dP->options,      sizeof(dP->options),      err, errLen) ||
+      !memberString(oP, "exe",          dP->exe,          sizeof(dP->exe),          err, errLen) ||
+      !memberString(oP, "cwd",          dP->cwd,          sizeof(dP->cwd),          err, errLen) ||
+      !memberString(oP, "env",          dP->env,          sizeof(dP->env),          err, errLen) ||
+      !memberString(oP, "command",      dP->command,      sizeof(dP->command),      err, errLen) ||
       !memberString(oP, "lastStarted",  dP->lastStarted,  sizeof(dP->lastStarted),  err, errLen) ||
       !memberBool(oP,   "dbDir",        &dP->dbDir,       err, errLen) ||
       !memberBool(oP,   "admin",        &dP->admin,       err, errLen) ||
@@ -1949,11 +1960,79 @@ static bool defParse(CorNode* oP, Def* dP, char* err, int errLen)
     return false;
   }
 
-  if ((strcmp(dP->from, "installed") != 0) && (strcmp(dP->from, "build") != 0) && (strcmp(dP->from, "image") != 0))
+  if ((strcmp(dP->from, "installed") != 0) && (strcmp(dP->from, "build") != 0) && (strcmp(dP->from, "image") != 0) && (strcmp(dP->from, "command") != 0))
   {
-    snprintf(err, errLen, "\"from\" is installed, build or image");
+    snprintf(err, errLen, "\"from\" is installed, build, image or command");
     return false;
   }
+
+  //
+  // A command: the executable and its arguments as they are - c3 adds nothing, runs no service; the ports from
+  // its --port / -p and --healthPort (coraine's default port, 1026, without one)
+  //
+  if (strcmp(dP->from, "command") == 0)
+  {
+    if (dP->exe[0] != '/')
+    {
+      snprintf(err, errLen, "a command: \"exe\" is the executable, an absolute path");
+      return false;
+    }
+    if ((dP->cwd[0] != 0) && (dP->cwd[0] != '/'))
+    {
+      snprintf(err, errLen, "a command: \"cwd\" is an absolute path");
+      return false;
+    }
+
+    char* a[256];
+    int   n = lineSplit(dP->command, a, 256);
+    dP->port       = 1026;
+    dP->healthPort = 0;
+    for (int ix = 0; ix < n; ix++)
+    {
+      bool last = (ix + 1 >= n);
+      if (((strcmp(a[ix], "--port") == 0) || (strcmp(a[ix], "-p") == 0)) && !last)       dP->port       = atoi(a[ix + 1]);
+      else if ((strcmp(a[ix], "--healthPort") == 0) && !last)                              dP->healthPort = atoi(a[ix + 1]);
+    }
+    for (int ix = 0; ix < n; ix++)
+      free(a[ix]);
+    if ((dP->port <= 0) || (dP->port > 65535) || (dP->healthPort < 0) || (dP->healthPort > 65535))
+    {
+      snprintf(err, errLen, "a command: its --port (and --healthPort) is 1 to 65535");
+      return false;
+    }
+
+    snprintf(dP->where, sizeof(dP->where), "native");
+    snprintf(dP->store, sizeof(dP->store), "corDB");
+    snprintf(dP->history, sizeof(dP->history), "none");
+    dP->dbDir = false;
+    dP->bridges[0] = dP->ckan[0] = dP->bridgeConfig[0] = dP->userContext[0] = 0;
+    dP->opcua.url[0] = dP->aas.url[0] = 0;
+    dP->dds.topics[0] = dP->dds.services[0] = dP->dds.actions[0] = 0;
+    dP->ws = dP->admin = dP->distributed = dP->verbose = false;
+    dP->options[0] = dP->args[0] = 0;
+
+    //
+    // What c3 shows of it follows from its options: the admin API (Configuration, Levels, Metrics, the log's
+    // trim) and the WebSocket transport (Explore's live view) - on its command line, or in its environment
+    //
+    n = lineSplit(dP->command, a, 256);
+    for (int ix = 0; ix + 1 < n; ix++)
+    {
+      if (((strcmp(a[ix], "--apiPlugins") == 0) || (strcmp(a[ix], "-api") == 0)) && (strstr(a[ix + 1], "admin") != NULL))           dP->admin = true;
+      if (((strcmp(a[ix], "--transports") == 0) || (strcmp(a[ix], "-transports") == 0)) && (strstr(a[ix + 1], "ws") != NULL))      dP->ws    = true;
+    }
+    for (int ix = 0; ix < n; ix++)
+      free(a[ix]);
+    n = lineSplit(dP->env, a, 64);
+    for (int ix = 0; ix < n; ix++)
+    {
+      if ((strncmp(a[ix], "CORAINE_APIPLUGINS=", 19) == 0) && (strstr(a[ix], "admin") != NULL))  dP->admin = true;
+      if ((strncmp(a[ix], "CORAINE_TRANSPORTS=", 19) == 0) && (strstr(a[ix], "ws") != NULL))     dP->ws    = true;
+      free(a[ix]);
+    }
+  }
+  else
+    dP->exe[0] = dP->cwd[0] = dP->env[0] = dP->command[0] = 0;
   if ((strcmp(dP->where, "native") != 0) && (strcmp(dP->where, "container") != 0))
   {
     snprintf(err, errLen, "\"where\" is native or container");
@@ -2320,6 +2399,13 @@ static void defRender(const Def* dP, Str* sP)
   strAddf(sP, ", \"admin\": %s, \"distributed\": %s, \"verbose\": %s", dP->admin ? "true" : "false", dP->distributed ? "true" : "false", dP->verbose ? "true" : "false");
   strAdd(sP, ", \"options\": ");      strAddJson(sP, dP->options);
   strAdd(sP, ", \"args\": ");         strAddJson(sP, dP->args);
+  if (strcmp(dP->from, "command") == 0)
+  {
+    strAdd(sP, ", \"exe\": ");        strAddJson(sP, dP->exe);
+    strAdd(sP, ", \"cwd\": ");        strAddJson(sP, (dP->cwd[0] != 0) ? dP->cwd : NULL);
+    strAdd(sP, ", \"env\": ");        strAddJson(sP, dP->env);
+    strAdd(sP, ", \"command\": ");    strAddJson(sP, dP->command);
+  }
   strAddf(sP, ", \"grace\": %d", dP->grace);
   strAdd(sP, ", \"lastStarted\": ");  strAddJson(sP, (dP->lastStarted[0] != 0) ? dP->lastStarted : NULL);
   strAdd(sP, "}");
@@ -2372,6 +2458,9 @@ static bool hasBridge(const Def* dP, const char* name)
 static int needs(const Def* dP)
 {
   int mask = 0;
+
+  if (strcmp(dP->from, "command") == 0)          // its services, if it has any, are its own
+    return 0;
 
   if (strcmp(dP->store, "mongoc") == 0)
     mask |= 1 << KIND_MONGO;
@@ -2456,6 +2545,39 @@ static void ddsFilesPath(const char* file, char* out, int outLen);
 
 static bool argvMake(const Def* dP, const int* ports, bool discovery, Argv* aP, char* err, int errLen)
 {
+  //
+  // A command: as it ran - its environment (env NAME=value ...), the executable, its arguments
+  //
+  if (strcmp(dP->from, "command") == 0)
+  {
+    char* a[256];
+    int   n;
+
+    if (access(dP->exe, X_OK) != 0)
+    {
+      snprintf(err, errLen, "%s is not an executable here (%s)", dP->exe, strerror(errno));
+      return false;
+    }
+    if (dP->env[0] != 0)
+    {
+      argAdd(aP, "/usr/bin/env");
+      n = lineSplit(dP->env, a, 64);
+      for (int ix = 0; ix < n; ix++)
+      {
+        argAdd(aP, a[ix]);
+        free(a[ix]);
+      }
+    }
+    argAdd(aP, dP->exe);
+    n = lineSplit(dP->command, a, 256);
+    for (int ix = 0; ix < n; ix++)
+    {
+      argAdd(aP, a[ix]);
+      free(a[ix]);
+    }
+    return true;
+  }
+
   bool container = (strcmp(dP->where, "container") == 0);
   bool hostNet   = container && hasBridge(dP, "dds");
   bool byName    = container && !hostNet;            // the services by their names on the network c3
@@ -4587,7 +4709,8 @@ static void* startThread(void* vP)
     //
     char*     aasVars[2];
     char**    env    = aasEnv(&d, aasVars);     // with an AAS server: the secrets c3 keeps for it
-    ProcSpawn sp     = { a.v, env, fd, dir, false, true, 0 };
+    const char* cwd  = ((strcmp(d.from, "command") == 0) && (d.cwd[0] != 0)) ? d.cwd : dir;   // a command: where it ran
+    ProcSpawn sp     = { a.v, env, fd, cwd, false, true, 0 };
     pid_t     pid    = procSpawn(&sp);
     aasEnvFree(env, aasVars);
     close(fd);
@@ -5615,6 +5738,16 @@ static bool sourceCheck(const Def* dP, char* err, int errLen)
 {
   char* version = NULL;
 
+  if (strcmp(dP->from, "command") == 0)          // what it runs is its own: only that it can run
+  {
+    if (access(dP->exe, X_OK) != 0)
+    {
+      snprintf(err, errLen, "%s is not an executable here (%s)", dP->exe, strerror(errno));
+      return false;
+    }
+    return true;
+  }
+
   if (strcmp(dP->where, "container") == 0)
   {
     if (engine[0] == 0)
@@ -5966,7 +6099,8 @@ static void brokerStart(CorHttpConn* connP, const Def* dP)
   memset(bP->usedSvc, 0, sizeof(bP->usedSvc));
 
   logLine(bP->logPath, "start '%s' - %s, %s", dP->name,
-          (strcmp(dP->from, "installed") == 0) ? "the installed coraine" : (strcmp(dP->from, "build") == 0) ? "a build of Compile's" : dP->image,
+          (strcmp(dP->from, "installed") == 0) ? "the installed coraine" : (strcmp(dP->from, "build") == 0) ? "a build of Compile's" :
+          (strcmp(dP->from, "command") == 0) ? dP->exe : dP->image,
           (strcmp(dP->where, "native") == 0) ? "natively" : "in a container");
 
   Str def = { NULL, 0, 0 };
@@ -9342,6 +9476,16 @@ void runRequest(CorHttpConn* connP, const char* path)
   if (strcmp(path, "/api/run/trimmed") == 0)
   {
     if (post) trimmedSave(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/external") == 0)
+  {
+    if (get) externalProcess(connP); else serveError(connP, 405, "Method not allowed", path);
+    return;
+  }
+  if (strcmp(path, "/api/run/external/stop") == 0)
+  {
+    if (post) externalStop(connP); else serveError(connP, 405, "Method not allowed", path);
     return;
   }
   if (strcmp(path, "/api/run/external/log") == 0)

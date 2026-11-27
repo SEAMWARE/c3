@@ -337,6 +337,8 @@ extern const char* startToken(void);
 extern void  reposRequest(CorHttpConn* connP, const char* path);
 extern void  issuesRequest(CorHttpConn* connP, const char* path);
 extern void  trimmedSave(CorHttpConn* connP);               // POST /api/run/trimmed (trimmed.c)
+extern void  externalProcess(CorHttpConn* connP);           // GET /api/run/external?port= (external.c)
+extern void  externalStop(CorHttpConn* connP);              // POST /api/run/external/stop?port= (external.c)
 extern char* jsonEscape(CorHttpConn* connP, const char* s);  // the inside of a JSON string, from the connection (demo.c)
 
 // window.c

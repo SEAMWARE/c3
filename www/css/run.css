@@ -26,6 +26,24 @@
 .rn-morebar { display: flex; justify-content: center; margin-top: 12px; }
 .rn-morebar[hidden] { display: none; }
 .rn-item .racts .btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Brokers: Add a broker (+), and how a broker c³ did not start is started (the launch panel) */
+.rn-addbtn { margin-left: auto; min-width: 36px; min-height: 32px; padding: 0 10px; font-size: 1.2rem; line-height: 1; }
+.rn-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.rn-add[hidden] { display: none; }
+.rn-add #rn-add-url { flex: 2 1 240px; min-width: 0; }
+.rn-add #rn-add-name { flex: 1 1 140px; min-width: 0; }
+.rn-add-note { flex: 1 1 100%; color: var(--bad); }
+.rn-add-note[hidden] { display: none; }
+.rn-cmdlwrap { display: flex; flex-direction: column; gap: 10px; flex: 1 1 100%; min-width: 0; }
+.rn-cmdlwrap > .rn-item { width: 100%; }
+.rn-cmdl { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rn-cmdl-head { color: var(--muted); }
+.rn-cmdl-f { display: flex; flex-direction: column; gap: 4px; }
+.rn-cmdl-f > span { font-size: 0.9rem; color: var(--muted); }
+.rn-cmdl-f .cp-input { width: 100%; font-family: var(--mono, monospace); }
+.rn-cmdl-f textarea.cp-input { resize: vertical; }
+.rn-cmdl .racts { display: flex; gap: 8px; justify-content: flex-end; }
 .rn-title { display: flex; align-items: center; gap: 12px; }
 .help-q {
   display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
