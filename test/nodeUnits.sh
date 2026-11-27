@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # nodeUnits.sh - the page's pure parts, run under node: the History panel's (test/temporal.mjs) and AI Assist's
-# show_history (test/showHistory.mjs)
+# show_history (test/showHistory.mjs) and focus (test/focus.mjs)
 #
 # Copyright 2026 Seamware
 # SPDX-License-Identifier: Apache-2.0
@@ -10,4 +10,4 @@
 #
 cd "$(dirname "$0")/.." || exit 1
 command -v node > /dev/null || { echo "nodeUnits: node not found - skipped"; exit 0; }
-node test/temporal.mjs && node test/showHistory.mjs
+node test/temporal.mjs && node test/showHistory.mjs && node test/focus.mjs

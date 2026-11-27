@@ -328,18 +328,25 @@ export function c3Tools(connect, ctx = {}) {
       },
     },
     {
-      name: 'map_focus',
-      description: 'The map, moved to show some entities (all the shown ones when ids is left out).',
+      name: 'focus',
+      description: 'Zoom and pan the view the user is on - the graph or the map, whichever it is - to show some entities '
+        + '(all the shown ones when ids is left out): "zoom out", "show me all", "fit". It never switches between graph '
+        + 'and map; to switch, use set_view first.',
       inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } } },
-      changes: true,
       async run({ ids }) {
         if (location.hash !== '#connect') location.hash = '#connect';
-        if (connect.view !== 'map') await connect.setView('map', true);
-        await connect.emap.ready;
-        const on = (ids || []).filter((id) => connect.emap.has(id));
-        connect.emap.fit(true, ids && ids.length ? on : null);
-        if (ids && ids.length && !on.length) return 'none of them is on the map (no location, or not shown)';
-        return ids && ids.length ? `the map shows ${on.length} of them` : 'the map shows every entity with a location';
+        const some = ids && ids.length;
+        if (connect.view === 'map') {
+          await connect.emap.ready;
+          const on = (ids || []).filter((id) => connect.emap.has(id));
+          if (some && !on.length) return 'the map: none of them is on it (no location, or not shown) - nothing moved';
+          connect.emap.fit(true, some ? on : null);
+          return some ? `the map shows ${on.length} of them` : 'the map shows every shown entity with a location';
+        }
+        const on = (ids || []).filter((id) => connect.graph.nodes.has(id));
+        if (some && !on.length) return 'the graph: none of them is in it (not loaded, or hidden) - nothing moved';
+        connect.graph.fit(some ? on : null);
+        return some ? `the graph shows ${on.length} of them` : 'the graph shows every shown entity';
       },
     },
     {
