@@ -19,6 +19,7 @@
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
 import { attrCamel } from './ngsild.js';
+import { closeX } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -212,10 +213,7 @@ export class OpcuaMapper {
   closeButtons() {
     const out = [];
     if (this.from === 'compile') out.push(button(t('← Back to Compile'), 'small dm-back', () => { this.close(); location.hash = '#compile'; }));
-    const close = button('×', 'dm-close', () => this.close());
-    close.title = t('back to the brokers');
-    close.setAttribute('aria-label', t('close the OPC UA mapping'));
-    out.push(close);
+    out.push(closeX(t('Close the OPC UA mapping - back to the brokers'), () => this.close()));
     return out;
   }
 
@@ -948,7 +946,7 @@ export class OpcuaMapper {
     out.push(start);
 
     const back = el('div', 'dm-row');
-    back.append(button(t('Edit the mapping'), '', () => this.show('map')), button(t('Close'), '', () => this.close()));
+    back.append(button(t('Edit the mapping'), '', () => this.show('map')));
     if (this.from === 'compile') back.append(button(t('← Back to Compile'), '', () => { this.close(); location.hash = '#compile'; }));
     out.push(back);
     return out;

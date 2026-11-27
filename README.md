@@ -148,6 +148,10 @@ buttons. Any other program on the port is an error.
 Full-screen, **Esc** leaves it, as F11 does - an Esc nothing on the page used: an open menu, panel or dialog
 takes it first (and closes), so leaving full-screen takes one more. A selected entity stays selected.
 
+Every popup, panel and question box closes by a red **×** in its top right corner - no Close, Cancel, OK or No
+button beside it (its tooltip says what closing means: "Close without saving", "Keep libmicrohttpd"). Its other
+buttons are its actions; Save is a disk, and saving closes it too.
+
 The Chrome profile in `~/.local/state/c3/chrome` is c³'s alone. A Chrome on it that no c3 controls - a
 window opened without the buttons, or one whose c3 was stopped - would take every new window over, and
 none could be shown again. Before c3 opens the window it controls, it stops that Chrome (SIGTERM; the
@@ -372,7 +376,7 @@ markers are coloured by), the downloaded map areas, and the last page:
   double-click gives the default width back. Its **×** closes it - the graph and the map take its room; the selection stays, and selecting an
   entity (a click on a box or a marker, even the selected one) brings the panel back. A live change does not.
 - **Deletes ask first** - every delete in Explore (the entity, an attribute, a history, an instance) asks
-  in a box of its own: "Delete <what> at the broker? It cannot be undone.", Cancel focused (Esc too). On a
+  in a box of its own: "Delete <what> at the broker? It cannot be undone.", its red × focused (Esc too). On a
   broker c³ sends no token to, the question says that anyone who can reach it can delete as well.
 - **An attribute's menu** - right-click it in the attribute panel: **Edit <name>…** (the editor, that
   attribute opened), **Delete <name>…** (`DELETE /entities/{id}/attrs/{name}`, with `datasetId` for an

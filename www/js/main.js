@@ -17,6 +17,7 @@ import { windowInit } from './window.js';
 import { headerInit } from './header.js';
 import { docsInit, docsShow } from './docs.js';
 import { i18nInit, t, plural, LANGUAGES, language, setLanguage } from './i18n.js';
+import { xFill } from './ui.js';
 import { openMenu } from './menu.js';
 
 const $ = (id) => document.getElementById(id);
@@ -180,6 +181,7 @@ try { textSizeApply(localStorage.getItem('c3.textSize') || '100'); } catch { /* 
 
 async function main() {
   await i18nInit();
+  xFill();                                            // the page's own × buttons: their cross
   languageButton();
   const boot = await splash();
   if (!boot) return;

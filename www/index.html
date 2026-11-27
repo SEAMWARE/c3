@@ -56,7 +56,7 @@
       </div>
     </div>
     <div class="aipop" id="ai-pop" role="dialog" aria-labelledby="ai-title" hidden>
-      <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">not available here</span></h2><button class="iconbtn" type="button" id="ai-close" aria-label="Close">✕</button></div>
+      <div class="ai-head"><h2 id="ai-title">AI Assist <span class="soon">not available here</span></h2><button class="xclose" type="button" id="ai-close" title="Close" aria-label="Close"></button></div>
       <p>Ask about the connected broker in your own words - <em>which vehicles near the depot were above 90 today?</em> - and the Coraine Assistant answers by querying it, with the entities of the answer highlighted in Explore.</p>
       <p class="why" id="ai-why"></p>
       <p>While it is being developed it runs on your own Claude login: <span class="mono">claude</span> (Claude Code, logged in) and <span class="mono">corMcp</span> on this machine, and c³ started with <span class="mono">C3_DEV=1</span>. The assistant's instructions come from Seamware's <span class="mono">coraine-assistant</span> repository, when it is checked out.</p>
@@ -69,7 +69,7 @@
       <span class="aip-prov" id="ai-prov"></span>
       <button class="btn small" type="button" id="ai-tokbtn" title="The AI Assist token - change or forget it">Token</button>
       <button class="iconbtn" type="button" id="ai-new" title="A new conversation - the model forgets this one" aria-label="A new conversation - the model forgets this one"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 7v6M9 10h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
-      <button class="iconbtn" type="button" id="ai-pclose" aria-label="Close the assistant">✕</button>
+      <button class="xclose" type="button" id="ai-pclose" title="Close the assistant" aria-label="Close the assistant"></button>
     </div>
     <div class="aip-ctx" id="ai-ctx"></div>
     <form class="aip-token" id="ai-token" hidden>
@@ -118,7 +118,7 @@
             <span class="grow"></span>
             <span class="el" id="cp-run-elapsed"></span>
             <button class="btn" type="button" id="cp-cancel" hidden>Cancel</button>
-            <button class="btn" type="button" id="cp-run-close" aria-label="Close">×</button>
+            <button class="xclose" type="button" id="cp-run-close" title="Close" aria-label="Close"></button>
           </div>
           <div class="cp-phases" id="cp-phases"></div>
           <div class="cp-now" id="cp-now" aria-live="off"></div>
@@ -218,7 +218,7 @@
           </div>
           <div class="cp-presets">
             <input class="cp-input" id="cp-preset-name" maxlength="64" placeholder="a name for this choice" spellcheck="false" autocomplete="off" style="flex: 1 1 140px">
-            <button class="btn" type="button" id="cp-preset-save">Save</button>
+            <button class="btn isave" type="button" id="cp-preset-save" title="Save this choice under the name" aria-label="Save this choice under the name"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 4h11.2L20 7.8V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4"/><path d="M7.5 20v-6.5h9V20"/></svg></button>
           </div>
           <span class="cp-note">Kept in c3.json: the optimisation, the features, the workload.</span>
         </details>
@@ -520,7 +520,7 @@
       <span class="live" id="live" hidden><span class="dot"></span><span class="label" id="live-label"></span></span>
       <button class="btn alarmbtn" type="button" id="alarm-btn" title="Alarms" aria-haspopup="dialog" aria-expanded="false" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v4.2L4.3 16.5h15.4L18 13.2V9a6 6 0 0 0-6-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.6 19a2.5 2.5 0 0 0 4.8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Alarms<span class="badge" id="alarm-badge" hidden></span></button>
       <div class="tokenpop alarmpop" id="alarmpop" role="dialog" aria-label="Alarms" hidden>
-        <div class="tp-head"><span>Alarms</span><span class="al-actions"><button class="btn small" type="button" id="al-ackall">Ack all</button><button class="btn small" type="button" id="al-rules-btn">Rules…</button><button class="iconbtn" type="button" id="al-close" aria-label="Close">✕</button></span></div>
+        <div class="tp-head"><span>Alarms</span><span class="al-actions"><button class="btn small" type="button" id="al-ackall">Ack all</button><button class="btn small" type="button" id="al-rules-btn">Rules…</button><button class="xclose" type="button" id="al-close" title="Close" aria-label="Close"></button></span></div>
         <div class="al-list" id="al-list"></div>
         <div class="al-rules" id="al-rules" hidden>
           <div class="tp-sub">Alert rules of this broker <span class="muted">- each one a subscription c³ makes over the broker's WebSocket</span></div>
@@ -537,7 +537,7 @@
       </div>
       <span class="notice" id="notice" hidden></span>
       <div class="tokenpop" id="tokenpop" role="dialog" aria-label="Access token and headers" hidden>
-        <div class="tp-head"><span>Access token and headers for <span class="mono" id="tp-broker"></span></span><button class="iconbtn" type="button" id="tp-close" aria-label="Close">✕</button></div>
+        <div class="tp-head"><span>Access token and headers for <span class="mono" id="tp-broker"></span></span><button class="xclose" type="button" id="tp-close" title="Close" aria-label="Close"></button></div>
         <p class="tp-state" id="tp-state"></p>
         <form class="tp-login" id="tp-login">
           <div class="tp-sub">Log in to its OpenID provider <span class="muted">(Keycloak, ...)</span></div>
@@ -640,7 +640,7 @@
           <div class="chips"><span class="chip2" id="not-on-map"></span><span class="chip2 warn" id="map-offline" hidden>online map not reachable - downloaded areas only</span></div>
         </div>
         <div class="dlpanel" id="dlpanel" role="dialog" aria-label="Offline map" hidden>
-          <div class="jhead"><span class="jtitle">Offline map</span><button class="btn" type="button" id="dl-close" aria-label="Close">×</button></div>
+          <div class="jhead"><span class="jtitle">Offline map</span><button class="xclose" type="button" id="dl-close" title="Close" aria-label="Close"></button></div>
           <div class="dlbody">
             <h3>Download this area</h3>
             <div class="dlrow"><span class="k">area</span><span class="v mono" id="dl-bbox"></span></div>
@@ -662,7 +662,7 @@
         </div>
         <div class="modebar" id="modebar" hidden><span id="mode-text"></span><button class="btn" type="button" id="mode-back">Back to the picked types</button></div>
         <div class="jsonpanel" id="jsonpanel" role="dialog" aria-label="Entity JSON" hidden>
-          <div class="jhead"><span class="jtitle" id="json-title"></span><button class="btn" type="button" id="json-copy">Copy</button><button class="btn" type="button" id="json-close" aria-label="Close the JSON">×</button></div>
+          <div class="jhead"><span class="jtitle" id="json-title"></span><button class="btn" type="button" id="json-copy">Copy</button><button class="xclose" type="button" id="json-close" title="Close the JSON" aria-label="Close the JSON"></button></div>
           <pre id="json-pre" tabindex="0"></pre>
         </div>
         <div class="editor" id="editor" role="dialog" aria-label="Edit the entity" hidden></div>
@@ -674,7 +674,7 @@
 
       <div class="eresize" id="entity-resize" role="separator" aria-orientation="vertical" tabindex="0"></div>
       <aside class="panel entity" id="entity">
-        <div class="ehead2"><h2 class="section">Entity</h2><span class="etools" id="entity-tools"></span><button class="btn eclose" type="button" id="entity-close">×</button></div>
+        <div class="ehead2"><h2 class="section">Entity</h2><span class="etools" id="entity-tools"></span><button class="xclose" type="button" id="entity-close"></button></div>
         <div class="empty" id="entity-empty">Click an entity to see its attributes.</div>
         <div id="entity-body" hidden></div>
       </aside>
@@ -721,13 +721,13 @@
     </div>
 
     <dialog class="db-progress" id="db-progress" aria-labelledby="db-ptitle">
+      <button class="xclose corner" type="button" id="db-pclose" title="Close" aria-label="Close"></button>
       <h2 id="db-ptitle">Starting the Dashboard</h2>
       <div class="db-pbar" role="progressbar" aria-labelledby="db-ptitle" id="db-pbar"><div id="db-pfill"></div></div>
       <div class="db-pcount" id="db-pcount"></div>
       <ol class="db-steps" id="db-steps"></ol>
       <p class="db-pwhy" id="db-pwhy" hidden></p>
       <details class="db-plog" id="db-plog"><summary>The log</summary><pre id="db-plogtext"></pre></details>
-      <div class="db-pacts"><button type="button" class="btn" id="db-pclose">Close</button></div>
     </dialog>
     <div class="db-bar" id="db-bar" hidden>
       <span class="rdot ok"></span>
@@ -776,9 +776,10 @@
 
 <!-- Compile: a build followed on the page has ended (outside every page: a page hidden would hide it) -->
 <dialog class="db-progress" id="cp-done" aria-labelledby="cp-done-title">
+  <button class="xclose corner" type="button" id="cp-done-close" title="Close" aria-label="Close"></button>
   <h2 id="cp-done-title">The compilation is done</h2>
   <p class="mono" id="cp-done-what"></p>
-  <div class="db-pacts"><button type="button" class="btn" id="cp-done-close">Close</button><button type="button" class="btn primary" id="cp-done-start">Start it</button></div>
+  <div class="db-pacts"><button type="button" class="btn primary" id="cp-done-start">Start it</button></div>
 </dialog>
 
 <script type="module" src="js/main.js"></script>

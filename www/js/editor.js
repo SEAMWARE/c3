@@ -36,6 +36,7 @@
 //
 import { brokerWrite } from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { closeX, saveButton } from './ui.js';
 
 export const NULL = 'urn:ngsi-ld:null';
 
@@ -353,8 +354,8 @@ export class EntityEditor {
     const head = el('div', 'ehead');
     this.title = el('span', 'etitle');
     this.modeLabel = el('span', 'emode');
-    this.saveBtn = button('btn primary', t('Save'), t('Save - send the request below'), () => this.save());
-    head.append(this.title, this.modeLabel, this.saveBtn, button('btn', t('Cancel'), t('Close without saving'), () => this.close()));
+    this.saveBtn = saveButton(t('Save - send the request below'), () => this.save());
+    head.append(this.title, this.modeLabel, this.saveBtn, closeX(t('Close without saving'), () => this.close()));
 
     this.idRow = el('div', 'eidrow');
     this.body = el('div', 'ebody');
@@ -522,6 +523,7 @@ export class EntityEditor {
     const idBad = this.mode !== 'edit' && (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(this.id) || !this.type.trim());
     this.saveBtn.disabled = empty || this.bad.size > 0 || idBad;
     this.saveBtn.title = this.bad.size ? t('An input does not parse - it is marked') : (idBad ? t('An id (a URI) and a type are needed') : t('Save - send the request below'));
+    this.saveBtn.setAttribute('aria-label', this.saveBtn.title);
 
     const before = this.origAttrs();
     for (const row of this.body.querySelectorAll('.erow[data-path]')) {
@@ -968,7 +970,7 @@ export class EntityEditor {
         const first = row && (row.querySelector('.ecell input, .ecell textarea') || row.querySelector('.ecell select'));
         if (first) first.focus();
       });
-      const cancel = button('btn small', t('Cancel'), t('Cancel'), () => { wrap.textContent = ''; wrap.append(opener); opener.focus(); });
+      const cancel = closeX(t('Cancel - add nothing'), () => { wrap.textContent = ''; wrap.append(opener); opener.focus(); });
       name.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go.click(); } };
       wrap.append(dl, name, kind);
       if (!inst) wrap.append(ds);

@@ -25,6 +25,7 @@ import { EntityEditor, NULL } from './editor.js';
 import { Alerts } from './alerts.js';
 import { Temporal, deleteEntityHistory } from './temporal.js';
 import { t, plural } from './i18n.js';
+import { closeX } from './ui.js';
 
 
 const $ = (id) => document.getElementById(id);
@@ -420,7 +421,7 @@ export class Connect {
   }
 
   //
-  // lostPopup - over whichever page is shown: the broker is gone; OK closes it (Explore keeps saying so)
+  // lostPopup - over whichever page is shown: the broker is gone; its × (or Esc, Enter) closes it (Explore keeps saying so)
   //
   lostPopup(url, at) {
     const old = document.querySelector('.brokerlost');
@@ -429,17 +430,13 @@ export class Connect {
     ov.setAttribute('role', 'alertdialog');
     ov.setAttribute('aria-modal', 'true');
     const card = el('div', 'card bad');
-    const ok = el('button', 'btn primary', t('OK'));
-    ok.type = 'button';
     const close = () => { ov.remove(); document.removeEventListener('keydown', key, true); };
     const key = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(); } };
-    ok.onclick = close;
-    const actions = el('div', 'actions');
-    actions.append(ok);
+    const ok = closeX(t('Close'), close, true);
     const h = el('h3', null, t('The broker stopped answering'));
     h.id = 'brokerlost-title';
     ov.setAttribute('aria-labelledby', h.id);
-    card.append(h, el('p', 'mono', url), el('p', null, t('At {time}. Explore shows nothing of it now; when it answers again, c³ connects to it again.', { time: at })), actions);
+    card.append(ok, h, el('p', 'mono', url), el('p', null, t('At {time}. Explore shows nothing of it now; when it answers again, c³ connects to it again.', { time: at })));
     ov.append(card);
     document.body.append(ov);
     document.addEventListener('keydown', key, true);
@@ -692,7 +689,7 @@ export class Connect {
   }
 
   //
-  // ask - a question in a box of its own, answered by a button: true for the first
+  // ask - a question in a box of its own: its button true, its × (or Esc, a click beside it) false
   //
   ask(text, yes, no = t('Cancel')) {
     return new Promise((resolve) => {
@@ -708,12 +705,11 @@ export class Connect {
       actions.className = 'actions';
       const done = (v) => { pop.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
       const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
-      const bNo = document.createElement('button');
-      bNo.className = 'btn'; bNo.type = 'button'; bNo.textContent = no; bNo.onclick = () => done(false);
+      const bNo = closeX(no, () => done(false), true);
       const bYes = document.createElement('button');
       bYes.className = 'btn primary'; bYes.type = 'button'; bYes.textContent = yes; bYes.onclick = () => done(true);
-      actions.append(bNo, bYes);
-      box.append(p, actions);
+      actions.append(bYes);
+      box.append(bNo, p, actions);
       pop.append(box);
       pop.addEventListener('pointerdown', (e) => { if (e.target === pop) done(false); });
       document.addEventListener('keydown', key, true);
@@ -1926,10 +1922,8 @@ export class Connect {
     box.setAttribute('aria-label', t('{entity} with its linked entities, level {level}', { entity: `${typesOf(full).map(typeLabel).join(', ')} ${full.id}`, level }));
     const head = box.querySelector('.lhead');
     head.append(el('span', 'lv', t('linked · level {level}', { level })));
-    const close = el('button', 'lclose', '×');
-    close.type = 'button';
-    close.setAttribute('aria-label', t('Close linked entities'));
-    close.onclick = () => this.collapse(id);
+    const close = closeX(t('Close linked entities'), () => this.collapse(id));
+    close.classList.add('lclose');
     head.append(close);
     this.graph.expand(id, box);
     this.graph.select(id);

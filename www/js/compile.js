@@ -13,6 +13,7 @@
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
 import { Source } from './source.js';
+import { closeX } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -299,7 +300,7 @@ function mdRender(md) {
 }
 
 //
-// helpShow - a section in a dialog; Escape, the button or a click beside it closes it
+// helpShow - a section in a dialog; Escape, its × or a click beside it closes it
 //
 export function helpShow(title, text) {
   const ov = el('div', 'overlay cp-modal');
@@ -309,19 +310,15 @@ export function helpShow(title, text) {
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-  const ok = el('button', 'btn', t('Close'));
-  ok.type = 'button';
-  ok.addEventListener('click', close);
+  const x = closeX(t('Close'), close, true);
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const h = el('h3');
   h.append(mdInline(title));
-  const actions = el('div', 'actions');
-  actions.append(ok);
-  card.append(h, mdRender(text), actions);
+  card.append(x, h, mdRender(text));
   ov.append(card);
   document.body.append(ov);
-  ok.focus();
+  x.focus();
 }
 
 //
@@ -365,17 +362,15 @@ function mapAsk(m) {
   const card = el('div', 'card cp-help-card');
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-  const cancel = el('button', 'btn', t('Stay here'));
-  cancel.type = 'button';
-  cancel.addEventListener('click', close);
+  const x = closeX(t('Stay here'), close, true);
   const go = el('button', 'btn primary', t('Go to Operate'));
   go.type = 'button';
   go.addEventListener('click', () => { close(); window.dispatchEvent(new CustomEvent(m.event)); });
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const actions = el('div', 'actions');
-  actions.append(cancel, go);
-  card.append(el('h3', '', t(m.heading)), el('p', '', t(m.where)), el('p', '', t(m.how)), actions);
+  actions.append(go);
+  card.append(x, el('h3', '', t(m.heading)), el('p', '', t(m.where)), el('p', '', t(m.how)), actions);
   ov.append(card);
   document.body.append(ov);
   go.focus();
@@ -629,8 +624,8 @@ export class Compile {
       list.append(li);
     }
     const yes = el('button', 'btn primary', t('Switch to {server}', { server: t(HTTP_LABEL[id]) }));
-    const no = el('button', 'btn', t('Keep {server}', { server: httpLabel(this.choice.httpServer) }));
-    yes.type = no.type = 'button';
+    const no = closeX(t('Keep {server}', { server: httpLabel(this.choice.httpServer) }), null, true);
+    yes.type = 'button';
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
     yes.addEventListener('click', () => { close(); apply(); });
@@ -638,9 +633,9 @@ export class Compile {
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
     document.addEventListener('keydown', onKey);
     const actions = el('div', 'actions');
-    actions.append(yes, no);
+    actions.append(yes);
     const server = t(HTTP_LABEL[id]), back = httpLabel(this.choice.httpServer);
-    card.append(el('h3', '', t('Switch to {server}?', { server })),
+    card.append(no, el('h3', '', t('Switch to {server}?', { server })),
                 el('p', '', plural(lost.length, 'With {server}, this switch is not built:', 'With {server}, these switches are not built:', { server })),
                 list,
                 el('p', '', plural(lost.length, 'Switching back to {server} turns it on again.', 'Switching back to {server} turns them on again.', { server: back })),
