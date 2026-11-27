@@ -12,6 +12,7 @@
 // GET: the NGSI-LD API (/ngsi-ld/...), /version, coraine's /admin/tenants (the tenants Connect offers),
 // coraine's /admin/bridges/<bridge>/inventory (what a bridge's source offers - Operate's OPC UA browser),
 // coraine's /admin/log (the log and trace levels - Operate's Levels; PUT sets them, from c3's own page),
+// coraine's /admin/log/lines (its recent log, kept in memory - the log of a broker c3 does not run),
 // coraine's /admin/config and /build (the options a broker runs with, what it is built with - Operate),
 // coraine's /admin/metrics (Prometheus text, passed on as it is - Operate's Metrics) and
 // /.well-known/oauth-protected-resource (RFC 9728: how to get a token the broker takes - Connect reads it on
@@ -373,10 +374,10 @@ void proxyRequest(CorHttpConn* connP, const char* path)
   {
     if ((strncmp(path, "/ngsi-ld/", 9) != 0) && (strcmp(path, "/version") != 0) && (strcmp(path, "/admin/tenants") != 0) &&
         (strcmp(path, "/.well-known/oauth-protected-resource") != 0) && (inventoryPath(path) == false) && (strcmp(path, "/admin/log") != 0) &&
-        (strcmp(path, "/admin/config") != 0) && (strcmp(path, "/admin/metrics") != 0) && (strcmp(path, "/build") != 0) &&
+        (strcmp(path, "/admin/log/lines") != 0) && (strcmp(path, "/admin/config") != 0) && (strcmp(path, "/admin/metrics") != 0) && (strcmp(path, "/build") != 0) &&
         (strcmp(path, "/admin/indexes") != 0))
     {
-      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /build, /admin/tenants, /admin/log, /admin/config, /admin/metrics, /admin/indexes, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
+      serveError(connP, 403, "Forbidden", "the proxy forwards GET for the NGSI-LD API (/ngsi-ld/...), /version, /build, /admin/tenants, /admin/log, /admin/log/lines, /admin/config, /admin/metrics, /admin/indexes, /admin/bridges/<bridge>/inventory and /.well-known/oauth-protected-resource only");
       return;
     }
   }

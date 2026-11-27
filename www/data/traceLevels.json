@@ -442,5 +442,11 @@
   "name": "CtService",
   "library": "coraine",
   "traces": "Service Execution: registrations, executions, executors"
+ },
+ {
+  "level": 404,
+  "name": "CtTroeSql",
+  "library": "coraine",
+  "traces": "TRoE store: the SQL of a temporal query's entity selector"
  }
 ]

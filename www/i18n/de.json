@@ -1639,8 +1639,11 @@
   "No broker yet - set one up above, or connect to one in Explore": "Noch kein Broker - oben einen einrichten oder in Erkunden mit einem verbinden",
   "on this machine, started outside c³ - connected to in Explore": "auf diesem Rechner, außerhalb von c³ gestartet - in Erkunden verbunden",
   "on another machine - connected to in Explore": "auf einem anderen Rechner - in Erkunden verbunden",
-  "{url} does not answer.": "{url} antwortet nicht.",
-  "No admin API in this broker (GET /admin/config: HTTP {status}) - no configuration, metrics or levels; its log is where its starter sends it.": "Keine Admin-API in diesem Broker (GET /admin/config: HTTP {status}) - keine Konfiguration, Metriken oder Stufen; sein Log ist dort, wohin sein Starter es schickt.",
-  "Not started by c³ - its log is in {dir} on the machine that runs it.": "Nicht von c³ gestartet - sein Log liegt in {dir} auf dem Rechner, der ihn ausführt.",
-  "Not started by c³ - it logs to {to}, wherever its starter sends that.": "Nicht von c³ gestartet - es loggt nach {to}, wohin auch immer sein Starter das schickt."
+  "No log: {url} does not answer.": "Kein Log: {url} antwortet nicht.",
+  "No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).": "Kein Log, keine Konfiguration, Metriken oder Stufen: dieser Broker hat keine Admin-API (GET /admin/config: HTTP {status}).",
+  "No log: this broker keeps none in memory (--logLines 0) and c³ cannot read where it writes it.": "Kein Log: dieser Broker behält keines im Speicher (--logLines 0), und c³ kann nicht lesen, wohin er es schreibt.",
+  "No log: this coraine is older than GET /admin/log/lines, and c³ cannot read where it writes its log.": "Kein Log: dieses coraine ist älter als GET /admin/log/lines, und c³ kann nicht lesen, wohin es sein Log schreibt.",
+  "No log: GET /admin/log/lines: {why}": "Kein Log: GET /admin/log/lines: {why}",
+  "A tick takes effect at once: it is sent to the broker (PUT /admin/log) as you click.": "Jedes Häkchen wirkt sofort: es wird beim Klicken an den Broker gesendet (PUT /admin/log).",
+  "sent to the broker": "an den Broker gesendet"
 }
