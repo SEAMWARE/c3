@@ -13,10 +13,13 @@
 //
 import * as api from './api.js';
 import { t, tk, plural } from './i18n.js';
+import { closeX } from './ui.js';
 
 const PERIOD_MS = 5000;
 const SAMPLES_MAX = 120;
-const W = 300, H = 56;
+const W = 300, H = 56;                // a chart in the row; a chart opened big (open): BW x BH
+const BW = 900, BH = 300;
+const COLOURS = 8;                     // s1..s8, cycled
 
 const svgNS = 'http://www.w3.org/2000/svg';
 
@@ -125,6 +128,20 @@ function latencyP95(a, b) {
 }
 
 //
+// histMean - a histogram's mean over the interval: its _sum rate over its _count rate (times 'k')
+//
+const histMean = (name, k = 1) => (a, b) => {
+  const n = rate(a, b, name + '_count'), s = rate(a, b, name + '_sum');
+  return (n && s !== null) ? (s / n) * k : null;
+};
+
+//
+// opsOf - one series per counter of an operation group (ngsild_<prefix>..._total) the broker serves, its rate
+//
+const opsOf = (re) => (b) => [...b.v.keys()].filter((n) => re.test(n)).sort()
+  .map((n) => ({ label: opLabel(n), f: (x, y) => rate(x, y, n) }));
+
+//
 // The charts: a title, a unit, gauge (drawn across a break too), and the series - each a label, a colour
 // class and the value of an interval (a: the sample before, b: this one)
 //
@@ -153,13 +170,74 @@ const CHARTS = [
     { label: tk('periodic'),       cls: 's2', f: (a, b) => gauge(b, 'ngsild_pernot_cache_size') },
     { label: tk('context source'), cls: 's3', f: (a, b) => gauge(b, 'ngsild_csource_subscription_cache_size') },
     { label: tk('SSE streams'),    cls: 's4', f: (a, b) => gauge(b, 'ngsild_sse_streams') },
+    { label: tk('registrations'),  cls: 's6', f: (a, b) => gauge(b, 'ngsild_csource_registration_cache_size') },
   ] },
   { title: tk('Memory'), unit: ' MiB', gauge: true, series: [
     { label: tk('used'),     cls: 's1', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_used_bytes')) },
     { label: tk('resident'), cls: 's2', f: (a, b) => mibOf(gauge(b, 'ngsild_memory_resident_bytes')) },
     { label: tk('budget'),   cls: 's5', f: (a, b) => { const v = gauge(b, 'ngsild_memory_budget_bytes'); return v ? mibOf(v) : null; } },
+    { label: tk('entity map'), cls: 's6', f: (a, b) => mibOf(gauge(b, 'ngsild_entity_map_bytes')) },
   ] },
+  { title: tk('Entity operations'), unit: '/s', ops: opsOf(/^ngsild_(entity|attr)_[a-z_]+_total$/) },
+  { title: tk('Batch operations'), unit: '/s', ops: opsOf(/^ngsild_batch_[a-z_]+_total$/) },
+  { title: tk('Subscription and registration operations'), unit: '/s', ops: opsOf(/^ngsild_(subscription|registration|csr_sub)_[a-z_]+_total$/) },
+  { title: tk('Request handling'), unit: '/s', series: [
+    { label: tk('inline'),               cls: 's1', f: (a, b) => rate(a, b, 'ngsild_requests_inline_total') },
+    { label: tk('worker'),               cls: 's2', f: (a, b) => rate(a, b, 'ngsild_requests_worker_total') },
+    { label: tk('refused, memory'),      cls: 's5', f: (a, b) => rate(a, b, 'ngsild_requests_refused_memory_total') },
+    { label: tk('refused, store paused'), cls: 's4', f: (a, b) => rate(a, b, 'ngsild_requests_refused_store_paused_total') },
+    { label: tk('SSE refused'),          cls: 's7', f: (a, b) => rate(a, b, 'ngsild_sse_streams_refused_total') },
+  ] },
+  { title: tk('Response bodies'), unit: ' KiB/s', series: [
+    { label: tk('sent'), cls: 's1', f: (a, b) => { const r = rate(a, b, 'ngsild_response_body_bytes_total'); return r === null ? null : r / 1024; } },
+  ] },
+  { title: tk('Forwarding (distributed operations)'), unit: '/s', series: [
+    { label: tk('forwarded'), cls: 's1', f: (a, b) => rate(a, b, 'ngsild_distop_forwarded_total') },
+    { label: tk('failed'),    cls: 's5', f: (a, b) => rate(a, b, 'ngsild_distop_forward_failed_total') },
+  ] },
+  { title: tk('Forwarding latency'), unit: ' ms', series: [
+    { label: tk('mean'), cls: 's1', f: histMean('ngsild_distop_forward_latency_seconds', 1000) },
+  ] },
+  { title: tk('Batch size'), unit: '', series: [
+    { label: tk('mean entities'), cls: 's1', f: histMean('ngsild_batch_item_count') },
+  ] },
+  { title: tk('Entity map'), unit: '', gauge: true, series: [
+    { label: tk('entities'), cls: 's1', f: (a, b) => gauge(b, 'ngsild_entity_map_store_size') },
+  ] },
+  { title: tk('Tenants and store'), unit: '', gauge: true, series: [
+    { label: tk('tenants'),      cls: 's1', f: (a, b) => gauge(b, 'ngsild_tenants_total') },
+    { label: tk('store paused'), cls: 's5', f: (a, b) => gauge(b, 'ngsild_store_paused') },
+  ] },
+  { title: tk('Other'), unit: '', other: true },
 ];
+
+//
+// KNOWN - every metric a chart above draws; 'Other' draws the rest a broker serves (a newer coraine's), a
+// counter as its rate, a gauge as it is
+//
+const KNOWN = new Set(['ngsild_request_latency_seconds_count', 'ngsild_request_latency_seconds_sum', 'ngsild_request_latency_seconds_bucket',
+  'ngsild_errors_4xx_total', 'ngsild_errors_5xx_total', 'ngsild_notifications_sent_total', 'ngsild_csource_notifications_sent_total',
+  'ngsild_sse_events_total', 'ngsild_notifications_failed_total', 'ngsild_csource_notifications_failed_total', 'ngsild_subscription_cache_size',
+  'ngsild_pernot_cache_size', 'ngsild_csource_subscription_cache_size', 'ngsild_sse_streams', 'ngsild_csource_registration_cache_size',
+  'ngsild_memory_used_bytes', 'ngsild_memory_resident_bytes', 'ngsild_memory_budget_bytes', 'ngsild_entity_map_bytes',
+  'ngsild_requests_inline_total', 'ngsild_requests_worker_total', 'ngsild_requests_refused_memory_total', 'ngsild_requests_refused_store_paused_total',
+  'ngsild_sse_streams_refused_total', 'ngsild_response_body_bytes_total', 'ngsild_distop_forwarded_total', 'ngsild_distop_forward_failed_total',
+  'ngsild_distop_forward_latency_seconds_count', 'ngsild_distop_forward_latency_seconds_sum', 'ngsild_distop_forward_latency_seconds_bucket',
+  'ngsild_batch_item_count_count', 'ngsild_batch_item_count_sum', 'ngsild_batch_item_count_bucket', 'ngsild_entity_map_store_size',
+  'ngsild_tenants_total', 'ngsild_store_paused']);
+
+const otherOf = (b) => [...b.v.keys()].filter((n) => !KNOWN.has(n) && !isOp(n) && !Array.isArray(b.v.get(n))).sort()
+  .map((n) => n.endsWith('_total') ? { label: n.slice(7, -6).replace(/_/g, ' ') + '/s', f: (x, y) => rate(x, y, n) }
+    : { label: n.slice(7).replace(/_/g, ' '), f: (x, y) => gauge(y, n) });
+
+//
+// seriesOf - a chart's series: its own, or those of the operations or metrics the last sample has; a colour each
+//
+function seriesOf(c, s) {
+  const b = s[s.length - 1];
+  const list = c.series || (b && b.v ? (c.ops ? c.ops(b) : c.other ? otherOf(b) : []) : []);
+  return list.map((x, i) => (x.cls ? x : { ...x, cls: 's' + ((i % COLOURS) + 1) }));
+}
 
 const mibOf = (v) => (v === null ? null : v / (1024 * 1024));
 
@@ -206,6 +284,7 @@ export class Metrics {
   stop() {
     clearInterval(this.timer);
     this.timer = null;
+    this.close();
   }
 
   async read(url) {
@@ -260,44 +339,72 @@ export class Metrics {
       : t('Every 5 s, the last {n} s (10 min kept). A rate is per second over each 5 s.', { n: span })));
 
     const grid = el('div', 'mx-grid');
-    for (const c of CHARTS) grid.append(this.chart(c, s));
+    for (const c of CHARTS) {
+      if (c.other && !seriesOf(c, s).length) continue;           // nothing beyond the charts above
+      grid.append(this.chart(c, s, url));
+    }
     box.append(grid);
+    if (this.big && this.big.url === url) this.bigDraw();
     box.append(this.busiest(s));
     return box;
   }
 
-  chart(c, s) {
-    const pts = c.series.map((ser) => s.slice(1).map((b, i) => [b.t, (c.gauge || sameRun(s[i], b)) ? ser.f(s[i], b) : null]));
-    if (c.series.every((ser, k) => pts[k].every(([, v]) => v === null))) {
+  //
+  // chart - one chart in the row: its title, its series' last values (the busiest 4 when it has more - all of
+  // them when opened), its lines; a click (Enter) opens it big (open)
+  //
+  chart(c, s, url, big = false) {
+    const series = seriesOf(c, s);
+    const pts = series.map((ser) => s.slice(1).map((b, i) => [b.t, (c.gauge || sameRun(s[i], b)) ? ser.f(s[i], b) : null]));
+    if (series.every((ser, k) => pts[k].every(([, v]) => v === null))) {
       const empty = el('div', 'mx-chart');
       empty.append(el('div', 'mx-title', t(c.title)), el('div', 'hrange', t('not served by this broker')));
       return empty;
     }
-    const box = el('div', 'mx-chart');
+    const box = el('div', 'mx-chart' + (big ? ' big' : ''));
+    if (!big) {
+      box.tabIndex = 0;
+      box.setAttribute('role', 'button');
+      box.title = t('{title} - open it big', { title: t(c.title) });
+      box.addEventListener('click', () => this.open(c, url));
+      box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.open(c, url); } });
+    }
     const head = el('div', 'mx-head');
     head.append(el('span', 'mx-title', t(c.title)));
     const now = el('span', 'mx-now');
-    c.series.forEach((ser, k) => {
-      const last = pts[k].length ? pts[k][pts[k].length - 1][1] : null;
-      if (last === null && pts[k].every(([, v]) => v === null)) return;
+    const lastOf = (k) => (pts[k].length ? pts[k][pts[k].length - 1][1] : null);
+    let shown = series.map((ser, k) => k).filter((k) => !(lastOf(k) === null && pts[k].every(([, v]) => v === null)));
+    const more = !big && shown.length > 4 ? shown.length - 4 : 0;
+    if (more) shown = shown.sort((p, q) => (lastOf(q) || 0) - (lastOf(p) || 0)).slice(0, 4);
+    for (const k of shown) {
       const item = el('span', 'mx-item');
-      item.append(el('i', 'mx-dot ' + ser.cls), document.createTextNode(t(ser.label) + ' ' + fmt(last) + c.unit));
+      item.append(el('i', 'mx-dot ' + series[k].cls), document.createTextNode(t(series[k].label) + ' ' + fmt(lastOf(k)) + c.unit));
       now.append(item);
-    });
+    }
+    if (more) now.append(el('span', 'mx-item', t('+{n} more', { n: more })));
     head.append(now);
 
+    const w = big ? BW : W, h = big ? BH : H;
     const t1 = s[s.length - 1].t, t0 = Math.min(s[0].t, t1 - 60 * 1000);   // what there is, a minute at least
     const hi = niceMax(Math.max(0, ...pts.flat().map(([, v]) => (v === null ? 0 : v))));
-    const x = (t) => Math.max(0, ((t - t0) / (t1 - t0)) * W);
-    const y = (v) => H - 2 - (v / hi) * (H - 6);
+    const x = (t) => Math.max(0, ((t - t0) / (t1 - t0)) * w);
+    const y = (v) => h - 2 - (v / hi) * (h - 6);
 
     const svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('class', 'mx-svg');
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', t('{title}, the last {n} samples, up to {max}', { title: t(c.title), n: s.length, max: fmt(hi) + c.unit }));
-    c.series.forEach((ser, k) => {
+    if (big) {                                                   // grid lines: a quarter of the top each
+      for (let q = 1; q <= 4; q++) {
+        const g = document.createElementNS(svgNS, 'path');
+        g.setAttribute('d', `M0,${y(hi * q / 4).toFixed(1)}H${w}`);
+        g.setAttribute('class', 'mx-gridline');
+        svg.append(g);
+      }
+    }
+    series.forEach((ser, k) => {
       let d = '', pen = false;
       for (const [t, v] of pts[k]) {
         if (v === null) { pen = false; continue; }
@@ -313,7 +420,42 @@ export class Metrics {
     const frame = el('div', 'mx-frame');
     frame.append(el('span', 'mx-max', fmt(hi) + c.unit), svg);
     box.append(head, frame);
+    if (big) {                                                   // the time axis: its ends and middle, clock time
+      const axis = el('div', 'mx-axis');
+      const hm = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      axis.append(el('span', '', hm(t0)), el('span', '', hm((t0 + t1) / 2)), el('span', '', hm(t1)));
+      box.append(axis);
+    }
     return box;
+  }
+
+  //
+  // open - a chart big, in a dialog, every series named; drawn again with each sample until closed (× or Esc)
+  //
+  open(c, url) {
+    this.close();
+    const d = el('dialog', 'mx-dialog');
+    d.setAttribute('aria-label', t(c.title));
+    d.append(closeX(t('Close'), () => this.close(), true), el('div', 'mx-bigbody'));
+    d.addEventListener('close', () => { if (this.big && this.big.d === d) { this.big = null; d.remove(); } });
+    document.body.append(d);
+    this.big = { c, url, d };
+    this.bigDraw();
+    d.showModal();
+  }
+
+  bigDraw() {
+    const { c, url, d } = this.big;
+    const s = this.samples.get(url) || [];
+    if (s.length >= 2) d.querySelector('.mx-bigbody').replaceChildren(this.chart(c, s, url, true));
+  }
+
+  close() {
+    if (!this.big) return;
+    const d = this.big.d;
+    this.big = null;
+    if (d.open) d.close();
+    d.remove();
   }
 
   //
@@ -345,3 +487,4 @@ export class Metrics {
     return box;
   }
 }
+export { CHARTS, seriesOf };                   // test/metrics.mjs
