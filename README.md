@@ -687,6 +687,10 @@ same panel, for its attributes.
 
 Every delete asks first, as Explore's other deletes do (below).
 
+AI Assist reads history with corMcp's `temporal` tool (ranges, `lastN`, the broker's aggregation) and opens this
+panel with the c³ command `show_history` (an entity, its attributes - one: that attribute's History - a preset
+or from/to, graph or table).
+
 The read is `GET /ngsi-ld/v1/temporal/entities/{id}?attrs=<attr,...>&timerel=between&timeAt&endTimeAt&timeproperty`,
 in pages of 1000 instances (`firstN`, ascending): the next page is the one the `Link` header's
 `rel="intervalafter"` points at (its `offsetN`), until there is none - at most 20000 instances (the panel says when
