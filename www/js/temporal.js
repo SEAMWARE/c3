@@ -22,7 +22,6 @@
 //
 import * as api from './api.js';
 import { PALETTE } from './entity.js';
-import { openMenu } from './menu.js';
 import { t, tk, plural, number } from './i18n.js';
 
 const PAGE = 1000;
@@ -197,7 +196,7 @@ const JSON_KINDS = ['GeoProperty', 'LanguageProperty', 'JsonProperty', 'ListProp
 
 export class Temporal {
   //
-  // host: Connect - its broker, ask(), openWrite(), toast()
+  // host: Connect - its broker, ask(), confirmDelete(), toast()
   //
   constructor(host, root) {
     this.host = host;
@@ -825,7 +824,7 @@ export class Temporal {
       tr.append(idtd);
       const act = el('td', 'hp-act');
       if (inst.instanceId) {
-        const del = button(t('Delete'), 'btn small', () => this.confirm(del, this.instanceWhat(inst), () => this.deleteInstance(inst)));
+        const del = button(t('Delete…'), 'btn small', () => this.deleteInstance(inst));
         act.append(button(t('Edit'), 'btn small', () => this.editRow(tr, inst)), del);
       }
       tr.append(act);
@@ -900,7 +899,7 @@ export class Temporal {
 
   async deleteInstance(inst) {
     const what = this.instanceWhat(inst);
-    if (!(await this.host.openWrite(what))) return;
+    if (!(await this.host.confirmDelete(what))) return;
     const r = await api.brokerWrite(this.host.broker, 'DELETE', this.instancePath(inst.instanceId));
     if (!r.ok) { this.host.toast(t('Not deleted - {why}', { why: brokerError(r) })); return; }
     this.host.toast(t('Deleted {what}', { what }));
@@ -910,7 +909,7 @@ export class Temporal {
   foot() {
     const f = el('div', 'hp-foot');
     f.append(button(t('Add an instance…'), 'btn small', () => this.addForm(f, [this.ctx.attr])));
-    const del = button(t('Delete this history…'), 'btn small', () => this.confirm(del, this.historyWhat(), () => this.deleteHistory()));
+    const del = button(t('Delete this history…'), 'btn small', () => this.deleteHistory());
     del.title = t('Every instance the broker keeps of this attribute, also outside the range - the attribute itself stays');
     f.append(del);
     return f;
@@ -928,8 +927,7 @@ export class Temporal {
     const csv = button(t('Download CSV'), 'btn small', () => this.download());
     csv.title = t('The table: a row per instant, a column per ticked attribute');
     csv.disabled = !this.total() || !!this.aggs;
-    const what = t('the history of {entity}', { entity: c.id });
-    const del = button(t('Delete its history…'), 'btn small', () => this.confirm(del, what, async () => { if (await deleteEntityHistory(this.host, c.id)) this.read(); }));
+    const del = button(t('Delete its history…'), 'btn small', async () => { if (await deleteEntityHistory(this.host, c.id)) this.read(); });
     del.title = t('Every instance of every attribute the broker keeps of this entity - the entity itself stays');
     f.append(add, csv, del);
     return f;
@@ -946,17 +944,6 @@ export class Temporal {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
-
-  //
-  // confirm - the menu every delete in Explore asks with: 'Delete it - at the broker', Cancel
-  //
-  confirm(target, what, action) {
-    const r = target.getBoundingClientRect();
-    openMenu({ x: r.left, y: r.bottom + 2, label: what, returnFocus: target, items: [
-      { label: t('Delete it - at the broker'), action },
-      { label: t('Cancel'), action: () => {} },
-    ] });
   }
 
   //
@@ -1003,7 +990,7 @@ export class Temporal {
     const c = this.ctx;
     const what = this.historyWhat();
     const ds = c.info.get(c.attr).datasetId;
-    if (!(await this.host.openWrite(what))) return;
+    if (!(await this.host.confirmDelete(what))) return;
     const r = await api.brokerWrite(this.host.broker, 'DELETE', `/ngsi-ld/v1/temporal/entities/${encodeURIComponent(c.id)}/attrs/${encodeURIComponent(c.attr)}` +
       (ds ? `?datasetId=${encodeURIComponent(ds)}` : ''));
     if (!r.ok) { this.host.toast(t('Not deleted - {why}', { why: brokerError(r) })); return; }
@@ -1014,11 +1001,11 @@ export class Temporal {
 
 //
 // deleteEntityHistory - DELETE /temporal/entities/{id}: the entity's whole history (the entity itself stays) -
-// asked first by the menu it comes from
+// asked first (confirmDelete)
 //
 export async function deleteEntityHistory(host, id) {
   const what = t('the history of {entity}', { entity: id });
-  if (!(await host.openWrite(what))) return false;
+  if (!(await host.confirmDelete(what))) return false;
   const r = await api.brokerWrite(host.broker, 'DELETE', '/ngsi-ld/v1/temporal/entities/' + encodeURIComponent(id));
   if (!r.ok) { host.toast(t('Not deleted - {why}', { why: brokerError(r) })); return false; }
   host.toast(t('Deleted {what}', { what }));

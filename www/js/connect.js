@@ -723,12 +723,12 @@ export class Connect {
   }
 
   //
-  // openWrite - a delete on a broker c³ sends no credentials to: it answered without any, so anyone who can
-  // reach it can do this too - said, and asked, first
+  // confirmDelete - every delete in Explore asks first, in a box of its own (Cancel focused): on a broker c³ sends
+  // no credentials to - it answered without any, so anyone who can reach it can delete too - the question says so
   //
-  async openWrite(what) {
+  async confirmDelete(what) {
     const st = await this.tokenState(this.broker);
-    if (!st || st.login || st.own || st.def) return true;
+    if (!st || st.login || st.own || st.def) return this.ask(t('Delete {what} at the broker? It cannot be undone.', { what }), t('Delete'));
     return this.ask(t('{broker} has no security that c³ knows of: c³ sends it no token, and it answers without one - anyone who can reach it can delete. Delete {what}?', { broker: this.broker, what }), t('Delete'));
   }
 
@@ -1730,21 +1730,8 @@ export class Connect {
     items.push({ label: t('Edit…'), hint: t('attributes, as rows'), action: () => this.edit(id) });
     items.push({ label: t('Replace…'), hint: t('the whole entity'), action: () => this.edit(id, null, 'replace') });
     items.push({ label: t('History…'), hint: t('the temporal API'), action: () => this.temporal.openEntity(e) });
-    items.push({
-      label: t('Delete its history…'),
-      hint: t('the temporal API'),
-      items: [
-        { label: t('Delete the history of {entity} - at the broker', { entity: shortId(e) }), action: () => this.deleteHistory(id) },
-        { label: t('Cancel'), action: () => {} },
-      ],
-    });
-    items.push({
-      label: t('Delete entity…'),
-      items: [
-        { label: t('Delete {entity} - at the broker', { entity: shortId(e) }), action: () => this.deleteEntity(id) },
-        { label: t('Cancel'), action: () => {} },
-      ],
-    });
+    items.push({ label: t('Delete its history…'), hint: t('the temporal API'), action: () => this.deleteHistory(id) });
+    items.push({ label: t('Delete entity…'), action: () => this.deleteEntity(id) });
 
     openMenu({ x: at.x, y: at.y, items, label: `${types.map(typeLabel).join(', ')} ${shortId(e)}`, returnFocus: target });
   }
@@ -1845,7 +1832,7 @@ export class Connect {
   }
 
   async deleteEntity(id) {
-    if (!(await this.openWrite(id))) return;
+    if (!(await this.confirmDelete(id))) return;
     const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id));
     if (!r.ok) {
       this.toast(t('Not deleted - the broker answered {status}: {detail}', { status: r.status, detail: [r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ') }));
@@ -1872,8 +1859,8 @@ export class Connect {
     const e = this.byId.get(id);
     const several = e && Array.isArray(e[name]) && e[name].length > 1;
     const what = ds ? `${name} (${ds})` : (several ? t('{name} - the default instance', { name }) : name);
-    const del = async (query) => {
-      if (!(await this.openWrite(what))) return;
+    const del = async (query, asked) => {
+      if (!(await this.confirmDelete(asked))) return;
       const r = await api.brokerWrite(this.broker, 'DELETE', '/ngsi-ld/v1/entities/' + encodeURIComponent(id) + '/attrs/' + encodeURIComponent(name) + query);
       if (!r.ok) {
         this.toast(t('Not deleted - the broker answered {status}: {detail}', { status: r.status, detail: [r.body && r.body.title, r.body && r.body.detail].filter(Boolean).join(' - ') }));
@@ -1887,15 +1874,9 @@ export class Connect {
       { separator: true },
       { label: t('Edit {name}…', { name }), action: () => this.edit(id, name) },
       { separator: true },
-      { label: t('Delete {what}…', { what }), items: [
-        { label: t('Delete it - at the broker'), action: () => del(ds ? '?datasetId=' + encodeURIComponent(ds) : '') },
-        { label: t('Cancel'), action: () => {} },
-      ] },
+      { label: t('Delete {what}…', { what }), action: () => del(ds ? '?datasetId=' + encodeURIComponent(ds) : '', what) },
     ];
-    if (several) items.push({ label: t('Delete every instance of {name}…', { name }), items: [
-      { label: t('Delete them all - at the broker'), action: () => del('?deleteAll=true') },
-      { label: t('Cancel'), action: () => {} },
-    ] });
+    if (several) items.push({ label: t('Delete every instance of {name}…', { name }), action: () => del('?deleteAll=true', t('every instance of {name}', { name })) });
     openMenu({ x: at.x, y: at.y, items, label: name, returnFocus: target });
   }
 

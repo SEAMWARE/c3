@@ -178,10 +178,7 @@
   "Delete data": "Daten löschen",
   "Delete entity…": "Entität löschen…",
   "Delete every instance of {name}…": "Jede Instanz von {name} löschen…",
-  "Delete it - at the broker": "Löschen - im Broker",
   "Delete the subscription {id}?": "Abonnement {id} löschen?",
-  "Delete them all - at the broker": "Alle löschen - im Broker",
-  "Delete {entity} - at the broker": "{entity} löschen - im Broker",
   "Delete {name}": "{name} löschen",
   "Delete {name} - this instance": "{name} löschen - diese Instanz",
   "Delete {volume}? Sure": "{volume} löschen? Sicher",
@@ -1565,7 +1562,6 @@
   "Aggregation period": "Aggregationszeitraum",
   "Close the history": "Historie schließen",
   "Delete its history…": "Seine Historie löschen…",
-  "Delete the history of {entity} - at the broker": "Historie von {entity} löschen - im Broker",
   "Delete this history…": "Diese Historie löschen…",
   "Edit": "Bearbeiten",
   "Every instance the broker keeps of this attribute, also outside the range - the attribute itself stays": "Jede Instanz, die der Broker von diesem Attribut hat, auch außerhalb des Zeitraums - das Attribut selbst bleibt",
@@ -1636,5 +1632,8 @@
   "The broker answers again - connecting": "Der Broker antwortet wieder - verbinde",
   "The broker stopped answering": "Der Broker antwortet nicht mehr",
   "not read - {why}": "nicht gelesen - {why}",
-  "Its menu: History, Edit, Delete, ...": "Sein Menü: Historie, Bearbeiten, Löschen, ..."
+  "Its menu: History, Edit, Delete, ...": "Sein Menü: Historie, Bearbeiten, Löschen, ...",
+  "Delete {what} at the broker? It cannot be undone.": "{what} beim Broker löschen? Das lässt sich nicht rückgängig machen.",
+  "every instance of {name}": "jede Instanz von {name}",
+  "Delete…": "Löschen…"
 }
