@@ -81,7 +81,7 @@ it, is in <a href="https://github.com/SEAMWARE/coraine/blob/main/doc/ideas.md">I
   entity, temporal and distributed queries (<a href="#docs/kubernetes">Kubernetes</a>).</li>
   <li><b>Running outside a container</b> - <code>--daemon</code> to detach, and the log in a file, on stdout or both
   (<code>--logTo</code>, <code>--logDir</code>); the broker stays in the foreground, logging to stdout, by default.
-  <code>-fg</code> is accepted, with a warning, until 0.8.0 (<a href="#docs/administration/running">Administration - Foreground or
+  <code>-fg</code> is refused from 0.8.0 (<a href="#docs/administration/running">Administration - Foreground or
   daemon</a>).</li>
   <li><b>Authorization in the broker</b> - <code>--auth</code>: auth plugins, and <code>fdsc.so</code>, the FIWARE Data
   Space Connector's access tokens and ODRL policies decided inside the broker as the connector decides them - 67 cases

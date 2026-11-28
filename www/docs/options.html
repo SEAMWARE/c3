@@ -184,15 +184,14 @@ builds have traces.</p>
   <tr><th>Short · variable · type</th><td><code>-fg</code> · <code>CORAINE_FOREGROUND</code> · Bool</td></tr>
   <tr><th>Default</th><td><code>false</code> (off)</td></tr>
   <tr><th>Values</th><td>a switch; the environment variable <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code> (<a href="#docs/options" data-scroll="reading">three spellings each</a>)</td></tr>
-  <tr><th>Deprecated</th><td>accepted through 0.7.x, refused from 0.8.0, not listed by <code>-u</code></td></tr>
+  <tr><th>Removed</th><td>0.8.0 - refused at start (deprecated through 0.7.x), not listed by <code>-u</code></td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
-<p>Does nothing: the broker runs in the foreground by default. A broker started with it, or with
-<code>CORAINE_FOREGROUND=true</code>, writes one warning line at start and runs as it would without it:</p>
-<pre>W: 000000.000: coraine.c[&lt;line&gt;]: main: -fg: the broker runs in the foreground by default now - the option is refused from 0.8.0</pre>
-<p>With <code>--daemon</code> it is refused at start, exit code 1: <code>coraine: --daemon and -fg contradict each
-other</code>. Drop it from scripts and units: from 0.8.0 the broker does not start with it.</p>
-<pre>coraine -fg -db corDB     <span class="c"># the same as: coraine -db corDB, plus the warning line</span></pre>
+<p>The broker runs in the foreground by default, and <code>--daemon</code> detaches it. A broker started with
+<code>-fg</code>, or with <code>CORAINE_FOREGROUND=true</code>, does not start: it says why on stderr, before it opens its
+log, and exits with 1. Drop it from scripts and units.</p>
+<pre>coraine -fg -db corDB
+<span class="c"># coraine: -fg / --foreground was removed in 0.8.0: the broker runs in the foreground by default (--daemon detaches) - drop the option</span></pre>
 
 <h3 id="daemon"><code>--daemon</code></h3>
 <table class="g-opts">
@@ -200,7 +199,7 @@ other</code>. Drop it from scripts and units: from 0.8.0 the broker does not sta
   <tr><th>Default</th><td><code>false</code> (the foreground)</td></tr>
   <tr><th>Values</th><td>a switch; the environment variable <code>true</code> or <code>on</code>, <code>false</code> or <code>off</code> (<a href="#docs/options" data-scroll="reading">three spellings each</a>)</td></tr>
   <tr><th>Needs</th><td><code>--logTo file</code></td></tr>
-  <tr><th>Excludes</th><td><code>--logTo stdout</code> (the default), <code>--logTo both</code>, <code>--foreground</code></td></tr>
+  <tr><th>Excludes</th><td><code>--logTo stdout</code> (the default), <code>--logTo both</code></td></tr>
   <tr><th>Plugin</th><td>core</td></tr>
 </table>
 <p>Runs the broker in the background: it detaches from the terminal - <code>fork</code> (the command returns 0 at
