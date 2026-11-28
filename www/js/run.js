@@ -238,6 +238,19 @@ export class Run {
     this.configBrokers = null;        // the configuration's brokers - those Explore connected to (probeRemote)
     this.remoteAnswers = new Map();   // url -> it answered the last ask (probeRemote)
     this.remoteAdmin = new Map();     // url -> it has the admin API (remoteCard)
+    this.launches = new Map();        // url -> {running, recorded}: how a broker on this machine c³ did not start runs, ran (probeRemote)
+    this.launchPanels = new Map();    // key -> the launch panel shown (its fields keep what is typed over re-renders)
+    this.reask = new Set();           // urls stopped: asked again, not taken as answering for having answered a moment ago
+    this.restarting = new Set();      // urls and names being restarted
+    this.asking = new Map();          // url -> the ask still out (probeRemote): one at a time
+    $('rn-add-btn').addEventListener('click', () => { const a = $('rn-add'); a.hidden = !a.hidden; if (!a.hidden) $('rn-add-url').focus(); });
+    $('rn-add-go').addEventListener('click', () => this.addBroker($('rn-add-url').value, $('rn-add-name').value));
+    for (const id of ['rn-add-url', 'rn-add-name']) {
+      $(id).addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.addBroker($('rn-add-url').value, $('rn-add-name').value);
+        if (e.key === 'Escape') { $('rn-add').hidden = true; this.addNote(''); }
+      });
+    }
     this.logRaw = [];                 // the log's lines as written (append) - shown again when the view changes
     this.logView = 'text';            // 'text' or 'json' (logViewSet)
     try { if (localStorage.getItem('c3.log.view') === 'json') this.logView = 'json'; } catch { /* text */ }
@@ -713,6 +726,7 @@ export class Run {
 
   sourceLabel(d) {
     if (d.from === 'build') return t('build {build}', { build: d.build });
+    if (d.from === 'command') return d.exe;
     if (d.from === 'image') return d.image;
     return t('installed coraine');
   }
@@ -731,7 +745,7 @@ export class Run {
   // listed - a broker in the list: one that runs, or is on its way up or down, or failed (its card says why);
   // one stopped by hand is not - its settings are under Set up and start a broker, Earlier settings
   //
-  listed(b) { return ['running', 'starting', 'stopping', 'failed'].includes(b.state); }
+  listed(b) { return ['running', 'starting', 'stopping', 'failed'].includes(b.state) || b.def.from === 'command'; }   // a command's card starts it again
 
   renderLists() {
     this.renderBrokers();
@@ -790,8 +804,9 @@ export class Run {
   remoteRow(r, inCard = false) {
     const on = this.active(r.url);
     const ok = this.remoteAnswers.get(r.url);          // true, false, or not asked yet
+    const here = this.local(r.url);
     const item = el('div', 'rn-item' + (inCard ? '' : ' rn-row-link') + (on ? ' active' : ''));
-    if (!inCard) {                                     // the row opens its card: configuration, metrics, levels
+    if (!inCard) {                                     // the row opens its card: configuration, metrics, levels - or how to start it
       item.tabIndex = 0;
       item.setAttribute('role', 'button');
       item.title = t('Open {name}', { name: r.name || r.url });
@@ -799,24 +814,261 @@ export class Run {
       item.addEventListener('click', (e) => { if (!e.target.closest('a, button')) open(); });
       item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); open(); } });
     }
-    item.append(el('span', 'rdot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'busy')));
+    const busy = this.restarting.has(r.url);
+    item.append(el('span', 'rdot ' + (busy ? 'busy' : ok === true ? 'ok' : ok === false ? 'bad' : 'busy')));
     const main = el('div', 'rmain');
     const title = el('div', 'rtitle');
     const name = r.name && r.name !== r.url.replace(/^https?:\/\//, '') ? r.name : '';
     title.append(el('span', 'rname', name || r.url));
     if (on) title.append(el('span', 'badge active', t('in Explore')));
-    title.append(el('span', 'badge ' + (ok === true ? 'ready' : 'stopped'), ok === true ? t('answers') : ok === false ? t('does not answer') : t('asking')));
+    title.append(el('span', 'badge ' + (ok === true ? 'ready' : 'stopped'), busy ? t('restarting') : ok === true ? t('answers') : ok === false ? (here ? t('not running') : t('does not answer')) : t('asking')));
     if (name) title.append(el('span', 'rurl', r.url));
-    main.append(title, el('div', 'rmeta', this.local(r.url) ? t('on this machine, started outside c³ - connected to in Explore') : t('on another machine - connected to in Explore')));
+    const how = this.launches.get(r.url);
+    const l = how && (how.running || how.recorded);
+    const meta = here ? (l ? t('on this machine, started outside c³') + ' · ' + (l.build ? t('build {build}', { build: l.build }) : l.exe) : t('on this machine, started outside c³'))
+      : ok === false ? t('on another machine - c³ starts brokers on this machine only') : t('on another machine');
+    main.append(title, el('div', 'rmeta', meta));
     item.append(main);
     const acts = el('div', 'racts');
-    const x = button(t('Explore'), '', () => this.onConnect(r.url));
-    x.disabled = ok === false;
-    if (x.disabled) x.title = t('{name} does not answer', { name: name || r.url });
-    acts.append(x);
+    if (ok !== false || busy) {
+      const x = button(t('Explore'), '', () => this.onConnect(r.url));
+      x.disabled = busy;
+      acts.append(x);
+    }
+    if (here && ok === true && !busy) {
+      acts.append(button(t('Stop'), '', () => this.stopOutside(r)));
+      const rs = button(t('Restart'), '', () => this.restartOutside(r));
+      rs.title = t('Stop it and start it again, as it ran - from then on one of c³\'s brokers, its log kept');
+      acts.append(rs);
+    }
+    if (here && ok === false && !busy && !inCard) acts.append(button(t('Start'), 'primary', () => this.select('remote', r.url)));
+    if (ok === false && !busy) {
+      if (this.armed === 'rforget:' + r.url) {
+        const f = button(t('Forget'), 'armed', () => this.forgetRemote(r));
+        f.title = t('Drop it from the list - nothing on the broker changes');
+        acts.append(f, closeX(t('Cancel - forget nothing'), () => this.disarm()));
+      } else acts.append(button(t('Forget'), '', () => this.arm('rforget:' + r.url)));
+    }
     item.append(acts);
+    if (inCard && here && ok === false && !busy) {   // how to start it: as it ran, if c³ saw it running
+      const wrap = el('div', 'rn-cmdlwrap');
+      wrap.append(item, this.launchPanel('url:' + r.url, this.launchInit(r, how), (def) => this.startCommand(def)));
+      return wrap;
+    }
     return item;
   }
+
+  //
+  // portOf - a URL's port (80 / 443 when it names none)
+  //
+  portOf(u) {
+    try { const x = new URL(u); return Number(x.port || (x.protocol === 'https:' ? 443 : 80)); } catch { return 0; }
+  }
+
+  //
+  // nameFor - a name c³ can keep a broker under (A-Z a-z 0-9 . _ -, a letter or digit first): Explore's name for
+  // it, else coraine-<port>
+  //
+  nameFor(r) {
+    const n = (r.name && r.name !== r.url.replace(/^https?:\/\//, '') ? r.name : '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64);
+    return n || 'coraine-' + this.portOf(r.url);
+  }
+
+  //
+  // launchInit - the launch panel's fields for a broker c³ did not start: as it ran (recorded while it answered),
+  // else the installed coraine on its port
+  //
+  launchInit(r, how) {
+    const l = how && (how.running || how.recorded);
+    const inst = this.sources && this.sources.installed;
+    return {
+      name: this.nameFor(r),
+      exe: l ? l.exe : (inst ? inst.path : ''),
+      cwd: (l && l.cwd) || '',
+      env: (l && l.env) || '',
+      command: l ? l.command : '--port ' + this.portOf(r.url),
+      seen: l ? l.at : null,
+      build: l ? l.build : null,
+    };
+  }
+
+  //
+  // launchPanel - how a broker is started from its own command line (from: command): name, executable, working
+  // directory, environment, arguments - editable - and Start. The same element while its key is shown, so what is
+  // typed survives the card being drawn again
+  //
+  launchPanel(key, init, onStart) {
+    const kept = this.launchPanels.get(key);
+    if (kept) return kept;
+    const box = el('div', 'rn-cmdl');
+    const v = { ...init };
+    box.append(el('div', 'rn-cmdl-head', v.seen ? t('As it ran - read from its process {when}', { when: logWhen(v.seen) }) + (v.build ? ' · ' + t('build {build}', { build: v.build }) : '')
+      : init.fromKept ? t('How c³ starts it') : t('c³ never saw it running - say how to start it')));
+    const field = (k, label, ph, area) => {
+      const f = el('label', 'rn-cmdl-f');
+      const inp = el(area ? 'textarea' : 'input', 'cp-input');
+      if (area) inp.rows = 3;
+      inp.value = v[k] || '';
+      inp.placeholder = ph;
+      inp.spellcheck = false;
+      inp.addEventListener('input', () => { v[k] = inp.value; });
+      f.append(el('span', '', label), inp);
+      box.append(f);
+      return inp;
+    };
+    const name = field('name', t('Name'), 'coraine-1026');
+    name.disabled = !!init.fromKept;
+    const exe = field('exe', t('Executable'), '/usr/bin/coraine');
+    const list = el('datalist');
+    list.id = 'rn-exes-' + Math.random().toString(36).slice(2);
+    const inst = this.sources && this.sources.installed;
+    const builds = (this.sources && this.sources.builds) || [];
+    if (inst) { const o = el('option'); o.value = inst.path; o.label = t('installed coraine'); list.append(o); }
+    for (const b of builds) {
+      if (!b.plugins) continue;
+      const o = el('option');
+      o.value = b.plugins.replace(/\/plugins$/, '/bin/coraine');
+      o.label = t('build {build}', { build: b.name });
+      list.append(o);
+    }
+    exe.setAttribute('list', list.id);
+    box.append(list);
+    const env = field('env', t('Environment'), 'CORAINE_VERBOSE=true');
+    exe.addEventListener('change', () => {           // a build's coraine: its plugins and etc, as its install/env sets them
+      const b = builds.find((x) => x.plugins && x.plugins.replace(/\/plugins$/, '/bin/coraine') === exe.value);
+      if (b && !v.env) {
+        const dir = b.plugins.replace(/\/plugins$/, '');
+        v.env = env.value = `SEAMWARE_PLUGIN_DIR=${dir}/plugins SEAMWARE_ETC_DIR=${dir}/etc CORAINE_CONTEXTSOURCEEXTRAS=${dir}/etc/contextSourceExtras.json`;
+      }
+    });
+    field('cwd', t('Working directory'), t('its own directory in c³'));
+    field('command', t('Command line'), '--port 1026 -db corDB', true);
+    const acts = el('div', 'racts');
+    const st = button(t('Start'), 'primary', () => onStart({ name: v.name.trim(), from: 'command', set: 'cordb', exe: v.exe.trim(), cwd: v.cwd.trim(), env: v.env.trim(), command: v.command.trim() }));
+    st.title = t('Start it - from then on one of c³\'s brokers: its log kept, Stop and Restart here');
+    acts.append(st);
+    box.append(acts);
+    this.launchPanels.set(key, box);
+    return box;
+  }
+
+  //
+  // startCommand - a broker from its own command line, kept and started: its card
+  //
+  startCommand(def) {
+    return this.act(async () => {
+      await api.runStart(def);
+      for (const k of [...this.launchPanels.keys()]) this.launchPanels.delete(k);
+      this.select('broker', def.name);
+    });
+  }
+
+  //
+  // stopOutside - SIGTERM to a broker on this machine c³ did not start (its ordered shutdown); asked again shortly
+  //
+  stopOutside(r) {
+    this.reask.add(r.url);
+    return this.act(async () => {
+      await api.runExternalStop(this.portOf(r.url));
+      this.remoteAnswers.set(r.url, undefined);
+      setTimeout(() => this.probeRemote(), 1500);
+    });
+  }
+
+  //
+  // restartOutside - stopped, then started again as it ran - kept by c³ from then on (from: command)
+  //
+  async restartOutside(r) {
+    const port = this.portOf(r.url);
+    this.restarting.add(r.url);
+    this.renderBrokers();
+    this.renderCard();
+    try {
+      const x = await api.runExternal(port);
+      const l = x.running || x.recorded;
+      if (!l) throw new Error(t('c³ cannot read how {url} was started', { url: r.url }));
+      await api.runExternalStop(port);
+      for (let ix = 0; ; ix++) {                       // until nothing listens on its port (60 s)
+        await new Promise((done) => setTimeout(done, 500));
+        const y = await api.runExternal(port);
+        if (!y.running) break;
+        if (ix >= 120) throw new Error(t('{url} did not stop within 60 s', { url: r.url }));
+      }
+      const def = { name: this.nameFor(r), from: 'command', set: 'cordb', exe: l.exe, cwd: l.cwd || '', env: l.env || '', command: l.command || '' };
+      await api.runStart(def);
+      this.select('broker', def.name);
+    } catch (e) {
+      this.note(e.message);
+    } finally {
+      this.restarting.delete(r.url);
+      this.reask.add(r.url);
+      this.stateText = '';
+      await this.load();
+      this.probeRemote();
+    }
+  }
+
+  //
+  // restartKept - one of c³'s brokers: stopped, then started again with its settings
+  //
+  async restartKept(b) {
+    this.restarting.add(b.name);
+    this.renderLists();
+    try {
+      await api.runStop(b.name);
+      for (let ix = 0; ix < (b.def.grace || 30) * 2 + 20; ix++) {
+        await new Promise((done) => setTimeout(done, 500));
+        this.stateText = '';
+        await this.load();
+        const k = this.kept(b.name);
+        if (!k || !['running', 'stopping', 'starting'].includes(k.state)) break;
+      }
+      await api.runStartKept(b.name);
+    } catch (e) {
+      this.select('broker', b.name);
+      this.note(e.message);
+    } finally {
+      this.restarting.delete(b.name);
+      this.stateText = '';
+      await this.load();
+    }
+  }
+
+  //
+  // forgetRemote - a broker c³ does not run, dropped from the list (Explore's brokers) - nothing on it changes
+  //
+  forgetRemote(r) {
+    this.disarm();
+    if (this.mode === 'item' && this.sel && this.sel.name === r.url) this.showView('list');
+    return this.act(async () => {
+      await api.brokerForget(r.url);
+      this.configBrokers = (this.configBrokers || []).filter((x) => x.url !== r.url);
+      this.remoteAnswers.delete(r.url);
+      this.launches.delete(r.url);
+    });
+  }
+
+  //
+  // addBroker - Operate's Add a broker: a URL (http:// when it names no scheme) and a name - kept with Explore's
+  // brokers, asked at once
+  //
+  async addBroker(url, name) {
+    url = url.trim().replace(/\/+$/, '');
+    if (!url) return;
+    if (!/^https?:\/\//.test(url)) url = 'http://' + url;
+    try { new URL(url); } catch { this.addNote(t('Not a URL: {url}', { url })); return; }
+    try {
+      await api.brokerTouch(url, name.trim() || undefined);
+    } catch (e) { this.addNote(e.message); return; }
+    this.addNote('');
+    $('rn-add').hidden = true;
+    $('rn-add-url').value = '';
+    $('rn-add-name').value = '';
+    this.remoteAsked = 0;
+    await this.probeRemote();
+  }
+
+  addNote(text) { $('rn-add-note').textContent = text; $('rn-add-note').hidden = !text; }
 
   //
   // probeRemote - the configuration's brokers (Explore's), read again, and each one c³ does not run asked GET
@@ -827,16 +1079,28 @@ export class Run {
     this.probingRemote = true;
     this.remoteAsked = Date.now();
     try { this.configBrokers = (await api.config()).brokers || []; } catch (e) { /* the list as it was */ }
+    //
+    // One ask per broker at a time: a broker that cannot be reached (another machine, gone) holds its request in the
+    // backend until the connection gives up - asked again every 10 s, those would fill the browser's connections to
+    // c³, and the others' asks would wait behind them and time out as "not answering"
+    //
     const ask = async (url) => {
-      if (api.answeredWithin(url, 10000)) return true;           // it answered the page anyway (metrics, log lines, Explore)
-      try {
-        const r = await Promise.race([api.brokerGet(url, '/version', ''), new Promise((done) => setTimeout(() => done(null), 3000))]);
-        return !!(r && r.reached && r.status > 0 && r.status < 500);
-      } catch (e) { return false; }
+      if (!this.reask.has(url) && api.answeredWithin(url, 10000)) return true;   // it answered the page anyway (metrics, log lines, Explore) - not one just stopped
+      this.reask.delete(url);
+      if (!this.asking.has(url)) {
+        this.asking.set(url, api.brokerGet(url, '/version', '')
+          .then((r) => !!(r && r.reached && r.status > 0 && r.status < 500), () => false)
+          .finally(() => this.asking.delete(url)));
+      }
+      const r = await Promise.race([this.asking.get(url), new Promise((done) => setTimeout(() => done(null), 3000))]);
+      return r === null ? (this.remoteAnswers.get(url) === true ? true : false) : r;   // still asking: as it was (a slow answer is not a stop)
     };
     const list = this.state ? this.remoteBrokers() : (this.configBrokers || []);
     const got = await Promise.all(list.map((r) => ask(r.url)));
     list.forEach((r, ix) => this.remoteAnswers.set(r.url, got[ix]));
+    await Promise.all(list.filter((r) => this.local(r.url)).map(async (r) => {   // on this machine: how it runs (kept by c³), or ran
+      try { this.launches.set(r.url, await api.runExternal(this.portOf(r.url))); } catch (e) { /* as it was */ }
+    }));
     this.probingRemote = false;
     if (this.state) this.renderBrokers();
   }
@@ -958,7 +1222,9 @@ export class Run {
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (b.state === 'running') acts.append(button(t('Stop'), '', () => this.stopInList(b)), exploreButton(b, this.onConnect));
+    if (this.restarting.has(b.name)) acts.append(el('span', 'badge starting', t('restarting')));
+    else if (b.state === 'running') acts.append(exploreButton(b, this.onConnect), button(t('Stop'), '', () => this.stopInList(b)), button(t('Restart'), '', () => this.restartKept(b)));
+    else if (d.from === 'command' && b.state !== 'starting' && b.state !== 'stopping') acts.append(button(t('Start'), 'primary', () => this.startKept(b)));
     item.append(acts);
     return item;
   }
@@ -1047,7 +1313,8 @@ export class Run {
     const main = el('div', 'rmain');
     main.append(this.titleOf(b, on));
 
-    const meta = [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'),
+    const cmd = d.from === 'command';
+    const meta = cmd ? [this.sourceLabel(d), t('natively'), t('its own command line')] : [this.sourceLabel(d), d.where === 'container' ? t('in a container') : t('natively'),
       d.store === 'corDB' ? (d.dbDir ? t('{store} on disk', { store: d.store }) : t('{store} in RAM', { store: d.store })) : d.store,
       t('history {name}', { name: d.history })];
     if (d.bridges && d.bridges.length) meta.push(t('bridges {list}', { list: d.bridges.join(', ') }));
@@ -1067,15 +1334,21 @@ export class Run {
     } else if (b.why) {
       main.append(el('div', 'rwhy' + (b.state === 'failed' ? ' bad' : ''), b.why));
     }
-    const where = b.dataDir ? t('data in {dir}', { dir: b.dataDir }) : b.volume ? t('data in the volume {volume}', { volume: b.volume }) : t('data in RAM only');
+    const where = cmd ? [d.env, d.exe, d.command].filter(Boolean).join(' ') + (d.cwd ? '   (' + t('in {dir}', { dir: d.cwd }) + ')' : '')
+      : b.dataDir ? t('data in {dir}', { dir: b.dataDir }) : b.volume ? t('data in the volume {volume}', { volume: b.volume }) : t('data in RAM only');
     main.append(el('div', 'rmeta mono', where));
     item.append(main);
 
     const acts = el('div', 'racts');
-    if (runs) {
+    if (this.restarting.has(b.name)) {
+      acts.append(el('span', 'badge starting', t('restarting')));
+    } else if (runs) {
       acts.append(button(t('Stop'), '', () => this.stop(b)));
+      acts.append(button(t('Restart'), '', () => this.restartKept(b)));
       acts.append(exploreButton(b, this.onConnect));
-      acts.append(button(t('Options'), '', () => this.edit(b, 'card')));  // to see them - and browse its OPC UA server
+      if (!cmd) acts.append(button(t('Options'), '', () => this.edit(b, 'card')));  // to see them - and browse its OPC UA server
+    } else if (cmd && b.state !== 'starting' && b.state !== 'stopping') {
+      // its command line, editable, and Start: below
     } else if (b.state !== 'starting' && b.state !== 'stopping') {
       const st = button(t('Start'), 'primary', () => this.startKept(b));
       st.disabled = b.busy;
@@ -1090,6 +1363,12 @@ export class Run {
       } else acts.append(button(t('Forget'), '', () => this.arm('forget:' + b.name)));
     }
     item.append(acts);
+    if (cmd && !runs && b.state !== 'starting' && b.state !== 'stopping' && !this.restarting.has(b.name)) {   // started again: as it is, or edited
+      const wrap = el('div', 'rn-cmdlwrap');
+      wrap.append(item, this.launchPanel('kept:' + b.name + ':' + (d.lastStarted || ''), { name: b.name, exe: d.exe, cwd: d.cwd || '', env: d.env || '', command: d.command || '', fromKept: true },
+        (def) => this.startCommand(def)));
+      return wrap;
+    }
     return item;
   }
 
@@ -1702,7 +1981,7 @@ export class Run {
       return;
     }
     if (!opts) {
-      this.noLog(r.reached === false ? t('No log: {url} does not answer.', { url }) : t('No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).', { status: r.status }));
+      this.noLog(r.reached === false ? (this.local(url) ? t('No log: it is not running - Start above starts it, and c³ keeps its log from then on.') : t('No log: {url} does not answer.', { url })) : t('No log, configuration, metrics or levels: this broker has no admin API (GET /admin/config: HTTP {status}).', { status: r.status }));
       return;
     }
     this.logGen++;

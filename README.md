@@ -253,6 +253,12 @@ markers are coloured by), the downloaded map areas, and the last page:
   their directory is the truth (Compile, below).
 - `run.brokers`: the brokers Operate started, with their options (Operate, below) - kept when one is started, removed
   with **Forget**. What runs is not in the file: the processes and containers are the truth.
+  `"from"`: `installed`, `build` (with `"build"`), `image` (with `"image"`) or `command` - a broker started from its
+  own command line (one started outside c³, started again from Operate): `"exe"` (an absolute path), `"cwd"`
+  (`null`: its directory under `run/`), `"env"` and `"command"` (quoted as `"args"` is); c³ adds no option and
+  runs no service for it, and takes its port from `--port` / `-p` (1026 without), its health port from
+  `--healthPort`, and whether it has the admin API and the WebSocket transport from `--apiPlugins` /
+  `--transports` on its command line or `CORAINE_APIPLUGINS` / `CORAINE_TRANSPORTS` in `"env"`.
 - No access token is ever in it, nor a broker's own headers: remembered, they are in `secrets.json` beside it (Explore, below).
 - Members this version does not know are kept. A file that is not a JSON object is moved to
   `c3.json.broken` and c³ starts from an empty one; a file with a `version` above 1 is read and never
@@ -821,13 +827,30 @@ Brokers started and stopped on this machine, and the services they use ([doc/des
 
 - **Operate** and its **?** - the page's description as a tooltip; **?** opens this section of the guide.
 - **Set up and start a broker**, a tile at the top. Under it **Brokers**: the brokers c³ started that run,
-  start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to
-  (`c3.json` "brokers") that c³ does not run - *on this machine, started outside c³* or *on another machine* -
-  each asked `GET /version` through the proxy every 10 s (any answer below 500 counts: *answers*, else *does not
-  answer*; one that answered another request of the page in those 10 s is not asked), with **Explore**. *No broker yet* when there is none of either. A c³ broker's row has **Stop** and
-  **Explore**; a click elsewhere on any row opens its card. **Explore** and a broker's URL open it in Explore once it
-  answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed: its settings are under
-  Set up and start a broker, **Earlier settings**.
+  start, stop or failed, the one Explore is connected to first; then the brokers added here or connected to in
+  Explore (`c3.json` "brokers") that c³ does not run - *on this machine, started outside c³* or *on another
+  machine* - each asked `GET /version` through the proxy every 10 s (any answer below 500 counts: *answers*, else
+  *not running* here, *does not answer* elsewhere; one that answered another request of the page in those 10 s is
+  not asked; one ask per broker at a time - an unreachable machine's request waits for its connection to give up,
+  and those piling up would hold up the others' asks). *No broker yet* when there is none of either.
+  - **+** in the Brokers bar adds a broker: its URL (`http://` when it names no scheme) and an optional name -
+    kept with Explore's brokers (`POST /api/brokers`), asked at once.
+  - A c³ broker's row: **Explore**, **Stop** and **Restart** (stopped, then started again with its settings).
+  - A broker on this machine started outside c³, while it answers: **Explore**, **Stop** (SIGTERM, its ordered
+    shutdown) and **Restart** (stopped, then started again as it ran - from then on one of c³'s, below). c³
+    reads how it runs from its process every 10 s and keeps it (`GET /api/run/external`): the executable (with
+    its build's name when it is one of Compile's), the working directory, the environment a broker reads
+    (`CORAINE_*`, `SEAMWARE_*`, `LD_LIBRARY_PATH`, `LD_PRELOAD`) and the command line.
+  - Not running: **Start** opens its card, with how it ran - name, executable, environment, working directory,
+    command line, each editable - and **Start**; one c³ never saw running is prefilled with the installed
+    coraine on its port. Started so, it is one of c³'s brokers (`"from": "command"`): its log kept, **Stop**,
+    **Restart**, its Configuration, Metrics and Levels (with `--apiPlugins admin` on its command line), and
+    when stopped its card shows the command line again, editable, with **Start**.
+  - A broker on another machine that does not answer: **Forget** only (c³ starts brokers on this machine).
+    **Forget** drops any broker c³ does not run from the list; nothing on the broker changes.
+  - A click elsewhere on any row opens its card. **Explore** and a broker's URL open it in Explore once it
+    answers its probe (`ready` or `answers`). A broker of c³'s stopped by hand is not listed (one from a command
+    line is): its settings are under Set up and start a broker, **Earlier settings**.
 - **Containers** - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
   that scrolls: its name, state, what it is (a c³ broker's, a c³ service, else its image), docker's status and
   its ports; the 10 newest, **Show all** for the rest. **Start** / **Stop** (one button; a c³ broker's container starts and stops as that broker; a service
@@ -1396,6 +1419,8 @@ The backend's API, used by the pages:
 | `POST /api/run/services/<container>/stop` | a service no broker uses: `202`; `409` while one does |
 | `POST /api/run/containers/<name>/start` \| `stop` | any container on this machine (Operate's Containers): `202`, done in a thread; `404` for one not seen |
 | `GET /api/run/containers/<name>/log` | `{"log"}`: its last 500 lines, out and err |
+| `GET /api/run/external?port=<port>` | a broker on this machine c³ did not start: `{port, running, recorded}` - each `{pid, exe, cwd, env, command, build, at}` or `null`. `running`: the process of this user's listening on the port (`/proc`, Linux), when it is a coraine; each such read is kept in `<run>/external/<port>.json`, which `recorded` returns - how it ran, once it has stopped. `env`: `CORAINE_*`, `SEAMWARE_*`, `LD_LIBRARY_PATH`, `LD_PRELOAD`; `command` and `env` quoted as the form's arguments are; `build`: Compile's build whose `install/bin` holds the executable |
+| `POST /api/run/external/stop?port=<port>` | SIGTERM to that process (a coraine only): `202 {pid}`; `404` when no process of this user's listens there, `409` when it is not a coraine |
 | `GET /api/run/external/log?port=<port>` | the log file of a broker on this machine c³ did not start: `<--logDir>/coraine.log` as its `GET /admin/config` says (asked once a minute), when `--logTo` is `file` or `both`; by Range; 404 with the reason otherwise |
 | `DELETE /api/run/volumes/<volume>` | one of c³'s volumes (`c3=run`), its container not running: `204` |
 | `GET /api/run/dashboard` | `{engine, engineWhy, image, state, busy, doing, why, port, services, log, steps}`: `state` `running`, `stopped`, `partly`, `busy` or `failed` (`why`); `port` WireCloud's, while it runs; `services` the three, as `GET /api/run`'s; `steps` the last start's or stop's - `{of: start|stop, total, list: [{text, seconds, done, failed}]}`, `total` the steps it should take as far as known (a first start has more: populate, the user, the search indexes; each widget installed is one). The page shows them while it starts or stops, in a dialog with a progress bar |

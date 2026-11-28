@@ -174,6 +174,8 @@ export const runCommand       = (def) => call('POST', '/api/run/command', def);
 export const runStart         = (def) => call('POST', '/api/run/brokers', def);
 export const runStartKept     = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/start');
 export const runStop          = (name) => call('POST', '/api/run/brokers/' + runName(name) + '/stop');
+export const runExternal      = (port) => call('GET', '/api/run/external?port=' + port);            // a broker c3 did not start: {running, recorded}
+export const runExternalStop  = (port) => call('POST', '/api/run/external/stop?port=' + port);      // SIGTERM to it
 export const runForget        = (name, data) => call('DELETE', '/api/run/brokers/' + runName(name) + (data ? '?data=true' : ''));
 export const runServiceStop   = (container) => call('POST', '/api/run/services/' + runName(container) + '/stop');
 export const runContainer     = (name, action) => call('POST', '/api/run/containers/' + runName(name) + '/' + action);   // start | stop: any container here

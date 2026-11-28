@@ -184,11 +184,25 @@ by the backend - the same build as on the command line (<a href="#docs/building"
 <ul>
   <li><b>Operate</b> and its <b>?</b> - the page's description as a tooltip; <b>?</b> opens this section.</li>
   <li><b>Set up and start a broker</b>, a tile at the top. Under it <b>Brokers</b>: the brokers c³ started that run,
-  start, stop or failed, the one Explore is connected to first; then the brokers Explore connected to that c³ does
-  not run - <i>on this machine, started outside c³</i> or <i>on another machine</i> - each with whether it answers
-  (asked every 10 s) and <b>Explore</b>. <i>No broker yet</i> when there is none of either. A c³ broker's row has
-  <b>Stop</b> and <b>Explore</b>; a click elsewhere on any row opens its card. A broker of c³'s stopped by hand is not listed: its
-  settings are under Set up and start a broker, <b>Earlier settings</b>.</li>
+  start, stop or failed, the one Explore is connected to first; then the brokers added here or connected to in
+  Explore that c³ does not run - <i>on this machine, started outside c³</i> or <i>on another machine</i> - each with
+  whether it answers (asked every 10 s). <i>No broker yet</i> when there is none of either.
+  <ul>
+    <li><b>+</b> in the Brokers bar adds a broker: its URL and, if you like, a name.</li>
+    <li>A c³ broker's row: <b>Explore</b>, <b>Stop</b> and <b>Restart</b>.</li>
+    <li>A broker on this machine started outside c³, while it answers: <b>Explore</b>, <b>Stop</b> (its ordered
+    shutdown) and <b>Restart</b> - started again as it ran, and from then on one of c³'s. While it runs, c³ reads
+    how it was started: the executable (a build of Compile's by its name), working directory, environment and
+    command line.</li>
+    <li>Not running: <b>Start</b> opens its card with how it ran, every field editable, and <b>Start</b> - for one c³
+    never saw running, the installed coraine on its port. Started so it is one of c³'s brokers: its log kept,
+    Stop, Restart, Configuration, Metrics and Levels (with <code>--apiPlugins admin</code>), and its command line
+    again, editable, when it is stopped.</li>
+    <li>On another machine and not answering: <b>Forget</b> only - c³ starts brokers on this machine. Forget drops a
+    broker from the list; nothing on the broker changes.</li>
+  </ul>
+  A click elsewhere on any row opens its card. A broker of c³'s stopped by hand is not listed (one started from
+  its command line is): its settings are under Set up and start a broker, <b>Earlier settings</b>.</li>
   <li><b>Containers</b> - every container on this machine, c³'s (marked c³) and others, the newest first, in a box
   that scrolls: its state, what it is, its status and ports; the 10 newest, <b>Show all</b> for the rest. <b>Start</b> / <b>Stop</b> (one button; a c³ broker's
   container starts and stops as that broker; a service a running c³ broker uses is stopped with that broker) and
